@@ -276,6 +276,133 @@ This means you can:
 - When Python brain runs in Docker, mount `data/` as a volume for persistence
 - Optionally back up to cloud storage (S3, GCS) for disaster recovery
 
+## API design (local-first, cloud-ready)
+
+Each ML operation is exposed as a **separate REST endpoint**, designed so it can later be deployed as an independent **Google Cloud Function** without code changes.
+
+### Endpoint overview
+
+**Inference endpoints** (called by Monday run):
+
+| Endpoint | Purpose | Trigger |
+|----------|---------|---------|
+| `POST /inference/lstm` | Price movement predictions | n8n → brain API |
+| `POST /inference/ppo` | Portfolio allocation | n8n → brain API |
+
+**Training endpoints** (called by Sunday cron or manual):
+
+| Endpoint | Purpose | Trigger |
+|----------|---------|---------|
+| `POST /train/lstm` | Full LSTM retrain | Cron (1st Sunday) or manual |
+| `POST /train/ppo/finetune` | PPO fine-tune on 26-week buffer | Cron (every Sunday) |
+| `POST /train/ppo/full` | PPO full retrain (drift recovery) | Manual |
+
+**Model management endpoints**:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /models/{model}/current` | Get active version + metadata |
+| `POST /models/{model}/promote` | Promote a version to current |
+| `POST /models/{model}/rollback` | Revert to previous known-good |
+
+### Architecture pattern
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  FastAPI endpoint (local)  OR  Cloud Function (later)       │
+│  • Validates request                                        │
+│  • Calls core function                                      │
+│  • Returns JSON response                                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Core function (pure Python, no framework dependency)       │
+│  • lstm_inference(features, model_path) → predictions       │
+│  • ppo_inference(state, policy_path) → allocation           │
+│  • lstm_train(data_window, output_path) → metrics           │
+│  • ppo_finetune(weeks, prior_path, output_path) → metrics   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Storage abstraction                                        │
+│  • LocalStorage: reads/writes data/models/...               │
+│  • GCSStorage: reads/writes gs://bucket/... (swap later)    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Request/response contracts
+
+**LSTM inference**:
+
+```json
+// POST /inference/lstm
+// Request
+{ "features": [...], "run_id": "paper:2025-12-29", "symbols": ["AAPL", "MSFT"] }
+
+// Response
+{ "predictions": [{ "symbol": "AAPL", "direction": 0.72, "uncertainty": 0.15 }, ...] }
+```
+
+**PPO inference**:
+
+```json
+// POST /inference/ppo
+// Request
+{ "state": { "features": [...], "current_weights": {...}, "cash": 10000 }, "run_id": "paper:2025-12-29" }
+
+// Response
+{ "allocation": { "AAPL": 0.15, "MSFT": 0.10, "CASH": 0.05 }, "turnover": 0.12 }
+```
+
+**Training endpoints**:
+
+```json
+// POST /train/lstm
+// Request
+{ "data_window_start": "2023-01-01", "data_window_end": "2025-01-01" }
+
+// Response
+{ "version": "v2025-01-05T08-00-00", "metrics": { "val_loss": 0.023 }, "promoted": true }
+```
+
+```json
+// POST /train/ppo/finetune
+// Request
+{ "weeks": 26 }
+
+// Response
+{ "version": "v2025-01-05T08-30-00", "metrics": { "sharpe": 1.2 }, "promoted": true, "prior_version": "v2024-12-29T08-00-00" }
+```
+
+### Design rules for cloud-readiness
+
+1. **Stateless** — load model from storage on each request; no in-memory caching across requests
+2. **Storage abstraction** — `storage.load_model(path)` works for local filesystem or GCS
+3. **JSON in, JSON out** — no framework-specific objects in core functions
+4. **Idempotent training** — version ID derived from `hash(data_window + config)`, so re-running produces same version
+5. **Timeout-aware** — training endpoints support async pattern for Cloud Functions (HTTP: 9 min, event-driven: 60 min)
+
+### Cloud Function migration path
+
+When ready to move to GCP:
+
+| Local | Cloud Function | Trigger |
+|-------|----------------|---------|
+| `POST /inference/lstm` | `lstm-inference` | HTTP (called by n8n or Cloud Workflows) |
+| `POST /inference/ppo` | `ppo-inference` | HTTP |
+| `POST /train/lstm` | `lstm-train` | Cloud Scheduler (1st Sunday 00:00 UTC) |
+| `POST /train/ppo/finetune` | `ppo-finetune` | Cloud Scheduler (every Sunday 00:00 UTC) |
+| `POST /train/ppo/full` | `ppo-full-retrain` | Pub/Sub or manual HTTP |
+
+**Migration steps**:
+
+1. Extract endpoint handler → standalone `main.py` with `def handler(request):`
+2. Swap `LocalStorage` → `GCSStorage` via environment variable
+3. Deploy: `gcloud functions deploy lstm-inference --runtime python311 --trigger-http`
+4. Update n8n to call Cloud Function URL instead of local FastAPI
+
 ## Quickstart: n8n hello email
 
 Validate your n8n + email setup before adding trading logic.
