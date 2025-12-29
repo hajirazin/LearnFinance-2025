@@ -37,3 +37,4 @@ def test_readiness():
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
 
+

@@ -10,3 +10,4 @@ def read_root() -> dict:
     """Hello world endpoint."""
     return {"message": "Hello from Brain API", "service": "brain-api", "version": "0.1.0"}
 
+
