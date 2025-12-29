@@ -16,3 +16,4 @@ def get_halal_stocks() -> dict:
     """
     return get_halal_universe()
 
+

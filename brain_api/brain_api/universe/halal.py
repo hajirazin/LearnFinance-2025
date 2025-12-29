@@ -83,3 +83,4 @@ def get_halal_universe() -> dict:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
 
+

@@ -206,39 +206,59 @@ def test_train_lstm_promoted_true_when_beats_baseline(client_with_mocks):
     assert data["promoted"] is True
 
 
-def test_train_lstm_not_promoted_when_worse_than_baseline(temp_storage):
-    """Model is NOT promoted when worse than baseline."""
-    # Override with worse trainer
-    app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_symbols] = mock_symbols
-    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
-    app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+def test_train_lstm_not_promoted_when_worse_than_baseline():
+    """Model is NOT promoted when worse than baseline (after first model exists)."""
+    # Use a fresh temp storage to avoid conflicts with other tests
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fresh_storage = LocalModelStorage(base_path=tmpdir)
 
-    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-    client = TestClient(app)
-
-    try:
-        response = client.post("/train/lstm", json={})
-        assert response.status_code == 200
-
-        data = response.json()
-        # Mock trainer returns val_loss=0.10 > baseline_loss=0.05
-        assert data["promoted"] is False
-
-        # Current should not be set
-        current = temp_storage.read_current_version()
-        assert current is None
-    finally:
+        # Clear any leftover overrides from previous tests
         app.dependency_overrides.clear()
-        os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-        os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+        # First, create a good model that gets promoted (first model always promoted)
+        app.dependency_overrides[get_storage] = lambda: fresh_storage
+        app.dependency_overrides[get_symbols] = mock_symbols
+        app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+        app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
+        app.dependency_overrides[get_trainer] = lambda: mock_trainer
+
+        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
+
+        client = TestClient(app)
+
+        try:
+            # Train first model - should be promoted (first model always promoted)
+            response1 = client.post("/train/lstm", json={})
+            assert response1.status_code == 200
+            first_version = response1.json()["version"]
+            assert fresh_storage.read_current_version() == first_version
+
+            # Now train a worse model with different date
+            app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+            os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-16"
+
+            response2 = client.post("/train/lstm", json={})
+            assert response2.status_code == 200
+
+            data = response2.json()
+            # Mock trainer returns val_loss=0.10 > baseline_loss=0.05
+            assert data["promoted"] is False
+
+            # Current should still point to the first version (worse model not promoted)
+            current = fresh_storage.read_current_version()
+            assert current == first_version
+        finally:
+            app.dependency_overrides.clear()
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
 def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
     """The 'current' pointer is unchanged when promotion fails."""
+    # Clear any leftover overrides from previous tests
+    app.dependency_overrides.clear()
+
     # First, create a good model that gets promoted
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_symbols] = mock_symbols

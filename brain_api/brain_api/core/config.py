@@ -39,3 +39,4 @@ def resolve_training_window() -> tuple[date, date]:
 
     return start_date, end_date
 
+

@@ -15,6 +15,28 @@ from sklearn.preprocessing import StandardScaler
 
 
 # ============================================================================
+# Device Detection (MPS for Apple Silicon, CUDA for NVIDIA, else CPU)
+# ============================================================================
+
+def get_device() -> torch.device:
+    """Get the best available device for training.
+
+    Priority:
+    1. MPS (Apple Silicon GPU) - for M1/M2/M3 Macs
+    2. CUDA (NVIDIA GPU)
+    3. CPU (fallback)
+
+    Returns:
+        torch.device for the best available accelerator
+    """
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+# ============================================================================
 # Configuration / Hyperparameters
 # ============================================================================
 
@@ -355,6 +377,11 @@ def train_model_pytorch(
 ) -> TrainingResult:
     """Train LSTM model using PyTorch.
 
+    Automatically uses the best available device:
+    - MPS (Apple Silicon GPU) on M1/M2/M3 Macs
+    - CUDA (NVIDIA GPU) if available
+    - CPU as fallback
+
     Args:
         X: Input sequences, shape (n_samples, seq_len, n_features)
         y: Targets, shape (n_samples, forecast_horizon) - scaled prices
@@ -365,6 +392,10 @@ def train_model_pytorch(
     Returns:
         TrainingResult with trained model and metrics
     """
+    # Detect best available device
+    device = get_device()
+    print(f"Training on device: {device}")
+
     if len(X) == 0:
         # No data - return dummy result
         model = LSTMModel(config)
@@ -383,14 +414,14 @@ def train_model_pytorch(
     X_train, X_val = X[:split_idx], X[split_idx:]
     y_train, y_val = y[:split_idx], y[split_idx:]
 
-    # Convert to tensors
-    X_train_t = torch.FloatTensor(X_train)
-    y_train_t = torch.FloatTensor(y_train)
-    X_val_t = torch.FloatTensor(X_val)
-    y_val_t = torch.FloatTensor(y_val)
+    # Convert to tensors and move to device
+    X_train_t = torch.FloatTensor(X_train).to(device)
+    y_train_t = torch.FloatTensor(y_train).to(device)
+    X_val_t = torch.FloatTensor(X_val).to(device)
+    y_val_t = torch.FloatTensor(y_val).to(device)
 
-    # Create model
-    model = LSTMModel(config)
+    # Create model and move to device
+    model = LSTMModel(config).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 
@@ -402,7 +433,7 @@ def train_model_pytorch(
         model.train()
 
         # Mini-batch training
-        indices = torch.randperm(len(X_train_t))
+        indices = torch.randperm(len(X_train_t), device=device)
         total_train_loss = 0.0
         n_batches = 0
 
@@ -428,13 +459,14 @@ def train_model_pytorch(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_model_state = model.state_dict().copy()
+            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
 
-    # Restore best model
+    # Restore best model (on CPU for portability when saving)
+    model_cpu = LSTMModel(config)
     if best_model_state is not None:
-        model.load_state_dict(best_model_state)
+        model_cpu.load_state_dict(best_model_state)
 
-    # Final metrics
+    # Final metrics (compute on device for speed)
     model.eval()
     with torch.no_grad():
         train_outputs = model(X_train_t)
@@ -446,7 +478,7 @@ def train_model_pytorch(
     baseline_loss = float(np.mean((y_val - y_val[:, :1]) ** 2))
 
     return TrainingResult(
-        model=model,
+        model=model_cpu,  # Return CPU model for portable saving
         feature_scaler=feature_scaler,
         price_scaler=price_scaler,
         config=config,

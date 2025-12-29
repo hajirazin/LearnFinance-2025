@@ -79,3 +79,4 @@ def test_get_halal_stocks_sorted_by_weight():
     weights = [stock["max_weight"] for stock in data["stocks"]]
     assert weights == sorted(weights, reverse=True), "Stocks not sorted by weight"
 
+

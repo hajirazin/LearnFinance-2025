@@ -171,7 +171,7 @@ def train_lstm(
         metadata=metadata,
     )
 
-    # Promote if passed evaluation
+    # Promote if passed evaluation, or if this is the first model (so inference has something)
     if promoted or prior_version is None:
         storage.promote_version(version)
 
