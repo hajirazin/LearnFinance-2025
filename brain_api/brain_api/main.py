@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from brain_api.routes import health, root, universe
+from brain_api.routes import health, root, training, universe
 
 app = FastAPI(
     title="Brain API",
@@ -13,5 +13,6 @@ app = FastAPI(
 app.include_router(root.router)
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(universe.router, prefix="/universe", tags=["universe"])
+app.include_router(training.router, prefix="/train", tags=["training"])
 
 

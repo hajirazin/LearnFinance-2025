@@ -1,0 +1,280 @@
+"""API-level tests for LSTM training endpoint."""
+
+import os
+import tempfile
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+from sklearn.preprocessing import StandardScaler
+
+from brain_api.core.lstm import DEFAULT_CONFIG, DatasetResult, LSTMModel, TrainingResult
+from brain_api.main import app
+from brain_api.routes.training import (
+    get_config,
+    get_dataset_builder,
+    get_price_loader,
+    get_storage,
+    get_symbols,
+    get_trainer,
+)
+from brain_api.storage.local import LocalModelStorage
+
+
+# ============================================================================
+# Test fixtures and mocks
+# ============================================================================
+
+
+def mock_symbols() -> list[str]:
+    """Return a small fixed list of symbols for testing."""
+    return ["AAPL", "MSFT"]
+
+
+def mock_price_loader(symbols, start_date, end_date):
+    """Return empty prices dict to skip actual data loading."""
+    return {}
+
+
+def mock_dataset_builder(prices, config) -> DatasetResult:
+    """Return a mock dataset result."""
+    return DatasetResult(
+        X=np.array([]).reshape(0, config.sequence_length, config.input_size),
+        y=np.array([]).reshape(0, config.forecast_horizon),
+        feature_scaler=StandardScaler(),
+        price_scaler=StandardScaler(),
+    )
+
+
+def mock_trainer(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
+    """Return a mock training result with controllable metrics."""
+    model = LSTMModel(config)
+    return TrainingResult(
+        model=model,
+        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
+        price_scaler=price_scaler if price_scaler else StandardScaler(),
+        config=config,
+        train_loss=0.01,
+        val_loss=0.02,  # Better than baseline (0.05)
+        baseline_loss=0.05,
+    )
+
+
+def mock_trainer_worse_than_baseline(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
+    """Return a mock training result that is worse than baseline."""
+    model = LSTMModel(config)
+    return TrainingResult(
+        model=model,
+        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
+        price_scaler=price_scaler if price_scaler else StandardScaler(),
+        config=config,
+        train_loss=0.10,
+        val_loss=0.10,  # Worse than baseline (0.05)
+        baseline_loss=0.05,
+    )
+
+
+@pytest.fixture
+def temp_storage():
+    """Create a temporary storage directory for tests."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield LocalModelStorage(base_path=tmpdir)
+
+
+@pytest.fixture
+def client_with_mocks(temp_storage):
+    """Create test client with mocked dependencies."""
+    # Override dependencies
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+    app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer
+
+    # Set fixed window for deterministic tests
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+    yield client
+
+    # Cleanup
+    app.dependency_overrides.clear()
+    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+# ============================================================================
+# Scenario 1: Empty-body success + resolved window
+# ============================================================================
+
+
+def test_train_lstm_empty_body_returns_200(client_with_mocks):
+    """POST /train/lstm with empty body returns 200."""
+    response = client_with_mocks.post("/train/lstm", json={})
+    assert response.status_code == 200
+
+
+def test_train_lstm_no_body_returns_200(client_with_mocks):
+    """POST /train/lstm with no body returns 200."""
+    response = client_with_mocks.post("/train/lstm")
+    assert response.status_code == 200
+
+
+def test_train_lstm_returns_resolved_window(client_with_mocks):
+    """POST /train/lstm returns data_window_start and data_window_end from config."""
+    response = client_with_mocks.post("/train/lstm", json={})
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "data_window_start" in data
+    assert "data_window_end" in data
+
+    # Verify window is consistent with env config (10 years before 2025-01-01)
+    assert data["data_window_end"] == "2025-01-01"
+    assert data["data_window_start"] == "2015-01-01"
+
+
+def test_train_lstm_returns_required_fields(client_with_mocks):
+    """POST /train/lstm returns all required response fields."""
+    response = client_with_mocks.post("/train/lstm", json={})
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "version" in data
+    assert "data_window_start" in data
+    assert "data_window_end" in data
+    assert "metrics" in data
+    assert "promoted" in data
+    # prior_version can be None
+
+    # Check metrics structure
+    assert isinstance(data["metrics"], dict)
+
+
+# ============================================================================
+# Scenario 2: Idempotency on rerun
+# ============================================================================
+
+
+def test_train_lstm_idempotent_version(client_with_mocks):
+    """Calling POST /train/lstm twice returns the same version."""
+    response1 = client_with_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 200
+    version1 = response1.json()["version"]
+
+    response2 = client_with_mocks.post("/train/lstm", json={})
+    assert response2.status_code == 200
+    version2 = response2.json()["version"]
+
+    assert version1 == version2, "Version should be identical on rerun with same config"
+
+
+def test_train_lstm_idempotent_does_not_change_current(client_with_mocks, temp_storage):
+    """Rerunning training does not change 'current' pointer if already promoted."""
+    # First call - should promote
+    response1 = client_with_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 200
+    data1 = response1.json()
+    version1 = data1["version"]
+
+    current_after_first = temp_storage.read_current_version()
+
+    # Second call - should return same version without changing current
+    response2 = client_with_mocks.post("/train/lstm", json={})
+    assert response2.status_code == 200
+    version2 = response2.json()["version"]
+
+    current_after_second = temp_storage.read_current_version()
+
+    assert version1 == version2
+    assert current_after_first == current_after_second
+
+
+# ============================================================================
+# Scenario 3: Promotion gate behavior
+# ============================================================================
+
+
+def test_train_lstm_promoted_true_when_beats_baseline(client_with_mocks):
+    """Model is promoted when it beats the baseline."""
+    response = client_with_mocks.post("/train/lstm", json={})
+    assert response.status_code == 200
+
+    data = response.json()
+    # Mock trainer returns val_loss=0.02 < baseline_loss=0.05
+    assert data["promoted"] is True
+
+
+def test_train_lstm_not_promoted_when_worse_than_baseline(temp_storage):
+    """Model is NOT promoted when worse than baseline."""
+    # Override with worse trainer
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+    app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+
+    try:
+        response = client.post("/train/lstm", json={})
+        assert response.status_code == 200
+
+        data = response.json()
+        # Mock trainer returns val_loss=0.10 > baseline_loss=0.05
+        assert data["promoted"] is False
+
+        # Current should not be set
+        current = temp_storage.read_current_version()
+        assert current is None
+    finally:
+        app.dependency_overrides.clear()
+        os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+        os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
+    """The 'current' pointer is unchanged when promotion fails."""
+    # First, create a good model that gets promoted
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+    app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+
+    response1 = client.post("/train/lstm", json={})
+    assert response1.status_code == 200
+    promoted_version = response1.json()["version"]
+
+    # Verify it was promoted
+    current_before = temp_storage.read_current_version()
+    assert current_before == promoted_version
+
+    # Now try with a different window that produces worse results
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-02"  # Different window -> different version
+
+    response2 = client.post("/train/lstm", json={})
+    assert response2.status_code == 200
+    data2 = response2.json()
+
+    # Should not be promoted (worse than baseline)
+    assert data2["promoted"] is False
+
+    # Current should still point to the first version
+    current_after = temp_storage.read_current_version()
+    assert current_after == promoted_version
+
+    # Cleanup
+    app.dependency_overrides.clear()
+    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
