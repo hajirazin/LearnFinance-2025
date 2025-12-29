@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# =============================================================================
+# Project-specific
+# =============================================================================
+
+# Data directory (models, raw evidence, features, experience buffers)
+# These can be large and are generated/downloaded, not source code
+data/
