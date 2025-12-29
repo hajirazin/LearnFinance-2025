@@ -1,0 +1,54 @@
+{
+  "name": "Hello World Email",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-recipient@example.com",
+        "subject": "Hello World from LearnFinance-2025",
+        "message": "Hello from LearnFinance-2025!\n\nThis is a test email to verify your n8n + Gmail OAuth setup is working.\n\n---\nRun ID (placeholder): paper:{{ $now.format('yyyy-MM-dd') }}\nTimestamp: {{ $now.toISO() }}\nTimezone: Asia/Kolkata (IST)\n---\n\nIf you received this, your email integration is ready for the weekly trading notifications.",
+        "options": {}
+      },
+      "id": "gmail-send",
+      "name": "Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [460, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "learnfinance-2025"
+  }
+}

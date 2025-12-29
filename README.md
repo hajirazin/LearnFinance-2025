@@ -3,7 +3,7 @@
 Build a weekly, paper-trading portfolio-rebalancing system for **halal Nasdaq-500 stocks** using a hybrid architecture:
 
 - **n8n** for scheduling/orchestration and integrations (Alpaca + email)
-- A Python “AI brain” for **multi-agent evidence synthesis**, **LSTM price forecasting**, and **RL portfolio decisions**
+- A Python “AI brain” for **multi-agent evidence synthesis**, **LSTM price forecasting**, and **RL (PPO) portfolio decisions**
 
 This is a learning repo, but the design aims to be **audit-friendly**, **idempotent**, and **safe-by-default**.
 
@@ -17,7 +17,7 @@ Every Monday **6:00 PM IST** (pre US open), the system:
 - Collects signals per ticker (news, social sentiment, global industry/market context)
 - Runs a **multi-agent “investment committee”** to synthesize evidence and resolve conflicts
 - Uses **LSTM** to predict near-term price movement (with uncertainty/quality signals)
-- Uses **RL** to choose the portfolio actions while penalizing unnecessary turnover
+- Uses **RL (PPO / Proximal Policy Optimization)** to choose the portfolio actions while penalizing unnecessary turnover
 - **Auto-submits limit orders to Alpaca paper**
 - Emails you: what was submitted + rationale + run identifiers + links/IDs for audit
 
@@ -36,7 +36,7 @@ flowchart LR
     runApi --> universe[universe_service]
     runApi --> ingest[data_ingestion_service]
     runApi --> agents[agent_committee_workflow]
-    runApi --> models[model_service_LSTM_RL]
+    runApi --> models[model_service_LSTM_PPO]
     runApi --> report[report_service]
   end
 
@@ -68,7 +68,7 @@ sequenceDiagram
   Brain->>Raw: Save_raw_inputs(news_social_market_snapshots)
   Brain->>Brain: MultiAgent_committee_synthesis
   Brain->>Brain: LSTM_inference
-  Brain->>Brain: RL_allocation_with_turnover_penalty
+  Brain->>Brain: PPO_allocation_with_turnover_penalty
   Brain->>DB: Persist_trade_plan_and_explanations
   Brain-->>N8N: Return_orders_with_client_order_ids
   N8N->>Alpaca: Submit_limit_orders(idempotent_client_order_id)
@@ -162,6 +162,189 @@ Even for paper, enforce hard limits (config):
 - Max position size (% of portfolio)
 - Minimum cash buffer
 - Blocklist/allowlist overrides
+
+## Model lifecycle (training vs inference)
+
+Monday inference runs **do not retrain** models. Training happens separately on Sundays.
+
+### Recommended schedule
+
+| Day | LSTM | PPO |
+|-----|------|-----|
+| **First Sunday of month** | Full retrain on expanded history | Fine-tune (rolling 26-week experience buffer) |
+| **Other Sundays** | No training | Fine-tune (rolling 26-week experience buffer) |
+| **Monday 6 PM IST** | Inference only | Inference only |
+
+**Why separate training from inference?**
+
+- Training can be slow, noisy, and fail; inference runs should be fast and reliable.
+- Separating them lets you validate new models before promoting them.
+- Monday runs remain deterministic and reproducible.
+
+### Training workflow (Sunday)
+
+```mermaid
+flowchart LR
+  trigger[Sunday_cron] --> train[Train_new_model]
+  train --> version[Write_versioned_artifact]
+  version --> eval[Evaluate_vs_baseline_and_prior]
+  eval -->|better| promote[Promote_to_current]
+  eval -->|worse| keep[Keep_prior_current]
+  promote --> done[Done]
+  keep --> done
+```
+
+### PPO continual learning (local)
+
+PPO learns over time via **weekly fine-tuning** on a rolling experience buffer, not by retraining from scratch.
+
+**Experience collection (Monday)**
+
+After each Monday run, store the experience tuple:
+
+- State: features/signals at decision time
+- Action: portfolio weights chosen
+- Reward: computed later (e.g., next-week return minus turnover cost)
+
+Save to: `data/experience/<run_id>.json`
+
+**Fine-tune loop (Sunday)**
+
+1. Load last 26 weeks of experience (rolling window, ~6 months)
+2. Run a small number of PPO update steps (not full training)
+3. Evaluate new policy vs prior policy on held-out data or replay
+4. **Promote only if better**; otherwise keep prior `current`
+
+**Guardrails**
+
+- **Evaluation gate**: new policy must beat prior + a baseline (e.g., equal-weight, momentum)
+- **Rollback**: keep last known-good version; promotion is atomic pointer swap
+- **Drift detection**: if performance degrades 4 weeks in a row, consider full retrain or manual review
+
+## Where models are stored (local)
+
+Trained models produce **artifact files** (weights, scalers, config) that inference loads each run.
+
+### Local artifacts layout
+
+```
+data/
+├── models/
+│   ├── lstm/
+│   │   ├── v2025-12-01T10-00-00/     # versioned artifact
+│   │   │   ├── weights.pt            # model weights (PyTorch example)
+│   │   │   ├── scaler.pkl            # feature scaler/normalizer
+│   │   │   ├── config.json           # hyperparams, feature schema
+│   │   │   └── metadata.json         # training date, data window, metrics
+│   │   └── current                   # text file containing "v2025-12-01T10-00-00"
+│   └── ppo/
+│       ├── v2025-12-29T08-00-00/
+│       │   ├── policy.pt
+│       │   ├── env_config.json
+│       │   └── metadata.json
+│       └── current
+├── experience/                        # PPO experience buffer
+│   ├── paper:2025-12-22.json
+│   └── paper:2025-12-29.json
+└── ...
+```
+
+### What's in a model artifact?
+
+| File | Purpose |
+|------|---------|
+| `weights.pt` / `policy.pt` | Trained parameters (like a `.dll` in .NET) |
+| `scaler.pkl` | Preprocessing transforms fitted on training data |
+| `config.json` | Hyperparameters, feature list, model architecture |
+| `metadata.json` | Training timestamp, data window, git commit, eval metrics |
+
+### How inference loads models
+
+1. Read `data/models/lstm/current` to get the active version string
+2. Load artifacts from `data/models/lstm/<version>/`
+3. Same for PPO
+
+This means you can:
+
+- **Roll back** by changing the `current` pointer
+- **A/B test** by loading a different version
+- **Audit** by inspecting exactly which version was used (logged in run DB)
+
+### Persistence (local stack)
+
+- Store under `data/` (add to `.gitignore` so large files aren't committed)
+- When Python brain runs in Docker, mount `data/` as a volume for persistence
+- Optionally back up to cloud storage (S3, GCS) for disaster recovery
+
+## Quickstart: n8n hello email
+
+Validate your n8n + email setup before adding trading logic.
+
+### Prerequisites
+
+- Docker & Docker Compose installed
+- A Google account
+- A Google Cloud project with OAuth credentials (see below)
+
+### 1. Start n8n
+
+```bash
+docker compose up -d
+```
+
+n8n will be available at http://localhost:5678
+
+### 2. Create Google OAuth credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or use an existing one)
+3. Go to **APIs & Services → OAuth consent screen**
+   - Choose **External** (or Internal if using Workspace)
+   - Fill in app name, user support email, developer email
+   - Add your email as a test user
+4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+   - Application type: **Web application**
+   - Name: `n8n Gmail`
+   - Authorized redirect URIs: `http://localhost:5678/rest/oauth2-credential/callback`
+5. Copy the **Client ID** and **Client Secret**
+
+### 3. Connect Gmail in n8n
+
+1. Open http://localhost:5678 and create an account (local only)
+2. Go to **Settings → Credentials → Add Credential → Gmail OAuth2**
+3. Fill in:
+   - **Credential Name**: `Gmail OAuth2`
+   - **Client ID**: (from step 2)
+   - **Client Secret**: (from step 2)
+4. Click **Sign in with Google** and authorize
+5. Save
+
+### 4. Import and run the workflow
+
+1. Go to **Workflows → Add Workflow → Import from File**
+2. Select `n8n/workflows/hello-world-email.json`
+3. Open the **Gmail** node and:
+   - Select your `Gmail OAuth2` credential
+   - Change `sendTo` to your recipient address
+4. Save the workflow
+5. Click **Execute Workflow**
+
+You should receive a "Hello World from LearnFinance-2025" email with a timestamp and placeholder `run_id`.
+
+### Environment variables (optional)
+
+Copy and customize if needed:
+
+```bash
+# n8n configuration
+N8N_HOST=localhost
+N8N_PORT=5678
+N8N_PROTOCOL=http
+WEBHOOK_URL=http://localhost:5678/
+
+# Timezone (IST for Monday 6 PM runs)
+TZ=Asia/Kolkata
+```
 
 ## Repo docs
 
