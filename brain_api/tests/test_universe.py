@@ -64,7 +64,7 @@ def test_get_halal_stocks_stock_structure():
         # Validate types
         assert isinstance(stock["symbol"], str)
         assert isinstance(stock["name"], str)
-        assert isinstance(stock["max_weight"], (int, float))
+        assert isinstance(stock["max_weight"], int | float)
         assert isinstance(stock["sources"], list)
         assert len(stock["sources"]) > 0  # At least one ETF source
 
@@ -78,5 +78,3 @@ def test_get_halal_stocks_sorted_by_weight():
 
     weights = [stock["max_weight"] for stock in data["stocks"]]
     assert weights == sorted(weights, reverse=True), "Stocks not sorted by weight"
-
-

@@ -15,5 +15,3 @@ def get_halal_stocks() -> dict:
     Each stock includes symbol, name, max weight across ETFs, and which ETFs hold it.
     """
     return get_halal_universe()
-
-

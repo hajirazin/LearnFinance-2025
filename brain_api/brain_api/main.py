@@ -14,5 +14,3 @@ app.include_router(root.router)
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(universe.router, prefix="/universe", tags=["universe"])
 app.include_router(training.router, prefix="/train", tags=["training"])
-
-

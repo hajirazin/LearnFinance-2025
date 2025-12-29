@@ -8,10 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 
-from brain_api.core.lstm import DEFAULT_CONFIG, DatasetResult, LSTMModel, TrainingResult
+from brain_api.core.lstm import DatasetResult, LSTMModel, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
-    get_config,
     get_dataset_builder,
     get_price_loader,
     get_storage,
@@ -19,7 +18,6 @@ from brain_api.routes.training import (
     get_trainer,
 )
 from brain_api.storage.local import LocalModelStorage
-
 
 # ============================================================================
 # Test fixtures and mocks
@@ -60,7 +58,9 @@ def mock_trainer(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
     )
 
 
-def mock_trainer_worse_than_baseline(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
+def mock_trainer_worse_than_baseline(
+    X, y, feature_scaler, price_scaler, config
+) -> TrainingResult:
     """Return a mock training result that is worse than baseline."""
     model = LSTMModel(config)
     return TrainingResult(
@@ -235,7 +235,9 @@ def test_train_lstm_not_promoted_when_worse_than_baseline():
             assert fresh_storage.read_current_version() == first_version
 
             # Now train a worse model with different date
-            app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+            app.dependency_overrides[get_trainer] = (
+                lambda: mock_trainer_worse_than_baseline
+            )
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-16"
 
             response2 = client.post("/train/lstm", json={})
@@ -281,7 +283,9 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
 
     # Now try with a different window that produces worse results
     app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-02"  # Different window -> different version
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
+        "2025-01-02"  # Different window -> different version
+    )
 
     response2 = client.post("/train/lstm", json={})
     assert response2.status_code == 200

@@ -1,6 +1,6 @@
 """Halal stock universe from ETF holdings."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import yfinance as yf
 
@@ -32,11 +32,13 @@ def _fetch_etf_holdings(ticker: str) -> list[dict]:
             weight_raw = row.get("Holding Percent", row.get("holdingPercent", 0))
             weight = float(weight_raw) * 100 if weight_raw else 0
 
-            rows.append({
-                "symbol": str(symbol),
-                "name": row.get("Name", row.get("holdingName", "")),
-                "weight": weight,
-            })
+            rows.append(
+                {
+                    "symbol": str(symbol),
+                    "name": row.get("Name", row.get("holdingName", "")),
+                    "weight": weight,
+                }
+            )
         return rows
     except Exception:
         return []
@@ -80,7 +82,5 @@ def get_halal_universe() -> dict:
         "stocks": stocks,
         "etfs_used": HALAL_ETFS,
         "total_stocks": len(stocks),
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "fetched_at": datetime.now(UTC).isoformat(),
     }
-
-

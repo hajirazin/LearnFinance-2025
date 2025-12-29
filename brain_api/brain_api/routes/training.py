@@ -1,6 +1,7 @@
 """Training endpoints for ML models."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -37,6 +38,7 @@ class LSTMTrainResponse(BaseModel):
 # ============================================================================
 # Dependency injection for testability
 # ============================================================================
+
 
 def get_storage() -> LocalModelStorage:
     """Get the model storage instance."""
@@ -78,6 +80,7 @@ def get_trainer() -> Trainer:
 # ============================================================================
 # Endpoint
 # ============================================================================
+
 
 @router.post("/lstm", response_model=LSTMTrainResponse)
 def train_lstm(

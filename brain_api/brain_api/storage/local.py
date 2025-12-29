@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,6 @@ import joblib
 import torch
 
 from brain_api.core.lstm import LSTMConfig, LSTMModel, StandardScaler
-
 
 # Default base path for data storage
 DEFAULT_DATA_PATH = Path("data")
@@ -190,7 +189,7 @@ def create_metadata(
     """
     return {
         "version": version,
-        "training_timestamp": datetime.now(timezone.utc).isoformat(),
+        "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,
@@ -205,4 +204,3 @@ def create_metadata(
         "promoted": promoted,
         "prior_version": prior_version,
     }
-

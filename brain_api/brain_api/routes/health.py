@@ -24,6 +24,3 @@ def readiness() -> dict:
     For now always returns ready. Later can check DB/storage connectivity.
     """
     return {"status": "ready"}
-
-
-

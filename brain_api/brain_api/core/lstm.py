@@ -13,10 +13,10 @@ import torch.nn as nn
 import yfinance as yf
 from sklearn.preprocessing import StandardScaler
 
-
 # ============================================================================
 # Device Detection (MPS for Apple Silicon, CUDA for NVIDIA, else CPU)
 # ============================================================================
+
 
 def get_device() -> torch.device:
     """Get the best available device for training.
@@ -39,6 +39,7 @@ def get_device() -> torch.device:
 # ============================================================================
 # Configuration / Hyperparameters
 # ============================================================================
+
 
 @dataclass
 class LSTMConfig:
@@ -87,6 +88,7 @@ DEFAULT_CONFIG = LSTMConfig()
 # Version computation (idempotent)
 # ============================================================================
 
+
 def compute_version(
     start_date: date,
     end_date: date,
@@ -122,6 +124,7 @@ def compute_version(
 # ============================================================================
 # Data loading (yfinance)
 # ============================================================================
+
 
 def load_prices_yfinance(
     symbols: list[str],
@@ -167,7 +170,9 @@ def load_prices_yfinance(
             for symbol in symbols:
                 try:
                     if symbol in data.columns.get_level_values(0):
-                        df = data[symbol][["Open", "High", "Low", "Close", "Volume"]].copy()
+                        df = data[symbol][
+                            ["Open", "High", "Low", "Close", "Volume"]
+                        ].copy()
                         df.columns = ["open", "high", "low", "close", "volume"]
                         df = df.dropna()
                         if len(df) > 0:
@@ -199,6 +204,7 @@ def load_prices_yfinance(
 # ============================================================================
 # Dataset building (7-day price prediction)
 # ============================================================================
+
 
 @dataclass
 class DatasetResult:
@@ -232,7 +238,7 @@ def build_dataset(
 
     horizon = config.forecast_horizon
 
-    for symbol, df in prices.items():
+    for _symbol, df in prices.items():
         # Need enough data for sequence + forecast horizon
         min_length = config.sequence_length + horizon
         if len(df) < min_length:
@@ -243,18 +249,26 @@ def build_dataset(
 
         # Feature engineering: use returns for input (more stationary)
         if config.use_returns:
-            features = pd.DataFrame({
-                "open_ret": np.log(df["open"] / df["open"].shift(1)),
-                "high_ret": np.log(df["high"] / df["high"].shift(1)),
-                "low_ret": np.log(df["low"] / df["low"].shift(1)),
-                "close_ret": np.log(df["close"] / df["close"].shift(1)),
-                "volume_ret": np.log(df["volume"] / df["volume"].shift(1).replace(0, 1)),
-            })
+            features = pd.DataFrame(
+                {
+                    "open_ret": np.log(df["open"] / df["open"].shift(1)),
+                    "high_ret": np.log(df["high"] / df["high"].shift(1)),
+                    "low_ret": np.log(df["low"] / df["low"].shift(1)),
+                    "close_ret": np.log(df["close"] / df["close"].shift(1)),
+                    "volume_ret": np.log(
+                        df["volume"] / df["volume"].shift(1).replace(0, 1)
+                    ),
+                }
+            )
             # Drop first row (NaN from shift) but keep index aligned with df
             features = features.iloc[1:].reset_index(drop=True)
             close_prices = df["close"].iloc[1:].reset_index(drop=True)
         else:
-            features = df[["open", "high", "low", "close", "volume"]].copy().reset_index(drop=True)
+            features = (
+                df[["open", "high", "low", "close", "volume"]]
+                .copy()
+                .reset_index(drop=True)
+            )
             close_prices = df["close"].reset_index(drop=True)
 
         # Replace infinities with 0
@@ -318,6 +332,7 @@ def build_dataset(
 # PyTorch LSTM Model (7-day output)
 # ============================================================================
 
+
 class LSTMModel(nn.Module):
     """PyTorch LSTM model for 7-day price prediction."""
 
@@ -354,6 +369,7 @@ class LSTMModel(nn.Module):
 # ============================================================================
 # Training
 # ============================================================================
+
 
 @dataclass
 class TrainingResult:
@@ -429,13 +445,12 @@ def train_model_pytorch(
     best_val_loss = float("inf")
     best_model_state = None
 
-    for epoch in range(config.epochs):
+    for _epoch in range(config.epochs):
         model.train()
 
         # Mini-batch training
         indices = torch.randperm(len(X_train_t), device=device)
         total_train_loss = 0.0
-        n_batches = 0
 
         for i in range(0, len(indices), config.batch_size):
             batch_idx = indices[i : i + config.batch_size]
@@ -449,7 +464,6 @@ def train_model_pytorch(
             optimizer.step()
 
             total_train_loss += loss.item()
-            n_batches += 1
 
         # Validation
         model.eval()
@@ -459,7 +473,9 @@ def train_model_pytorch(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            best_model_state = {
+                k: v.cpu().clone() for k, v in model.state_dict().items()
+            }
 
     # Restore best model (on CPU for portability when saving)
     model_cpu = LSTMModel(config)
@@ -492,6 +508,7 @@ def train_model_pytorch(
 # Evaluation / Promotion Gate
 # ============================================================================
 
+
 def evaluate_for_promotion(
     val_loss: float,
     baseline_loss: float,
@@ -516,7 +533,4 @@ def evaluate_for_promotion(
         return False
 
     # Must beat prior (if exists)
-    if prior_val_loss is not None and val_loss >= prior_val_loss:
-        return False
-
-    return True
+    return prior_val_loss is None or val_loss < prior_val_loss
