@@ -1,5 +1,5 @@
 {
-  "name": "Weekly LSTM Forecast Email",
+  "name": "Weekly Forecast + News Sentiment Email",
   "nodes": [
     {
       "parameters": {
@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract top N symbols from halal universe\nconst N = 20;\n\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\n\n// Pass the run date (today in IST) for the inference request\nconst now = new Date();\nconst istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30\nconst istDate = new Date(now.getTime() + istOffset);\nconst asOfDate = istDate.toISOString().split('T')[0];\n\nreturn {\n  json: {\n    symbols: symbols,\n    as_of_date: asOfDate,\n    stock_count: symbols.length\n  }\n};"
+        "jsCode": "// Extract top N symbols from halal universe\nconst N = 20;\n\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\n\n// Pass the run date (today in IST) for the inference request\nconst now = new Date();\nconst istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30\nconst istDate = new Date(now.getTime() + istOffset);\nconst asOfDate = istDate.toISOString().split('T')[0];\nconst runId = `paper:${asOfDate}`;\n\nreturn {\n  json: {\n    symbols: symbols,\n    as_of_date: asOfDate,\n    run_id: runId,\n    stock_count: symbols.length\n  }\n};"
       },
       "id": "code-pick-symbols",
       "name": "Pick Top 20 Symbols",
@@ -59,17 +59,88 @@
       "name": "POST LSTM Inference",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, 300]
+      "position": [840, 200]
     },
     {
       "parameters": {
-        "jsCode": "// Format predictions into an email-friendly table\nconst data = $input.first().json;\nconst predictions = data.predictions || [];\nconst modelVersion = data.model_version || 'unknown';\nconst targetWeekStart = data.target_week_start || 'N/A';\nconst targetWeekEnd = data.target_week_end || 'N/A';\nconst asOfDate = data.as_of_date || 'N/A';\n\n// Separate valid and insufficient-history predictions\nconst valid = predictions.filter(p => p.has_enough_history);\nconst insufficient = predictions.filter(p => !p.has_enough_history);\n\n// Build HTML table for valid predictions (already sorted by API)\nlet tableRows = '';\nfor (let i = 0; i < valid.length; i++) {\n  const p = valid[i];\n  const ret = p.predicted_weekly_return_pct;\n  const retStr = ret !== null ? (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%' : 'N/A';\n  const direction = p.direction;\n  const color = direction === 'UP' ? '#22c55e' : direction === 'DOWN' ? '#ef4444' : '#6b7280';\n  const arrow = direction === 'UP' ? '↑' : direction === 'DOWN' ? '↓' : '→';\n  \n  tableRows += `<tr>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb;\">${i + 1}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;\">${p.symbol}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color}; font-weight: bold;\">${arrow} ${retStr}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color};\">${direction}</td>\n  </tr>`;\n}\n\n// Build insufficient history section if any\nlet insufficientSection = '';\nif (insufficient.length > 0) {\n  const insufficientSymbols = insufficient.map(p => p.symbol).join(', ');\n  insufficientSection = `\n    <div style=\"margin-top: 24px; padding: 16px; background-color: #fef3c7; border-radius: 8px;\">\n      <strong>⚠️ Insufficient History (${insufficient.length} symbols):</strong><br/>\n      ${insufficientSymbols}\n    </div>\n  `;\n}\n\nconst emailBody = `\n<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <h2 style=\"color: #1f2937;\">Weekly LSTM Forecast</h2>\n  \n  <div style=\"background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\">\n    <strong>Target Week:</strong> ${targetWeekStart} → ${targetWeekEnd}<br/>\n    <strong>As-of Date:</strong> ${asOfDate}<br/>\n    <strong>Model Version:</strong> ${modelVersion}<br/>\n    <strong>Predictions:</strong> ${valid.length} valid, ${insufficient.length} insufficient history\n  </div>\n  \n  <h3 style=\"color: #374151;\">Ranked Predictions (Highest Gain → Highest Loss)</h3>\n  \n  <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n    <thead>\n      <tr style=\"background-color: #f9fafb;\">\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">#</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Symbol</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Predicted Return</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Direction</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${tableRows}\n    </tbody>\n  </table>\n  \n  ${insufficientSection}\n  \n  <div style=\"margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;\">\n    <em>This is a prediction from LearnFinance-2025 LSTM model. Not financial advice.</em><br/>\n    Run ID: paper:${asOfDate}\n  </div>\n</div>\n`;\n\nreturn {\n  json: {\n    emailSubject: `Weekly LSTM Forecast (${targetWeekStart} → ${targetWeekEnd})`,\n    emailBody: emailBody,\n    targetWeekStart: targetWeekStart,\n    targetWeekEnd: targetWeekEnd,\n    validCount: valid.length,\n    insufficientCount: insufficient.length\n  }\n};"
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/signals/news",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symbols: $json.symbols, as_of_date: $json.as_of_date, run_id: $json.run_id, max_articles_per_symbol: 10, return_top_k: 3 }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "http-news-sentiment",
+      "name": "POST News Sentiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 400]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge LSTM + News",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine LSTM and News Sentiment data for OpenAI prompt\n// Note: n8n merge node in combineByPosition mode merges all JSON into ONE item\nconst inputs = $input.all();\n\n// With combineByPosition, both LSTM and News data are in the first (merged) item\n// LSTM data has: predictions, model_version, as_of_date, target_week_start, target_week_end\n// News data has: per_symbol, run_id, attempt, as_of_date, from_cache\nconst mergedData = inputs[0]?.json || {};\n\n// Extract LSTM data (look for 'predictions' array)\nconst predictions = mergedData.predictions || [];\n\n// Extract News data (look for 'per_symbol' array)\nconst newsSentiments = mergedData.per_symbol || [];\n\n// Create a lookup map for news sentiment by symbol\nconst newsMap = {};\nfor (const ns of newsSentiments) {\n  newsMap[ns.symbol] = ns;\n}\n\n// Build combined data for each symbol\nconst combined = predictions.map(p => {\n  const news = newsMap[p.symbol] || null;\n  return {\n    symbol: p.symbol,\n    predicted_return_pct: p.predicted_weekly_return_pct,\n    direction: p.direction,\n    has_enough_history: p.has_enough_history,\n    sentiment_score: news ? news.sentiment_score : null,\n    insufficient_news: news ? news.insufficient_news : true,\n    top_articles: news ? news.top_k_articles : []\n  };\n});\n\n// Build prompt for OpenAI\nconst symbolSummaries = combined\n  .filter(c => c.has_enough_history)\n  .slice(0, 10) // Top 10 for brevity\n  .map(c => {\n    const articles = c.top_articles.slice(0, 2).map(a => `\"${a.title}\"`).join(', ');\n    return `- ${c.symbol}: LSTM predicts ${c.direction} (${c.predicted_return_pct?.toFixed(2) || 'N/A'}%), news sentiment=${c.sentiment_score?.toFixed(2) || 'N/A'}. Headlines: ${articles || 'none'}`;\n  }).join('\\n');\n\nconst prompt = `You are a financial analyst assistant. Based on the following LSTM predictions and news sentiment for stocks, provide a brief structured summary in JSON format.\n\nData:\n${symbolSummaries}\n\nRespond with valid JSON only (no markdown), containing:\n{\n  \"market_outlook\": \"<1-2 sentence overall market sentiment based on the signals>\",\n  \"top_opportunities\": [\"<symbol1>\", \"<symbol2>\", \"<symbol3>\"],\n  \"key_risks\": [\"<brief risk 1>\", \"<brief risk 2>\"],\n  \"notable_news_themes\": [\"<theme1>\", \"<theme2>\"]\n}`;\n\nreturn {\n  json: {\n    lstm: { predictions: predictions, model_version: mergedData.model_version, target_week_start: mergedData.target_week_start, target_week_end: mergedData.target_week_end },\n    news: { per_symbol: newsSentiments, run_id: mergedData.run_id, from_cache: mergedData.from_cache },\n    combined: combined,\n    openai_prompt: prompt\n  }\n};"
+      },
+      "id": "code-prepare-openai",
+      "name": "Prepare OpenAI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 300]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.openai_prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "openai-summary",
+      "name": "OpenAI Summary",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [1500, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the final email combining LSTM, News, and OpenAI summary\nconst input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\n\nconst lstmData = prevData.lstm || {};\nconst newsData = prevData.news || {};\nconst combined = prevData.combined || [];\n\n// Parse OpenAI response\nlet aiSummary = {};\ntry {\n  const content = input.message?.content || input.choices?.[0]?.message?.content || '{}';\n  aiSummary = JSON.parse(content);\n} catch (e) {\n  aiSummary = { market_outlook: 'Unable to generate AI summary', top_opportunities: [], key_risks: [], notable_news_themes: [] };\n}\n\nconst predictions = lstmData.predictions || [];\nconst modelVersion = lstmData.model_version || 'unknown';\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = lstmData.as_of_date || 'N/A';\n\n// Separate valid and insufficient-history predictions\nconst valid = predictions.filter(p => p.has_enough_history);\nconst insufficient = predictions.filter(p => !p.has_enough_history);\n\n// Create news sentiment lookup\nconst newsMap = {};\nfor (const ns of (newsData.per_symbol || [])) {\n  newsMap[ns.symbol] = ns;\n}\n\n// Build HTML table for valid predictions with sentiment\nlet tableRows = '';\nfor (let i = 0; i < valid.length; i++) {\n  const p = valid[i];\n  const ns = newsMap[p.symbol];\n  \n  const ret = p.predicted_weekly_return_pct;\n  const retStr = ret !== null ? (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%' : 'N/A';\n  const direction = p.direction;\n  const color = direction === 'UP' ? '#22c55e' : direction === 'DOWN' ? '#ef4444' : '#6b7280';\n  const arrow = direction === 'UP' ? '↑' : direction === 'DOWN' ? '↓' : '→';\n  \n  // Sentiment\n  const sentScore = ns ? ns.sentiment_score : null;\n  let sentStr = 'N/A';\n  let sentColor = '#6b7280';\n  if (sentScore !== null) {\n    sentStr = sentScore >= 0 ? '+' + sentScore.toFixed(2) : sentScore.toFixed(2);\n    sentColor = sentScore > 0.1 ? '#22c55e' : sentScore < -0.1 ? '#ef4444' : '#6b7280';\n  }\n  \n  tableRows += `<tr>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb;\">${i + 1}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;\">${p.symbol}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color}; font-weight: bold;\">${arrow} ${retStr}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color};\">${direction}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${sentColor};\">${sentStr}</td>\n  </tr>`;\n}\n\n// Build insufficient history section if any\nlet insufficientSection = '';\nif (insufficient.length > 0) {\n  const insufficientSymbols = insufficient.map(p => p.symbol).join(', ');\n  insufficientSection = `\n    <div style=\"margin-top: 24px; padding: 16px; background-color: #fef3c7; border-radius: 8px;\">\n      <strong>⚠️ Insufficient History (${insufficient.length} symbols):</strong><br/>\n      ${insufficientSymbols}\n    </div>\n  `;\n}\n\n// Build AI Summary section\nconst topOpps = (aiSummary.top_opportunities || []).join(', ') || 'None identified';\nconst keyRisks = (aiSummary.key_risks || []).map(r => `<li>${r}</li>`).join('') || '<li>None identified</li>';\nconst themes = (aiSummary.notable_news_themes || []).join(', ') || 'None identified';\n\nconst aiSection = `\n  <div style=\"margin-top: 24px; padding: 16px; background-color: #dbeafe; border-radius: 8px;\">\n    <h3 style=\"margin-top: 0; color: #1e40af;\">🤖 AI Analysis Summary</h3>\n    <p><strong>Market Outlook:</strong> ${aiSummary.market_outlook || 'N/A'}</p>\n    <p><strong>Top Opportunities:</strong> ${topOpps}</p>\n    <p><strong>Key Risks:</strong></p>\n    <ul style=\"margin: 4px 0;\">${keyRisks}</ul>\n    <p><strong>News Themes:</strong> ${themes}</p>\n  </div>\n`;\n\nconst emailBody = `\n<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 0 auto;\">\n  <h2 style=\"color: #1f2937;\">Weekly Forecast + News Sentiment</h2>\n  \n  <div style=\"background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\">\n    <strong>Target Week:</strong> ${targetWeekStart} → ${targetWeekEnd}<br/>\n    <strong>As-of Date:</strong> ${asOfDate}<br/>\n    <strong>Model Version:</strong> ${modelVersion}<br/>\n    <strong>Predictions:</strong> ${valid.length} valid, ${insufficient.length} insufficient history\n  </div>\n  \n  ${aiSection}\n  \n  <h3 style=\"color: #374151;\">Ranked Predictions (Highest Gain → Highest Loss)</h3>\n  \n  <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n    <thead>\n      <tr style=\"background-color: #f9fafb;\">\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">#</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Symbol</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">LSTM Return</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Direction</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">News Sentiment</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${tableRows}\n    </tbody>\n  </table>\n  \n  ${insufficientSection}\n  \n  <div style=\"margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;\">\n    <em>This is a prediction from LearnFinance-2025 LSTM model + FinBERT news sentiment. Not financial advice.</em><br/>\n    Run ID: paper:${asOfDate}\n  </div>\n</div>\n`;\n\nreturn {\n  json: {\n    emailSubject: `Weekly Forecast + News (${targetWeekStart} → ${targetWeekEnd})`,\n    emailBody: emailBody,\n    targetWeekStart: targetWeekStart,\n    targetWeekEnd: targetWeekEnd,\n    validCount: valid.length,\n    insufficientCount: insufficient.length,\n    aiSummary: aiSummary\n  }\n};"
       },
       "id": "code-format-email",
       "name": "Format Email Body",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1060, 300]
+      "position": [1720, 300]
     },
     {
       "parameters": {
@@ -84,7 +155,7 @@
       "name": "Gmail Send Forecast",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [1280, 300],
+      "position": [1940, 300],
       "credentials": {
         "gmailOAuth2": {
           "id": "",
@@ -131,11 +202,60 @@
             "node": "POST LSTM Inference",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "POST News Sentiment",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     },
     "POST LSTM Inference": {
+      "main": [
+        [
+          {
+            "node": "Merge LSTM + News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST News Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge LSTM + News",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge LSTM + News": {
+      "main": [
+        [
+          {
+            "node": "Prepare OpenAI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare OpenAI Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Summary": {
       "main": [
         [
           {
@@ -180,4 +300,3 @@
     "instanceId": "learnfinance-2025"
   }
 }
-
