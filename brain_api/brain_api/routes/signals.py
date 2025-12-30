@@ -28,8 +28,8 @@ MAX_SYMBOLS = 50
 MAX_ARTICLES_PER_SYMBOL = 30
 MAX_RETURN_TOP_K = 10
 
-DEFAULT_MAX_ARTICLES = 10
-DEFAULT_RETURN_TOP_K = 5
+DEFAULT_MAX_ARTICLES = 30
+DEFAULT_RETURN_TOP_K = 10
 
 
 # ============================================================================
@@ -251,4 +251,6 @@ def get_news_sentiment(
 
     # Convert to response format
     return _result_to_response(result, return_top_k)
+
+
 

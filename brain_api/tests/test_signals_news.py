@@ -547,3 +547,5 @@ def test_news_sentiment_default_attempt(client_with_mocks):
     data = response.json()
     assert data["attempt"] == 1
 
+
+
