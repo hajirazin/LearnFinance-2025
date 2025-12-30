@@ -30,6 +30,9 @@ The API will be available at http://localhost:8000
 | GET | `/health` | Generic health check |
 | GET | `/health/live` | Liveness probe |
 | GET | `/health/ready` | Readiness probe |
+| GET | `/universe/halal` | Get halal stock universe |
+| POST | `/train/lstm` | Train LSTM model (Sunday cron) |
+| POST | `/inference/lstm` | LSTM weekly return predictions (Monday run) |
 
 ## API documentation
 

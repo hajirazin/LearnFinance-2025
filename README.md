@@ -357,10 +357,29 @@ Each ML operation is exposed as a **separate REST endpoint**, designed so it can
 ```json
 // POST /inference/lstm
 // Request
-{ "features": [...], "run_id": "paper:2025-12-29", "symbols": ["AAPL", "MSFT"] }
+{ "symbols": ["AAPL", "MSFT"], "as_of_date": "2025-12-29" }
+// Note: as_of_date is optional (defaults to today). API fetches price history from yfinance.
 
 // Response
-{ "predictions": [{ "symbol": "AAPL", "direction": 0.72, "uncertainty": 0.15 }, ...] }
+{
+  "predictions": [
+    {
+      "symbol": "AAPL",
+      "predicted_weekly_return_pct": 2.5,
+      "direction": "UP",
+      "has_enough_history": true,
+      "history_days_used": 100,
+      "data_end_date": "2025-12-26",
+      "target_week_start": "2025-12-29",
+      "target_week_end": "2026-01-03"
+    }
+  ],
+  "model_version": "v2025-01-01-abc123",
+  "as_of_date": "2025-12-29",
+  "target_week_start": "2025-12-29",
+  "target_week_end": "2026-01-03"
+}
+// Note: target_week_end is holiday-aware (Thu if Fri is a market holiday)
 ```
 
 **PPO inference**:

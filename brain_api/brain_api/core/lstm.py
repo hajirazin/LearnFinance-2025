@@ -297,7 +297,7 @@ def build_dataset(
     symbols_used = 0
     total_weeks = 0
 
-    for symbol, df in prices.items():
+    for _symbol, df in prices.items():
         # Skip if not enough data
         if len(df) < config.sequence_length + 5:  # Need at least one week after lookback
             continue
@@ -526,7 +526,7 @@ def train_model_pytorch(
     best_epoch = 0
     log_interval = max(1, config.epochs // 5)  # Log ~5 times during training
 
-    print(f"[LSTM] Starting training...")
+    print("[LSTM] Starting training...")
 
     for epoch in range(config.epochs):
         model.train()
@@ -630,3 +630,285 @@ def evaluate_for_promotion(
 
     # Must beat prior (if exists)
     return prior_val_loss is None or val_loss < prior_val_loss
+
+
+# ============================================================================
+# Inference helpers
+# ============================================================================
+
+
+@dataclass
+class WeekBoundaries:
+    """Trading week boundaries for inference.
+
+    Represents the target week for prediction, computed with holiday awareness.
+    """
+
+    target_week_start: date  # First trading day of the week (Mon or later if holiday)
+    target_week_end: date  # Last trading day of the week (Fri or earlier if holiday)
+    calendar_monday: date  # Calendar Monday of the ISO week
+    calendar_friday: date  # Calendar Friday of the ISO week
+
+
+def compute_week_boundaries(as_of_date: date) -> WeekBoundaries:
+    """Compute holiday-aware week boundaries for the week containing as_of_date.
+
+    Uses the NYSE calendar (XNYS) to determine actual trading days.
+    The target week is the ISO week that contains as_of_date.
+
+    Args:
+        as_of_date: Reference date (typically the Monday when inference runs)
+
+    Returns:
+        WeekBoundaries with actual trading day start/end for the week
+    """
+    from datetime import timedelta
+
+    import exchange_calendars as xcals
+
+    # Get NYSE calendar
+    nyse = xcals.get_calendar("XNYS")
+
+    # Find the Monday of the ISO week containing as_of_date
+    # weekday(): Monday=0, Tuesday=1, ..., Sunday=6
+    days_since_monday = as_of_date.weekday()
+    calendar_monday = as_of_date - timedelta(days=days_since_monday)
+    calendar_friday = calendar_monday + timedelta(days=4)
+
+    # Convert to pandas Timestamp for exchange_calendars
+    monday_ts = pd.Timestamp(calendar_monday)
+    friday_ts = pd.Timestamp(calendar_friday)
+
+    # Find first trading day on or after Monday (up to Friday)
+    # and last trading day on or before Friday (down to Monday)
+    schedule = nyse.sessions_in_range(monday_ts, friday_ts)
+
+    if len(schedule) == 0:
+        # Entire week is holiday - rare but possible (e.g., week between Christmas and New Year)
+        # Fall back to calendar dates; inference will note this in quality
+        return WeekBoundaries(
+            target_week_start=calendar_monday,
+            target_week_end=calendar_friday,
+            calendar_monday=calendar_monday,
+            calendar_friday=calendar_friday,
+        )
+
+    target_week_start = schedule[0].date()
+    target_week_end = schedule[-1].date()
+
+    return WeekBoundaries(
+        target_week_start=target_week_start,
+        target_week_end=target_week_end,
+        calendar_monday=calendar_monday,
+        calendar_friday=calendar_friday,
+    )
+
+
+@dataclass
+class InferenceFeatures:
+    """Features prepared for inference for a single symbol."""
+
+    symbol: str
+    features: np.ndarray | None  # Shape: (seq_len, n_features) or None if insufficient data
+    has_enough_history: bool
+    history_days_used: int
+    data_end_date: date | None  # Last date of data used (should be before target_week_start)
+
+
+def build_inference_features(
+    symbol: str,
+    prices_df: pd.DataFrame,
+    config: LSTMConfig,
+    cutoff_date: date,
+) -> InferenceFeatures:
+    """Build feature sequence for inference from OHLCV data.
+
+    Constructs the same log-return features as training, ending just before
+    cutoff_date (which should be target_week_start).
+
+    Args:
+        symbol: Ticker symbol
+        prices_df: DataFrame with OHLCV columns (open, high, low, close, volume)
+                   and DatetimeIndex
+        config: LSTM config with sequence_length and use_returns settings
+        cutoff_date: Features end before this date (typically target_week_start)
+
+    Returns:
+        InferenceFeatures with prepared feature sequence or None if insufficient data
+    """
+    if prices_df.empty:
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=0,
+            data_end_date=None,
+        )
+
+    # Ensure DatetimeIndex
+    if not isinstance(prices_df.index, pd.DatetimeIndex):
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=0,
+            data_end_date=None,
+        )
+
+    # Filter to data before cutoff_date
+    cutoff_ts = pd.Timestamp(cutoff_date)
+    df = prices_df[prices_df.index < cutoff_ts].copy()
+
+    if len(df) < config.sequence_length + 1:  # +1 for the shift in log returns
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=len(df),
+            data_end_date=df.index[-1].date() if len(df) > 0 else None,
+        )
+
+    # Compute features (log returns, same as training)
+    if config.use_returns:
+        features_df = pd.DataFrame(
+            {
+                "open_ret": np.log(df["open"] / df["open"].shift(1)),
+                "high_ret": np.log(df["high"] / df["high"].shift(1)),
+                "low_ret": np.log(df["low"] / df["low"].shift(1)),
+                "close_ret": np.log(df["close"] / df["close"].shift(1)),
+                "volume_ret": np.log(
+                    df["volume"] / df["volume"].shift(1).replace(0, 1)
+                ),
+            },
+            index=df.index,
+        )
+        # Drop first row (NaN from shift)
+        features_df = features_df.iloc[1:]
+    else:
+        features_df = df[["open", "high", "low", "close", "volume"]].copy()
+
+    # Replace infinities with 0
+    features_df = features_df.replace([np.inf, -np.inf], 0).fillna(0)
+
+    # Check if we have enough data after computing returns
+    if len(features_df) < config.sequence_length:
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=len(features_df),
+            data_end_date=features_df.index[-1].date() if len(features_df) > 0 else None,
+        )
+
+    # Take the last sequence_length rows
+    sequence = features_df.iloc[-config.sequence_length :].values
+    data_end_date = features_df.index[-1].date()
+
+    return InferenceFeatures(
+        symbol=symbol,
+        features=sequence,
+        has_enough_history=True,
+        history_days_used=len(features_df),
+        data_end_date=data_end_date,
+    )
+
+
+@dataclass
+class SymbolPrediction:
+    """Prediction result for a single symbol."""
+
+    symbol: str
+    predicted_weekly_return_pct: float | None  # Percentage (e.g., 2.5 for +2.5%)
+    direction: str  # "UP", "DOWN", or "FLAT"
+    has_enough_history: bool
+    history_days_used: int
+    data_end_date: str | None  # ISO format
+    target_week_start: str  # ISO format
+    target_week_end: str  # ISO format
+
+
+def run_inference(
+    model: "LSTMModel",
+    feature_scaler: StandardScaler,
+    features_list: list[InferenceFeatures],
+    week_boundaries: WeekBoundaries,
+) -> list[SymbolPrediction]:
+    """Run LSTM inference on prepared feature sequences.
+
+    Args:
+        model: Loaded LSTMModel in eval mode
+        feature_scaler: Fitted StandardScaler from training
+        features_list: List of InferenceFeatures (one per symbol)
+        week_boundaries: Target week info for the response
+
+    Returns:
+        List of SymbolPrediction results
+    """
+    predictions = []
+
+    # Separate symbols with/without sufficient data
+    valid_features = [(f.symbol, f) for f in features_list if f.features is not None]
+    invalid_features = [f for f in features_list if f.features is None]
+
+    # Handle symbols without enough data
+    for feat in invalid_features:
+        predictions.append(
+            SymbolPrediction(
+                symbol=feat.symbol,
+                predicted_weekly_return_pct=None,
+                direction="FLAT",
+                has_enough_history=False,
+                history_days_used=feat.history_days_used,
+                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                target_week_start=week_boundaries.target_week_start.isoformat(),
+                target_week_end=week_boundaries.target_week_end.isoformat(),
+            )
+        )
+
+    if not valid_features:
+        return predictions
+
+    # Batch inference for valid symbols
+    X = np.array([f.features for _, f in valid_features])
+
+    # Scale features using the training scaler
+    original_shape = X.shape
+    X_flat = X.reshape(-1, X.shape[-1])
+    X_scaled = feature_scaler.transform(X_flat)
+    X = X_scaled.reshape(original_shape)
+
+    # Convert to tensor and run model
+    X_tensor = torch.FloatTensor(X)
+
+    model.eval()
+    with torch.no_grad():
+        outputs = model(X_tensor)
+        raw_predictions = outputs.cpu().numpy().flatten()
+
+    # Build prediction results
+    for i, (symbol, feat) in enumerate(valid_features):
+        weekly_return = float(raw_predictions[i])
+        weekly_return_pct = weekly_return * 100  # Convert to percentage
+
+        # Determine direction
+        if weekly_return > 0.001:  # > 0.1% threshold for "UP"
+            direction = "UP"
+        elif weekly_return < -0.001:  # < -0.1% threshold for "DOWN"
+            direction = "DOWN"
+        else:
+            direction = "FLAT"
+
+        predictions.append(
+            SymbolPrediction(
+                symbol=symbol,
+                predicted_weekly_return_pct=round(weekly_return_pct, 4),
+                direction=direction,
+                has_enough_history=True,
+                history_days_used=feat.history_days_used,
+                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                target_week_start=week_boundaries.target_week_start.isoformat(),
+                target_week_end=week_boundaries.target_week_end.isoformat(),
+            )
+        )
+
+    return predictions

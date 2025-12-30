@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,23 @@ import joblib
 import torch
 
 from brain_api.core.lstm import LSTMConfig, LSTMModel, StandardScaler
+
+
+@dataclass
+class LSTMArtifacts:
+    """Loaded LSTM model artifacts for inference.
+
+    Contains everything needed to run inference:
+    - config: model hyperparameters (sequence_length, input_size, etc.)
+    - feature_scaler: fitted StandardScaler for input normalization
+    - model: PyTorch LSTM model with loaded weights
+    - version: the version string these artifacts came from
+    """
+
+    config: LSTMConfig
+    feature_scaler: StandardScaler
+    model: LSTMModel
+    version: str
 
 # Default base path for data storage
 DEFAULT_DATA_PATH = Path("data")
@@ -152,6 +170,93 @@ class LocalModelStorage:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
+
+    # ========================================================================
+    # Inference artifact loading
+    # ========================================================================
+
+    def load_config(self, version: str) -> LSTMConfig:
+        """Load model configuration for a version.
+
+        Args:
+            version: Version string
+
+        Returns:
+            LSTMConfig reconstructed from config.json
+
+        Raises:
+            FileNotFoundError: if config.json doesn't exist
+        """
+        config_path = self._version_path(version) / "config.json"
+        with open(config_path) as f:
+            config_dict = json.load(f)
+        return LSTMConfig(**config_dict)
+
+    def load_feature_scaler(self, version: str) -> StandardScaler:
+        """Load fitted feature scaler for a version.
+
+        Args:
+            version: Version string
+
+        Returns:
+            StandardScaler loaded from feature_scaler.pkl
+
+        Raises:
+            FileNotFoundError: if feature_scaler.pkl doesn't exist
+        """
+        scaler_path = self._version_path(version) / "feature_scaler.pkl"
+        return joblib.load(scaler_path)
+
+    def load_model(self, version: str, config: LSTMConfig | None = None) -> LSTMModel:
+        """Load trained LSTM model for a version.
+
+        Args:
+            version: Version string
+            config: Optional LSTMConfig; if not provided, will load from config.json
+
+        Returns:
+            LSTMModel with weights loaded
+
+        Raises:
+            FileNotFoundError: if weights.pt doesn't exist
+        """
+        if config is None:
+            config = self.load_config(version)
+
+        weights_path = self._version_path(version) / "weights.pt"
+        model = LSTMModel(config)
+        model.load_state_dict(torch.load(weights_path, weights_only=True))
+        model.eval()  # Set to evaluation mode for inference
+        return model
+
+    def load_current_artifacts(self) -> LSTMArtifacts:
+        """Load all artifacts for the current promoted version.
+
+        Convenience method that loads config, scaler, and model together.
+
+        Returns:
+            LSTMArtifacts containing everything needed for inference
+
+        Raises:
+            ValueError: if no current version is set
+            FileNotFoundError: if any artifact file is missing
+        """
+        version = self.read_current_version()
+        if version is None:
+            raise ValueError(
+                "No current LSTM version set. Train a model first with POST /train/lstm"
+            )
+
+        config = self.load_config(version)
+        feature_scaler = self.load_feature_scaler(version)
+        model = self.load_model(version, config)
+
+        return LSTMArtifacts(
+            config=config,
+            feature_scaler=feature_scaler,
+            model=model,
+            version=version,
+        )
 
 
 def create_metadata(
