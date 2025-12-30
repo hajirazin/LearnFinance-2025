@@ -495,6 +495,44 @@ n8n will be available at http://localhost:5678
 
 You should receive a "Hello World from LearnFinance-2025" email with a timestamp and placeholder `run_id`.
 
+## Weekly LSTM forecast email workflow
+
+Once you have Gmail set up, import the weekly forecast workflow:
+
+### 1. Start Brain API
+
+Brain API must be running and accessible from the n8n Docker container:
+
+```bash
+cd brain_api
+uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 2. Import the workflow
+
+1. In n8n, go to **Workflows → Add Workflow → Import from File**
+2. Select `n8n/workflows/weekly-lstm-forecast-email.json`
+3. Open the **Gmail Send Forecast** node and:
+   - Select your `Gmail OAuth2` credential
+   - Change `sendTo` to your recipient address
+4. Save the workflow
+
+### 3. Test manually
+
+Click **Execute Workflow** to test. The workflow will:
+
+1. Fetch the halal stock universe from `/universe/halal`
+2. Pick the top 20 symbols by ETF weight
+3. Call `/inference/lstm` for weekly return predictions
+4. Format and send an email with stocks ranked from highest predicted gain to highest predicted loss
+
+### 4. Enable the schedule
+
+By default, the workflow triggers every Monday at 18:00 IST. To enable:
+
+1. Toggle the workflow to **Active** in n8n
+2. The cron will run automatically each Monday
+
 ### Environment variables (optional)
 
 Copy and customize if needed:

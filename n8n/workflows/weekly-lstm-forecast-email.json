@@ -1,0 +1,183 @@
+{
+  "name": "Weekly LSTM Forecast Email",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1],
+              "triggerAtHour": 18,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Weekly Trigger (Mon 18:00 IST)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/universe/halal",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "http-halal-universe",
+      "name": "GET Halal Universe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract top N symbols from halal universe\nconst N = 20;\n\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\n\n// Pass the run date (today in IST) for the inference request\nconst now = new Date();\nconst istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30\nconst istDate = new Date(now.getTime() + istOffset);\nconst asOfDate = istDate.toISOString().split('T')[0];\n\nreturn {\n  json: {\n    symbols: symbols,\n    as_of_date: asOfDate,\n    stock_count: symbols.length\n  }\n};"
+      },
+      "id": "code-pick-symbols",
+      "name": "Pick Top 20 Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/inference/lstm",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symbols: $json.symbols, as_of_date: $json.as_of_date }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "http-lstm-inference",
+      "name": "POST LSTM Inference",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format predictions into an email-friendly table\nconst data = $input.first().json;\nconst predictions = data.predictions || [];\nconst modelVersion = data.model_version || 'unknown';\nconst targetWeekStart = data.target_week_start || 'N/A';\nconst targetWeekEnd = data.target_week_end || 'N/A';\nconst asOfDate = data.as_of_date || 'N/A';\n\n// Separate valid and insufficient-history predictions\nconst valid = predictions.filter(p => p.has_enough_history);\nconst insufficient = predictions.filter(p => !p.has_enough_history);\n\n// Build HTML table for valid predictions (already sorted by API)\nlet tableRows = '';\nfor (let i = 0; i < valid.length; i++) {\n  const p = valid[i];\n  const ret = p.predicted_weekly_return_pct;\n  const retStr = ret !== null ? (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%' : 'N/A';\n  const direction = p.direction;\n  const color = direction === 'UP' ? '#22c55e' : direction === 'DOWN' ? '#ef4444' : '#6b7280';\n  const arrow = direction === 'UP' ? '↑' : direction === 'DOWN' ? '↓' : '→';\n  \n  tableRows += `<tr>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb;\">${i + 1}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;\">${p.symbol}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color}; font-weight: bold;\">${arrow} ${retStr}</td>\n    <td style=\"padding: 8px; border-bottom: 1px solid #e5e7eb; color: ${color};\">${direction}</td>\n  </tr>`;\n}\n\n// Build insufficient history section if any\nlet insufficientSection = '';\nif (insufficient.length > 0) {\n  const insufficientSymbols = insufficient.map(p => p.symbol).join(', ');\n  insufficientSection = `\n    <div style=\"margin-top: 24px; padding: 16px; background-color: #fef3c7; border-radius: 8px;\">\n      <strong>⚠️ Insufficient History (${insufficient.length} symbols):</strong><br/>\n      ${insufficientSymbols}\n    </div>\n  `;\n}\n\nconst emailBody = `\n<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <h2 style=\"color: #1f2937;\">Weekly LSTM Forecast</h2>\n  \n  <div style=\"background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\">\n    <strong>Target Week:</strong> ${targetWeekStart} → ${targetWeekEnd}<br/>\n    <strong>As-of Date:</strong> ${asOfDate}<br/>\n    <strong>Model Version:</strong> ${modelVersion}<br/>\n    <strong>Predictions:</strong> ${valid.length} valid, ${insufficient.length} insufficient history\n  </div>\n  \n  <h3 style=\"color: #374151;\">Ranked Predictions (Highest Gain → Highest Loss)</h3>\n  \n  <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n    <thead>\n      <tr style=\"background-color: #f9fafb;\">\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">#</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Symbol</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Predicted Return</th>\n        <th style=\"padding: 12px 8px; text-align: left; border-bottom: 2px solid #e5e7eb;\">Direction</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${tableRows}\n    </tbody>\n  </table>\n  \n  ${insufficientSection}\n  \n  <div style=\"margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;\">\n    <em>This is a prediction from LearnFinance-2025 LSTM model. Not financial advice.</em><br/>\n    Run ID: paper:${asOfDate}\n  </div>\n</div>\n`;\n\nreturn {\n  json: {\n    emailSubject: `Weekly LSTM Forecast (${targetWeekStart} → ${targetWeekEnd})`,\n    emailBody: emailBody,\n    targetWeekStart: targetWeekStart,\n    targetWeekEnd: targetWeekEnd,\n    validCount: valid.length,\n    insufficientCount: insufficient.length\n  }\n};"
+      },
+      "id": "code-format-email",
+      "name": "Format Email Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "hajirazin@gmail.com",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "={{ $json.emailBody }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "gmail-send",
+      "name": "Gmail Send Forecast",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1280, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger (for testing)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [180, 480]
+    }
+  ],
+  "connections": {
+    "Weekly Trigger (Mon 18:00 IST)": {
+      "main": [
+        [
+          {
+            "node": "GET Halal Universe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Halal Universe": {
+      "main": [
+        [
+          {
+            "node": "Pick Top 20 Symbols",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Top 20 Symbols": {
+      "main": [
+        [
+          {
+            "node": "POST LSTM Inference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST LSTM Inference": {
+      "main": [
+        [
+          {
+            "node": "Format Email Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Body": {
+      "main": [
+        [
+          {
+            "node": "Gmail Send Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (for testing)": {
+      "main": [
+        [
+          {
+            "node": "GET Halal Universe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "learnfinance-2025"
+  }
+}
+

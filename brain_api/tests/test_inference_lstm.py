@@ -407,3 +407,93 @@ def test_inference_lstm_custom_as_of_date(client_with_mocks):
     data = response.json()
     assert data["as_of_date"] == "2025-01-06"
 
+
+# ============================================================================
+# Scenario 6: Sorting behavior (highest gain → highest loss)
+# ============================================================================
+
+
+def test_inference_lstm_predictions_sorted_by_return_desc(client_with_mocks):
+    """POST /inference/lstm returns predictions sorted by predicted_weekly_return_pct descending."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    predictions = data["predictions"]
+
+    # Extract returns for symbols with valid predictions
+    valid_returns = [
+        p["predicted_weekly_return_pct"]
+        for p in predictions
+        if p["predicted_weekly_return_pct"] is not None
+    ]
+
+    # Check that valid returns are sorted descending (highest first)
+    assert valid_returns == sorted(valid_returns, reverse=True)
+
+
+def test_inference_lstm_insufficient_history_at_end(temp_storage):
+    """Symbols with insufficient history should appear at the end of predictions."""
+
+    def mock_price_loader_partial(symbols, start_date, end_date):
+        """Return data only for some symbols."""
+        prices = {}
+        date_range = pd.bdate_range(start=start_date, end=end_date)
+
+        # Only return data for AAPL and MSFT, not UNKNOWNSYMBOL
+        for symbol in symbols:
+            if symbol in ["AAPL", "MSFT"] and len(date_range) >= 10:
+                np.random.seed(hash(symbol) % 2**32)
+                base_price = 100.0
+                returns = np.random.randn(len(date_range)) * 0.02
+                prices_array = base_price * np.exp(np.cumsum(returns))
+
+                df = pd.DataFrame(
+                    {
+                        "open": prices_array * (1 + np.random.randn(len(date_range)) * 0.005),
+                        "high": prices_array * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
+                        "low": prices_array * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
+                        "close": prices_array,
+                        "volume": np.random.randint(1000000, 10000000, len(date_range)),
+                    },
+                    index=date_range,
+                )
+                prices[symbol] = df
+
+        return prices
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_partial
+    app.dependency_overrides[get_week_boundary_computer] = (
+        lambda: mock_week_boundary_computer_normal
+    )
+
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/inference/lstm",
+            json={"symbols": ["UNKNOWNSYMBOL", "AAPL", "MSFT"]},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        predictions = data["predictions"]
+
+        # Should have 3 predictions
+        assert len(predictions) == 3
+
+        # UNKNOWNSYMBOL should be at the end (has_enough_history=False)
+        assert predictions[-1]["symbol"] == "UNKNOWNSYMBOL"
+        assert predictions[-1]["has_enough_history"] is False
+
+        # AAPL and MSFT should be first two, sorted by return
+        assert predictions[0]["has_enough_history"] is True
+        assert predictions[1]["has_enough_history"] is True
+    finally:
+        app.dependency_overrides.clear()
+

@@ -11,7 +11,7 @@
     },
     {
       "parameters": {
-        "sendTo": "your-recipient@example.com",
+        "sendTo": "hajirazin@gmail.com",
         "subject": "Hello World from LearnFinance-2025",
         "message": "Hello from LearnFinance-2025!\n\nThis is a test email to verify your n8n + Gmail OAuth setup is working.\n\n---\nRun ID (placeholder): paper:{{ $now.format('yyyy-MM-dd') }}\nTimestamp: {{ $now.toISO() }}\nTimezone: Asia/Kolkata (IST)\n---\n\nIf you received this, your email integration is ready for the weekly trading notifications.",
         "options": {}
