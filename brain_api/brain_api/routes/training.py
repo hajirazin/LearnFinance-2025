@@ -97,7 +97,7 @@ def train_lstm(
     the RL agent's weekly decision horizon. This naturally handles holidays
     as a "week" is simply the first-to-last trading day of each ISO week.
 
-    Uses API config for data window (default: last 10 years).
+    Uses API config for data window (default: last 15 years).
     Fetches price data from yfinance for the halal universe.
     Writes versioned artifacts and promotes if evaluation passes.
 
