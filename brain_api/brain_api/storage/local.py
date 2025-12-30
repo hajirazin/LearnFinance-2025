@@ -23,12 +23,14 @@ class LocalModelStorage:
         {base_path}/models/lstm/{version}/
             - weights.pt            (PyTorch model weights)
             - feature_scaler.pkl    (sklearn StandardScaler for input features)
-            - price_scaler.pkl      (sklearn StandardScaler for target prices)
             - config.json           (model hyperparameters)
             - metadata.json         (training info, metrics, data window)
 
     The current version pointer is stored at:
         {base_path}/models/lstm/current
+
+    Note: The model predicts weekly returns directly, so no price_scaler
+    is needed for denormalization.
     """
 
     def __init__(self, base_path: Path | str | None = None):
@@ -55,7 +57,6 @@ class LocalModelStorage:
         version: str,
         model: LSTMModel,
         feature_scaler: StandardScaler,
-        price_scaler: StandardScaler,
         config: LSTMConfig,
         metadata: dict[str, Any],
     ) -> Path:
@@ -65,7 +66,6 @@ class LocalModelStorage:
             version: Version string (e.g., 'v2025-01-05-abc123')
             model: Trained PyTorch LSTM model
             feature_scaler: Fitted StandardScaler for input features
-            price_scaler: Fitted StandardScaler for target prices (for denormalization)
             config: Model configuration
             metadata: Training metadata (includes window, metrics, etc.)
 
@@ -82,10 +82,6 @@ class LocalModelStorage:
         # Save feature scaler (for input normalization)
         feature_scaler_path = version_dir / "feature_scaler.pkl"
         joblib.dump(feature_scaler, feature_scaler_path)
-
-        # Save price scaler (for output denormalization back to prices)
-        price_scaler_path = version_dir / "price_scaler.pkl"
-        joblib.dump(price_scaler, price_scaler_path)
 
         # Save config
         config_path = version_dir / "config.json"

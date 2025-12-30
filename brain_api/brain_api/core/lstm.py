@@ -43,26 +43,34 @@ def get_device() -> torch.device:
 
 @dataclass
 class LSTMConfig:
-    """LSTM model hyperparameters and training config."""
+    """LSTM model hyperparameters and training config.
+
+    The LSTM predicts weekly returns (Mon open → Fri close), not daily prices.
+    This aligns with the RL agent's weekly decision horizon.
+    """
 
     # Model architecture
-    input_size: int = 5  # OHLCV features
+    input_size: int = 5  # OHLCV features (log returns)
     hidden_size: int = 64
     num_layers: int = 2
     dropout: float = 0.2
 
     # Forecast settings
-    forecast_horizon: int = 7  # Predict next 7 days of prices
+    # Single output: weekly return = (fri_close - mon_open) / mon_open
+    forecast_horizon: int = 1
 
     # Training
-    sequence_length: int = 60  # 60 days lookback
+    sequence_length: int = 60  # 60 trading days lookback
     batch_size: int = 32
     learning_rate: float = 0.001
     epochs: int = 50
     validation_split: float = 0.2
 
     # Feature engineering
-    use_returns: bool = True  # Use returns for input features (more stationary)
+    use_returns: bool = True  # Use log returns for input features (more stationary)
+
+    # Week filtering
+    min_week_days: int = 3  # Skip weeks with fewer than 3 trading days
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -78,6 +86,7 @@ class LSTMConfig:
             "epochs": self.epochs,
             "validation_split": self.validation_split,
             "use_returns": self.use_returns,
+            "min_week_days": self.min_week_days,
         }
 
 
@@ -202,54 +211,100 @@ def load_prices_yfinance(
 
 
 # ============================================================================
-# Dataset building (7-day price prediction)
+# Dataset building (weekly return prediction)
 # ============================================================================
 
 
 @dataclass
 class DatasetResult:
-    """Result of dataset building."""
+    """Result of dataset building for weekly return prediction."""
 
     X: np.ndarray  # Input sequences: (n_samples, seq_len, n_features)
-    y: np.ndarray  # Targets: (n_samples, forecast_horizon) - next 7 days close prices
+    y: np.ndarray  # Targets: (n_samples, 1) - weekly returns
     feature_scaler: StandardScaler  # Scaler for input features
-    price_scaler: StandardScaler  # Scaler for target prices (for denormalization)
+
+
+def _extract_trading_weeks(df: pd.DataFrame, min_days: int = 3) -> list[pd.DataFrame]:
+    """Extract trading weeks from a price DataFrame.
+
+    Groups data by ISO week and filters out weeks with too few trading days.
+
+    Args:
+        df: DataFrame with DatetimeIndex containing OHLCV data
+        min_days: Minimum trading days required for a valid week
+
+    Returns:
+        List of DataFrames, one per valid trading week
+    """
+    # Ensure we have a DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return []
+
+    # Group by ISO week (year + week number)
+    df = df.copy()
+    df["_year_week"] = df.index.to_period("W")
+
+    weeks = []
+    for _, week_df in df.groupby("_year_week"):
+        if len(week_df) >= min_days:
+            weeks.append(week_df.drop(columns=["_year_week"]))
+
+    return weeks
+
+
+def _compute_weekly_return(week_df: pd.DataFrame) -> float:
+    """Compute weekly return from a trading week DataFrame.
+
+    Args:
+        week_df: DataFrame for a single trading week with OHLCV data
+
+    Returns:
+        Weekly return = (last_day_close - first_day_open) / first_day_open
+    """
+    first_day_open = week_df["open"].iloc[0]
+    last_day_close = week_df["close"].iloc[-1]
+
+    if first_day_open == 0:
+        return 0.0
+
+    return (last_day_close - first_day_open) / first_day_open
 
 
 def build_dataset(
     prices: dict[str, pd.DataFrame],
     config: LSTMConfig,
 ) -> DatasetResult:
-    """Build training dataset from price data.
+    """Build training dataset for weekly return prediction.
 
-    Creates sequences of features for LSTM input and corresponding targets
-    (next 7 days of close prices).
+    Creates samples aligned to trading weeks:
+    - Input: 60 trading days of features ending at week start
+    - Target: weekly return (fri_close - mon_open) / mon_open
+
+    This naturally handles holidays - a "week" is simply the first to last
+    trading day of each ISO week.
 
     Args:
-        prices: Dict of symbol -> OHLCV DataFrame
+        prices: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
         config: LSTM configuration
 
     Returns:
-        DatasetResult with X, y, feature_scaler, and price_scaler
+        DatasetResult with X, y (weekly returns), and feature_scaler
     """
     all_sequences = []
     all_targets = []
-    all_close_prices = []  # For fitting price scaler
 
-    horizon = config.forecast_horizon
+    print(f"[LSTM] Building dataset from {len(prices)} symbols...")
+    symbols_used = 0
+    total_weeks = 0
 
-    for _symbol, df in prices.items():
-        # Need enough data for sequence + forecast horizon
-        min_length = config.sequence_length + horizon
-        if len(df) < min_length:
+    for symbol, df in prices.items():
+        # Skip if not enough data
+        if len(df) < config.sequence_length + 5:  # Need at least one week after lookback
             continue
 
-        # Collect all close prices for scaler fitting
-        all_close_prices.extend(df["close"].values.tolist())
-
-        # Feature engineering: use returns for input (more stationary)
+        # Compute features (log returns for stationarity)
         if config.use_returns:
-            features = pd.DataFrame(
+            features_df = pd.DataFrame(
                 {
                     "open_ret": np.log(df["open"] / df["open"].shift(1)),
                     "high_ret": np.log(df["high"] / df["high"].shift(1)),
@@ -258,47 +313,74 @@ def build_dataset(
                     "volume_ret": np.log(
                         df["volume"] / df["volume"].shift(1).replace(0, 1)
                     ),
-                }
+                },
+                index=df.index,
             )
-            # Drop first row (NaN from shift) but keep index aligned with df
-            features = features.iloc[1:].reset_index(drop=True)
-            close_prices = df["close"].iloc[1:].reset_index(drop=True)
+            # Drop first row (NaN from shift)
+            features_df = features_df.iloc[1:]
+            df_aligned = df.iloc[1:]
         else:
-            features = (
-                df[["open", "high", "low", "close", "volume"]]
-                .copy()
-                .reset_index(drop=True)
-            )
-            close_prices = df["close"].reset_index(drop=True)
+            features_df = df[["open", "high", "low", "close", "volume"]].copy()
+            df_aligned = df
 
         # Replace infinities with 0
-        features = features.replace([np.inf, -np.inf], 0).fillna(0)
+        features_df = features_df.replace([np.inf, -np.inf], 0).fillna(0)
 
-        values = features.values
+        # Extract trading weeks from the aligned data
+        weeks = _extract_trading_weeks(df_aligned, min_days=config.min_week_days)
 
-        # Create sequences with 7-day price targets
-        # We need: [day_0 ... day_59] as input -> [day_60 ... day_66] as target
-        for i in range(len(values) - config.sequence_length - horizon + 1):
-            seq = values[i : i + config.sequence_length]
+        if len(weeks) < 2:  # Need at least 2 weeks (1 for target)
+            continue
 
-            # Target: next 7 days of close prices
-            target_start = i + config.sequence_length
-            target_end = target_start + horizon
-            target_prices = close_prices.iloc[target_start:target_end].values
+        symbol_samples = 0
 
-            if len(target_prices) == horizon:
-                all_sequences.append(seq)
-                all_targets.append(target_prices)
+        # For each week (except the last), create a training sample
+        # Input: features from sequence_length days ending at week start
+        # Target: that week's return
+        for i in range(len(weeks) - 1):
+            week = weeks[i + 1]  # Target week (we predict the NEXT week)
+            week_start = week.index[0]
+
+            # Find the position of week_start in features_df
+            try:
+                week_start_idx = features_df.index.get_loc(week_start)
+            except KeyError:
+                continue
+
+            # Check if we have enough history
+            if week_start_idx < config.sequence_length:
+                continue
+
+            # Extract input sequence (sequence_length days ending just before week start)
+            seq_start_idx = week_start_idx - config.sequence_length
+            seq_end_idx = week_start_idx  # Exclusive
+
+            sequence = features_df.iloc[seq_start_idx:seq_end_idx].values
+
+            if len(sequence) != config.sequence_length:
+                continue
+
+            # Compute target: weekly return for the target week
+            weekly_return = _compute_weekly_return(week)
+
+            all_sequences.append(sequence)
+            all_targets.append([weekly_return])
+            symbol_samples += 1
+
+        if symbol_samples > 0:
+            symbols_used += 1
+            total_weeks += symbol_samples
+
+    print(f"[LSTM] Dataset built: {total_weeks} weekly samples from {symbols_used} symbols")
 
     if not all_sequences:
         # Return empty arrays if no data
         empty_X = np.array([]).reshape(0, config.sequence_length, config.input_size)
-        empty_y = np.array([]).reshape(0, horizon)
+        empty_y = np.array([]).reshape(0, 1)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
             feature_scaler=StandardScaler(),
-            price_scaler=StandardScaler(),
         )
 
     X = np.array(all_sequences)
@@ -311,30 +393,28 @@ def build_dataset(
     X_flat_scaled = feature_scaler.fit_transform(X_flat)
     X = X_flat_scaled.reshape(original_shape)
 
-    # Fit price scaler on all close prices (for target normalization)
-    price_scaler = StandardScaler()
-    price_scaler.fit(np.array(all_close_prices).reshape(-1, 1))
-
-    # Scale the targets
-    y_shape = y.shape
-    y_flat = y.reshape(-1, 1)
-    y_scaled = price_scaler.transform(y_flat).reshape(y_shape)
+    # Note: We do NOT scale the targets (weekly returns).
+    # Returns are already naturally bounded (typically -0.1 to +0.1) and
+    # keeping them in original scale makes interpretation straightforward.
 
     return DatasetResult(
         X=X,
-        y=y_scaled,
+        y=y,
         feature_scaler=feature_scaler,
-        price_scaler=price_scaler,
     )
 
 
 # ============================================================================
-# PyTorch LSTM Model (7-day output)
+# PyTorch LSTM Model (weekly return prediction)
 # ============================================================================
 
 
 class LSTMModel(nn.Module):
-    """PyTorch LSTM model for 7-day price prediction."""
+    """PyTorch LSTM model for weekly return prediction.
+
+    Predicts a single scalar: the expected weekly return
+    (friday_close - monday_open) / monday_open.
+    """
 
     def __init__(self, config: LSTMConfig):
         super().__init__()
@@ -348,7 +428,7 @@ class LSTMModel(nn.Module):
             batch_first=True,
         )
 
-        # Output layer: predict forecast_horizon days (default 7)
+        # Output layer: single value (weekly return)
         self.fc = nn.Linear(config.hidden_size, config.forecast_horizon)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -358,7 +438,7 @@ class LSTMModel(nn.Module):
             x: Input tensor of shape (batch, seq_len, input_size)
 
         Returns:
-            Output tensor of shape (batch, forecast_horizon) - predicted prices for next 7 days
+            Output tensor of shape (batch, 1) - predicted weekly return
         """
         lstm_out, _ = self.lstm(x)
         # Take the last time step's output
@@ -373,22 +453,20 @@ class LSTMModel(nn.Module):
 
 @dataclass
 class TrainingResult:
-    """Result of LSTM training."""
+    """Result of LSTM training for weekly return prediction."""
 
     model: LSTMModel
     feature_scaler: StandardScaler
-    price_scaler: StandardScaler  # For denormalizing predictions back to prices
     config: LSTMConfig
     train_loss: float
     val_loss: float
-    baseline_loss: float  # Persistence model loss
+    baseline_loss: float  # Baseline: predict 0 return (no change)
 
 
 def train_model_pytorch(
     X: np.ndarray,
     y: np.ndarray,
     feature_scaler: StandardScaler,
-    price_scaler: StandardScaler,
     config: LSTMConfig,
 ) -> TrainingResult:
     """Train LSTM model using PyTorch.
@@ -400,9 +478,8 @@ def train_model_pytorch(
 
     Args:
         X: Input sequences, shape (n_samples, seq_len, n_features)
-        y: Targets, shape (n_samples, forecast_horizon) - scaled prices
+        y: Targets, shape (n_samples, 1) - weekly returns (unscaled)
         feature_scaler: Fitted scaler for input features
-        price_scaler: Fitted scaler for target prices
         config: Model configuration
 
     Returns:
@@ -410,15 +487,14 @@ def train_model_pytorch(
     """
     # Detect best available device
     device = get_device()
-    print(f"Training on device: {device}")
+    print(f"[LSTM] Training on device: {device}")
 
     if len(X) == 0:
-        # No data - return dummy result
+        print("[LSTM] No training data - returning dummy model")
         model = LSTMModel(config)
         return TrainingResult(
             model=model,
             feature_scaler=feature_scaler,
-            price_scaler=price_scaler,
             config=config,
             train_loss=float("inf"),
             val_loss=float("inf"),
@@ -429,6 +505,9 @@ def train_model_pytorch(
     split_idx = int(len(X) * (1 - config.validation_split))
     X_train, X_val = X[:split_idx], X[split_idx:]
     y_train, y_val = y[:split_idx], y[split_idx:]
+
+    print(f"[LSTM] Dataset: {len(X)} samples ({len(X_train)} train, {len(X_val)} val)")
+    print(f"[LSTM] Config: {config.epochs} epochs, batch_size={config.batch_size}, lr={config.learning_rate}")
 
     # Convert to tensors and move to device
     X_train_t = torch.FloatTensor(X_train).to(device)
@@ -444,13 +523,18 @@ def train_model_pytorch(
     # Training loop
     best_val_loss = float("inf")
     best_model_state = None
+    best_epoch = 0
+    log_interval = max(1, config.epochs // 5)  # Log ~5 times during training
 
-    for _epoch in range(config.epochs):
+    print(f"[LSTM] Starting training...")
+
+    for epoch in range(config.epochs):
         model.train()
 
         # Mini-batch training
         indices = torch.randperm(len(X_train_t), device=device)
         total_train_loss = 0.0
+        n_batches = 0
 
         for i in range(0, len(indices), config.batch_size):
             batch_idx = indices[i : i + config.batch_size]
@@ -464,6 +548,9 @@ def train_model_pytorch(
             optimizer.step()
 
             total_train_loss += loss.item()
+            n_batches += 1
+
+        avg_train_loss = total_train_loss / n_batches
 
         # Validation
         model.eval()
@@ -471,11 +558,18 @@ def train_model_pytorch(
             val_outputs = model(X_val_t)
             val_loss = criterion(val_outputs, y_val_t).item()
 
+        # Log progress at intervals
+        if (epoch + 1) % log_interval == 0 or epoch == 0:
+            print(f"[LSTM] Epoch {epoch + 1}/{config.epochs}: train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}")
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            best_epoch = epoch + 1
             best_model_state = {
                 k: v.cpu().clone() for k, v in model.state_dict().items()
             }
+
+    print(f"[LSTM] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f}")
 
     # Restore best model (on CPU for portability when saving)
     model_cpu = LSTMModel(config)
@@ -488,15 +582,17 @@ def train_model_pytorch(
         train_outputs = model(X_train_t)
         final_train_loss = criterion(train_outputs, y_train_t).item()
 
-    # Baseline: persistence model (predict last known price for all 7 days)
-    # Since targets are scaled, baseline predicts scaled "0" which represents the mean
-    # A better baseline: MSE if we predicted y_val[:, 0] (day 1) for all days
-    baseline_loss = float(np.mean((y_val - y_val[:, :1]) ** 2))
+    # Baseline: predict 0 return (no change from week to week)
+    # This is the naive "persistence" baseline for returns
+    baseline_loss = float(np.mean(y_val**2))
+
+    print(f"[LSTM] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}")
+    beats_baseline = best_val_loss < baseline_loss
+    print(f"[LSTM] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline")
 
     return TrainingResult(
         model=model_cpu,  # Return CPU model for portable saving
         feature_scaler=feature_scaler,
-        price_scaler=price_scaler,
         config=config,
         train_loss=final_train_loss,
         val_loss=best_val_loss,

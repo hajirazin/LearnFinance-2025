@@ -35,22 +35,20 @@ def mock_price_loader(symbols, start_date, end_date):
 
 
 def mock_dataset_builder(prices, config) -> DatasetResult:
-    """Return a mock dataset result."""
+    """Return a mock dataset result for weekly return prediction."""
     return DatasetResult(
         X=np.array([]).reshape(0, config.sequence_length, config.input_size),
-        y=np.array([]).reshape(0, config.forecast_horizon),
+        y=np.array([]).reshape(0, 1),  # Single weekly return per sample
         feature_scaler=StandardScaler(),
-        price_scaler=StandardScaler(),
     )
 
 
-def mock_trainer(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
+def mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
     """Return a mock training result with controllable metrics."""
     model = LSTMModel(config)
     return TrainingResult(
         model=model,
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
-        price_scaler=price_scaler if price_scaler else StandardScaler(),
         config=config,
         train_loss=0.01,
         val_loss=0.02,  # Better than baseline (0.05)
@@ -58,15 +56,12 @@ def mock_trainer(X, y, feature_scaler, price_scaler, config) -> TrainingResult:
     )
 
 
-def mock_trainer_worse_than_baseline(
-    X, y, feature_scaler, price_scaler, config
-) -> TrainingResult:
+def mock_trainer_worse_than_baseline(X, y, feature_scaler, config) -> TrainingResult:
     """Return a mock training result that is worse than baseline."""
     model = LSTMModel(config)
     return TrainingResult(
         model=model,
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
-        price_scaler=price_scaler if price_scaler else StandardScaler(),
         config=config,
         train_loss=0.10,
         val_loss=0.10,  # Worse than baseline (0.05)

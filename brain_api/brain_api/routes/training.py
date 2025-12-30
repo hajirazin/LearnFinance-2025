@@ -59,7 +59,7 @@ def get_config() -> LSTMConfig:
 # Type aliases for dependency injection
 PriceLoader = Callable[[list[str], Any, Any], dict]
 DatasetBuilder = Callable[[dict, LSTMConfig], DatasetResult]
-Trainer = Callable[[Any, Any, Any, Any, LSTMConfig], TrainingResult]
+Trainer = Callable[[Any, Any, Any, LSTMConfig], TrainingResult]  # X, y, scaler, config
 
 
 def get_price_loader() -> PriceLoader:
@@ -91,7 +91,11 @@ def train_lstm(
     dataset_builder: DatasetBuilder = Depends(get_dataset_builder),
     trainer: Trainer = Depends(get_trainer),
 ) -> LSTMTrainResponse:
-    """Train the shared LSTM model for 7-day price prediction.
+    """Train the shared LSTM model for weekly return prediction.
+
+    The model predicts weekly returns (Mon open → Fri close) to align with
+    the RL agent's weekly decision horizon. This naturally handles holidays
+    as a "week" is simply the first-to-last trading day of each ISO week.
 
     Uses API config for data window (default: last 10 years).
     Fetches price data from yfinance for the halal universe.
@@ -123,7 +127,7 @@ def train_lstm(
     # Load price data
     prices = price_loader(symbols, start_date, end_date)
 
-    # Build dataset (returns DatasetResult with X, y, feature_scaler, price_scaler)
+    # Build dataset (returns DatasetResult with X, y (weekly returns), feature_scaler)
     dataset = dataset_builder(prices, config)
 
     # Train model
@@ -131,7 +135,6 @@ def train_lstm(
         dataset.X,
         dataset.y,
         dataset.feature_scaler,
-        dataset.price_scaler,
         config,
     )
 
@@ -164,12 +167,11 @@ def train_lstm(
         prior_version=prior_version,
     )
 
-    # Write artifacts (now includes both scalers)
+    # Write artifacts
     storage.write_artifacts(
         version=version,
         model=result.model,
         feature_scaler=result.feature_scaler,
-        price_scaler=result.price_scaler,
         config=config,
         metadata=metadata,
     )

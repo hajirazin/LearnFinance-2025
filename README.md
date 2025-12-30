@@ -167,6 +167,24 @@ Even for paper, enforce hard limits (config):
 
 Monday inference runs **do not retrain** models. Training happens separately on Sundays.
 
+### LSTM prediction target
+
+The LSTM predicts **weekly returns** (not daily prices):
+
+- **Input**: Last 60 trading days of OHLCV log-return features
+- **Output**: Single scalar = `(Friday close - Monday open) / Monday open`
+
+This directly aligns with the RL agent's weekly decision horizon and eliminates holiday edge cases:
+
+| Week type | What "week" means | No special code needed |
+|-----------|-------------------|------------------------|
+| Normal 5-day | Mon → Fri | ✓ |
+| Monday holiday | Tue → Fri | ✓ |
+| Friday holiday | Mon → Thu | ✓ |
+| Short week (3-4 days) | First → Last trading day | ✓ |
+
+The training data groups by ISO week, so a "week" is simply whatever trading days fall within that calendar week. Weeks with fewer than 3 trading days are skipped.
+
 ### Recommended schedule
 
 | Day | LSTM | PPO |
