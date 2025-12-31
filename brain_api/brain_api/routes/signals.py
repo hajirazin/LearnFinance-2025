@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from brain_api.core.news_sentiment import (
@@ -251,6 +251,7 @@ def get_news_sentiment(
 
     # Convert to response format
     return _result_to_response(result, return_top_k)
+
 
 
 

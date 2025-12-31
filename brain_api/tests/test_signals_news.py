@@ -10,8 +10,6 @@ from fastapi.testclient import TestClient
 from brain_api.core.news_sentiment import (
     Article,
     FinBERTResult,
-    NewsFetcher,
-    SentimentScorer,
 )
 from brain_api.main import app
 from brain_api.routes.signals import (
@@ -19,7 +17,6 @@ from brain_api.routes.signals import (
     get_news_fetcher,
     get_sentiment_scorer,
 )
-
 
 # ============================================================================
 # Mock implementations for testing
@@ -546,6 +543,7 @@ def test_news_sentiment_default_attempt(client_with_mocks):
 
     data = response.json()
     assert data["attempt"] == 1
+
 
 
 

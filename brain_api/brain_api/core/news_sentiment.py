@@ -2,6 +2,7 @@
 
 import json
 import math
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -9,7 +10,6 @@ from typing import Any, Protocol
 
 import yfinance as yf
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
-
 
 # ============================================================================
 # Data models
@@ -201,21 +201,13 @@ class YFinanceNewsFetcher:
             published = None
             pub_date_str = content.get("pubDate")
             if pub_date_str:
-                try:
+                with suppress(ValueError, TypeError):
                     # Parse ISO format: "2025-12-29T21:55:58Z"
-                    published = datetime.fromisoformat(
-                        pub_date_str.replace("Z", "+00:00")
-                    )
-                except (ValueError, TypeError):
-                    pass
+                    published = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
             # Fallback to old format (Unix timestamp)
             elif "providerPublishTime" in item:
-                try:
-                    published = datetime.fromtimestamp(
-                        item["providerPublishTime"], tz=UTC
-                    )
-                except (ValueError, OSError):
-                    pass
+                with suppress(ValueError, OSError):
+                    published = datetime.fromtimestamp(item["providerPublishTime"], tz=UTC)
 
             # Extract article data from new structure
             # Publisher is now in content.provider.displayName

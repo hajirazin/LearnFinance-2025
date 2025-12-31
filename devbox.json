@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.13.7/.schema/devbox.schema.json",
+  "packages": [
+    "python311@latest",
+    "uv@latest",
+    "git@latest",
+    "colima@latest",
+    "docker@latest",
+    "docker-compose@latest",
+    "jq@latest",
+    "curl@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo '🚀 Devbox environment ready for LearnFinance-2025'",
+      "echo '   Run \"devbox run --list\" to see available commands'"
+    ],
+    "scripts": {
+      "colima:start": ["colima start"],
+      "colima:stop": ["colima stop"],
+      "n8n:up": ["docker compose up -d"],
+      "n8n:down": ["docker compose down"],
+      "n8n:logs": ["docker compose logs -f"],
+      "brain:setup": ["cd brain_api && uv sync --all-extras"],
+      "brain:run": ["cd brain_api && uv sync --all-extras && uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000"],
+      "brain:test": ["cd brain_api && uv sync --all-extras && uv run pytest"],
+      "brain:lint": ["cd brain_api && uv sync --all-extras && uv run ruff check ."],
+      "brain:format": ["cd brain_api && uv sync --all-extras && uv run ruff format ."]
+    }
+  }
+}
+
