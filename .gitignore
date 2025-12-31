@@ -213,3 +213,4 @@ __marimo__/
 # Data directory (models, raw evidence, features, experience buffers)
 # These can be large and are generated/downloaded, not source code
 data/
+.devbox/
