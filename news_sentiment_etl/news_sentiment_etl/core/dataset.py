@@ -175,6 +175,141 @@ def _extract_date(row: dict, extra_fields: dict) -> str:
     return ""
 
 
+class DuckDBArticleStream:
+    """DuckDB-based article streamer with eager initialization.
+    
+    Initializes DuckDB query and prints status BEFORE iteration starts,
+    avoiding output buffering issues with tqdm.
+    """
+    
+    def __init__(
+        self,
+        config: ETLConfig,
+        halal_symbols: set[str] | None = None,
+        cached_hashes: set[str] | None = None,
+    ):
+        self.config = config
+        self.halal_symbols = halal_symbols
+        self.cached_hashes = cached_hashes
+        self.con = None
+        self.result = None
+        self.total_matching = 0
+        
+        # Initialize eagerly (not lazily in generator)
+        self._initialize()
+    
+    def _initialize(self):
+        """Initialize DuckDB connection and run COUNT query."""
+        # Ensure dataset is downloaded locally (HF handles caching/resume)
+        local_path = ensure_local_dataset(self.config)
+
+        console.print("[bold blue]🦆 Loading dataset with DuckDB...[/]")
+
+        # Build the parquet glob pattern
+        parquet_pattern = str(local_path / "data" / "*" / "*.parquet")
+        console.print(f"  Source: [cyan]{parquet_pattern}[/]")
+
+        # Build SQL WHERE clause for halal symbols
+        if self.halal_symbols:
+            symbol_conditions = " OR ".join(
+                f"extra_fields LIKE '%\"{sym}\"%'" for sym in self.halal_symbols
+            )
+            where_clause = f"""
+                WHERE extra_fields IS NOT NULL
+                AND LENGTH(text) >= 10
+                AND ({symbol_conditions})
+            """
+            console.print(f"  Filtering to [green]{len(self.halal_symbols)}[/] halal symbols in SQL")
+        else:
+            where_clause = """
+                WHERE extra_fields IS NOT NULL
+                AND LENGTH(text) >= 10
+                AND (
+                    extra_fields LIKE '%"stocks"%' OR
+                    extra_fields LIKE '%"tickers"%' OR
+                    extra_fields LIKE '%"symbol"%'
+                )
+            """
+            console.print("  Filtering to rows with symbols")
+
+        # Connect and count
+        self.con = duckdb.connect()
+        count_query = f"SELECT COUNT(*) FROM '{parquet_pattern}' {where_clause}"
+        self.total_matching = self.con.execute(count_query).fetchone()[0]
+        console.print(f"  Found [cyan]{self.total_matching:,}[/] halal articles (from 57M)")
+        
+        # Show cache filtering info
+        if self.cached_hashes:
+            console.print(f"  Cache has [yellow]{len(self.cached_hashes):,}[/] scored articles to skip")
+            estimated_new = max(0, self.total_matching - len(self.cached_hashes))
+            console.print(f"  Estimated new articles: [green]~{estimated_new:,}[/]")
+        else:
+            console.print(f"  Cache filter: [dim]disabled[/]")
+
+        # Prepare the main query
+        query = f"SELECT date, text, extra_fields FROM '{parquet_pattern}' {where_clause}"
+        console.print("[bold green]✓ DuckDB query ready![/]")
+        console.print()
+        
+        # Execute query (cursor ready for iteration)
+        self.result = self.con.execute(query)
+        self._parquet_pattern = parquet_pattern
+        self._where_clause = where_clause
+    
+    def __iter__(self) -> Iterator[NewsArticle]:
+        """Iterate through articles."""
+        return self._stream_articles()
+    
+    def _stream_articles(self) -> Iterator[NewsArticle]:
+        """Stream articles from the prepared DuckDB result."""
+        while True:
+            chunk = self.result.fetchmany(10000)
+            if not chunk:
+                break
+
+            for row in chunk:
+                date_str, text, extra_fields_str = row
+
+                extra_fields = _parse_extra_fields(extra_fields_str)
+                symbols = _extract_symbols(extra_fields)
+                if not symbols:
+                    continue
+
+                if self.halal_symbols:
+                    symbols = [s for s in symbols if s in self.halal_symbols]
+                    if not symbols:
+                        continue
+
+                date = _extract_date({"date": date_str}, extra_fields)
+                if not date:
+                    continue
+
+                if self.cached_hashes:
+                    import hashlib
+                    article_hash = hashlib.md5(text.encode()).hexdigest()[:16]
+                    if article_hash in self.cached_hashes:
+                        continue
+
+                dataset_source = extra_fields.get("dataset", "unknown")
+
+                yield NewsArticle(
+                    date=date,
+                    text=text,
+                    symbols=symbols,
+                    dataset_source=dataset_source,
+                    raw_date=date_str or "",
+                )
+
+        if self.con:
+            self.con.close()
+    
+    def close(self):
+        """Close the DuckDB connection."""
+        if self.con:
+            self.con.close()
+            self.con = None
+
+
 def stream_articles(
     config: ETLConfig,
     halal_symbols: set[str] | None = None,
@@ -193,119 +328,8 @@ def stream_articles(
     Yields:
         NewsArticle objects with symbols
     """
-    # Ensure dataset is downloaded locally (HF handles caching/resume)
-    local_path = ensure_local_dataset(config)
-
-    console.print("[bold blue]🦆 Loading dataset with DuckDB...[/]")
-
-    # Build the parquet glob pattern - explicitly use input directory
-    # local_path is: data/input/financial-news-multisource
-    # Parquet files are in: data/input/financial-news-multisource/data/{source}/*.parquet
-    parquet_pattern = str(local_path / "data" / "*" / "*.parquet")
-    console.print(f"  Source: [cyan]{parquet_pattern}[/]")
-
-    # Build SQL WHERE clause for halal symbols
-    if halal_symbols:
-        # Create LIKE conditions for each symbol
-        symbol_conditions = " OR ".join(
-            f"extra_fields LIKE '%\"{sym}\"%'" for sym in halal_symbols
-        )
-        where_clause = f"""
-            WHERE extra_fields IS NOT NULL
-            AND LENGTH(text) >= 10
-            AND ({symbol_conditions})
-        """
-        console.print(f"  Filtering to [green]{len(halal_symbols)}[/] halal symbols in SQL")
-    else:
-        # Just filter to rows with any symbols
-        where_clause = """
-            WHERE extra_fields IS NOT NULL
-            AND LENGTH(text) >= 10
-            AND (
-                extra_fields LIKE '%"stocks"%' OR
-                extra_fields LIKE '%"tickers"%' OR
-                extra_fields LIKE '%"symbol"%'
-            )
-        """
-        console.print("  Filtering to rows with symbols")
-
-    # Count matching rows first (fast with DuckDB)
-    con = duckdb.connect()
-    count_query = f"""
-        SELECT COUNT(*) FROM '{parquet_pattern}'
-        {where_clause}
-    """
-    total_matching = con.execute(count_query).fetchone()[0]
-    console.print(f"  Found [cyan]{total_matching:,}[/] halal articles (from 57M)")
-    
-    # Show cache filtering info
-    if cached_hashes:
-        console.print(f"  Cache has [yellow]{len(cached_hashes):,}[/] scored articles to skip")
-        estimated_new = max(0, total_matching - len(cached_hashes))
-        console.print(f"  Estimated new articles: [green]~{estimated_new:,}[/]")
-    else:
-        console.print(f"  Cache filter: [dim]disabled[/]")
-
-    # Stream results
-    query = f"""
-        SELECT date, text, extra_fields
-        FROM '{parquet_pattern}'
-        {where_clause}
-    """
-
-    console.print("[bold green]✓ DuckDB query ready![/]")
-    console.print()
-
-    # Execute and iterate
-    result = con.execute(query)
-
-    while True:
-        # Fetch in chunks for memory efficiency
-        chunk = result.fetchmany(10000)
-        if not chunk:
-            break
-
-        for row in chunk:
-            date_str, text, extra_fields_str = row
-
-            # Parse extra_fields
-            extra_fields = _parse_extra_fields(extra_fields_str)
-
-            # Extract symbols
-            symbols = _extract_symbols(extra_fields)
-            if not symbols:
-                continue
-
-            # Filter to halal symbols if provided (double-check after SQL LIKE)
-            if halal_symbols:
-                symbols = [s for s in symbols if s in halal_symbols]
-                if not symbols:
-                    continue
-
-            # Extract date
-            date = _extract_date({"date": date_str}, extra_fields)
-            if not date:
-                continue
-
-            # Skip cached articles if hash set provided
-            if cached_hashes:
-                import hashlib
-                article_hash = hashlib.md5(text.encode()).hexdigest()[:16]
-                if article_hash in cached_hashes:
-                    continue
-
-            # Get dataset source
-            dataset_source = extra_fields.get("dataset", "unknown")
-
-            yield NewsArticle(
-                date=date,
-                text=text,
-                symbols=symbols,
-                dataset_source=dataset_source,
-                raw_date=date_str or "",
-            )
-
-    con.close()
+    streamer = DuckDBArticleStream(config, halal_symbols, cached_hashes)
+    return iter(streamer)
 
 
 def batch_articles(
