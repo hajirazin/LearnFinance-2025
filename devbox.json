@@ -25,7 +25,12 @@
       "brain:run": ["cd brain_api && uv sync --all-extras && uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000"],
       "brain:test": ["cd brain_api && uv sync --all-extras && uv run pytest"],
       "brain:lint": ["cd brain_api && uv sync --all-extras && uv run ruff check ."],
-      "brain:format": ["cd brain_api && uv sync --all-extras && uv run ruff format ."]
+      "brain:format": ["cd brain_api && uv sync --all-extras && uv run ruff format ."],
+      "etl:setup": ["cd news_sentiment_etl && uv pip install -e ."],
+      "etl:run": ["cd news_sentiment_etl && uv run news-sentiment-etl"],
+      "etl:test": ["cd news_sentiment_etl && uv run news-sentiment-etl --max-articles 1000"],
+      "hf:login": ["uv run huggingface-cli login"],
+      "hf:whoami": ["uv run huggingface-cli whoami"]
     }
   }
 }
