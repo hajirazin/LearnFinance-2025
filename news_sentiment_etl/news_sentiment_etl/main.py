@@ -189,10 +189,11 @@ def run_pipeline(config: ETLConfig) -> dict:
                 total_cache_hits += cache_hits
                 total_new_scores += new_scores
 
-                # Store article-symbol associations in SQLite for aggregation
-                for article in filtered_batch:
-                    article_hash = compute_article_hash(article.text)
-                    cache.store_article_symbols(article_hash, article.date, article.symbols)
+                # Store article-symbol associations ONLY if we scored new articles
+                if new_scores > 0:
+                    for article in filtered_batch:
+                        article_hash = compute_article_hash(article.text)
+                        cache.store_article_symbols(article_hash, article.date, article.symbols)
 
                 batches_processed += 1
                 
