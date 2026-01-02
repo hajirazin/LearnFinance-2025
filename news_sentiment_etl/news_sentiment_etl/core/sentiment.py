@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
+from news_sentiment_etl.core.cache import SentimentCache, compute_article_hash
 from news_sentiment_etl.core.config import FINBERT_MAX_LENGTH, FINBERT_MODEL
 
 
@@ -41,24 +42,33 @@ class SentimentScore:
 
 
 class FinBERTScorer:
-    """FinBERT sentiment scorer with batching and GPU support.
+    """FinBERT sentiment scorer with batching, GPU support, and caching.
 
-    Singleton pattern to avoid loading the model multiple times.
+    Uses SQLite cache to avoid recomputing sentiment for articles
+    that have already been scored in previous runs.
     """
 
     _instance: "FinBERTScorer | None" = None
     _pipeline = None
     _device: str = "cpu"
+    _cache: SentimentCache | None = None
 
-    def __new__(cls, use_gpu: bool | None = None) -> "FinBERTScorer":
+    def __new__(
+        cls, use_gpu: bool | None = None, cache: SentimentCache | None = None
+    ) -> "FinBERTScorer":
         """Create or return singleton instance.
 
         Args:
             use_gpu: Force GPU usage. None = auto-detect.
+            cache: SentimentCache for storing/retrieving scores.
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._use_gpu = use_gpu
+            cls._instance._cache = cache
+        elif cache is not None and cls._instance._cache is None:
+            # Update cache if provided on subsequent call
+            cls._instance._cache = cache
         return cls._instance
 
     def _detect_device(self) -> str:
@@ -117,8 +127,108 @@ class FinBERTScorer:
         """
         return self.score_batch([text])[0]
 
-    def score_batch(self, texts: list[str]) -> list[SentimentScore]:
-        """Score a batch of texts.
+    def score_batch(
+        self, texts: list[str]
+    ) -> tuple[list[SentimentScore], int, int]:
+        """Score a batch of texts, using cache when available.
+
+        Args:
+            texts: List of texts to analyze
+
+        Returns:
+            Tuple of (list of SentimentScore objects, cache_hits, new_scores)
+        """
+        if not texts:
+            return [], 0, 0
+
+        # Compute hashes for all texts
+        hashes = [compute_article_hash(text) for text in texts]
+
+        # Check cache for existing scores
+        results: list[SentimentScore | None] = [None] * len(texts)
+        texts_to_score: list[tuple[int, str, str]] = []  # (index, text, hash)
+
+        if self._cache is not None:
+            cached = self._cache.get_batch(hashes)
+            for i, (text, h) in enumerate(zip(texts, hashes)):
+                if cached.get(h) is not None:
+                    results[i] = cached[h]
+                else:
+                    texts_to_score.append((i, text, h))
+        else:
+            texts_to_score = [(i, text, h) for i, (text, h) in enumerate(zip(texts, hashes))]
+
+        cache_hits = len(texts) - len(texts_to_score)
+        new_scores = len(texts_to_score)
+
+        # Score remaining texts with FinBERT
+        if texts_to_score:
+            self._ensure_loaded()
+
+            texts_only = [t[1] for t in texts_to_score]
+            try:
+                batch_results = self._pipeline(texts_only)
+            except Exception:
+                # Return neutral on error
+                batch_results = [
+                    [
+                        {"label": "neutral", "score": 0.34},
+                        {"label": "positive", "score": 0.33},
+                        {"label": "negative", "score": 0.33},
+                    ]
+                    for _ in texts_only
+                ]
+
+            # Process results and save to cache
+            new_cache_entries: list[tuple[str, SentimentScore]] = []
+
+            for (orig_idx, _, article_hash), scores in zip(texts_to_score, batch_results):
+                p_pos = 0.0
+                p_neg = 0.0
+                p_neu = 0.0
+
+                for item in scores:
+                    label = item["label"].lower()
+                    prob = item["score"]
+                    if label == "positive":
+                        p_pos = prob
+                    elif label == "negative":
+                        p_neg = prob
+                    elif label == "neutral":
+                        p_neu = prob
+
+                # Determine winning label
+                if p_pos >= p_neg and p_pos >= p_neu:
+                    label = "positive"
+                elif p_neg >= p_pos and p_neg >= p_neu:
+                    label = "negative"
+                else:
+                    label = "neutral"
+
+                score_val = p_pos - p_neg
+                confidence = max(p_pos, p_neg, p_neu)
+
+                sentiment_score = SentimentScore(
+                    label=label,
+                    p_pos=round(p_pos, 4),
+                    p_neg=round(p_neg, 4),
+                    p_neu=round(p_neu, 4),
+                    score=round(score_val, 4),
+                    confidence=round(confidence, 4),
+                )
+
+                results[orig_idx] = sentiment_score
+                new_cache_entries.append((article_hash, sentiment_score))
+
+            # Batch insert into cache
+            if self._cache is not None and new_cache_entries:
+                self._cache.put_batch(new_cache_entries)
+
+        # All results should be filled now
+        return [r for r in results if r is not None], cache_hits, new_scores
+
+    def score_batch_simple(self, texts: list[str]) -> list[SentimentScore]:
+        """Score a batch of texts (simple interface, ignores cache stats).
 
         Args:
             texts: List of texts to analyze
@@ -126,64 +236,6 @@ class FinBERTScorer:
         Returns:
             List of SentimentScore objects
         """
-        self._ensure_loaded()
-
-        if not texts:
-            return []
-
-        try:
-            batch_results = self._pipeline(texts)
-        except Exception:
-            # Return neutral on error
-            return [
-                SentimentScore(
-                    label="neutral",
-                    p_pos=0.33,
-                    p_neg=0.33,
-                    p_neu=0.34,
-                    score=0.0,
-                    confidence=0.34,
-                )
-                for _ in texts
-            ]
-
-        results = []
-        for scores in batch_results:
-            p_pos = 0.0
-            p_neg = 0.0
-            p_neu = 0.0
-
-            for item in scores:
-                label = item["label"].lower()
-                prob = item["score"]
-                if label == "positive":
-                    p_pos = prob
-                elif label == "negative":
-                    p_neg = prob
-                elif label == "neutral":
-                    p_neu = prob
-
-            # Determine winning label
-            if p_pos >= p_neg and p_pos >= p_neu:
-                label = "positive"
-            elif p_neg >= p_pos and p_neg >= p_neu:
-                label = "negative"
-            else:
-                label = "neutral"
-
-            score = p_pos - p_neg
-            confidence = max(p_pos, p_neg, p_neu)
-
-            results.append(
-                SentimentScore(
-                    label=label,
-                    p_pos=round(p_pos, 4),
-                    p_neg=round(p_neg, 4),
-                    p_neu=round(p_neu, 4),
-                    score=round(score, 4),
-                    confidence=round(confidence, 4),
-                )
-            )
-
-        return results
+        scores, _, _ = self.score_batch(texts)
+        return scores
 

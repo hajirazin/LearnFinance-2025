@@ -17,6 +17,7 @@ from rich.table import Table
 from tqdm import tqdm
 
 from news_sentiment_etl.core.aggregation import SentimentAggregator
+from news_sentiment_etl.core.cache import SentimentCache
 from news_sentiment_etl.core.config import ETLConfig
 from news_sentiment_etl.core.dataset import batch_articles, stream_articles
 from news_sentiment_etl.core.sentiment import FinBERTScorer
@@ -101,9 +102,14 @@ def run_pipeline(config: ETLConfig) -> dict:
         universe = UniverseFilter.allow_all()
         stats["universe"] = {"type": "all"}
 
-    # FinBERT scorer (lazy-loaded on first use)
+    # Sentiment cache
+    cache = SentimentCache(config.cache_dir)
+    cache.log_status()
+    initial_cache_size = cache.stats.total_entries
+
+    # FinBERT scorer (lazy-loaded on first use, with cache)
     console.print("  FinBERT model will load on first use")
-    scorer = FinBERTScorer(use_gpu=config.use_gpu)
+    scorer = FinBERTScorer(use_gpu=config.use_gpu, cache=cache)
     model_loaded = False
 
     # Aggregator and writer
@@ -124,21 +130,28 @@ def run_pipeline(config: ETLConfig) -> dict:
     last_stats_time = time.time()
     last_stats_articles = 0
 
+    # Cache tracking
+    total_cache_hits = 0
+    total_new_scores = 0
+
     console.print("\n[bold blue]Processing articles...[/]")
     console.print(f"  Estimated total: ~{format_number(ESTIMATED_TOTAL_ARTICLES)} articles")
     console.print(f"  Batch size: {config.batch_size}")
+    if config.max_articles:
+        console.print(f"  Target: [yellow]{config.max_articles:,}[/] NEW articles to score")
     console.print()
 
     # Stream and process articles
     try:
         article_stream = stream_articles(config)
 
-        # Use tqdm for progress (works better with streaming)
+        # Use tqdm for progress - tracks NEW scores toward target
+        pbar_total = config.max_articles if config.max_articles else None
         with tqdm(
-            desc="Processing",
-            unit=" articles",
+            desc="New scores",
+            unit=" new",
             dynamic_ncols=True,
-            total=config.max_articles or ESTIMATED_TOTAL_ARTICLES,
+            total=pbar_total,
             smoothing=0.1,
         ) as pbar:
             for batch in batch_articles(article_stream, config.batch_size):
@@ -157,12 +170,12 @@ def run_pipeline(config: ETLConfig) -> dict:
                         symbols_seen.update(filtered_symbols)
                         dates_seen.add(article.date)
 
+                total_articles += len(batch)
+
                 if not filtered_batch:
-                    pbar.update(len(batch))
-                    total_articles += len(batch)
                     continue
 
-                # Load FinBERT on first actual use
+                # Load FinBERT on first actual use (if there are uncached articles)
                 if not model_loaded:
                     console.print(f"\n  [yellow]Loading FinBERT model (first halal match found)...[/]")
                     # Trigger model load by accessing device
@@ -171,27 +184,34 @@ def run_pipeline(config: ETLConfig) -> dict:
                     model_loaded = True
                     console.print()
 
-                # Score batch
+                # Score batch (uses cache automatically)
                 texts = [a.text for a in filtered_batch]
-                scores = scorer.score_batch(texts)
+                scores, cache_hits, new_scores = scorer.score_batch(texts)
+
+                total_cache_hits += cache_hits
+                total_new_scores += new_scores
 
                 # Add to aggregator
                 aggregator.add_batch(filtered_batch, scores)
 
-                total_articles += len(batch)
                 batches_processed += 1
-                pbar.update(len(batch))
-
+                
                 # Calculate throughput
                 elapsed = time.time() - start_time
                 articles_per_sec = total_articles / elapsed if elapsed > 0 else 0
-                progress_pct = (total_articles / ESTIMATED_TOTAL_ARTICLES) * 100
-
+                
+                # Update progress bar with new scores
+                pbar.update(new_scores)
                 pbar.set_postfix({
-                    "batch": batches_processed,
+                    "cached": total_cache_hits,
+                    "scanned": format_number(total_articles),
                     "rate": f"{articles_per_sec:.0f}/s",
-                    "progress": f"~{progress_pct:.1f}%",
                 })
+
+                # Check if we've scored enough NEW articles
+                if config.max_articles and total_new_scores >= config.max_articles:
+                    console.print(f"\n  [green]✓ Reached {config.max_articles:,} new articles scored[/]")
+                    break
 
                 # Detailed stats every N batches
                 if batches_processed % DETAILED_STATS_INTERVAL == 0:
@@ -200,15 +220,26 @@ def run_pipeline(config: ETLConfig) -> dict:
                     interval_time = now - last_stats_time
                     interval_rate = interval_articles / interval_time if interval_time > 0 else 0
 
-                    # Estimate remaining time
-                    remaining_articles = ESTIMATED_TOTAL_ARTICLES - total_articles
-                    eta_seconds = remaining_articles / articles_per_sec if articles_per_sec > 0 else 0
+                    # Estimate remaining time (based on new scores if we have a target)
+                    if config.max_articles and total_new_scores > 0:
+                        new_per_sec = total_new_scores / elapsed if elapsed > 0 else 0
+                        remaining_new = config.max_articles - total_new_scores
+                        eta_seconds = remaining_new / new_per_sec if new_per_sec > 0 else 0
+                    else:
+                        remaining_articles = ESTIMATED_TOTAL_ARTICLES - total_articles
+                        eta_seconds = remaining_articles / articles_per_sec if articles_per_sec > 0 else 0
+
+                    # Cache hit rate
+                    total_scored = total_cache_hits + total_new_scores
+                    cache_hit_rate = (total_cache_hits / total_scored * 100) if total_scored > 0 else 0
+                    progress_pct = (total_articles / ESTIMATED_TOTAL_ARTICLES) * 100
 
                     console.print(f"\n  [dim]─── Batch {batches_processed} Stats ───[/]")
-                    console.print(f"  Processed: [cyan]{format_number(total_articles)}[/] articles ({progress_pct:.2f}%)")
+                    console.print(f"  Scanned: [cyan]{format_number(total_articles)}[/] articles ({progress_pct:.2f}% of dataset)")
                     console.print(f"  Elapsed: [cyan]{format_duration(elapsed)}[/] | ETA: [yellow]{format_duration(eta_seconds)}[/]")
                     console.print(f"  Rate: [cyan]{articles_per_sec:.0f}[/] articles/sec (last interval: {interval_rate:.0f}/sec)")
                     console.print(f"  Matched halal: [green]{articles_after_filter:,}[/] ({100*articles_after_filter/articles_with_symbols:.1f}%)")
+                    console.print(f"  Cache: [green]{total_cache_hits:,}[/] hits / [yellow]{total_new_scores:,}[/] new ({cache_hit_rate:.1f}% hit rate)")
                     console.print(f"  Symbols found: [green]{len(symbols_seen)}[/] | Date range: {min(dates_seen) if dates_seen else 'N/A'} → {max(dates_seen) if dates_seen else 'N/A'}")
                     console.print(f"  Pending aggregation: [yellow]{aggregator.pending_count:,}[/] (date,symbol) pairs")
                     console.print()
@@ -267,6 +298,13 @@ def run_pipeline(config: ETLConfig) -> dict:
             "file_size_mb": round(csv_path.stat().st_size / (1024 * 1024), 2),
         }
 
+    # Close cache and get final stats
+    final_cache_size = cache.stats.total_entries
+    new_cache_entries = final_cache_size - initial_cache_size
+    total_scored = total_cache_hits + total_new_scores
+    cache_hit_rate = (total_cache_hits / total_scored * 100) if total_scored > 0 else 0
+    cache.close()
+
     # Finalize stats
     elapsed = time.time() - start_time
     output_info = {
@@ -283,6 +321,13 @@ def run_pipeline(config: ETLConfig) -> dict:
             "total_processed": total_articles,
             "with_symbols": articles_with_symbols,
             "after_universe_filter": articles_after_filter,
+        },
+        "cache": {
+            "hits": total_cache_hits,
+            "new_scores": total_new_scores,
+            "hit_rate_percent": round(cache_hit_rate, 2),
+            "total_cached": final_cache_size,
+            "new_entries": new_cache_entries,
         },
         "batches_processed": batches_processed,
         "output": output_info,
@@ -401,6 +446,10 @@ def main() -> int:
 
         table.add_row("Articles Processed", f"{stats['articles']['total_processed']:,}")
         table.add_row("Articles with Halal Symbols", f"{stats['articles']['after_universe_filter']:,}")
+        table.add_row("Cache Hits", f"{stats['cache']['hits']:,}")
+        table.add_row("New Scores", f"{stats['cache']['new_scores']:,}")
+        table.add_row("Cache Hit Rate", f"{stats['cache']['hit_rate_percent']:.1f}%")
+        table.add_row("Total Cached", f"{stats['cache']['total_cached']:,}")
         table.add_row("Output Rows", f"{stats['output']['row_count']:,}")
         table.add_row("Unique Symbols", str(stats['output']['symbol_count']))
         table.add_row("Date Range", f"{stats['output']['date_min']} → {stats['output']['date_max']}")

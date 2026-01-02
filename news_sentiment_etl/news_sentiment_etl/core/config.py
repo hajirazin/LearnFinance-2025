@@ -11,15 +11,17 @@ class ETLConfig:
     Attributes:
         dataset_name: HuggingFace dataset identifier
         data_files: Glob pattern for dataset files (None = all)
+        data_input_dir: Directory for downloaded dataset files
         output_dir: Directory for output files
         checkpoint_dir: Directory for processing checkpoints
+        cache_dir: Directory for sentiment cache database
         output_parquet: Filename for Parquet output (None to skip)
         output_csv: Filename for CSV output (None to skip)
         batch_size: Number of articles to process per FinBERT batch
         checkpoint_interval: Save checkpoint every N batches
         sentiment_threshold: Min |p_pos - p_neg| to include article (bounded filter)
         use_gpu: Whether to use GPU for FinBERT (auto-detect if None)
-        max_articles: Maximum articles to process (None = all, useful for testing)
+        max_articles: Maximum NEW articles to score (None = all, useful for testing)
         filter_to_halal: Whether to filter output to halal universe only
         hf_token: HuggingFace token for gated datasets (optional)
     """
@@ -27,10 +29,12 @@ class ETLConfig:
     # Dataset configuration
     dataset_name: str = "Brianferrell787/financial-news-multisource"
     data_files: str | None = "data/*/*.parquet"
+    data_input_dir: Path = field(default_factory=lambda: Path("data/input"))
 
     # Output configuration
     output_dir: Path = field(default_factory=lambda: Path("data/output"))
     checkpoint_dir: Path = field(default_factory=lambda: Path("data/checkpoints"))
+    cache_dir: Path = field(default_factory=lambda: Path("data/cache"))
     output_parquet: str | None = "daily_sentiment.parquet"  # None to skip
     output_csv: str | None = None  # None to skip (default: parquet only)
 
@@ -49,10 +53,14 @@ class ETLConfig:
 
     def __post_init__(self) -> None:
         """Ensure paths are Path objects."""
+        if isinstance(self.data_input_dir, str):
+            self.data_input_dir = Path(self.data_input_dir)
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
         if isinstance(self.checkpoint_dir, str):
             self.checkpoint_dir = Path(self.checkpoint_dir)
+        if isinstance(self.cache_dir, str):
+            self.cache_dir = Path(self.cache_dir)
 
 
 # FinBERT model configuration

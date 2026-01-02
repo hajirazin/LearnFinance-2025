@@ -4,10 +4,51 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from datasets import load_dataset
+from huggingface_hub import snapshot_download
+from rich.console import Console
 
 from news_sentiment_etl.core.config import ETLConfig
+
+console = Console()
+
+
+def ensure_local_dataset(config: ETLConfig) -> Path:
+    """Download dataset to local directory. HuggingFace handles caching/delta/resume.
+
+    On first run: downloads full dataset with progress bars.
+    On subsequent runs: instantly skips if files match (ETag check).
+    If source changed: downloads only delta.
+    If interrupted: auto-resumes from where it stopped.
+
+    Args:
+        config: ETL configuration
+
+    Returns:
+        Path to the local dataset directory
+    """
+    local_dir = config.data_input_dir / "financial-news-multisource"
+
+    console.print("[bold blue]📥 Checking dataset...[/]")
+    console.print(f"  Repository: [cyan]{config.dataset_name}[/]")
+    console.print(f"  Local path: [cyan]{local_dir}[/]")
+    console.print()
+
+    # HuggingFace shows its own progress bars during download
+    # If files exist and match remote, it skips instantly
+    local_path = snapshot_download(
+        repo_id=config.dataset_name,
+        repo_type="dataset",
+        local_dir=local_dir,
+        token=config.hf_token,
+    )
+
+    console.print("[bold green]✓ Dataset ready![/]")
+    console.print()
+
+    return Path(local_path)
 
 
 @dataclass
@@ -134,7 +175,8 @@ def _extract_date(row: dict, extra_fields: dict) -> str:
 def stream_articles(config: ETLConfig) -> Iterator[NewsArticle]:
     """Stream articles from the HuggingFace dataset.
 
-    Filters to only articles that have stock symbols.
+    First ensures dataset is downloaded locally (with smart caching),
+    then streams from local files. Filters to only articles that have stock symbols.
 
     Args:
         config: ETL configuration
@@ -142,16 +184,41 @@ def stream_articles(config: ETLConfig) -> Iterator[NewsArticle]:
     Yields:
         NewsArticle objects with symbols
     """
-    # Load dataset in streaming mode
-    dataset = load_dataset(
-        config.dataset_name,
-        data_files=config.data_files,
-        split="train",
-        streaming=True,
-        token=config.hf_token,
-    )
+    # Ensure dataset is downloaded locally (HF handles caching/resume)
+    local_path = ensure_local_dataset(config)
 
-    count = 0
+    # Load from local files in streaming mode
+    console.print("[bold blue]📖 Loading dataset...[/]")
+
+    # Find parquet files in the local directory
+    parquet_files = list(local_path.glob("data/*/*.parquet"))
+    if not parquet_files:
+        # Try other patterns
+        parquet_files = list(local_path.glob("**/*.parquet"))
+
+    if parquet_files:
+        console.print(f"  Found [cyan]{len(parquet_files)}[/] parquet files")
+        data_files = [str(f) for f in parquet_files]
+        dataset = load_dataset(
+            "parquet",
+            data_files=data_files,
+            split="train",
+            streaming=True,
+        )
+    else:
+        # Fall back to loading the dataset normally
+        console.print("  [yellow]No local parquet files found, loading from HF cache...[/]")
+        dataset = load_dataset(
+            config.dataset_name,
+            data_files=config.data_files,
+            split="train",
+            streaming=True,
+            token=config.hf_token,
+        )
+
+    console.print("[bold green]✓ Dataset loaded![/]")
+    console.print()
+
     for row in dataset:
         # Parse extra_fields
         extra_fields = _parse_extra_fields(row.get("extra_fields"))
@@ -181,10 +248,6 @@ def stream_articles(config: ETLConfig) -> Iterator[NewsArticle]:
             dataset_source=dataset_source,
             raw_date=row.get("date", ""),
         )
-
-        count += 1
-        if config.max_articles and count >= config.max_articles:
-            break
 
 
 def batch_articles(
