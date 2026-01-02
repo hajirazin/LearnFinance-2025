@@ -133,15 +133,24 @@ def run_pipeline(config: ETLConfig) -> dict:
     total_new_scores = 0
 
     console.print("\n[bold blue]Processing articles...[/]")
-    console.print(f"  Estimated total: ~{format_number(ESTIMATED_TOTAL_ARTICLES)} articles")
     console.print(f"  Batch size: {config.batch_size}")
     if config.max_articles:
         console.print(f"  Target: [yellow]{config.max_articles:,}[/] NEW articles to score")
     console.print()
 
-    # Stream and process articles
+    # Stream and process articles with DuckDB pre-filtering
     try:
-        article_stream = stream_articles(config)
+        # Pass halal symbols to DuckDB for SQL-level filtering
+        halal_symbols = universe.symbols if config.filter_to_halal else None
+        
+        # Get cached hashes to skip already-processed articles
+        cached_hashes = cache.get_all_cached_hashes()
+        
+        article_stream = stream_articles(
+            config, 
+            halal_symbols=halal_symbols,
+            cached_hashes=cached_hashes,
+        )
 
         # Use tqdm for progress - tracks NEW scores toward target
         pbar_total = config.max_articles if config.max_articles else None
@@ -153,25 +162,20 @@ def run_pipeline(config: ETLConfig) -> dict:
             smoothing=0.1,
         ) as pbar:
             for batch in batch_articles(article_stream, config.batch_size):
-                # Filter batch to universe
-                filtered_batch = []
+                # DuckDB already filtered to halal symbols, just track stats
                 for article in batch:
                     articles_with_symbols += 1
-                    # Filter symbols to universe
-                    filtered_symbols = universe.filter_symbols(article.symbols)
-                    if filtered_symbols:
-                        # Update article with filtered symbols
-                        article.symbols = filtered_symbols
-                        filtered_batch.append(article)
-                        articles_after_filter += 1
-                        # Track symbols and dates
-                        symbols_seen.update(filtered_symbols)
-                        dates_seen.add(article.date)
+                    articles_after_filter += 1
+                    symbols_seen.update(article.symbols)
+                    dates_seen.add(article.date)
 
                 total_articles += len(batch)
 
-                if not filtered_batch:
+                if not batch:
                     continue
+
+                # Use batch directly (already filtered by DuckDB)
+                filtered_batch = batch
 
                 # Load FinBERT on first actual use (if there are uncached articles)
                 if not model_loaded:

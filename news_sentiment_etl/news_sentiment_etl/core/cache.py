@@ -297,6 +297,18 @@ class SentimentCache:
         cursor = conn.execute("SELECT COUNT(*) FROM article_symbols")
         return cursor.fetchone()[0]
 
+    def get_all_cached_hashes(self) -> set[str]:
+        """Get all article hashes that have been scored.
+
+        Used for pre-filtering in DuckDB to skip already-cached articles.
+
+        Returns:
+            Set of article hash strings
+        """
+        conn = self._ensure_connected()
+        cursor = conn.execute("SELECT article_hash FROM sentiment_cache")
+        return {row[0] for row in cursor.fetchall()}
+
     def aggregate_daily_sentiment(self, threshold: float = 0.1) -> list:
         """Aggregate daily sentiment per symbol using SQL.
 
