@@ -16,8 +16,7 @@ from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
 
-from news_sentiment_etl.core.aggregation import SentimentAggregator
-from news_sentiment_etl.core.cache import SentimentCache
+from news_sentiment_etl.core.cache import SentimentCache, compute_article_hash
 from news_sentiment_etl.core.config import ETLConfig
 from news_sentiment_etl.core.dataset import batch_articles, stream_articles
 from news_sentiment_etl.core.sentiment import FinBERTScorer
@@ -112,8 +111,7 @@ def run_pipeline(config: ETLConfig) -> dict:
     scorer = FinBERTScorer(use_gpu=config.use_gpu, cache=cache)
     model_loaded = False
 
-    # Aggregator and writer
-    aggregator = SentimentAggregator(threshold=config.sentiment_threshold)
+    # Writer (aggregation now happens via SQL in cache)
     writer = ParquetWriter(config.output_dir)
 
     # Checkpoint setup
@@ -191,8 +189,10 @@ def run_pipeline(config: ETLConfig) -> dict:
                 total_cache_hits += cache_hits
                 total_new_scores += new_scores
 
-                # Add to aggregator
-                aggregator.add_batch(filtered_batch, scores)
+                # Store article-symbol associations in SQLite for aggregation
+                for article in filtered_batch:
+                    article_hash = compute_article_hash(article.text)
+                    cache.store_article_symbols(article_hash, article.date, article.symbols)
 
                 batches_processed += 1
                 
@@ -241,7 +241,7 @@ def run_pipeline(config: ETLConfig) -> dict:
                     console.print(f"  Matched halal: [green]{articles_after_filter:,}[/] ({100*articles_after_filter/articles_with_symbols:.1f}%)")
                     console.print(f"  Cache: [green]{total_cache_hits:,}[/] hits / [yellow]{total_new_scores:,}[/] new ({cache_hit_rate:.1f}% hit rate)")
                     console.print(f"  Symbols found: [green]{len(symbols_seen)}[/] | Date range: {min(dates_seen) if dates_seen else 'N/A'} → {max(dates_seen) if dates_seen else 'N/A'}")
-                    console.print(f"  Pending aggregation: [yellow]{aggregator.pending_count:,}[/] (date,symbol) pairs")
+                    console.print(f"  Article-symbol pairs in DB: [yellow]{cache.article_symbols_count:,}[/]")
                     console.print()
 
                     last_stats_time = now
@@ -266,9 +266,11 @@ def run_pipeline(config: ETLConfig) -> dict:
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Interrupted! Saving progress...[/]")
 
-    # Aggregate and write results
-    console.print("\n[bold blue]Aggregating sentiments...[/]")
-    daily_sentiments = aggregator.aggregate()
+    # Aggregate via SQL and write results
+    console.print("\n[bold blue]Aggregating sentiments (SQL)...[/]")
+    console.print(f"  Article-symbol pairs in DB: [cyan]{cache.article_symbols_count:,}[/]")
+    console.print(f"  Sentiment threshold: [cyan]{config.sentiment_threshold}[/]")
+    daily_sentiments = cache.aggregate_daily_sentiment(config.sentiment_threshold)
     console.print(f"  Generated [green]{len(daily_sentiments)}[/] daily sentiment records")
 
     # Write output file(s)

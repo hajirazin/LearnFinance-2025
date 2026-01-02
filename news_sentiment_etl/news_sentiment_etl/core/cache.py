@@ -88,6 +88,19 @@ class SentimentCache:
             CREATE INDEX IF NOT EXISTS idx_created
             ON sentiment_cache(created_at)
         """)
+        # Article-symbol associations for aggregation (replaces in-memory dict)
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS article_symbols (
+                article_hash TEXT NOT NULL,
+                date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                PRIMARY KEY (article_hash, date, symbol)
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_date_symbol
+            ON article_symbols(date, symbol)
+        """)
         self._conn.commit()
 
         # Get initial count
@@ -247,10 +260,94 @@ class SentimentCache:
         conn.commit()
         self._stats.total_entries += len(hash_score_pairs)
 
+    def store_article_symbols(
+        self, article_hash: str, date: str, symbols: list[str]
+    ) -> None:
+        """Store date/symbol associations for an article.
+
+        Uses INSERT OR IGNORE to skip if (hash, date, symbol) already exists.
+
+        Args:
+            article_hash: MD5 hash of article text
+            date: Article date in YYYY-MM-DD format
+            symbols: List of stock symbols mentioned in article
+        """
+        if not symbols:
+            return
+
+        conn = self._ensure_connected()
+        conn.executemany(
+            """
+            INSERT OR IGNORE INTO article_symbols (article_hash, date, symbol)
+            VALUES (?, ?, ?)
+            """,
+            [(article_hash, date, symbol) for symbol in symbols],
+        )
+        conn.commit()
+
     @property
     def stats(self) -> CacheStats:
         """Return cache statistics."""
         return self._stats
+
+    @property
+    def article_symbols_count(self) -> int:
+        """Get count of article-symbol associations."""
+        conn = self._ensure_connected()
+        cursor = conn.execute("SELECT COUNT(*) FROM article_symbols")
+        return cursor.fetchone()[0]
+
+    def aggregate_daily_sentiment(self, threshold: float = 0.1) -> list:
+        """Aggregate daily sentiment per symbol using SQL.
+
+        Replaces the in-memory SentimentAggregator with a single SQL query.
+
+        Args:
+            threshold: Minimum |p_pos - p_neg| to include article
+
+        Returns:
+            List of DailySentiment objects
+        """
+        # Import here to avoid circular import
+        from news_sentiment_etl.core.aggregation import DailySentiment
+
+        conn = self._ensure_connected()
+        cursor = conn.execute(
+            """
+            SELECT 
+                a.date,
+                a.symbol,
+                SUM(c.confidence * c.score) / SUM(c.confidence) as sentiment_score,
+                COUNT(*) as article_count,
+                AVG(c.confidence) as avg_confidence,
+                AVG(c.p_pos) as p_pos_avg,
+                AVG(c.p_neg) as p_neg_avg,
+                COUNT(*) as total_articles
+            FROM article_symbols a
+            JOIN sentiment_cache c ON a.article_hash = c.article_hash
+            WHERE ABS(c.p_pos - c.p_neg) >= ?
+            GROUP BY a.date, a.symbol
+            ORDER BY a.date, a.symbol
+            """,
+            (threshold,),
+        )
+
+        results = []
+        for row in cursor:
+            results.append(
+                DailySentiment(
+                    date=row[0],
+                    symbol=row[1],
+                    sentiment_score=round(row[2], 4) if row[2] else 0.0,
+                    article_count=row[3],
+                    avg_confidence=round(row[4], 4) if row[4] else 0.0,
+                    p_pos_avg=round(row[5], 4) if row[5] else 0.0,
+                    p_neg_avg=round(row[6], 4) if row[6] else 0.0,
+                    total_articles=row[7],
+                )
+            )
+
+        return results
 
     def close(self) -> None:
         """Close the database connection."""
@@ -261,8 +358,10 @@ class SentimentCache:
     def log_status(self) -> None:
         """Log cache status to console."""
         self._ensure_connected()
+        symbol_count = self.article_symbols_count
         console.print("[bold blue]🗄️ Loading sentiment cache...[/]")
         console.print(f"  Cache location: [cyan]{self.db_path}[/]")
         console.print(f"  Cached scores: [green]{self._stats.total_entries:,}[/]")
+        console.print(f"  Article-symbol pairs: [green]{symbol_count:,}[/]")
         console.print()
 
