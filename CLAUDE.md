@@ -8,7 +8,7 @@ Build a weekly, paper-trading portfolio decision system for halal Nasdaq-500 sto
 
 - **Safe-by-default** (paper auto-submit only; reruns cannot duplicate orders)
 - **Audit-friendly** (every run reproducible and explainable)
-- **Learning-focused** (n8n orchestration + multi-agent workflows + LSTM + PPO)
+- **Learning-focused** (n8n orchestration + multi-agent workflows + LSTM + HRP + PPO)
 - **Cloud-ready** (local-first design that can migrate to Cloud Functions)
 
 ## Non-negotiable invariants (do not break)
@@ -70,7 +70,7 @@ The system must:
   - universe build + screening
   - data ingestion and caching
   - multi-agent committee workflows (agent-to-agent)
-  - LSTM inference + PPO decisions
+  - LSTM inference + HRP allocation (+ PPO decisions in future)
   - explanation generation
   - persistence of run artifacts
 
@@ -85,7 +85,8 @@ Each ML operation must be a **separate REST endpoint** that can later become a s
 **Inference** (called by Monday run):
 
 - `POST /inference/lstm` — price predictions
-- `POST /inference/ppo` — portfolio allocation
+- `POST /allocation/hrp` — HRP risk-parity portfolio allocation *(currently active)*
+- `POST /inference/ppo` — RL-based portfolio allocation *(planned future enhancement)*
 
 **Training** (called by Sunday cron or manual):
 

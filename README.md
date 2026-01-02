@@ -3,7 +3,7 @@
 Build a weekly, paper-trading portfolio-rebalancing system for **halal Nasdaq-500 stocks** using a hybrid architecture:
 
 - **n8n** for scheduling/orchestration and integrations (Alpaca + email)
-- A Python “AI brain” for **multi-agent evidence synthesis**, **LSTM price forecasting**, and **RL (PPO) portfolio decisions**
+- A Python "AI brain" for **multi-agent evidence synthesis**, **LSTM price forecasting**, **HRP allocation** (currently active), and **RL (PPO) portfolio decisions** (future)
 
 This is a learning repo, but the design aims to be **audit-friendly**, **idempotent**, and **safe-by-default**.
 
@@ -17,7 +17,8 @@ Every Monday **6:00 PM IST** (pre US open), the system:
 - Collects signals per ticker (news, social sentiment, global industry/market context)
 - Runs a **multi-agent “investment committee”** to synthesize evidence and resolve conflicts
 - Uses **LSTM** to predict near-term price movement (with uncertainty/quality signals)
-- Uses **RL (PPO / Proximal Policy Optimization)** to choose the portfolio actions while penalizing unnecessary turnover
+- Uses **HRP (Hierarchical Risk Parity)** to allocate portfolio weights based on risk structure *(currently active)*
+- Uses **RL (PPO / Proximal Policy Optimization)** to choose the portfolio actions while penalizing unnecessary turnover *(future enhancement)*
 - **Auto-submits limit orders to Alpaca paper**
 - Emails you: what was submitted + rationale + run identifiers + links/IDs for audit
 
@@ -68,7 +69,8 @@ sequenceDiagram
   Brain->>Raw: Save_raw_inputs(news_social_market_snapshots)
   Brain->>Brain: MultiAgent_committee_synthesis
   Brain->>Brain: LSTM_inference
-  Brain->>Brain: PPO_allocation_with_turnover_penalty
+  Brain->>Brain: HRP_risk_parity_allocation
+  Note over Brain: PPO_allocation_planned_for_future
   Brain->>DB: Persist_trade_plan_and_explanations
   Brain-->>N8N: Return_orders_with_client_order_ids
   N8N->>Alpaca: Submit_limit_orders(idempotent_client_order_id)
@@ -302,10 +304,11 @@ Each ML operation is exposed as a **separate REST endpoint**, designed so it can
 
 **Inference endpoints** (called by Monday run):
 
-| Endpoint | Purpose | Trigger |
-|----------|---------|---------|
-| `POST /inference/lstm` | Price movement predictions | n8n → brain API |
-| `POST /inference/ppo` | Portfolio allocation | n8n → brain API |
+| Endpoint | Purpose | Trigger | Status |
+|----------|---------|---------|--------|
+| `POST /inference/lstm` | Price movement predictions | n8n → brain API | ✅ Active |
+| `POST /allocation/hrp` | HRP risk-parity portfolio allocation | n8n → brain API | ✅ Active |
+| `POST /inference/ppo` | RL-based portfolio allocation | n8n → brain API | 🔜 Planned |
 
 **Training endpoints** (called by Sunday cron or manual):
 
@@ -523,8 +526,15 @@ Click **Execute Workflow** to test. The workflow will:
 
 1. Fetch the halal stock universe from `/universe/halal`
 2. Pick the top 20 symbols by ETF weight
-3. Call `/inference/lstm` for weekly return predictions
-4. Format and send an email with stocks ranked from highest predicted gain to highest predicted loss
+3. Run three parallel signals:
+   - `/inference/lstm` for weekly return predictions
+   - `/signals/news` for FinBERT news sentiment
+   - `/allocation/hrp` for HRP portfolio allocation
+4. Send data to OpenAI for AI-generated market analysis
+5. Format and send an email with:
+   - **AI Summary**: Market outlook, opportunities, risks, and portfolio insights
+   - **HRP Allocation**: Risk-balanced portfolio weights (sorted highest to lowest)
+   - **LSTM Predictions**: Stocks ranked from highest predicted gain to highest predicted loss
 
 ### 4. Enable the schedule
 
