@@ -25,6 +25,9 @@ dependencies = [
     "requests>=2.31.0",
 ]
 
+# Note: shared package must be installed separately:
+# cd ../shared && pip install -e .
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
@@ -72,7 +75,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["brain_api"]
+known-first-party = ["brain_api", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = [

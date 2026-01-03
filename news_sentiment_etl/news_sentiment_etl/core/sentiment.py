@@ -1,12 +1,15 @@
-"""FinBERT sentiment scoring with batching and GPU support."""
+"""FinBERT sentiment scoring with batching and GPU support.
+
+Uses shared FinBERTScorer implementation with ETL-specific caching support.
+"""
 
 from dataclasses import dataclass
+from typing import Callable
 
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from shared.ml.finbert import FinBERTResult as SharedFinBERTResult
+from shared.ml.finbert import FinBERTScorer as SharedFinBERTScorer
 
 from news_sentiment_etl.core.cache import SentimentCache, compute_article_hash
-from news_sentiment_etl.core.config import FINBERT_MAX_LENGTH, FINBERT_MODEL
 
 
 @dataclass
@@ -41,17 +44,70 @@ class SentimentScore:
         return abs(self.p_pos - self.p_neg) >= threshold
 
 
+def _shared_to_local_score(shared: SharedFinBERTResult) -> SentimentScore:
+    """Convert shared FinBERTResult to local SentimentScore format."""
+    return SentimentScore(
+        label=shared.label,
+        p_pos=shared.p_pos,
+        p_neg=shared.p_neg,
+        p_neu=shared.p_neu,
+        score=shared.score,
+        confidence=shared.confidence,
+    )
+
+
+class CacheAdapter:
+    """Adapter to make SentimentCache compatible with shared scorer protocol."""
+
+    def __init__(self, cache: SentimentCache):
+        self._cache = cache
+
+    def get_batch(self, hashes: list[str]) -> dict[str, SharedFinBERTResult | None]:
+        """Get cached scores, converting from SentimentScore to SharedFinBERTResult."""
+        results = self._cache.get_batch(hashes)
+        converted: dict[str, SharedFinBERTResult | None] = {}
+        for h, score in results.items():
+            if score is None:
+                converted[h] = None
+            else:
+                converted[h] = SharedFinBERTResult(
+                    label=score.label,
+                    p_pos=score.p_pos,
+                    p_neg=score.p_neg,
+                    p_neu=score.p_neu,
+                    score=score.score,
+                    confidence=score.confidence,
+                )
+        return converted
+
+    def put_batch(self, entries: list[tuple[str, SharedFinBERTResult]]) -> None:
+        """Store scores, converting from SharedFinBERTResult to SentimentScore."""
+        converted = [
+            (h, SentimentScore(
+                label=r.label,
+                p_pos=r.p_pos,
+                p_neg=r.p_neg,
+                p_neu=r.p_neu,
+                score=r.score,
+                confidence=r.confidence,
+            ))
+            for h, r in entries
+        ]
+        self._cache.put_batch(converted)
+
+
 class FinBERTScorer:
     """FinBERT sentiment scorer with batching, GPU support, and caching.
 
-    Uses SQLite cache to avoid recomputing sentiment for articles
-    that have already been scored in previous runs.
+    This is a wrapper around the shared FinBERTScorer that:
+    - Converts results to local SentimentScore format
+    - Provides ETL-specific caching support
     """
 
     _instance: "FinBERTScorer | None" = None
-    _pipeline = None
-    _device: str = "cpu"
+    _shared_scorer: SharedFinBERTScorer | None = None
     _cache: SentimentCache | None = None
+    _cache_adapter: CacheAdapter | None = None
 
     def __new__(
         cls, use_gpu: bool | None = None, cache: SentimentCache | None = None
@@ -64,57 +120,29 @@ class FinBERTScorer:
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._use_gpu = use_gpu
             cls._instance._cache = cache
+            cls._instance._cache_adapter = CacheAdapter(cache) if cache else None
+            # Initialize shared scorer with cache adapter
+            cls._instance._shared_scorer = SharedFinBERTScorer(
+                use_gpu=use_gpu,
+                cache=cls._instance._cache_adapter,
+            )
         elif cache is not None and cls._instance._cache is None:
             # Update cache if provided on subsequent call
             cls._instance._cache = cache
+            cls._instance._cache_adapter = CacheAdapter(cache)
+            # Reset shared scorer to use new cache
+            SharedFinBERTScorer.reset_instance()
+            cls._instance._shared_scorer = SharedFinBERTScorer(
+                use_gpu=use_gpu,
+                cache=cls._instance._cache_adapter,
+            )
         return cls._instance
-
-    def _detect_device(self) -> str:
-        """Detect best available device."""
-        if self._use_gpu is False:
-            return "cpu"
-
-        # Check for MPS (Apple Silicon)
-        if torch.backends.mps.is_available():
-            return "mps"
-
-        # Check for CUDA
-        if torch.cuda.is_available():
-            return "cuda"
-
-        return "cpu"
-
-    def _ensure_loaded(self) -> None:
-        """Lazy-load the model on first use."""
-        if self._pipeline is not None:
-            return
-
-        self._device = self._detect_device()
-
-        tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL)
-        model = AutoModelForSequenceClassification.from_pretrained(FINBERT_MODEL)
-
-        # Move model to device
-        if self._device != "cpu":
-            model = model.to(self._device)
-
-        self._pipeline = pipeline(
-            "sentiment-analysis",
-            model=model,
-            tokenizer=tokenizer,
-            return_all_scores=True,
-            truncation=True,
-            max_length=FINBERT_MAX_LENGTH,
-            device=0 if self._device == "cuda" else -1 if self._device == "cpu" else self._device,
-        )
 
     @property
     def device(self) -> str:
         """Return the device being used."""
-        self._ensure_loaded()
-        return self._device
+        return self._shared_scorer.device
 
     def score(self, text: str) -> SentimentScore:
         """Score a single text.
@@ -125,15 +153,18 @@ class FinBERTScorer:
         Returns:
             SentimentScore with probabilities and score
         """
-        return self.score_batch([text])[0]
+        shared_result = self._shared_scorer.score(text)
+        return _shared_to_local_score(shared_result)
 
     def score_batch(
-        self, texts: list[str]
+        self, texts: list[str], hash_fn: Callable[[str], str] | None = None
     ) -> tuple[list[SentimentScore], int, int]:
         """Score a batch of texts, using cache when available.
 
         Args:
             texts: List of texts to analyze
+            hash_fn: Function to compute article hash from text. Defaults to
+                compute_article_hash if cache is available.
 
         Returns:
             Tuple of (list of SentimentScore objects, cache_hits, new_scores)
@@ -141,91 +172,16 @@ class FinBERTScorer:
         if not texts:
             return [], 0, 0
 
-        # Compute hashes for all texts
-        hashes = [compute_article_hash(text) for text in texts]
+        # Use compute_article_hash by default when cache is available
+        if hash_fn is None and self._cache is not None:
+            hash_fn = compute_article_hash
 
-        # Check cache for existing scores
-        results: list[SentimentScore | None] = [None] * len(texts)
-        texts_to_score: list[tuple[int, str, str]] = []  # (index, text, hash)
+        # Use the shared scorer with stats if hash function provided
+        shared_results, cache_hits, new_scores = self._shared_scorer.score_batch_with_stats(
+            texts, hash_fn=hash_fn
+        )
 
-        if self._cache is not None:
-            cached = self._cache.get_batch(hashes)
-            for i, (text, h) in enumerate(zip(texts, hashes)):
-                if cached.get(h) is not None:
-                    results[i] = cached[h]
-                else:
-                    texts_to_score.append((i, text, h))
-        else:
-            texts_to_score = [(i, text, h) for i, (text, h) in enumerate(zip(texts, hashes))]
-
-        cache_hits = len(texts) - len(texts_to_score)
-        new_scores = len(texts_to_score)
-
-        # Score remaining texts with FinBERT
-        if texts_to_score:
-            self._ensure_loaded()
-
-            texts_only = [t[1] for t in texts_to_score]
-            try:
-                batch_results = self._pipeline(texts_only)
-            except Exception:
-                # Return neutral on error
-                batch_results = [
-                    [
-                        {"label": "neutral", "score": 0.34},
-                        {"label": "positive", "score": 0.33},
-                        {"label": "negative", "score": 0.33},
-                    ]
-                    for _ in texts_only
-                ]
-
-            # Process results and save to cache
-            new_cache_entries: list[tuple[str, SentimentScore]] = []
-
-            for (orig_idx, _, article_hash), scores in zip(texts_to_score, batch_results):
-                p_pos = 0.0
-                p_neg = 0.0
-                p_neu = 0.0
-
-                for item in scores:
-                    label = item["label"].lower()
-                    prob = item["score"]
-                    if label == "positive":
-                        p_pos = prob
-                    elif label == "negative":
-                        p_neg = prob
-                    elif label == "neutral":
-                        p_neu = prob
-
-                # Determine winning label
-                if p_pos >= p_neg and p_pos >= p_neu:
-                    label = "positive"
-                elif p_neg >= p_pos and p_neg >= p_neu:
-                    label = "negative"
-                else:
-                    label = "neutral"
-
-                score_val = p_pos - p_neg
-                confidence = max(p_pos, p_neg, p_neu)
-
-                sentiment_score = SentimentScore(
-                    label=label,
-                    p_pos=round(p_pos, 4),
-                    p_neg=round(p_neg, 4),
-                    p_neu=round(p_neu, 4),
-                    score=round(score_val, 4),
-                    confidence=round(confidence, 4),
-                )
-
-                results[orig_idx] = sentiment_score
-                new_cache_entries.append((article_hash, sentiment_score))
-
-            # Batch insert into cache
-            if self._cache is not None and new_cache_entries:
-                self._cache.put_batch(new_cache_entries)
-
-        # All results should be filled now
-        return [r for r in results if r is not None], cache_hits, new_scores
+        return [_shared_to_local_score(r) for r in shared_results], cache_hits, new_scores
 
     def score_batch_simple(self, texts: list[str]) -> list[SentimentScore]:
         """Score a batch of texts (simple interface, ignores cache stats).
@@ -236,6 +192,5 @@ class FinBERTScorer:
         Returns:
             List of SentimentScore objects
         """
-        scores, _, _ = self.score_batch(texts)
-        return scores
-
+        shared_results = self._shared_scorer.score_batch(texts)
+        return [_shared_to_local_score(r) for r in shared_results]

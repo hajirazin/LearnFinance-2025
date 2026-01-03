@@ -13,27 +13,18 @@ import torch.nn as nn
 import yfinance as yf
 from sklearn.preprocessing import StandardScaler
 
-# ============================================================================
-# Device Detection (MPS for Apple Silicon, CUDA for NVIDIA, else CPU)
-# ============================================================================
+from shared.ml.device import get_torch_device
 
 
 def get_device() -> torch.device:
     """Get the best available device for training.
 
-    Priority:
-    1. MPS (Apple Silicon GPU) - for M1/M2/M3 Macs
-    2. CUDA (NVIDIA GPU)
-    3. CPU (fallback)
+    Uses shared device detection module.
 
     Returns:
         torch.device for the best available accelerator
     """
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
+    return get_torch_device()
 
 
 # ============================================================================
