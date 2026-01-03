@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -114,6 +115,51 @@ class NewsSignalResponse(BaseModel):
 
 
 # ============================================================================
+# Historical news sentiment request / response models
+# ============================================================================
+
+MAX_HISTORICAL_SENTIMENT_SYMBOLS = 20  # Match fundamentals
+
+
+class HistoricalNewsSentimentRequest(BaseModel):
+    """Request model for historical news sentiment endpoint (training via parquet)."""
+
+    symbols: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_HISTORICAL_SENTIMENT_SYMBOLS,
+        description=f"List of ticker symbols (1-{MAX_HISTORICAL_SENTIMENT_SYMBOLS})",
+    )
+    start_date: str = Field(
+        ...,
+        description="Start date for historical range (YYYY-MM-DD)",
+    )
+    end_date: str = Field(
+        ...,
+        description="End date for historical range (YYYY-MM-DD)",
+    )
+
+
+class SentimentDataPoint(BaseModel):
+    """Historical sentiment data for a symbol on a specific date."""
+
+    symbol: str
+    date: str
+    sentiment_score: float  # -1 to 1, 0.0 = neutral (default for missing)
+    article_count: int | None  # None if neutral fallback (no data)
+    p_pos_avg: float | None
+    p_neg_avg: float | None
+
+
+class HistoricalNewsSentimentResponse(BaseModel):
+    """Response model for historical news sentiment endpoint."""
+
+    start_date: str
+    end_date: str
+    data: list[SentimentDataPoint]  # All requested (date, symbol) combos
+
+
+# ============================================================================
 # Dependency injection for testability
 # ============================================================================
 
@@ -131,6 +177,17 @@ def get_sentiment_scorer() -> SentimentScorer:
 def get_data_base_path() -> Path:
     """Get the base path for data storage."""
     return Path("data")
+
+
+def get_sentiment_parquet_path() -> Path:
+    """Get the path to the historical sentiment parquet file.
+    
+    The parquet is at project root /data/output/, not brain_api/data/.
+    Uses __file__ to get the correct path regardless of working directory.
+    """
+    # brain_api/brain_api/routes/signals.py -> go up 4 levels to project root
+    project_root = Path(__file__).parent.parent.parent.parent
+    return project_root / "data" / "output" / "daily_sentiment.parquet"
 
 
 # ============================================================================
@@ -594,5 +651,119 @@ def get_historical_fundamentals(
         )
     finally:
         fetcher.close()
+
+
+# ============================================================================
+# Historical news sentiment helper
+# ============================================================================
+
+
+def _load_historical_sentiment(
+    parquet_path: Path,
+    symbols: list[str],
+    start_date: str,
+    end_date: str,
+) -> list[SentimentDataPoint]:
+    """Load historical sentiment from parquet with neutral fallback for missing data.
+
+    Args:
+        parquet_path: Path to the daily_sentiment.parquet file
+        symbols: List of symbols to fetch
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+
+    Returns:
+        List of SentimentDataPoint for all (date, symbol) combinations in range.
+        Missing combinations get neutral sentiment (score=0.0, other fields=None).
+    """
+    # Generate all date+symbol combinations requested
+    all_dates = pd.date_range(start_date, end_date, freq="D")
+    requested_df = pd.DataFrame(
+        [(d.strftime("%Y-%m-%d"), s) for d in all_dates for s in symbols],
+        columns=["date", "symbol"],
+    )
+
+    # Load parquet and filter
+    if parquet_path.exists():
+        df = pd.read_parquet(parquet_path)
+        # Convert date to string for consistent comparison (parquet may have datetime.date objects)
+        df["date"] = df["date"].astype(str)
+        mask = (
+            (df["date"] >= start_date)
+            & (df["date"] <= end_date)
+            & (df["symbol"].isin(symbols))
+        )
+        filtered_df = df[mask][
+            ["date", "symbol", "sentiment_score", "article_count", "p_pos_avg", "p_neg_avg"]
+        ].copy()
+    else:
+        # No parquet file - empty dataframe
+        filtered_df = pd.DataFrame(
+            columns=["date", "symbol", "sentiment_score", "article_count", "p_pos_avg", "p_neg_avg"]
+        )
+
+    # Left join to include all requested combos
+    result_df = requested_df.merge(filtered_df, how="left", on=["date", "symbol"])
+
+    # Fill missing sentiment_score with neutral (0.0)
+    # Ensure column is float64 to avoid downcasting warnings
+    if "sentiment_score" not in result_df.columns or result_df["sentiment_score"].isna().all():
+        result_df["sentiment_score"] = 0.0
+    else:
+        result_df["sentiment_score"] = result_df["sentiment_score"].fillna(0.0).astype(float)
+    # Keep article_count, p_pos_avg, p_neg_avg as None (NaN → None in response)
+
+    # Convert to response objects
+    data_points = []
+    for _, row in result_df.iterrows():
+        data_points.append(
+            SentimentDataPoint(
+                symbol=row["symbol"],
+                date=row["date"],
+                sentiment_score=float(row["sentiment_score"]),
+                article_count=int(row["article_count"]) if pd.notna(row["article_count"]) else None,
+                p_pos_avg=float(row["p_pos_avg"]) if pd.notna(row["p_pos_avg"]) else None,
+                p_neg_avg=float(row["p_neg_avg"]) if pd.notna(row["p_neg_avg"]) else None,
+            )
+        )
+
+    return data_points
+
+
+# ============================================================================
+# Historical news sentiment endpoint
+# ============================================================================
+
+
+@router.post("/news/historical", response_model=HistoricalNewsSentimentResponse)
+def get_historical_news_sentiment(
+    request: HistoricalNewsSentimentRequest,
+    parquet_path: Annotated[Path, Depends(get_sentiment_parquet_path)],
+) -> HistoricalNewsSentimentResponse:
+    """Get HISTORICAL news sentiment for training (date range).
+
+    Returns sentiment scores for all requested (date, symbol) combinations.
+    Missing data is filled with neutral sentiment (score=0.0).
+
+    Data source: Pre-computed daily_sentiment.parquet (from news_sentiment_etl)
+
+    The parquet file contains sentiment scores aggregated from multiple news
+    sources, scored using FinBERT. Available date range: 1997-01-03 to 2025-09-08.
+
+    Returns:
+        HistoricalNewsSentimentResponse with flat list of sentiment data points
+    """
+    data = _load_historical_sentiment(
+        parquet_path=parquet_path,
+        symbols=request.symbols,
+        start_date=request.start_date,
+        end_date=request.end_date,
+    )
+
+    return HistoricalNewsSentimentResponse(
+        start_date=request.start_date,
+        end_date=request.end_date,
+        data=data,
+    )
 
 

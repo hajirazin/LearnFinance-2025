@@ -4,6 +4,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,7 @@ from brain_api.main import app
 from brain_api.routes.signals import (
     get_data_base_path,
     get_news_fetcher,
+    get_sentiment_parquet_path,
     get_sentiment_scorer,
 )
 
@@ -545,8 +547,340 @@ def test_news_sentiment_default_attempt(client_with_mocks):
     assert data["attempt"] == 1
 
 
+# ============================================================================
+# Historical News Sentiment Endpoint Tests
+# ============================================================================
+
+# Sample parquet data for testing
+SAMPLE_SENTIMENT_DATA = pd.DataFrame(
+    {
+        "date": ["2024-01-02", "2024-01-02", "2024-01-03", "2024-01-03"],
+        "symbol": ["AAPL", "MSFT", "AAPL", "MSFT"],
+        "sentiment_score": [0.5, -0.3, 0.2, 0.1],
+        "article_count": [10, 5, 8, 3],
+        "avg_confidence": [0.85, 0.90, 0.88, 0.75],
+        "p_pos_avg": [0.6, 0.2, 0.5, 0.4],
+        "p_neg_avg": [0.1, 0.5, 0.3, 0.3],
+        "total_articles": [10, 5, 8, 3],
+    }
+)
 
 
+@pytest.fixture
+def temp_parquet_path():
+    """Create a temporary parquet file with sample data."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        parquet_path = Path(tmpdir) / "daily_sentiment.parquet"
+        SAMPLE_SENTIMENT_DATA.to_parquet(parquet_path, index=False)
+        yield parquet_path
+
+
+@pytest.fixture
+def client_with_parquet(temp_parquet_path):
+    """Create test client with mock parquet path."""
+    app.dependency_overrides[get_sentiment_parquet_path] = lambda: temp_parquet_path
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_with_missing_parquet():
+    """Create test client with non-existent parquet path."""
+    app.dependency_overrides[get_sentiment_parquet_path] = lambda: Path("/nonexistent/file.parquet")
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Historical Sentiment - Basic tests
+# ============================================================================
+
+
+def test_historical_sentiment_returns_200(client_with_parquet):
+    """POST /signals/news/historical with valid params returns 200."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 200
+
+
+def test_historical_sentiment_returns_required_fields(client_with_parquet):
+    """POST /signals/news/historical returns all required response fields."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert "start_date" in data
+    assert "end_date" in data
+    assert "data" in data
+
+
+def test_historical_sentiment_returns_data_points(client_with_parquet):
+    """POST /signals/news/historical returns sentiment data points."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert isinstance(data["data"], list)
+    assert len(data["data"]) > 0
+
+    # Check data point fields
+    point = data["data"][0]
+    assert "symbol" in point
+    assert "date" in point
+    assert "sentiment_score" in point
+    assert "article_count" in point
+    assert "p_pos_avg" in point
+    assert "p_neg_avg" in point
+
+
+def test_historical_sentiment_correct_data(client_with_parquet):
+    """POST /signals/news/historical returns correct sentiment values."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-02",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    # Should have exactly 1 data point for AAPL on 2024-01-02
+    assert len(data["data"]) == 1
+
+    point = data["data"][0]
+    assert point["symbol"] == "AAPL"
+    assert point["date"] == "2024-01-02"
+    assert point["sentiment_score"] == 0.5
+    assert point["article_count"] == 10
+
+
+# ============================================================================
+# Historical Sentiment - Validation tests
+# ============================================================================
+
+
+def test_historical_sentiment_empty_symbols_returns_422(client_with_parquet):
+    """POST /signals/news/historical with empty symbols returns 422."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": [],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_historical_sentiment_no_symbols_returns_422(client_with_parquet):
+    """POST /signals/news/historical without symbols returns 422."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_historical_sentiment_max_symbols_exceeded_returns_422(client_with_parquet):
+    """POST /signals/news/historical with too many symbols returns 422."""
+    # MAX_HISTORICAL_SENTIMENT_SYMBOLS is 20
+    symbols = [f"SYM{i}" for i in range(21)]
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": symbols,
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_historical_sentiment_requires_start_date(client_with_parquet):
+    """POST /signals/news/historical requires start_date."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_historical_sentiment_requires_end_date(client_with_parquet):
+    """POST /signals/news/historical requires end_date."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+        },
+    )
+    assert response.status_code == 422
+
+
+# ============================================================================
+# Historical Sentiment - Neutral fallback tests
+# ============================================================================
+
+
+def test_historical_sentiment_neutral_for_missing_symbol(client_with_parquet):
+    """Missing symbol in parquet returns neutral sentiment."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["UNKNOWNSYM"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-02",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data["data"]) == 1
+
+    point = data["data"][0]
+    assert point["symbol"] == "UNKNOWNSYM"
+    assert point["sentiment_score"] == 0.0  # Neutral
+    assert point["article_count"] is None  # No data marker
+    assert point["p_pos_avg"] is None
+    assert point["p_neg_avg"] is None
+
+
+def test_historical_sentiment_neutral_for_missing_date(client_with_parquet):
+    """Missing date in parquet returns neutral sentiment."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2023-01-01",  # Before data range
+            "end_date": "2023-01-01",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data["data"]) == 1
+
+    point = data["data"][0]
+    assert point["symbol"] == "AAPL"
+    assert point["date"] == "2023-01-01"
+    assert point["sentiment_score"] == 0.0  # Neutral
+    assert point["article_count"] is None
+
+
+def test_historical_sentiment_returns_all_requested_combos(client_with_parquet):
+    """Returns all date+symbol combinations, filling missing with neutral."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL", "GOOGL"],  # GOOGL not in sample data
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    # 2 symbols × 2 dates = 4 data points
+    assert len(data["data"]) == 4
+
+    # Group by symbol
+    by_symbol = {}
+    for point in data["data"]:
+        by_symbol.setdefault(point["symbol"], []).append(point)
+
+    assert set(by_symbol.keys()) == {"AAPL", "GOOGL"}
+
+    # AAPL should have real data
+    aapl_points = by_symbol["AAPL"]
+    assert len(aapl_points) == 2
+    for p in aapl_points:
+        assert p["sentiment_score"] != 0.0 or p["article_count"] is not None
+
+    # GOOGL should have neutral data (all None markers)
+    googl_points = by_symbol["GOOGL"]
+    assert len(googl_points) == 2
+    for p in googl_points:
+        assert p["sentiment_score"] == 0.0
+        assert p["article_count"] is None
+
+
+def test_historical_sentiment_missing_parquet_returns_neutral(client_with_missing_parquet):
+    """When parquet file doesn't exist, all data is neutral."""
+    response = client_with_missing_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-02",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data["data"]) == 1
+
+    point = data["data"][0]
+    assert point["sentiment_score"] == 0.0
+    assert point["article_count"] is None
+
+
+# ============================================================================
+# Historical Sentiment - Multiple symbols test
+# ============================================================================
+
+
+def test_historical_sentiment_multiple_symbols(client_with_parquet):
+    """POST /signals/news/historical with multiple symbols returns all."""
+    response = client_with_parquet.post(
+        "/signals/news/historical",
+        json={
+            "symbols": ["AAPL", "MSFT"],
+            "start_date": "2024-01-02",
+            "end_date": "2024-01-03",
+        },
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    # 2 symbols × 2 dates = 4 data points
+    assert len(data["data"]) == 4
+
+    symbols_in_response = {p["symbol"] for p in data["data"]}
+    assert symbols_in_response == {"AAPL", "MSFT"}
 
 
 
