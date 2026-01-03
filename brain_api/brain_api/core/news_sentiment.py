@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import yfinance as yf
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
+from shared.ml.finbert import FinBERTResult as SharedFinBERTResult
+from shared.ml.finbert import FinBERTScorer as SharedFinBERTScorer
 
 # ============================================================================
 # Data models
@@ -248,36 +250,27 @@ class YFinanceNewsFetcher:
 # ============================================================================
 
 
+def _shared_to_local_result(shared: SharedFinBERTResult) -> FinBERTResult:
+    """Convert shared FinBERTResult to local format."""
+    return FinBERTResult(
+        label=shared.label,
+        p_pos=shared.p_pos,
+        p_neg=shared.p_neg,
+        p_neu=shared.p_neu,
+        article_score=shared.score,
+    )
+
+
 class FinBERTScorer:
     """Score article sentiment using FinBERT (ProsusAI/finbert).
 
-    This model is specifically trained on financial news and SEC filings,
-    making it well-suited for stock sentiment analysis.
+    This is a wrapper around the shared FinBERTScorer that converts
+    results to the local FinBERTResult format for backward compatibility.
     """
 
-    _instance: "FinBERTScorer | None" = None
-    _pipeline = None
-
-    def __new__(cls) -> "FinBERTScorer":
-        """Singleton pattern to avoid loading model multiple times."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def _ensure_loaded(self) -> None:
-        """Lazy-load the model on first use."""
-        if self._pipeline is None:
-            model_name = "ProsusAI/finbert"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            self._pipeline = pipeline(
-                "sentiment-analysis",
-                model=model,
-                tokenizer=tokenizer,
-                return_all_scores=True,
-                truncation=True,
-                max_length=512,
-            )
+    def __init__(self):
+        """Initialize with shared scorer instance."""
+        self._shared_scorer = SharedFinBERTScorer()
 
     def score(self, text: str) -> FinBERTResult:
         """Score the sentiment of a single text.
@@ -288,8 +281,8 @@ class FinBERTScorer:
         Returns:
             FinBERTResult with label, probabilities, and article_score
         """
-        results = self.score_batch([text])
-        return results[0]
+        shared_result = self._shared_scorer.score(text)
+        return _shared_to_local_result(shared_result)
 
     def score_batch(self, texts: list[str]) -> list[FinBERTResult]:
         """Score sentiment for a batch of texts.
@@ -300,65 +293,8 @@ class FinBERTScorer:
         Returns:
             List of FinBERTResult objects
         """
-        self._ensure_loaded()
-
-        if not texts:
-            return []
-
-        # Run inference
-        try:
-            batch_results = self._pipeline(texts)
-        except Exception:
-            # Return neutral on error
-            return [
-                FinBERTResult(
-                    label="neutral",
-                    p_pos=0.33,
-                    p_neg=0.33,
-                    p_neu=0.34,
-                    article_score=0.0,
-                )
-                for _ in texts
-            ]
-
-        results = []
-        for scores in batch_results:
-            # scores is a list of dicts: [{'label': 'positive', 'score': ...}, ...]
-            p_pos = 0.0
-            p_neg = 0.0
-            p_neu = 0.0
-
-            for item in scores:
-                label = item["label"].lower()
-                score = item["score"]
-                if label == "positive":
-                    p_pos = score
-                elif label == "negative":
-                    p_neg = score
-                elif label == "neutral":
-                    p_neu = score
-
-            # Determine winning label
-            if p_pos >= p_neg and p_pos >= p_neu:
-                label = "positive"
-            elif p_neg >= p_pos and p_neg >= p_neu:
-                label = "negative"
-            else:
-                label = "neutral"
-
-            article_score = p_pos - p_neg
-
-            results.append(
-                FinBERTResult(
-                    label=label,
-                    p_pos=round(p_pos, 4),
-                    p_neg=round(p_neg, 4),
-                    p_neu=round(p_neu, 4),
-                    article_score=round(article_score, 4),
-                )
-            )
-
-        return results
+        shared_results = self._shared_scorer.score_batch(texts)
+        return [_shared_to_local_result(r) for r in shared_results]
 
 
 # ============================================================================

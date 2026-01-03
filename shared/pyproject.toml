@@ -1,29 +1,16 @@
 [project]
-name = "news-sentiment-etl"
+name = "learnfinance-shared"
 version = "0.1.0"
-description = "ETL pipeline to process HuggingFace financial news dataset into daily sentiment scores per symbol"
+description = "Shared utilities for LearnFinance-2025 (halal universe, FinBERT, device detection)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # HuggingFace dataset loading
-    "datasets>=2.14.0",
-    "huggingface-hub>=0.20.0",  # For huggingface-cli login
+    # Halal universe fetching
+    "yfinance>=0.2.0",
     # FinBERT sentiment analysis
     "transformers>=4.36.0",
     "torch>=2.0.0",
-    # Data processing
-    "pandas>=2.0.0",
-    "pyarrow>=14.0.0",
-    "duckdb>=1.0.0",
-    # Utilities
-    "rich>=13.0.0",
-    "tqdm>=4.66.0",
-    # Universe filtering (yfinance for halal ETF holdings)
-    "yfinance>=0.2.0",
 ]
-
-# Note: shared package must be installed separately:
-# cd ../shared && pip install -e .
 
 [project.optional-dependencies]
 dev = [
@@ -31,23 +18,18 @@ dev = [
     "ruff>=0.12.0",
 ]
 
-[project.scripts]
-news-sentiment-etl = "news_sentiment_etl.main:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["shared"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
 indent-width = 4
-src = ["news_sentiment_etl"]
-
-extend-exclude = [
-    ".venv",
-    "data",
-]
+src = ["shared"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -73,5 +55,5 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["news_sentiment_etl", "shared"]
+known-first-party = ["shared"]
 
