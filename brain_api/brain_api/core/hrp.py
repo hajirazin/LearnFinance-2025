@@ -327,3 +327,4 @@ def compute_hrp_allocation(
         as_of_date=as_of_date.isoformat(),
     )
 
+

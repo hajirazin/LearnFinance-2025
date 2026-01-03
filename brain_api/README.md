@@ -43,6 +43,27 @@ uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 | GET | `/universe/halal` | Get halal stock universe |
 | POST | `/train/lstm` | Train LSTM model (Sunday cron) |
 | POST | `/inference/lstm` | LSTM weekly return predictions (Monday run). Returns predictions sorted highest gain → highest loss, with insufficient-history symbols at the end. |
+| POST | `/signals/news` | News sentiment using yfinance + FinBERT. Returns recency-weighted sentiment scores per symbol. |
+| POST | `/signals/fundamentals` | **Current** fundamentals for inference. Uses **yfinance** (no rate limits). |
+| POST | `/signals/fundamentals/historical` | **Historical** fundamentals for training. Uses **Alpha Vantage** (25/day limit, cached). Takes date range, returns n symbols × m quarters. |
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ALPHA_VANTAGE_API_KEY` | API key for Alpha Vantage historical fundamentals | For `/signals/fundamentals/historical` only |
+
+### Data Sources
+
+| Endpoint | Data Source | Rate Limit | Cache |
+|----------|-------------|------------|-------|
+| `/signals/fundamentals` | yfinance | None | Not needed |
+| `/signals/fundamentals/historical` | Alpha Vantage | 25/day (free tier) | Yes (SQLite + JSON) |
+
+The historical endpoint response includes `api_status`:
+```json
+{"api_status": {"calls_today": 8, "daily_limit": 25, "remaining": 17}}
+```
 
 ## API documentation
 
