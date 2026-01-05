@@ -18,6 +18,8 @@ After completing the commit workflow and exiting this mode:
 
 **IMPORTANT: This workflow is FULLY AUTOMATED. No confirmation prompts. User runs /commit = execute everything.**
 
+CRITICAL: ONLY SIGNED COMMITS ARE ALLOWED.
+
 **Steps to follow:**
 
 1. **Analyze Changes and Generate Commit Message**
@@ -49,7 +51,7 @@ After completing the commit workflow and exiting this mode:
    4. Run: git checkout -b [branch-name]
    5. Run: git stash pop
    6. Run: git add .
-   7. Run: git commit -m "[generated message]"
+   7. Run: git commit -S -m "[generated message]"
    8. Run: git push -u origin [branch-name]
    9. Create new PR (see step 5)
    ```
@@ -57,7 +59,7 @@ After completing the commit workflow and exiting this mode:
    **WORKFLOW B: If on feature branch:**
    ```
    1. Run: git add .
-   2. Run: git commit -m "[generated message]"
+   2. Run: git commit -S -m "[generated message]"
    3. Run: git push (or git push -u origin [branch] if needed)
    4. Check for open PR (see step 4)
    5. Update existing PR OR create new PR (see step 5)

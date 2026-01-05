@@ -72,6 +72,8 @@ Files Modified:
 - Use `*` for changes spanning multiple areas
 - Examples: `feat(reservations)`, `fix(api)`, `refactor(ui)`
 
+CRITICAL: ONLY SIGNED COMMITS ARE ALLOWED.  
+
 ### Step 4: Commit with the Generated Message
 1. Display the generated commit message in a beautiful, readable format with:
    - Clear sections and proper spacing
@@ -79,7 +81,7 @@ Files Modified:
    - File tree showing what was modified
    - Summary statistics (files changed, insertions, deletions)
 
-2. **Immediately commit** using the generated message with `git commit -m "<message>"`
+2. **Immediately commit** using the generated message with `git commit -S -m "<message>"` (the `-S` flag signs the commit)
 
 3. Display success confirmation with the commit hash
 
