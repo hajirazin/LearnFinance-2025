@@ -1,7 +1,16 @@
 """Configuration for news sentiment ETL pipeline."""
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Environment variable for HF news sentiment dataset repo
+ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
+
+
+def get_hf_news_sentiment_repo() -> str | None:
+    """Get HuggingFace news sentiment dataset repository from environment."""
+    return os.environ.get(ENV_HF_NEWS_SENTIMENT_REPO)
 
 
 @dataclass
@@ -24,6 +33,7 @@ class ETLConfig:
         max_articles: Maximum NEW articles to score (None = all, useful for testing)
         filter_to_halal: Whether to filter output to halal universe only
         hf_token: HuggingFace token for gated datasets (optional)
+        local_only: If True, skip HF upload even if HF_NEWS_SENTIMENT_REPO is set
     """
 
     # Dataset configuration
@@ -50,6 +60,9 @@ class ETLConfig:
 
     # Authentication
     hf_token: str | None = None
+
+    # HuggingFace upload control
+    local_only: bool = False  # If True, skip HF upload
 
     def __post_init__(self) -> None:
         """Ensure paths are Path objects."""

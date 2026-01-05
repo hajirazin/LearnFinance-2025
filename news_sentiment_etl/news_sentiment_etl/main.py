@@ -17,7 +17,7 @@ from rich.table import Table
 from tqdm import tqdm
 
 from news_sentiment_etl.core.cache import SentimentCache, compute_article_hash
-from news_sentiment_etl.core.config import ETLConfig
+from news_sentiment_etl.core.config import ETLConfig, get_hf_news_sentiment_repo
 from news_sentiment_etl.core.dataset import batch_articles, stream_articles
 from news_sentiment_etl.core.sentiment import FinBERTScorer
 from news_sentiment_etl.core.symbol_filter import UniverseFilter
@@ -289,6 +289,48 @@ def run_pipeline(config: ETLConfig) -> dict:
     for fmt, path in output_paths.items():
         console.print(f"  {fmt.upper()}: [green]{path}[/]")
 
+    # Upload to HuggingFace if configured and not local_only
+    hf_upload_url = None
+    hf_news_repo = get_hf_news_sentiment_repo()
+
+    if not config.local_only and hf_news_repo:
+        console.print("\n[bold blue]Uploading to HuggingFace...[/]")
+        console.print(f"  Repository: [cyan]{hf_news_repo}[/]")
+
+        try:
+            from huggingface_hub import HfApi
+
+            api = HfApi()
+
+            # Create repo if it doesn't exist
+            try:
+                api.repo_info(repo_id=hf_news_repo, repo_type="dataset")
+            except Exception:
+                console.print(f"  Creating repository: [yellow]{hf_news_repo}[/]")
+                api.create_repo(repo_id=hf_news_repo, repo_type="dataset", exist_ok=True)
+
+            # Upload parquet file if it exists
+            if "parquet" in output_paths:
+                parquet_path = output_paths["parquet"]
+                api.upload_file(
+                    path_or_fileobj=str(parquet_path),
+                    path_in_repo="data/daily_sentiment.parquet",
+                    repo_id=hf_news_repo,
+                    repo_type="dataset",
+                    commit_message=f"Update sentiment data: {len(daily_sentiments)} records",
+                )
+                hf_upload_url = f"https://huggingface.co/datasets/{hf_news_repo}"
+                console.print(f"  [green]✓ Uploaded to {hf_upload_url}[/]")
+
+        except Exception as e:
+            console.print(f"  [red]✗ HuggingFace upload failed: {e}[/]")
+            console.print("  [dim]Local files are still saved. Run manually with push script if needed.[/]")
+
+    elif config.local_only:
+        console.print("\n[dim]HuggingFace upload skipped (--local-only)[/]")
+    elif not hf_news_repo:
+        console.print("\n[dim]HuggingFace upload skipped (HF_NEWS_SENTIMENT_REPO not set)[/]")
+
     # Get output stats (from parquet if available, else from csv)
     if "parquet" in output_paths:
         output_stats = read_parquet_stats(output_paths["parquet"])
@@ -316,6 +358,7 @@ def run_pipeline(config: ETLConfig) -> dict:
     elapsed = time.time() - start_time
     output_info = {
         "paths": {fmt: str(path) for fmt, path in output_paths.items()},
+        "hf_url": hf_upload_url,
         **output_stats,
     }
     # Set device to N/A if model was never loaded
@@ -393,6 +436,11 @@ def main() -> int:
         help="HuggingFace token for gated datasets",
     )
     parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Skip HuggingFace upload even if HF_NEWS_SENTIMENT_REPO is set",
+    )
+    parser.add_argument(
         "--parquet",
         type=str,
         default=None,
@@ -432,6 +480,7 @@ def main() -> int:
         filter_to_halal=not args.no_halal_filter,
         use_gpu=False if args.cpu else None,
         hf_token=args.hf_token,
+        local_only=args.local_only,
     )
 
     console.print()
@@ -507,6 +556,7 @@ def handler(request):
         filter_to_halal=request_json.get("filter_to_halal", True),
         use_gpu=request_json.get("use_gpu"),
         hf_token=request_json.get("hf_token"),
+        local_only=request_json.get("local_only", False),
     )
 
     try:

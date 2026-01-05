@@ -335,7 +335,7 @@ def test_inference_lstm_no_model_returns_503():
                 json={"symbols": ["AAPL"]},
             )
             assert response.status_code == 503
-            assert "No current LSTM version" in response.json()["detail"]
+            assert "No trained model available" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 

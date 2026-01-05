@@ -23,6 +23,9 @@ dependencies = [
     "transformers>=4.36.0",
     # Fundamentals API
     "requests>=2.31.0",
+    # HuggingFace Hub for model/dataset storage
+    "huggingface-hub>=0.20.0",
+    "datasets>=2.16.0",
 ]
 
 [project.optional-dependencies]

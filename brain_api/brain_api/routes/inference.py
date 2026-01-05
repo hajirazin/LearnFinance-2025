@@ -1,10 +1,12 @@
 """Inference endpoints for ML models."""
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from brain_api.core.config import get_hf_model_repo, get_storage_backend
 from brain_api.core.lstm import (
     SymbolPrediction,
     build_inference_features,
@@ -12,9 +14,10 @@ from brain_api.core.lstm import (
     load_prices_yfinance,
     run_inference,
 )
-from brain_api.storage.local import LocalModelStorage
+from brain_api.storage.local import LSTMArtifacts, LocalModelStorage
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -117,19 +120,8 @@ def infer_lstm(
     # Compute holiday-aware week boundaries
     week_boundaries = week_boundary_computer(as_of)
 
-    # Load current model artifacts
-    try:
-        artifacts = storage.load_current_artifacts()
-    except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=str(e),
-        ) from None
-    except FileNotFoundError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Model artifacts incomplete: {e}",
-        ) from None
+    # Load current model artifacts (try local first, then HuggingFace)
+    artifacts = _load_model_artifacts(storage)
 
     # Calculate how much history we need to fetch
     # We need sequence_length days of data ending before target_week_start
@@ -189,6 +181,59 @@ def infer_lstm(
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
     )
+
+
+def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
+    """Load model artifacts with HuggingFace fallback.
+
+    Tries to load from local storage first. If that fails and HuggingFace
+    is configured, attempts to download from HuggingFace Hub.
+
+    Args:
+        storage: Local storage instance for caching
+
+    Returns:
+        LSTMArtifacts ready for inference
+
+    Raises:
+        HTTPException 503: if no model is available from any source
+    """
+    # Try local storage first
+    try:
+        return storage.load_current_artifacts()
+    except (ValueError, FileNotFoundError) as local_error:
+        logger.info(f"Local model not found: {local_error}")
+
+    # Try HuggingFace if configured
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_model_repo()
+
+    if storage_backend == "hf" or hf_model_repo:
+        if hf_model_repo:
+            try:
+                from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+                logger.info(f"Attempting to load model from HuggingFace: {hf_model_repo}")
+                hf_storage = HuggingFaceModelStorage(
+                    repo_id=hf_model_repo,
+                    local_cache=storage,
+                )
+                return hf_storage.download_model(use_cache=True)
+            except Exception as hf_error:
+                logger.error(f"Failed to load model from HuggingFace: {hf_error}")
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"No model available. Local: model not trained. "
+                        f"HuggingFace ({hf_model_repo}): {hf_error}"
+                    ),
+                ) from None
+
+    # No model available from any source
+    raise HTTPException(
+        status_code=503,
+        detail="No trained model available. Train a model first with POST /train/lstm",
+    ) from None
 
 
 def _sort_predictions(predictions: list[SymbolPrediction]) -> list[SymbolPrediction]:

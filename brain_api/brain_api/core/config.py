@@ -1,4 +1,4 @@
-"""Configuration for LSTM training."""
+"""Configuration for LSTM training and storage backends."""
 
 import os
 from datetime import date
@@ -9,8 +9,41 @@ from dateutil.relativedelta import relativedelta
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
 
+# HuggingFace Hub environment variables
+ENV_HF_TOKEN = "HF_TOKEN"
+ENV_HF_MODEL_REPO = "HF_MODEL_REPO"
+ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
+ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
+ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
+
 # Defaults
 DEFAULT_LOOKBACK_YEARS = 15
+DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
+
+
+def get_hf_token() -> str | None:
+    """Get HuggingFace API token from environment."""
+    return os.environ.get(ENV_HF_TOKEN)
+
+
+def get_hf_model_repo() -> str | None:
+    """Get HuggingFace model repository name (e.g., 'username/learnfinance-lstm')."""
+    return os.environ.get(ENV_HF_MODEL_REPO)
+
+
+def get_hf_news_sentiment_repo() -> str | None:
+    """Get HuggingFace news sentiment dataset repository name."""
+    return os.environ.get(ENV_HF_NEWS_SENTIMENT_REPO)
+
+
+def get_hf_twitter_sentiment_repo() -> str | None:
+    """Get HuggingFace twitter sentiment dataset repository name."""
+    return os.environ.get(ENV_HF_TWITTER_SENTIMENT_REPO)
+
+
+def get_storage_backend() -> str:
+    """Get the storage backend to use ('local' or 'hf')."""
+    return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
 
 
 def resolve_training_window() -> tuple[date, date]:

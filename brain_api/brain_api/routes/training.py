@@ -1,12 +1,17 @@
 """Training endpoints for ML models."""
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from brain_api.core.config import resolve_training_window
+from brain_api.core.config import (
+    get_hf_model_repo,
+    get_storage_backend,
+    resolve_training_window,
+)
 from brain_api.core.lstm import (
     DEFAULT_CONFIG,
     DatasetResult,
@@ -21,6 +26,8 @@ from brain_api.core.lstm import (
 from brain_api.storage.local import LocalModelStorage, create_metadata
 from brain_api.universe import get_halal_universe
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -33,6 +40,8 @@ class LSTMTrainResponse(BaseModel):
     metrics: dict[str, Any]
     promoted: bool
     prior_version: str | None = None
+    hf_repo: str | None = None  # HuggingFace repo if uploaded
+    hf_url: str | None = None  # URL to model on HuggingFace
 
 
 # ============================================================================
@@ -167,7 +176,7 @@ def train_lstm(
         prior_version=prior_version,
     )
 
-    # Write artifacts
+    # Write artifacts locally
     storage.write_artifacts(
         version=version,
         model=result.model,
@@ -180,6 +189,32 @@ def train_lstm(
     if promoted or prior_version is None:
         storage.promote_version(version)
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=metadata,
+                make_current=(promoted or prior_version is None),
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"Failed to upload model to HuggingFace: {e}")
+            # Don't fail the training request if HF upload fails
+
     return LSTMTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -191,4 +226,6 @@ def train_lstm(
         },
         promoted=promoted,
         prior_version=prior_version,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
     )
