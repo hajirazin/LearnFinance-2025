@@ -3,11 +3,28 @@
 ## Purpose
 Analyze all staged Git changes and generate a beautiful, detailed commit message that clearly explains what was changed, why, and the impact.
 
+## ⚠️ CRITICAL: Prevent Pager/User Input Issues
+
+**ALWAYS prefix git commands with `GIT_PAGER=cat` to prevent interactive pagers from blocking:**
+
+```bash
+# ✅ CORRECT - prevents pager
+GIT_PAGER=cat git diff --cached --name-status
+GIT_PAGER=cat git diff --cached
+GIT_PAGER=cat git log --oneline -5
+
+# ❌ WRONG - may open pager and hang
+git diff --cached
+git log
+```
+
+This prevents `less`, `vim`, or other pagers from opening and waiting for user input.
+
 ## Instructions
 
 ### Step 1: Check Staged Files
-1. Run `git diff --cached --name-status` to see what files are staged
-2. Run `git diff --cached --stat` to see the summary of changes
+1. Run `GIT_PAGER=cat git diff --cached --name-status` to see what files are staged
+2. Run `GIT_PAGER=cat git diff --cached --stat` to see the summary of changes
 3. If **nothing is staged**, immediately stop and respond:
    ```
    ❌ Nothing is staged for commit.
@@ -21,7 +38,7 @@ Analyze all staged Git changes and generate a beautiful, detailed commit message
 
 ### Step 2: Analyze Changes (Only if files are staged)
 For each staged file, examine:
-1. **Read the actual diff** using `git diff --cached` to understand exact changes
+1. **Read the actual diff** using `GIT_PAGER=cat git diff --cached` to understand exact changes
 2. **Categorize changes**:
    - New features
    - Bug fixes

@@ -14,6 +14,24 @@ After completing the commit workflow and exiting this mode:
 
 **Remember:** The user has explicitly configured this workflow to prevent auto-commits. Respect this preference absolutely.
 
+## ⚠️ CRITICAL: Prevent Pager/User Input Issues
+
+**ALWAYS prefix git commands with `GIT_PAGER=cat` to prevent interactive pagers from blocking:**
+
+```bash
+# ✅ CORRECT - prevents pager
+GIT_PAGER=cat git diff --staged
+GIT_PAGER=cat git diff
+GIT_PAGER=cat git log --oneline -5
+GIT_PAGER=cat git show HEAD
+
+# ❌ WRONG - may open pager and hang
+git diff --staged
+git log
+```
+
+This prevents `less`, `vim`, or other pagers from opening and waiting for user input.
+
 ## Commit Mode Workflow
 
 **IMPORTANT: This workflow is FULLY AUTOMATED. No confirmation prompts. User runs /commit = execute everything.**
@@ -23,7 +41,7 @@ CRITICAL: ONLY SIGNED COMMITS ARE ALLOWED.
 **Steps to follow:**
 
 1. **Analyze Changes and Generate Commit Message**
-   - Run `git diff --staged` (if files already staged) OR `git diff` (if not staged)
+   - Run `GIT_PAGER=cat git diff --staged` (if files already staged) OR `GIT_PAGER=cat git diff` (if not staged)
    - Run `git status --short` to see modified/added/deleted files
    - Analyze the changes to understand:
      - What was changed (files, functions, features)
