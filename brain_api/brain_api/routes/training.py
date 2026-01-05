@@ -148,14 +148,21 @@ def train_lstm(
     Returns:
         Training result including version, metrics, and promotion status.
     """
+    import time
+
     # Resolve window from API config
     start_date, end_date = resolve_training_window()
+    logger.info(f"[LSTM] Starting training for {len(symbols)} symbols")
+    logger.info(f"[LSTM] Data window: {start_date} to {end_date}")
+    logger.info(f"[LSTM] Symbols: {symbols}")
 
     # Compute deterministic version
     version = compute_version(start_date, end_date, symbols, config)
+    logger.info(f"[LSTM] Computed version: {version}")
 
     # Check if this version already exists (idempotent)
     if storage.version_exists(version):
+        logger.info(f"[LSTM] Version {version} already exists (idempotent), returning cached result")
         # Return existing metadata
         existing_metadata = storage.read_metadata(version)
         if existing_metadata:
@@ -169,26 +176,51 @@ def train_lstm(
             )
 
     # Load price data
+    logger.info(f"[LSTM] Loading price data for {len(symbols)} symbols...")
+    t0 = time.time()
     prices = price_loader(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[LSTM] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s")
+
+    if len(prices) == 0:
+        logger.error("[LSTM] No price data loaded - cannot train model")
+        raise ValueError("No price data available for training")
 
     # Build dataset (returns DatasetResult with X, y (weekly returns), feature_scaler)
+    logger.info("[LSTM] Building dataset...")
+    t0 = time.time()
     dataset = dataset_builder(prices, config)
+    t_dataset = time.time() - t0
+    logger.info(f"[LSTM] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples")
+
+    if len(dataset.X) == 0:
+        logger.error("[LSTM] Dataset is empty - cannot train model")
+        raise ValueError("No training samples could be built from price data")
 
     # Train model
+    logger.info("[LSTM] Starting model training...")
+    t0 = time.time()
     result = trainer(
         dataset.X,
         dataset.y,
         dataset.feature_scaler,
         config,
     )
+    t_train = time.time() - t0
+    logger.info(f"[LSTM] Training complete in {t_train:.1f}s")
+    logger.info(f"[LSTM] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}")
 
     # Get prior version info for promotion decision
     prior_version = storage.read_current_version()
     prior_val_loss = None
     if prior_version:
+        logger.info(f"[LSTM] Prior version: {prior_version}")
         prior_metadata = storage.read_metadata(prior_version)
         if prior_metadata:
             prior_val_loss = prior_metadata["metrics"].get("val_loss")
+            logger.info(f"[LSTM] Prior val_loss: {prior_val_loss}")
+    else:
+        logger.info("[LSTM] No prior version exists (first model)")
 
     # Decide on promotion
     promoted = evaluate_for_promotion(
@@ -196,6 +228,7 @@ def train_lstm(
         baseline_loss=result.baseline_loss,
         prior_val_loss=prior_val_loss,
     )
+    logger.info(f"[LSTM] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}")
 
     # Create metadata
     metadata = create_metadata(
@@ -212,6 +245,7 @@ def train_lstm(
     )
 
     # Write artifacts locally
+    logger.info(f"[LSTM] Writing artifacts for version {version}...")
     storage.write_artifacts(
         version=version,
         model=result.model,
@@ -219,10 +253,12 @@ def train_lstm(
         config=config,
         metadata=metadata,
     )
+    logger.info("[LSTM] Artifacts written successfully")
 
     # Promote if passed evaluation, or if this is the first model (so inference has something)
     if promoted or prior_version is None:
         storage.promote_version(version)
+        logger.info(f"[LSTM] Version {version} promoted to current")
 
     # Optionally push to HuggingFace Hub
     hf_repo = None
@@ -347,14 +383,22 @@ def train_patchtst(
     Returns:
         Training result including version, metrics, and promotion status.
     """
+    import time
+
     # Resolve window from API config
     start_date, end_date = resolve_training_window()
+    logger.info(f"[PatchTST] Starting training for {len(symbols)} symbols")
+    logger.info(f"[PatchTST] Data window: {start_date} to {end_date}")
+    logger.info(f"[PatchTST] Symbols: {symbols}")
+    logger.info(f"[PatchTST] Config: {config.num_input_channels} channels, {config.epochs} epochs")
 
     # Compute deterministic version
     version = patchtst_compute_version(start_date, end_date, symbols, config)
+    logger.info(f"[PatchTST] Computed version: {version}")
 
     # Check if this version already exists (idempotent)
     if storage.version_exists(version):
+        logger.info(f"[PatchTST] Version {version} already exists (idempotent), returning cached result")
         existing_metadata = storage.read_metadata(version)
         if existing_metadata:
             return PatchTSTTrainResponse(
@@ -370,42 +414,75 @@ def train_patchtst(
 
     # Load price data
     logger.info(f"[PatchTST] Loading price data for {len(symbols)} symbols...")
+    t0 = time.time()
     prices = price_loader(symbols, start_date, end_date)
-    logger.info(f"[PatchTST] Loaded prices for {len(prices)} symbols")
+    t_prices = time.time() - t0
+    logger.info(f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s")
+
+    if len(prices) == 0:
+        logger.error("[PatchTST] No price data loaded - cannot train model")
+        raise ValueError("No price data available for training")
 
     # Load news sentiment
     logger.info("[PatchTST] Loading historical news sentiment...")
+    t0 = time.time()
     news_sentiment = news_loader(symbols, start_date, end_date)
-    logger.info(f"[PatchTST] Loaded news sentiment for {len(news_sentiment)} symbols")
+    t_news = time.time() - t0
+    logger.info(f"[PatchTST] Loaded news sentiment for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s")
 
     # Load fundamentals
     logger.info("[PatchTST] Loading historical fundamentals...")
+    t0 = time.time()
     fundamentals = fundamentals_loader(symbols, start_date, end_date)
-    logger.info(f"[PatchTST] Loaded fundamentals for {len(fundamentals)} symbols")
+    t_fund = time.time() - t0
+    logger.info(f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s")
 
     # Align all data into multi-channel features
     logger.info("[PatchTST] Aligning multivariate data...")
+    t0 = time.time()
     aligned_features = data_aligner(prices, news_sentiment, fundamentals, config)
-    logger.info(f"[PatchTST] Aligned data for {len(aligned_features)} symbols")
+    t_align = time.time() - t0
+    logger.info(f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s")
+
+    if len(aligned_features) == 0:
+        logger.error("[PatchTST] No aligned features - cannot train model")
+        raise ValueError("No aligned features could be built from available data")
 
     # Build dataset
+    logger.info("[PatchTST] Building dataset...")
+    t0 = time.time()
     dataset = dataset_builder(aligned_features, prices, config)
+    t_dataset = time.time() - t0
+    logger.info(f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples")
+
+    if len(dataset.X) == 0:
+        logger.error("[PatchTST] Dataset is empty - cannot train model")
+        raise ValueError("No training samples could be built from aligned features")
 
     # Train model
+    logger.info("[PatchTST] Starting model training...")
+    t0 = time.time()
     result = trainer(
         dataset.X,
         dataset.y,
         dataset.feature_scaler,
         config,
     )
+    t_train = time.time() - t0
+    logger.info(f"[PatchTST] Training complete in {t_train:.1f}s")
+    logger.info(f"[PatchTST] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}")
 
     # Get prior version info for promotion decision
     prior_version = storage.read_current_version()
     prior_val_loss = None
     if prior_version:
+        logger.info(f"[PatchTST] Prior version: {prior_version}")
         prior_metadata = storage.read_metadata(prior_version)
         if prior_metadata:
             prior_val_loss = prior_metadata["metrics"].get("val_loss")
+            logger.info(f"[PatchTST] Prior val_loss: {prior_val_loss}")
+    else:
+        logger.info("[PatchTST] No prior version exists (first model)")
 
     # Decide on promotion
     promoted = patchtst_evaluate_for_promotion(
@@ -413,6 +490,7 @@ def train_patchtst(
         baseline_loss=result.baseline_loss,
         prior_val_loss=prior_val_loss,
     )
+    logger.info(f"[PatchTST] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}")
 
     # Create metadata
     metadata = create_patchtst_metadata(
@@ -429,6 +507,7 @@ def train_patchtst(
     )
 
     # Write artifacts locally
+    logger.info(f"[PatchTST] Writing artifacts for version {version}...")
     storage.write_artifacts(
         version=version,
         model=result.model,
@@ -436,12 +515,38 @@ def train_patchtst(
         config=config,
         metadata=metadata,
     )
+    logger.info("[PatchTST] Artifacts written successfully")
 
     # Promote if passed evaluation, or if this is the first model
     if promoted or prior_version is None:
         storage.promote_version(version)
+        logger.info(f"[PatchTST] Version {version} promoted to current")
 
-    # Note: HuggingFace upload for PatchTST can be added later if needed
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
+
+            hf_storage = PatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=metadata,
+                make_current=(promoted or prior_version is None),
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[PatchTST] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[PatchTST] Failed to upload model to HuggingFace: {e}")
+            # Don't fail the training request if HF upload fails
 
     return PatchTSTTrainResponse(
         version=version,
@@ -454,6 +559,8 @@ def train_patchtst(
         },
         promoted=promoted,
         prior_version=prior_version,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
         num_input_channels=config.num_input_channels,
         signals_used=["ohlcv", "news_sentiment", "fundamentals"],
     )

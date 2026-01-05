@@ -25,6 +25,8 @@ from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTConfig as HFPatchTSTConfig
 from transformers import PatchTSTForPrediction
 
+from brain_api.core.prices import load_prices_yfinance as _load_prices_shared
+
 # ============================================================================
 # Device Detection (MPS for Apple Silicon, CUDA for NVIDIA, else CPU)
 # ============================================================================
@@ -83,7 +85,7 @@ class PatchTSTConfig:
     # Training
     batch_size: int = 32
     learning_rate: float = 0.001
-    epochs: int = 50
+    epochs: int = 100
     validation_split: float = 0.2
 
     # Feature engineering
@@ -197,61 +199,7 @@ def load_prices_yfinance(
     Returns:
         Dict mapping symbol -> DataFrame with OHLCV columns and DatetimeIndex
     """
-    import yfinance as yf
-
-    prices: dict[str, pd.DataFrame] = {}
-    tickers_str = " ".join(symbols)
-
-    try:
-        data = yf.download(
-            tickers_str,
-            start=start_date.isoformat(),
-            end=end_date.isoformat(),
-            progress=False,
-            group_by="ticker",
-        )
-
-        if len(symbols) == 1:
-            symbol = symbols[0]
-            if not data.empty:
-                df = data[["Open", "High", "Low", "Close", "Volume"]].copy()
-                df.columns = ["open", "high", "low", "close", "volume"]
-                df = df.dropna()
-                if len(df) > 0:
-                    prices[symbol] = df
-        else:
-            for symbol in symbols:
-                try:
-                    if symbol in data.columns.get_level_values(0):
-                        df = data[symbol][
-                            ["Open", "High", "Low", "Close", "Volume"]
-                        ].copy()
-                        df.columns = ["open", "high", "low", "close", "volume"]
-                        df = df.dropna()
-                        if len(df) > 0:
-                            prices[symbol] = df
-                except (KeyError, TypeError):
-                    continue
-
-    except Exception:
-        # Fallback: fetch individually
-        for symbol in symbols:
-            try:
-                ticker = yf.Ticker(symbol)
-                df = ticker.history(
-                    start=start_date.isoformat(),
-                    end=end_date.isoformat(),
-                )
-                if not df.empty:
-                    df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
-                    df.columns = ["open", "high", "low", "close", "volume"]
-                    df = df.dropna()
-                    if len(df) > 0:
-                        prices[symbol] = df
-            except Exception:
-                continue
-
-    return prices
+    return _load_prices_shared(symbols, start_date, end_date, log_prefix="[PatchTST]")
 
 
 def load_historical_news_sentiment(
@@ -327,7 +275,7 @@ def load_historical_fundamentals(
         and DatetimeIndex (quarterly dates, to be forward-filled later)
     """
     if cache_path is None:
-        cache_path = Path(__file__).parent.parent / "data" / "fundamentals_cache"
+        cache_path = Path(__file__).parent.parent / "data" / "raw" / "fundamentals"
 
     fundamentals: dict[str, pd.DataFrame] = {}
 

@@ -1,6 +1,6 @@
 """PatchTST model storage module."""
 
-from brain_api.storage.patchtst.huggingface import HuggingFaceModelStorage
+from brain_api.storage.patchtst.huggingface import PatchTSTHuggingFaceModelStorage
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
     PatchTSTModelStorage,
@@ -11,6 +11,6 @@ __all__ = [
     "PatchTSTArtifacts",
     "PatchTSTModelStorage",
     "create_metadata",
-    "HuggingFaceModelStorage",
+    "PatchTSTHuggingFaceModelStorage",
 ]
 

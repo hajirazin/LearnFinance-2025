@@ -160,14 +160,26 @@ def infer_lstm(
     Raises:
         HTTPException 503: if no trained model is available
     """
+    import time
+
+    t_start = time.time()
+    logger.info(f"[LSTM] Starting inference for {len(request.symbols)} symbols")
+    logger.info(f"[LSTM] Symbols: {request.symbols}")
+
     # Get as-of date
     as_of = get_as_of_date(request)
+    logger.info(f"[LSTM] As-of date: {as_of}")
 
     # Compute holiday-aware week boundaries
     week_boundaries = week_boundary_computer(as_of)
+    logger.info(f"[LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
 
     # Load current model artifacts (try local first, then HuggingFace)
+    logger.info("[LSTM] Loading model artifacts...")
+    t0 = time.time()
     artifacts = _load_model_artifacts(storage)
+    t_model = time.time() - t0
+    logger.info(f"[LSTM] Model loaded in {t_model:.2f}s: version={artifacts.version}")
 
     # Calculate how much history we need to fetch
     # We need sequence_length days of data ending before target_week_start
@@ -182,10 +194,18 @@ def infer_lstm(
     data_end = week_boundaries.target_week_start - timedelta(days=1)
 
     # Fetch price data for all symbols
+    logger.info(f"[LSTM] Fetching prices for {len(request.symbols)} symbols ({data_start} to {data_end})...")
+    t0 = time.time()
     prices = price_loader(request.symbols, data_start, data_end)
+    t_prices = time.time() - t0
+    logger.info(f"[LSTM] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s")
 
     # Build features for each symbol
+    logger.info("[LSTM] Building feature sequences...")
+    t0 = time.time()
     features_list = []
+    symbols_with_data = 0
+    symbols_missing_data = []
     for symbol in request.symbols:
         prices_df = prices.get(symbol)
         if prices_df is None or prices_df.empty:
@@ -200,6 +220,7 @@ def infer_lstm(
                     data_end_date=None,
                 )
             )
+            symbols_missing_data.append(symbol)
         else:
             features = build_inference_features(
                 symbol=symbol,
@@ -208,17 +229,38 @@ def infer_lstm(
                 cutoff_date=week_boundaries.target_week_start,
             )
             features_list.append(features)
+            if features.has_enough_history:
+                symbols_with_data += 1
+            else:
+                symbols_missing_data.append(symbol)
+    t_features = time.time() - t0
+    logger.info(f"[LSTM] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready")
+    if symbols_missing_data:
+        logger.warning(f"[LSTM] Symbols with insufficient data: {symbols_missing_data}")
 
     # Run inference
+    logger.info("[LSTM] Running model inference...")
+    t0 = time.time()
     predictions = run_inference(
         model=artifacts.model,
         feature_scaler=artifacts.feature_scaler,
         features_list=features_list,
         week_boundaries=week_boundaries,
     )
+    t_infer = time.time() - t0
+    logger.info(f"[LSTM] Inference complete in {t_infer:.2f}s")
 
     # Sort predictions: highest gain → highest loss, with null/insufficient-history at the end
     predictions = _sort_predictions(predictions)
+
+    # Summary
+    valid_predictions = [p for p in predictions if p.predicted_weekly_return_pct is not None]
+    t_total = time.time() - t_start
+    logger.info(f"[LSTM] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s")
+    if valid_predictions:
+        top = valid_predictions[0]
+        bottom = valid_predictions[-1]
+        logger.info(f"[LSTM] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)")
 
     return LSTMInferenceResponse(
         predictions=predictions,
@@ -229,26 +271,31 @@ def infer_lstm(
     )
 
 
-def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
+def _load_model_artifacts_generic(
+    model_type: str,
+    local_storage: LocalModelStorage | PatchTSTModelStorage,
+    hf_storage_class: type,
+) -> LSTMArtifacts | PatchTSTArtifacts:
     """Load model artifacts with HuggingFace fallback.
 
-    Tries to load from local storage first. If that fails and HuggingFace
-    is configured, attempts to download from HuggingFace Hub.
+    Generic helper that handles local → HuggingFace fallback for any model type.
 
     Args:
-        storage: Local storage instance for caching
+        model_type: Model type identifier (e.g., "LSTM", "PatchTST")
+        local_storage: Local storage instance for caching
+        hf_storage_class: HuggingFace storage class to use for fallback
 
     Returns:
-        LSTMArtifacts ready for inference
+        Model artifacts ready for inference
 
     Raises:
         HTTPException 503: if no model is available from any source
     """
     # Try local storage first
     try:
-        return storage.load_current_artifacts()
+        return local_storage.load_current_artifacts()
     except (ValueError, FileNotFoundError) as local_error:
-        logger.info(f"Local model not found: {local_error}")
+        logger.info(f"[{model_type}] Local model not found: {local_error}")
 
     # Try HuggingFace if configured
     storage_backend = get_storage_backend()
@@ -257,20 +304,18 @@ def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
     if storage_backend == "hf" or hf_model_repo:
         if hf_model_repo:
             try:
-                from brain_api.storage.huggingface import HuggingFaceModelStorage
-
-                logger.info(f"Attempting to load model from HuggingFace: {hf_model_repo}")
-                hf_storage = HuggingFaceModelStorage(
+                logger.info(f"[{model_type}] Attempting to load model from HuggingFace: {hf_model_repo}")
+                hf_storage = hf_storage_class(
                     repo_id=hf_model_repo,
-                    local_cache=storage,
+                    local_cache=local_storage,
                 )
                 return hf_storage.download_model(use_cache=True)
             except Exception as hf_error:
-                logger.error(f"Failed to load model from HuggingFace: {hf_error}")
+                logger.error(f"[{model_type}] Failed to load model from HuggingFace: {hf_error}")
                 raise HTTPException(
                     status_code=503,
                     detail=(
-                        f"No model available. Local: model not trained. "
+                        f"No {model_type} model available. Local: model not trained. "
                         f"HuggingFace ({hf_model_repo}): {hf_error}"
                     ),
                 ) from None
@@ -278,8 +323,15 @@ def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
     # No model available from any source
     raise HTTPException(
         status_code=503,
-        detail="No trained model available. Train a model first with POST /train/lstm",
+        detail=f"No trained {model_type} model available. Train a model first with POST /train/{model_type.lower()}",
     ) from None
+
+
+def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
+    """Load LSTM model artifacts with HuggingFace fallback."""
+    from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+    return _load_model_artifacts_generic("LSTM", storage, HuggingFaceModelStorage)
 
 
 def _sort_predictions(predictions: list[LSTMSymbolPrediction]) -> list[LSTMSymbolPrediction]:
@@ -366,14 +418,26 @@ def infer_patchtst(
     Raises:
         HTTPException 503: if no trained model is available
     """
+    import time
+
+    t_start = time.time()
+    logger.info(f"[PatchTST] Starting inference for {len(request.symbols)} symbols")
+    logger.info(f"[PatchTST] Symbols: {request.symbols}")
+
     # Get as-of date
     as_of = get_patchtst_as_of_date(request)
+    logger.info(f"[PatchTST] As-of date: {as_of}")
 
     # Compute holiday-aware week boundaries
     week_boundaries = patchtst_compute_week_boundaries(as_of)
+    logger.info(f"[PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
 
     # Load current model artifacts
+    logger.info("[PatchTST] Loading model artifacts...")
+    t0 = time.time()
     artifacts = _load_patchtst_model_artifacts(storage)
+    t_model = time.time() - t0
+    logger.info(f"[PatchTST] Model loaded in {t_model:.2f}s: version={artifacts.version}")
 
     # Calculate data fetch window
     config = artifacts.config
@@ -382,25 +446,39 @@ def infer_patchtst(
     buffer_days = config.context_length * 2 + 30
     data_start = week_boundaries.target_week_start - timedelta(days=buffer_days)
     data_end = week_boundaries.target_week_start - timedelta(days=1)
+    logger.info(f"[PatchTST] Data window: {data_start} to {data_end}")
 
     # Fetch price data for all symbols
     logger.info(f"[PatchTST] Fetching prices for {len(request.symbols)} symbols...")
+    t0 = time.time()
     prices = patchtst_load_prices(request.symbols, data_start, data_end)
+    t_prices = time.time() - t0
+    logger.info(f"[PatchTST] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s")
 
     # Fetch news sentiment
     logger.info("[PatchTST] Loading news sentiment...")
+    t0 = time.time()
     news_sentiment = load_historical_news_sentiment(
         request.symbols, data_start, data_end
     )
+    t_news = time.time() - t0
+    logger.info(f"[PatchTST] Loaded news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s")
 
     # Fetch fundamentals (from cache)
     logger.info("[PatchTST] Loading fundamentals...")
+    t0 = time.time()
     fundamentals = load_historical_fundamentals(
         request.symbols, data_start, data_end
     )
+    t_fund = time.time() - t0
+    logger.info(f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s")
 
     # Build features for each symbol
+    logger.info("[PatchTST] Building feature sequences...")
+    t0 = time.time()
     features_list = []
+    symbols_with_data = 0
+    symbols_missing_data = []
     for symbol in request.symbols:
         prices_df = prices.get(symbol)
         news_df = news_sentiment.get(symbol)
@@ -418,6 +496,7 @@ def infer_patchtst(
                     has_fundamentals_data=fund_df is not None and len(fund_df) > 0,
                 )
             )
+            symbols_missing_data.append(symbol)
         else:
             features = patchtst_build_inference_features(
                 symbol=symbol,
@@ -428,14 +507,26 @@ def infer_patchtst(
                 cutoff_date=week_boundaries.target_week_start,
             )
             features_list.append(features)
+            if features.has_enough_history:
+                symbols_with_data += 1
+            else:
+                symbols_missing_data.append(symbol)
+    t_features = time.time() - t0
+    logger.info(f"[PatchTST] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready")
+    if symbols_missing_data:
+        logger.warning(f"[PatchTST] Symbols with insufficient data: {symbols_missing_data}")
 
     # Run inference
+    logger.info("[PatchTST] Running model inference...")
+    t0 = time.time()
     predictions = patchtst_run_inference(
         model=artifacts.model,
         feature_scaler=artifacts.feature_scaler,
         features_list=features_list,
         week_boundaries=week_boundaries,
     )
+    t_infer = time.time() - t0
+    logger.info(f"[PatchTST] Inference complete in {t_infer:.2f}s")
 
     # Sort predictions
     predictions = _sort_patchtst_predictions(predictions)
@@ -446,6 +537,16 @@ def infer_patchtst(
         signals_used.append("news_sentiment")
     if any(f.has_fundamentals_data for f in features_list):
         signals_used.append("fundamentals")
+
+    # Summary
+    valid_predictions = [p for p in predictions if p.predicted_weekly_return_pct is not None]
+    t_total = time.time() - t_start
+    logger.info(f"[PatchTST] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s")
+    logger.info(f"[PatchTST] Signals used: {signals_used}")
+    if valid_predictions:
+        top = valid_predictions[0]
+        bottom = valid_predictions[-1]
+        logger.info(f"[PatchTST] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)")
 
     return PatchTSTInferenceResponse(
         predictions=predictions,
@@ -458,23 +559,8 @@ def infer_patchtst(
 
 
 def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArtifacts:
-    """Load PatchTST model artifacts.
+    """Load PatchTST model artifacts with HuggingFace fallback."""
+    from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
 
-    Args:
-        storage: PatchTST storage instance
-
-    Returns:
-        PatchTSTArtifacts ready for inference
-
-    Raises:
-        HTTPException 503: if no model is available
-    """
-    try:
-        return storage.load_current_artifacts()
-    except (ValueError, FileNotFoundError) as e:
-        logger.error(f"PatchTST model not found: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="No trained PatchTST model available. Train a model first with POST /train/patchtst",
-        ) from None
+    return _load_model_artifacts_generic("PatchTST", storage, PatchTSTHuggingFaceModelStorage)
 

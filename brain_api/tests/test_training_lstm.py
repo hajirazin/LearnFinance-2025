@@ -30,15 +30,33 @@ def mock_symbols() -> list[str]:
 
 
 def mock_price_loader(symbols, start_date, end_date):
-    """Return empty prices dict to skip actual data loading."""
-    return {}
+    """Return mock price data for testing."""
+    import pandas as pd
+
+    # Create minimal fake price data for each symbol
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]  # 100 business days
+    prices = {}
+    for symbol in symbols:
+        prices[symbol] = pd.DataFrame(
+            {
+                "open": [100.0] * len(dates),
+                "high": [101.0] * len(dates),
+                "low": [99.0] * len(dates),
+                "close": [100.5] * len(dates),
+                "volume": [1000000] * len(dates),
+            },
+            index=dates,
+        )
+    return prices
 
 
 def mock_dataset_builder(prices, config) -> DatasetResult:
     """Return a mock dataset result for weekly return prediction."""
+    # Return non-empty arrays to pass validation checks
+    n_samples = 10
     return DatasetResult(
-        X=np.array([]).reshape(0, config.sequence_length, config.input_size),
-        y=np.array([]).reshape(0, 1),  # Single weekly return per sample
+        X=np.random.randn(n_samples, config.sequence_length, config.input_size),
+        y=np.random.randn(n_samples, 1),  # Single weekly return per sample
         feature_scaler=StandardScaler(),
     )
 

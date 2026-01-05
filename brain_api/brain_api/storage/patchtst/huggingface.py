@@ -1,56 +1,108 @@
-"""HuggingFace Hub storage for PatchTST model artifacts.
+"""HuggingFace Hub storage for PatchTST model artifacts."""
 
-Note: PatchTST HuggingFace storage is planned for future implementation.
-For now, PatchTST models are stored locally only.
-"""
+from typing import TYPE_CHECKING, Any
 
-import logging
+from brain_api.storage.base_huggingface import BaseHuggingFaceModelStorage, HFModelInfo
+from brain_api.storage.patchtst.local import PatchTSTArtifacts, PatchTSTModelStorage
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from transformers import PatchTSTForPrediction
+
+    from brain_api.core.patchtst import PatchTSTConfig
+
+# Re-export HFModelInfo for backward compatibility
+__all__ = ["PatchTSTHuggingFaceModelStorage", "HFModelInfo"]
 
 
-class HuggingFaceModelStorage:
+class PatchTSTHuggingFaceModelStorage(
+    BaseHuggingFaceModelStorage[
+        "PatchTSTConfig", "PatchTSTForPrediction", PatchTSTArtifacts, PatchTSTModelStorage
+    ]
+):
     """HuggingFace Hub storage for PatchTST model artifacts.
 
-    Note: This is a stub implementation. PatchTST HuggingFace upload
-    will be implemented when needed.
+    Stores model artifacts as files in a HuggingFace Model repository:
+        - weights.pt            (PyTorch model weights)
+        - feature_scaler.pkl    (sklearn StandardScaler for input features)
+        - config.json           (model hyperparameters)
+        - metadata.json         (training info, metrics, data window)
+
+    Versions are managed as git tags/branches on the HF repo.
+    The 'main' branch typically points to the current promoted version.
     """
 
-    def __init__(
+    @property
+    def model_type(self) -> str:
+        return "patchtst"
+
+    def _create_local_storage(self) -> PatchTSTModelStorage:
+        return PatchTSTModelStorage()
+
+    def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
+        from brain_api.core.patchtst import PatchTSTConfig
+
+        return PatchTSTConfig(**config_dict)
+
+    def _create_model(self, config: "PatchTSTConfig") -> "PatchTSTForPrediction":
+        from transformers import PatchTSTForPrediction
+
+        hf_config = config.to_hf_config()
+        return PatchTSTForPrediction(hf_config)
+
+    def _create_artifacts(
         self,
-        repo_id: str | None = None,
-        token: str | None = None,
-    ):
-        """Initialize HuggingFace model storage.
-
-        Args:
-            repo_id: HuggingFace repo ID for PatchTST models.
-            token: HuggingFace API token.
-        """
-        self.repo_id = repo_id
-        self.token = token
-        logger.warning(
-            "PatchTST HuggingFace storage is not yet implemented. "
-            "Models are stored locally only."
+        config: "PatchTSTConfig",
+        feature_scaler: Any,
+        model: "PatchTSTForPrediction",
+        version: str,
+    ) -> PatchTSTArtifacts:
+        return PatchTSTArtifacts(
+            config=config,
+            feature_scaler=feature_scaler,
+            model=model,
+            version=version,
         )
 
-    def upload_model(self, *args, **kwargs):
-        """Upload PatchTST model to HuggingFace Hub.
+    def _generate_readme(self, version: str, metadata: dict[str, Any]) -> str:
+        return f"""---
+tags:
+- patchtst
+- transformer
+- finance
+- weekly-returns
+- learnfinance
+- time-series
+---
 
-        Note: Not yet implemented.
-        """
-        raise NotImplementedError(
-            "PatchTST HuggingFace upload is not yet implemented. "
-            "Use local storage for now."
-        )
+# LearnFinance PatchTST Model - {version}
 
-    def download_model(self, *args, **kwargs):
-        """Download PatchTST model from HuggingFace Hub.
+Multi-signal PatchTST transformer model for predicting weekly stock returns.
 
-        Note: Not yet implemented.
-        """
-        raise NotImplementedError(
-            "PatchTST HuggingFace download is not yet implemented. "
-            "Use local storage for now."
-        )
+## Model Details
 
+- **Version**: {version}
+- **Model Type**: PatchTST (Patch Time Series Transformer)
+- **Training Window**: {metadata.get('data_window', {}).get('start', 'N/A')} to {metadata.get('data_window', {}).get('end', 'N/A')}
+- **Symbols**: {len(metadata.get('symbols', []))} stocks
+
+## Input Channels (11 total)
+
+- OHLCV log returns (5): open, high, low, close, volume
+- News sentiment (1)
+- Fundamentals (5): gross_margin, operating_margin, net_margin, current_ratio, debt_to_equity
+
+## Metrics
+
+- Train Loss: {metadata.get('metrics', {}).get('train_loss', 'N/A')}
+- Validation Loss: {metadata.get('metrics', {}).get('val_loss', 'N/A')}
+- Baseline Loss: {metadata.get('metrics', {}).get('baseline_loss', 'N/A')}
+
+## Usage
+
+```python
+from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
+
+storage = PatchTSTHuggingFaceModelStorage(repo_id="{self.repo_id}")
+artifacts = storage.download_model(version="{version}")
+```
+"""
