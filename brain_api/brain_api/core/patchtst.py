@@ -731,9 +731,8 @@ def train_model_pytorch(
     print(f"[PatchTST] Dataset: {len(X)} samples ({len(X_train)} train, {len(X_val)} val)")
     print(f"[PatchTST] Config: {config.epochs} epochs, batch_size={config.batch_size}, lr={config.learning_rate}")
 
-    # PatchTST expects shape (batch, n_channels, context_length) - transpose!
-    X_train = np.transpose(X_train, (0, 2, 1))
-    X_val = np.transpose(X_val, (0, 2, 1))
+    # HuggingFace PatchTST expects shape (batch, sequence_length, num_channels)
+    # Our X is already in that shape from build_dataset, no transpose needed
 
     # Convert to tensors
     X_train_t = torch.FloatTensor(X_train).to(device)
@@ -878,4 +877,341 @@ def evaluate_for_promotion(
 
     # Must beat prior (if exists)
     return prior_val_loss is None or val_loss < prior_val_loss
+
+
+# ============================================================================
+# Inference helpers
+# ============================================================================
+
+
+@dataclass
+class WeekBoundaries:
+    """Trading week boundaries for inference.
+
+    Represents the target week for prediction, computed with holiday awareness.
+    """
+
+    target_week_start: date  # First trading day of the week (Mon or later if holiday)
+    target_week_end: date  # Last trading day of the week (Fri or earlier if holiday)
+    calendar_monday: date  # Calendar Monday of the ISO week
+    calendar_friday: date  # Calendar Friday of the ISO week
+
+
+def compute_week_boundaries(as_of_date: date) -> WeekBoundaries:
+    """Compute holiday-aware week boundaries for the week containing as_of_date.
+
+    Uses the NYSE calendar (XNYS) to determine actual trading days.
+    The target week is the ISO week that contains as_of_date.
+
+    Args:
+        as_of_date: Reference date (typically the Monday when inference runs)
+
+    Returns:
+        WeekBoundaries with actual trading day start/end for the week
+    """
+    from datetime import timedelta
+
+    import exchange_calendars as xcals
+
+    # Get NYSE calendar
+    nyse = xcals.get_calendar("XNYS")
+
+    # Find the Monday of the ISO week containing as_of_date
+    days_since_monday = as_of_date.weekday()
+    calendar_monday = as_of_date - timedelta(days=days_since_monday)
+    calendar_friday = calendar_monday + timedelta(days=4)
+
+    # Convert to pandas Timestamp for exchange_calendars
+    monday_ts = pd.Timestamp(calendar_monday)
+    friday_ts = pd.Timestamp(calendar_friday)
+
+    # Find trading days in the week
+    schedule = nyse.sessions_in_range(monday_ts, friday_ts)
+
+    if len(schedule) == 0:
+        # Entire week is holiday
+        return WeekBoundaries(
+            target_week_start=calendar_monday,
+            target_week_end=calendar_friday,
+            calendar_monday=calendar_monday,
+            calendar_friday=calendar_friday,
+        )
+
+    target_week_start = schedule[0].date()
+    target_week_end = schedule[-1].date()
+
+    return WeekBoundaries(
+        target_week_start=target_week_start,
+        target_week_end=target_week_end,
+        calendar_monday=calendar_monday,
+        calendar_friday=calendar_friday,
+    )
+
+
+@dataclass
+class InferenceFeatures:
+    """Multi-channel features prepared for inference for a single symbol."""
+
+    symbol: str
+    features: np.ndarray | None  # Shape: (context_length, num_channels) or None
+    has_enough_history: bool
+    history_days_used: int
+    data_end_date: date | None
+    has_news_data: bool  # Whether news sentiment data was available
+    has_fundamentals_data: bool  # Whether fundamentals data was available
+
+
+def build_inference_features(
+    symbol: str,
+    prices_df: pd.DataFrame,
+    news_df: pd.DataFrame | None,
+    fundamentals_df: pd.DataFrame | None,
+    config: PatchTSTConfig,
+    cutoff_date: date,
+) -> InferenceFeatures:
+    """Build multi-channel feature sequence for inference.
+
+    Constructs the same features as training:
+    - OHLCV log returns (5 channels)
+    - News sentiment (1 channel) - forward-filled
+    - Fundamentals (5 channels) - forward-filled
+
+    Args:
+        symbol: Ticker symbol
+        prices_df: DataFrame with OHLCV columns and DatetimeIndex
+        news_df: DataFrame with 'sentiment_score' column and DatetimeIndex (or None)
+        fundamentals_df: DataFrame with fundamental ratio columns and DatetimeIndex (or None)
+        config: PatchTST config with context_length and feature settings
+        cutoff_date: Features end before this date (typically target_week_start)
+
+    Returns:
+        InferenceFeatures with prepared multi-channel feature sequence
+    """
+    if prices_df.empty:
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=0,
+            data_end_date=None,
+            has_news_data=False,
+            has_fundamentals_data=False,
+        )
+
+    # Ensure DatetimeIndex
+    if not isinstance(prices_df.index, pd.DatetimeIndex):
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=0,
+            data_end_date=None,
+            has_news_data=False,
+            has_fundamentals_data=False,
+        )
+
+    # Filter to data before cutoff_date
+    cutoff_ts = pd.Timestamp(cutoff_date)
+    df = prices_df[prices_df.index < cutoff_ts].copy()
+
+    if len(df) < config.context_length + 1:
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=len(df),
+            data_end_date=df.index[-1].date() if len(df) > 0 else None,
+            has_news_data=news_df is not None and len(news_df) > 0,
+            has_fundamentals_data=fundamentals_df is not None and len(fundamentals_df) > 0,
+        )
+
+    # Compute OHLCV features (log returns)
+    if config.use_returns:
+        features_df = pd.DataFrame(
+            {
+                "open_ret": np.log(df["open"] / df["open"].shift(1)),
+                "high_ret": np.log(df["high"] / df["high"].shift(1)),
+                "low_ret": np.log(df["low"] / df["low"].shift(1)),
+                "close_ret": np.log(df["close"] / df["close"].shift(1)),
+                "volume_ret": np.log(
+                    df["volume"] / df["volume"].shift(1).replace(0, 1)
+                ),
+            },
+            index=df.index,
+        )
+        features_df = features_df.iloc[1:]  # Drop first row (NaN from shift)
+    else:
+        features_df = df[["open", "high", "low", "close", "volume"]].copy()
+        features_df.columns = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+
+    # Replace infinities with 0
+    features_df = features_df.replace([np.inf, -np.inf], 0).fillna(0)
+
+    # Add news sentiment (forward-fill missing days)
+    has_news = False
+    if news_df is not None and len(news_df) > 0:
+        news_aligned = news_df.reindex(features_df.index, method="ffill")
+        features_df["news_sentiment"] = news_aligned["sentiment_score"].fillna(0.0)
+        has_news = True
+    else:
+        features_df["news_sentiment"] = 0.0
+
+    # Add fundamentals (forward-fill quarterly data)
+    fundamental_cols = ["gross_margin", "operating_margin", "net_margin",
+                       "current_ratio", "debt_to_equity"]
+    has_fundamentals = False
+    if fundamentals_df is not None and len(fundamentals_df) > 0:
+        fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
+        for col in fundamental_cols:
+            if col in fund_aligned.columns:
+                features_df[col] = fund_aligned[col].fillna(0.0)
+            else:
+                features_df[col] = 0.0
+        has_fundamentals = True
+    else:
+        for col in fundamental_cols:
+            features_df[col] = 0.0
+
+    # Ensure column order matches config.feature_names
+    features_df = features_df[config.feature_names]
+
+    # Check if we have enough data after computing returns
+    if len(features_df) < config.context_length:
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=len(features_df),
+            data_end_date=features_df.index[-1].date() if len(features_df) > 0 else None,
+            has_news_data=has_news,
+            has_fundamentals_data=has_fundamentals,
+        )
+
+    # Take the last context_length rows
+    sequence = features_df.iloc[-config.context_length:].values
+    data_end_date = features_df.index[-1].date()
+
+    return InferenceFeatures(
+        symbol=symbol,
+        features=sequence,
+        has_enough_history=True,
+        history_days_used=len(features_df),
+        data_end_date=data_end_date,
+        has_news_data=has_news,
+        has_fundamentals_data=has_fundamentals,
+    )
+
+
+@dataclass
+class SymbolPrediction:
+    """Prediction result for a single symbol."""
+
+    symbol: str
+    predicted_weekly_return_pct: float | None  # Percentage (e.g., 2.5 for +2.5%)
+    direction: str  # "UP", "DOWN", or "FLAT"
+    has_enough_history: bool
+    history_days_used: int
+    data_end_date: str | None  # ISO format
+    target_week_start: str  # ISO format
+    target_week_end: str  # ISO format
+    has_news_data: bool
+    has_fundamentals_data: bool
+
+
+def run_inference(
+    model: PatchTSTForPrediction,
+    feature_scaler: StandardScaler,
+    features_list: list[InferenceFeatures],
+    week_boundaries: WeekBoundaries,
+) -> list[SymbolPrediction]:
+    """Run PatchTST inference on prepared multi-channel feature sequences.
+
+    Args:
+        model: Loaded PatchTSTForPrediction model in eval mode
+        feature_scaler: Fitted StandardScaler from training
+        features_list: List of InferenceFeatures (one per symbol)
+        week_boundaries: Target week info for the response
+
+    Returns:
+        List of SymbolPrediction results
+    """
+    predictions = []
+
+    # Separate symbols with/without sufficient data
+    valid_features = [(f.symbol, f) for f in features_list if f.features is not None]
+    invalid_features = [f for f in features_list if f.features is None]
+
+    # Handle symbols without enough data
+    for feat in invalid_features:
+        predictions.append(
+            SymbolPrediction(
+                symbol=feat.symbol,
+                predicted_weekly_return_pct=None,
+                direction="FLAT",
+                has_enough_history=False,
+                history_days_used=feat.history_days_used,
+                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                target_week_start=week_boundaries.target_week_start.isoformat(),
+                target_week_end=week_boundaries.target_week_end.isoformat(),
+                has_news_data=feat.has_news_data,
+                has_fundamentals_data=feat.has_fundamentals_data,
+            )
+        )
+
+    if not valid_features:
+        return predictions
+
+    # Batch inference for valid symbols
+    # Shape: (n_samples, context_length, num_channels)
+    X = np.array([f.features for _, f in valid_features])
+
+    # Scale features using the training scaler
+    original_shape = X.shape
+    X_flat = X.reshape(-1, X.shape[-1])
+    X_scaled = feature_scaler.transform(X_flat)
+    X = X_scaled.reshape(original_shape)
+
+    # HuggingFace PatchTST expects shape (batch, sequence_length, num_channels)
+    # Our X is already in that shape, no transpose needed
+
+    # Convert to tensor and run model
+    X_tensor = torch.FloatTensor(X)
+
+    model.eval()
+    with torch.no_grad():
+        outputs = model(past_values=X_tensor)
+        raw_predictions = outputs.prediction_outputs
+        if raw_predictions.dim() == 3:
+            raw_predictions = raw_predictions.mean(dim=-1)
+        raw_predictions = raw_predictions.cpu().numpy().flatten()
+
+    # Build prediction results
+    for i, (symbol, feat) in enumerate(valid_features):
+        weekly_return = float(raw_predictions[i])
+        weekly_return_pct = weekly_return * 100  # Convert to percentage
+
+        # Determine direction
+        if weekly_return > 0.001:  # > 0.1% threshold for "UP"
+            direction = "UP"
+        elif weekly_return < -0.001:  # < -0.1% threshold for "DOWN"
+            direction = "DOWN"
+        else:
+            direction = "FLAT"
+
+        predictions.append(
+            SymbolPrediction(
+                symbol=symbol,
+                predicted_weekly_return_pct=round(weekly_return_pct, 4),
+                direction=direction,
+                has_enough_history=True,
+                history_days_used=feat.history_days_used,
+                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                target_week_start=week_boundaries.target_week_start.isoformat(),
+                target_week_end=week_boundaries.target_week_end.isoformat(),
+                has_news_data=feat.has_news_data,
+                has_fundamentals_data=feat.has_fundamentals_data,
+            )
+        )
+
+    return predictions
 
