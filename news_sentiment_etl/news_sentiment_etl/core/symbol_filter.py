@@ -1,41 +1,23 @@
-"""Universe filtering for stock symbols."""
+"""Universe filtering for stock symbols.
+
+Imports halal universe logic from brain_api to avoid code duplication.
+"""
 
 from datetime import UTC, datetime
 
-import yfinance as yf
-
-# Halal ETFs to source holdings from (same as brain_api)
-HALAL_ETFS = ["SPUS", "HLAL", "SPTE"]
-
-
-def _fetch_etf_holdings(ticker: str) -> list[str]:
-    """Fetch symbols from a single ETF's holdings.
-
-    Args:
-        ticker: ETF ticker symbol
-
-    Returns:
-        List of stock symbols in the ETF
-    """
-    try:
-        etf = yf.Ticker(ticker)
-        if not hasattr(etf, "funds_data") or etf.funds_data is None:
-            return []
-
-        top_holdings = etf.funds_data.top_holdings
-        if top_holdings is None or top_holdings.empty:
-            return []
-
-        return [str(symbol).upper() for symbol in top_holdings.index]
-    except Exception:
-        return []
+# Import shared universe logic from brain_api
+from brain_api.universe import (
+    HALAL_ETFS,
+    get_halal_symbols,
+    is_us_ticker,
+)
 
 
 class UniverseFilter:
     """Filter symbols to a specific universe.
 
     Supports:
-    - Halal stocks (from ETF holdings)
+    - Halal stocks (from ETF holdings via brain_api)
     - Custom symbol list
     - No filtering (all symbols)
     """
@@ -53,16 +35,15 @@ class UniverseFilter:
     def from_halal_universe(cls) -> "UniverseFilter":
         """Create filter from halal ETF holdings.
 
-        Fetches current holdings from SPUS, HLAL, SPTE ETFs.
+        Uses brain_api.universe to fetch holdings from SPUS, HLAL, SPTE ETFs,
+        filtered to US-listed stocks only.
 
         Returns:
             UniverseFilter with halal symbols
         """
-        all_symbols: set[str] = set()
-
-        for etf_ticker in HALAL_ETFS:
-            holdings = _fetch_etf_holdings(etf_ticker)
-            all_symbols.update(holdings)
+        # Use shared logic from brain_api
+        symbols = get_halal_symbols()
+        all_symbols = {s.upper() for s in symbols}
 
         instance = cls(all_symbols)
         instance._fetched_at = datetime.now(UTC).isoformat()
@@ -130,3 +111,7 @@ class UniverseFilter:
         """When the universe was fetched, if applicable."""
         return self._fetched_at
 
+    @property
+    def etfs_used(self) -> list[str]:
+        """List of ETF tickers used for halal universe."""
+        return list(HALAL_ETFS)

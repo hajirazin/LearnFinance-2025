@@ -430,7 +430,7 @@ def get_fundamentals_fetcher(
     return FundamentalsFetcher(
         api_key=api_key,
         base_path=base_path,
-        daily_limit=25,  # Alpha Vantage free tier
+        daily_limit=500,  # Soft limit - Alpha Vantage still returns data
     )
 
 
