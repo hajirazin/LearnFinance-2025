@@ -4,12 +4,14 @@ This file is the **working agreement** for humans + AI assistants contributing t
 
 ## Project intent (north star)
 
-Build a weekly, paper-trading portfolio decision system for halal Nasdaq-500 stocks that is:
+Build a **learning-focused** weekly paper-trading portfolio system for halal Nasdaq-500 stocks that **compares multiple approaches side-by-side**:
 
 - **Safe-by-default** (paper auto-submit only; reruns cannot duplicate orders)
 - **Audit-friendly** (every run reproducible and explainable)
-- **Learning-focused** (n8n orchestration + multi-agent workflows + LSTM + HRP + PPO)
+- **Learning-focused** (compare LSTM vs PatchTST, PPO vs SAC, all vs HRP baseline)
 - **Cloud-ready** (local-first design that can migrate to Cloud Functions)
+
+The goal is to learn which approaches work best, not to pick a single method upfront.
 
 ## Non-negotiable invariants (do not break)
 
@@ -45,32 +47,41 @@ The system must:
 ### Model lifecycle (training vs inference)
 
 - **Monday runs are inference-only**. Never retrain inside the Monday inference run.
-- **Training happens on Sundays** as separate jobs:
-  - LSTM: full retrain on **first Sunday of month**
-  - PPO: fine-tune **every Sunday** using 26-week rolling experience buffer
+- **Training schedule**:
+
+| When | What | Trigger |
+|------|------|---------|
+| Monthly (Saturday) | Full retrain LSTM | Manual |
+| Monthly (Saturday) | Full retrain PatchTST (future) | Manual |
+| Monthly (Saturday) | Full retrain PPO | Manual |
+| Monthly (Saturday) | Full retrain SAC | Manual |
+| Weekly (Sunday) | Fine-tune PPO | Cron |
+| Weekly (Sunday) | Fine-tune SAC | Cron |
+
 - Training produces a **new versioned artifact**; inference loads from `current` pointer.
 - **Promotion requires evaluation**: new model must beat prior + baseline before becoming `current`.
 - **Rollback is always possible**: keep last known-good version; pointer swap is atomic.
 
 ### Model storage (local artifacts)
 
-- Models are stored under `data/models/{lstm,ppo}/<version>/`
+- Models are stored under `data/models/{lstm,patchtst,ppo,sac}/<version>/`
 - Active version tracked by `data/models/{model}/current` (text file with version string)
-- PPO experience buffer stored under `data/experience/<run_id>.json`
+- RL experience buffer (shared by PPO/SAC) stored under `data/experience/<run_id>.json`
 - All model artifacts must include `metadata.json` with: training timestamp, data window, config hash, eval metrics
 
 ## Architecture boundaries (keep it modular)
 
 - **n8n** is the outer orchestrator:
-  - schedule trigger
-  - calling APIs (Alpaca, email)
-  - calling the Python brain API
+  - schedule trigger (Monday 6 PM IST)
+  - calling brain_api endpoints
+  - calling OpenAI/LLM for summary
+  - sending comparison email via Gmail
   - status tracking + notifications
 - **Python brain** owns:
   - universe build + screening
-  - data ingestion and caching
-  - multi-agent committee workflows (agent-to-agent)
-  - LSTM inference + HRP allocation (+ PPO decisions in future)
+  - signal collection (news, fundamentals, twitter)
+  - price forecasting (LSTM pure-price, PatchTST multi-signal)
+  - portfolio allocation (HRP math baseline, PPO RL, SAC RL)
   - explanation generation
   - persistence of run artifacts
 
@@ -82,17 +93,29 @@ Each ML operation must be a **separate REST endpoint** that can later become a s
 
 ### Required endpoints
 
-**Inference** (called by Monday run):
+**Inference** (called by Monday run via n8n):
 
-- `POST /inference/lstm` — price predictions
-- `POST /allocation/hrp` — HRP risk-parity portfolio allocation *(currently active)*
-- `POST /inference/ppo` — RL-based portfolio allocation *(planned future enhancement)*
+- `POST /inference/lstm` — price predictions (OHLCV only, pure price) ✅ Active
+- `POST /inference/patchtst` — price predictions (multi-signal) 🔜 Future
+- `POST /allocation/hrp` — HRP risk-parity allocation ✅ Active
+- `POST /inference/ppo` — PPO RL-based allocation 🔜 Planned
+- `POST /inference/sac` — SAC RL-based allocation 🔜 Planned
 
-**Training** (called by Sunday cron or manual):
+**Signals** (called by Monday run via n8n):
 
-- `POST /train/lstm` — full LSTM retrain
-- `POST /train/ppo/finetune` — PPO fine-tune on 26-week buffer
-- `POST /train/ppo/full` — PPO full retrain (drift recovery)
+- `POST /signals/news` — news sentiment (FinBERT) ✅ Active
+- `POST /signals/fundamentals` — financial ratios (5 metrics) ✅ Active
+- `POST /signals/twitter` — twitter/social sentiment 🔜 To build
+- `POST /signals/analyst` — analyst ratings (optional) 🔜 To build
+
+**Training** (called by Saturday/Sunday cron or manual):
+
+- `POST /train/lstm` — full LSTM retrain (monthly, manual)
+- `POST /train/patchtst` — full PatchTST retrain (monthly, manual)
+- `POST /train/ppo/full` — full PPO retrain (monthly, manual)
+- `POST /train/sac/full` — full SAC retrain (monthly, manual)
+- `POST /train/ppo/finetune` — PPO fine-tune on 26-week buffer (weekly, cron)
+- `POST /train/sac/finetune` — SAC fine-tune on 26-week buffer (weekly, cron)
 
 **Model management**:
 
@@ -111,20 +134,24 @@ Each ML operation must be a **separate REST endpoint** that can later become a s
 ### Code structure pattern
 
 ```
-brain/
-├── api/
-│   └── routes/
-│       ├── inference.py      # POST /inference/lstm, /inference/ppo
-│       ├── training.py       # POST /train/lstm, /train/ppo/*
-│       └── models.py         # GET/POST /models/*
+brain_api/
+├── routes/
+│   ├── inference.py      # POST /inference/lstm, /inference/patchtst, /inference/ppo, /inference/sac
+│   ├── allocation.py     # POST /allocation/hrp
+│   ├── signals.py        # POST /signals/news, /signals/fundamentals, /signals/twitter
+│   ├── training.py       # POST /train/lstm, /train/patchtst, /train/ppo/*, /train/sac/*
+│   └── models.py         # GET/POST /models/*
 ├── core/
-│   ├── lstm.py               # lstm_inference(), lstm_train() — pure functions
-│   ├── ppo.py                # ppo_inference(), ppo_finetune(), ppo_train()
+│   ├── lstm.py           # lstm_inference(), lstm_train() — pure price forecaster
+│   ├── patchtst.py       # patchtst_inference(), patchtst_train() — multi-signal forecaster
+│   ├── ppo.py            # ppo_inference(), ppo_finetune(), ppo_train()
+│   ├── sac.py            # sac_inference(), sac_finetune(), sac_train()
+│   ├── hrp.py            # hrp_allocation() — math baseline
 │   └── ...
 ├── storage/
-│   ├── base.py               # abstract Storage class
-│   ├── local.py              # LocalStorage(base_path="data/")
-│   └── gcs.py                # GCSStorage(bucket="...") — swap via env var
+│   ├── base.py           # abstract Storage class
+│   ├── local.py          # LocalStorage(base_path="data/")
+│   └── gcs.py            # GCSStorage(bucket="...") — swap via env var
 └── ...
 ```
 
@@ -136,6 +163,48 @@ When migrating an endpoint to GCP:
 2. Set `STORAGE_BACKEND=gcs` environment variable
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
 4. Update caller (n8n) to use Cloud Function URL
+
+## Model hierarchy (learning comparison)
+
+This repo compares multiple approaches at each stage:
+
+### Price Forecasters
+
+| Model | Input | Output | Notes |
+|-------|-------|--------|-------|
+| LSTM | OHLCV only (pure price) | Weekly return prediction | Simple baseline |
+| PatchTST | OHLCV + All signals | Weekly return prediction | Multi-signal transformer |
+
+### Portfolio Allocators
+
+| Model | Input | Output | Notes |
+|-------|-------|--------|-------|
+| HRP | Covariance matrix | Allocation weights | Math baseline |
+| PPO | State vector (all signals) | Allocation weights | On-policy RL |
+| SAC | State vector (all signals) | Allocation weights | Off-policy RL |
+
+### Signal state vector (for RL and PatchTST)
+
+The RL agents (PPO/SAC) and PatchTST receive a state vector containing:
+
+| Feature | Source | Status |
+|---------|--------|--------|
+| LSTM predicted return | `/inference/lstm` | ✅ Built |
+| News sentiment score | `/signals/news` | ✅ Built |
+| Gross margin | `/signals/fundamentals` | ✅ Built |
+| Operating margin | `/signals/fundamentals` | ✅ Built |
+| Net margin | `/signals/fundamentals` | ✅ Built |
+| Current ratio | `/signals/fundamentals` | ✅ Built |
+| Debt to equity | `/signals/fundamentals` | ✅ Built |
+| Twitter sentiment | `/signals/twitter` | 🔜 To build |
+| Analyst rating changes | `/signals/analyst` | 🔜 Optional |
+| Current portfolio weight | Portfolio state | N/A |
+| Cash available | Portfolio state | N/A |
+
+**Key distinction:**
+- **LSTM** = pure price forecaster (OHLCV only, does NOT receive signals)
+- **PatchTST** = multi-signal forecaster (receives all signals + OHLCV)
+- **PPO/SAC** = RL allocators (receive all signals + LSTM output)
 
 ## Data storage rules (auditability)
 
@@ -163,7 +232,15 @@ Agents must produce **structured outputs** that can be stored and audited:
   - flag weak/insufficient evidence
   - downgrade confidence or veto a trade recommendation
 
-Agents are used for **evidence synthesis**. Numeric optimization remains in deterministic code (feature engineering) + LSTM/RL.
+Agents are used for **evidence synthesis**. Numeric optimization remains in deterministic code (feature engineering) + LSTM/PatchTST/RL.
+
+### LLM summary (n8n orchestrated)
+
+The Monday email includes an **AI summary** generated by OpenAI/GPT-4o-mini:
+
+- n8n merges all signal data and sends to OpenAI
+- LLM produces: market outlook, top opportunities, key risks, portfolio insights
+- This is for **learning/interpretation**, not for trading decisions
 
 ## Testing policy (important)
 
@@ -204,5 +281,7 @@ Before merging changes that touch ML/model code:
 - Confirm promotion requires evaluation gate
 - Confirm endpoints remain stateless (no global model cache)
 - Confirm storage abstraction is used (not hardcoded paths)
+- Confirm LSTM remains pure-price (no signals in input)
+- Confirm PatchTST/PPO/SAC receive correct signal state vector
 
 

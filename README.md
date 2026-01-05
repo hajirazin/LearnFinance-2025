@@ -1,26 +1,28 @@
 # LearnFinance-2025
 
-Build a weekly, paper-trading portfolio-rebalancing system for **halal Nasdaq-500 stocks** using a hybrid architecture:
+A **learning-focused** weekly paper-trading portfolio system for **halal Nasdaq-500 stocks**. The goal is to **compare multiple approaches side-by-side** — not to pick a single "best" method.
 
-- **n8n** for scheduling/orchestration and integrations (Alpaca + email)
-- A Python "AI brain" for **multi-agent evidence synthesis**, **LSTM price forecasting**, **HRP allocation** (currently active), and **RL (PPO) portfolio decisions** (future)
+**Architecture:**
 
-This is a learning repo, but the design aims to be **audit-friendly**, **idempotent**, and **safe-by-default**.
+- **n8n** for scheduling/orchestration and integrations (Alpaca + email + LLM summary)
+- A Python "AI brain" for **LSTM price forecasting** (pure price), **PatchTST forecasting** (multi-signal, future), **HRP allocation** (math baseline), and **RL portfolio decisions** (PPO + SAC for comparison)
+
+This repo is designed to be **audit-friendly**, **idempotent**, and **safe-by-default**.
 
 ## What it does (weekly)
 
-Every Monday **6:00 PM IST** (pre US open), the system:
+Every Monday **6:00 PM IST** (pre US open), the n8n workflow orchestrates:
 
-- Fetches current portfolio + cash from **Alpaca (paper)**
-- Builds the **Halal Nasdaq-500 universe**
-- Runs a **screening stage** to pick a manageable candidate set (Top-30) while always including current holdings
-- Collects signals per ticker (news, social sentiment, global industry/market context)
-- Runs a **multi-agent “investment committee”** to synthesize evidence and resolve conflicts
-- Uses **LSTM** to predict near-term price movement (with uncertainty/quality signals)
-- Uses **HRP (Hierarchical Risk Parity)** to allocate portfolio weights based on risk structure *(currently active)*
-- Uses **RL (PPO / Proximal Policy Optimization)** to choose the portfolio actions while penalizing unnecessary turnover *(future enhancement)*
-- **Auto-submits limit orders to Alpaca paper**
-- Emails you: what was submitted + rationale + run identifiers + links/IDs for audit
+1. **Universe & Signals**: Fetch halal universe, collect signals (news sentiment, fundamentals)
+2. **Price Forecasting**: Run LSTM (price-only) and PatchTST (multi-signal, future)
+3. **Portfolio Allocation**: Run multiple allocators for comparison:
+   - **HRP** (Hierarchical Risk Parity) — math baseline ✅ Active
+   - **PPO** (Proximal Policy Optimization) — RL agent 🔜 Planned
+   - **SAC** (Soft Actor-Critic) — RL agent 🔜 Planned
+4. **LLM Summary**: OpenAI/GPT synthesizes all signals into market insights
+5. **Email**: Send comparison tables with all approaches for learning
+
+The email shows **all allocations side-by-side** so you can learn which approach performs best over time.
 
 ## What it does NOT do
 
@@ -35,20 +37,78 @@ flowchart LR
 
   subgraph brain[python_brain]
     runApi --> universe[universe_service]
-    runApi --> ingest[data_ingestion_service]
-    runApi --> agents[agent_committee_workflow]
-    runApi --> models[model_service_LSTM_PPO]
-    runApi --> report[report_service]
+    runApi --> signals[signal_service]
+    runApi --> forecasters[forecasters_LSTM_PatchTST]
+    runApi --> allocators[allocators_HRP_PPO_SAC]
   end
 
-  ingest --> raw[raw_evidence_store]
-  models --> db[run_db_Postgres]
-  report --> db
+  signals --> raw[raw_evidence_store]
+  forecasters --> db[run_db_Postgres]
+  allocators --> db
 
+  n8n -->|LLM_summary| openai[OpenAI_GPT]
+  n8n -->|send_comparison_email| email[Gmail]
   n8n -->|submit_limit_orders| alpaca[alpaca_paper_api]
-  n8n -->|send_summary_email| email[email_provider]
-  alpaca -->|order_status| db
 ```
+
+## Model hierarchy (learning comparison)
+
+This repo compares multiple approaches at each stage:
+
+**Price Forecasters** (predict weekly returns):
+
+| Model | Input | Notes |
+|-------|-------|-------|
+| LSTM | OHLCV only (pure price) | Simple baseline ✅ Active |
+| PatchTST | OHLCV + All signals | Multi-signal transformer 🔜 Future |
+
+**Portfolio Allocators** (decide weights):
+
+| Model | Input | Notes |
+|-------|-------|-------|
+| HRP | Covariance matrix | Math baseline ✅ Active |
+| PPO | State vector (all signals) | RL agent 🔜 Planned |
+| SAC | State vector (all signals) | RL agent 🔜 Planned |
+
+## Signal flow
+
+Signals feed into both PatchTST (for forecasting) and PPO/SAC (for allocation):
+
+```
+┌─────────────────────────────────────┐
+│           All Signals               │
+│  (News, Twitter, Fundamentals, etc) │
+└───────────┬───────────┬─────────────┘
+            │           │
+┌───────────┘           └───────────┐
+▼                                   ▼
+┌─────────────────┐       ┌─────────────────┐
+│    PatchTST     │       │   RL State      │
+│   (future)      │       │   Vector        │
+│  OHLCV+Signals  │       └────────┬────────┘
+└────────┬────────┘                │
+         │                         │
+         ▼                         ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  Rich Forecast  │  │      LSTM       │  │   PPO / SAC     │
+└─────────────────┘  │  OHLCV only     │  │   RL Agents     │
+                     └────────┬────────┘  └────────┬────────┘
+                              │                    │
+                              ▼                    ▼
+                     ┌─────────────────┐  ┌─────────────────┐
+                     │ Simple Forecast │  │   Allocation    │
+                     │ (feeds into RL) │  │    Weights      │
+                     └─────────────────┘  └─────────────────┘
+```
+
+**Signals available:**
+
+| Signal | Status | Endpoint |
+|--------|--------|----------|
+| News sentiment | ✅ Built | `/signals/news` |
+| Fundamentals (5 ratios) | ✅ Built | `/signals/fundamentals` |
+| Twitter/Social sentiment | 🔜 To build | — |
+| Analyst ratings | 🔜 Optional | — |
 
 ## Weekly data flow (Monday run)
 
@@ -167,13 +227,13 @@ Even for paper, enforce hard limits (config):
 
 ## Model lifecycle (training vs inference)
 
-Monday inference runs **do not retrain** models. Training happens separately on Sundays.
+Monday inference runs **do not retrain** models. Training happens separately.
 
 ### LSTM prediction target
 
 The LSTM predicts **weekly returns** (not daily prices):
 
-- **Input**: Last 60 trading days of OHLCV log-return features
+- **Input**: Last 60 trading days of OHLCV log-return features (pure price data)
 - **Output**: Single scalar = `(Friday close - Monday open) / Monday open`
 
 This directly aligns with the RL agent's weekly decision horizon and eliminates holiday edge cases:
@@ -187,13 +247,30 @@ This directly aligns with the RL agent's weekly decision horizon and eliminates 
 
 The training data groups by ISO week, so a "week" is simply whatever trading days fall within that calendar week. Weeks with fewer than 3 trading days are skipped.
 
-### Recommended schedule
+### PatchTST (future) prediction target
 
-| Day | LSTM | PPO |
-|-----|------|-----|
-| **First Sunday of month** | Full retrain on expanded history | Fine-tune (rolling 26-week experience buffer) |
-| **Other Sundays** | No training | Fine-tune (rolling 26-week experience buffer) |
-| **Monday 6 PM IST** | Inference only | Inference only |
+PatchTST will predict **weekly returns** like LSTM, but with richer input:
+
+- **Input**: OHLCV + News sentiment + Fundamentals + Twitter sentiment (all signals)
+- **Output**: Same as LSTM — weekly return prediction
+
+This allows comparing a simple price-only model (LSTM) vs a multi-signal transformer (PatchTST).
+
+### Recommended weekly schedule
+
+| Day | LSTM | PatchTST | PPO | SAC | HRP |
+|-----|------|----------|-----|-----|-----|
+| **Saturday (monthly, manual)** | Full retrain | Full retrain | Full retrain | Full retrain | N/A (no training) |
+| **Sunday (weekly, cron)** | — | — | Fine-tune | Fine-tune | N/A |
+| **Monday 6 PM IST (cron)** | Inference | Inference | Inference | Inference | Inference |
+
+### Training triggers
+
+| When | What | Trigger |
+|------|------|---------|
+| Monthly (Saturday) | Full retrain all models | Manual |
+| Weekly (Sunday) | Fine-tune PPO + SAC on 26-week experience buffer | Cron |
+| Monday 6 PM IST | Inference only (all models) | Cron (n8n) |
 
 **Why separate training from inference?**
 
@@ -214,15 +291,15 @@ flowchart LR
   keep --> done
 ```
 
-### PPO continual learning (local)
+### RL continual learning (PPO and SAC)
 
-PPO learns over time via **weekly fine-tuning** on a rolling experience buffer, not by retraining from scratch.
+Both PPO and SAC learn over time via **weekly fine-tuning** on a rolling experience buffer, not by retraining from scratch. Running both allows comparison of on-policy (PPO) vs off-policy (SAC) RL.
 
 **Experience collection (Monday)**
 
 After each Monday run, store the experience tuple:
 
-- State: features/signals at decision time
+- State: features/signals at decision time (LSTM prediction, news sentiment, fundamentals, etc.)
 - Action: portfolio weights chosen
 - Reward: computed later (e.g., next-week return minus turnover cost)
 
@@ -231,13 +308,14 @@ Save to: `data/experience/<run_id>.json`
 **Fine-tune loop (Sunday)**
 
 1. Load last 26 weeks of experience (rolling window, ~6 months)
-2. Run a small number of PPO update steps (not full training)
-3. Evaluate new policy vs prior policy on held-out data or replay
-4. **Promote only if better**; otherwise keep prior `current`
+2. Run a small number of PPO update steps
+3. Run a small number of SAC update steps (same experience buffer)
+4. Evaluate both policies vs prior and baseline
+5. **Promote only if better**; otherwise keep prior `current`
 
 **Guardrails**
 
-- **Evaluation gate**: new policy must beat prior + a baseline (e.g., equal-weight, momentum)
+- **Evaluation gate**: new policy must beat prior + a baseline (e.g., equal-weight, HRP)
 - **Rollback**: keep last known-good version; promotion is atomic pointer swap
 - **Drift detection**: if performance degrades 4 weeks in a row, consider full retrain or manual review
 
@@ -252,18 +330,31 @@ data/
 ├── models/
 │   ├── lstm/
 │   │   ├── v2025-12-01T10-00-00/     # versioned artifact
-│   │   │   ├── weights.pt            # model weights (PyTorch example)
+│   │   │   ├── weights.pt            # model weights (PyTorch)
 │   │   │   ├── scaler.pkl            # feature scaler/normalizer
 │   │   │   ├── config.json           # hyperparams, feature schema
 │   │   │   └── metadata.json         # training date, data window, metrics
-│   │   └── current                   # text file containing "v2025-12-01T10-00-00"
-│   └── ppo/
+│   │   └── current                   # text file containing version string
+│   ├── patchtst/                     # (future) multi-signal forecaster
+│   │   ├── v2025-12-01T10-00-00/
+│   │   │   ├── weights.pt
+│   │   │   ├── scaler.pkl
+│   │   │   ├── config.json
+│   │   │   └── metadata.json
+│   │   └── current
+│   ├── ppo/
+│   │   ├── v2025-12-29T08-00-00/
+│   │   │   ├── policy.pt
+│   │   │   ├── env_config.json
+│   │   │   └── metadata.json
+│   │   └── current
+│   └── sac/                          # SAC for comparison with PPO
 │       ├── v2025-12-29T08-00-00/
 │       │   ├── policy.pt
 │       │   ├── env_config.json
 │       │   └── metadata.json
 │       └── current
-├── experience/                        # PPO experience buffer
+├── experience/                        # RL experience buffer (shared by PPO/SAC)
 │   ├── paper:2025-12-22.json
 │   └── paper:2025-12-29.json
 └── ...
@@ -282,7 +373,7 @@ data/
 
 1. Read `data/models/lstm/current` to get the active version string
 2. Load artifacts from `data/models/lstm/<version>/`
-3. Same for PPO
+3. Same pattern for PatchTST, PPO, and SAC
 
 This means you can:
 
@@ -302,21 +393,34 @@ Each ML operation is exposed as a **separate REST endpoint**, designed so it can
 
 ### Endpoint overview
 
-**Inference endpoints** (called by Monday run):
+**Inference endpoints** (called by Monday run via n8n):
 
-| Endpoint | Purpose | Trigger | Status |
-|----------|---------|---------|--------|
-| `POST /inference/lstm` | Price movement predictions | n8n → brain API | ✅ Active |
-| `POST /allocation/hrp` | HRP risk-parity portfolio allocation | n8n → brain API | ✅ Active |
-| `POST /inference/ppo` | RL-based portfolio allocation | n8n → brain API | 🔜 Planned |
+| Endpoint | Purpose | Status |
+|----------|---------|--------|
+| `POST /inference/lstm` | Price predictions (OHLCV only) | ✅ Active |
+| `POST /inference/patchtst` | Price predictions (multi-signal) | 🔜 Future |
+| `POST /allocation/hrp` | HRP risk-parity allocation | ✅ Active |
+| `POST /inference/ppo` | PPO RL-based allocation | 🔜 Planned |
+| `POST /inference/sac` | SAC RL-based allocation | 🔜 Planned |
 
-**Training endpoints** (called by Sunday cron or manual):
+**Signal endpoints** (called by Monday run via n8n):
+
+| Endpoint | Purpose | Status |
+|----------|---------|--------|
+| `POST /signals/news` | News sentiment (FinBERT) | ✅ Active |
+| `POST /signals/fundamentals` | Financial ratios (5 metrics) | ✅ Active |
+| `POST /signals/twitter` | Twitter/social sentiment | 🔜 To build |
+
+**Training endpoints** (called by Saturday/Sunday cron or manual):
 
 | Endpoint | Purpose | Trigger |
 |----------|---------|---------|
-| `POST /train/lstm` | Full LSTM retrain | Cron (1st Sunday) or manual |
-| `POST /train/ppo/finetune` | PPO fine-tune on 26-week buffer | Cron (every Sunday) |
-| `POST /train/ppo/full` | PPO full retrain (drift recovery) | Manual |
+| `POST /train/lstm` | Full LSTM retrain | Monthly (Saturday, manual) |
+| `POST /train/patchtst` | Full PatchTST retrain | Monthly (Saturday, manual) |
+| `POST /train/ppo/full` | Full PPO retrain | Monthly (Saturday, manual) |
+| `POST /train/sac/full` | Full SAC retrain | Monthly (Saturday, manual) |
+| `POST /train/ppo/finetune` | PPO fine-tune on 26-week buffer | Weekly (Sunday, cron) |
+| `POST /train/sac/finetune` | SAC fine-tune on 26-week buffer | Weekly (Sunday, cron) |
 
 **Model management endpoints**:
 
@@ -430,11 +534,16 @@ When ready to move to GCP:
 
 | Local | Cloud Function | Trigger |
 |-------|----------------|---------|
-| `POST /inference/lstm` | `lstm-inference` | HTTP (called by n8n or Cloud Workflows) |
+| `POST /inference/lstm` | `lstm-inference` | HTTP (n8n or Cloud Workflows) |
+| `POST /inference/patchtst` | `patchtst-inference` | HTTP |
 | `POST /inference/ppo` | `ppo-inference` | HTTP |
-| `POST /train/lstm` | `lstm-train` | Cloud Scheduler (1st Sunday 00:00 UTC) |
-| `POST /train/ppo/finetune` | `ppo-finetune` | Cloud Scheduler (every Sunday 00:00 UTC) |
+| `POST /inference/sac` | `sac-inference` | HTTP |
+| `POST /train/lstm` | `lstm-train` | Cloud Scheduler (monthly) |
+| `POST /train/patchtst` | `patchtst-train` | Cloud Scheduler (monthly) |
+| `POST /train/ppo/finetune` | `ppo-finetune` | Cloud Scheduler (weekly Sunday) |
+| `POST /train/sac/finetune` | `sac-finetune` | Cloud Scheduler (weekly Sunday) |
 | `POST /train/ppo/full` | `ppo-full-retrain` | Pub/Sub or manual HTTP |
+| `POST /train/sac/full` | `sac-full-retrain` | Pub/Sub or manual HTTP |
 
 **Migration steps**:
 
@@ -498,50 +607,64 @@ n8n will be available at http://localhost:5678
 
 You should receive a "Hello World from LearnFinance-2025" email with a timestamp and placeholder `run_id`.
 
-## Weekly LSTM forecast email workflow
+## Weekly comparison email workflow (n8n)
 
-Once you have Gmail set up, import the weekly forecast workflow:
+The n8n workflow orchestrates Monday inference and sends a **comparison email** for learning.
 
-### 1. Start Brain API
+### Workflow architecture
 
-Brain API must be running and accessible from the n8n Docker container:
+```
+n8n cron trigger (Monday 6 PM IST)
+  │
+  ├─→ GET  /universe/halal              → Halal stock universe
+  │
+  └─→ Pick Top N Symbols
+        │
+        ├─→ POST /inference/lstm        → LSTM forecasts (price-only)
+        ├─→ POST /inference/patchtst    → PatchTST forecasts (future)
+        ├─→ POST /signals/news          → News sentiment
+        ├─→ POST /signals/fundamentals  → Financial ratios
+        ├─→ POST /inference/ppo         → PPO allocation (future)
+        ├─→ POST /inference/sac         → SAC allocation (future)
+        └─→ POST /allocation/hrp        → HRP allocation
+              │
+              └─→ Merge all data
+                    │
+                    └─→ OpenAI/LLM (GPT-4o-mini) → AI Summary
+                          │
+                          └─→ Format Email → Gmail Send
+```
+
+### Email sections (for learning/comparison)
+
+| Section | Source | Purpose |
+|---------|--------|---------|
+| **AI Summary** | OpenAI/LLM | Market outlook, opportunities, risks |
+| **LSTM Forecasts** | `/inference/lstm` | Simple price-only predictions |
+| **PatchTST Forecasts** (future) | `/inference/patchtst` | Multi-signal predictions |
+| **PPO Allocation** (future) | `/inference/ppo` | RL-based weights |
+| **SAC Allocation** (future) | `/inference/sac` | RL-based weights |
+| **HRP Allocation** | `/allocation/hrp` | Math baseline |
+
+### Setup
+
+**1. Start Brain API:**
 
 ```bash
 cd brain_api
 uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2. Import the workflow
+**2. Import the workflow:**
 
 1. In n8n, go to **Workflows → Add Workflow → Import from File**
 2. Select `n8n/workflows/weekly-lstm-forecast-email.json`
-3. Open the **Gmail Send Forecast** node and:
-   - Select your `Gmail OAuth2` credential
-   - Change `sendTo` to your recipient address
+3. Configure Gmail credentials and recipient address
 4. Save the workflow
 
-### 3. Test manually
+**3. Enable the schedule:**
 
-Click **Execute Workflow** to test. The workflow will:
-
-1. Fetch the halal stock universe from `/universe/halal`
-2. Pick the top 20 symbols by ETF weight
-3. Run three parallel signals:
-   - `/inference/lstm` for weekly return predictions
-   - `/signals/news` for FinBERT news sentiment
-   - `/allocation/hrp` for HRP portfolio allocation
-4. Send data to OpenAI for AI-generated market analysis
-5. Format and send an email with:
-   - **AI Summary**: Market outlook, opportunities, risks, and portfolio insights
-   - **HRP Allocation**: Risk-balanced portfolio weights (sorted highest to lowest)
-   - **LSTM Predictions**: Stocks ranked from highest predicted gain to highest predicted loss
-
-### 4. Enable the schedule
-
-By default, the workflow triggers every Monday at 18:00 IST. To enable:
-
-1. Toggle the workflow to **Active** in n8n
-2. The cron will run automatically each Monday
+Toggle the workflow to **Active** in n8n. The cron runs every Monday at 18:00 IST.
 
 ### Environment variables (optional)
 
