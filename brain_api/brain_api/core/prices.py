@@ -129,3 +129,4 @@ def load_prices_yfinance(
     return prices
 
 
+

@@ -259,3 +259,4 @@ class TestSentimentScore:
         assert restored.score == original.score
         assert restored.confidence == original.confidence
 
+

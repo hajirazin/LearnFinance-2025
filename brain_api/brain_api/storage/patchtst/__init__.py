@@ -4,13 +4,12 @@ from brain_api.storage.patchtst.huggingface import PatchTSTHuggingFaceModelStora
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
     PatchTSTModelStorage,
-    create_metadata,
 )
+from brain_api.storage.metadata import create_training_metadata
 
 __all__ = [
     "PatchTSTArtifacts",
     "PatchTSTModelStorage",
-    "create_metadata",
+    "create_training_metadata",
     "PatchTSTHuggingFaceModelStorage",
 ]
-

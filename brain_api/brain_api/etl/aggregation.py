@@ -43,3 +43,4 @@ class DailySentiment:
             "total_articles": self.total_articles,
         }
 
+

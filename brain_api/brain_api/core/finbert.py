@@ -198,7 +198,7 @@ class FinBERTScorer:
             "sentiment-analysis",
             model=model,
             tokenizer=tokenizer,
-            return_all_scores=True,
+            top_k=None,
             truncation=True,
             max_length=FINBERT_MAX_LENGTH,
             device=device_param,
@@ -346,4 +346,5 @@ class FinBERTScorer:
 
         # All results should be filled now
         return [r for r in results if r is not None], cache_hits, new_scores
+
 

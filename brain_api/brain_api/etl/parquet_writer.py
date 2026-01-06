@@ -203,3 +203,4 @@ def read_parquet_stats(path: Path) -> dict:
         "file_size_mb": round(path.stat().st_size / (1024 * 1024), 2),
     }
 
+

@@ -113,3 +113,4 @@ class UniverseFilter:
         """List of ETF tickers used for halal universe."""
         return list(HALAL_ETFS)
 
+

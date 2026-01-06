@@ -370,3 +370,4 @@ class SentimentCache:
         console.print(f"  Article-symbol pairs: [green]{symbol_count:,}[/]")
         console.print()
 
+
