@@ -1,15 +1,13 @@
 """Universe filtering for stock symbols.
 
-Imports halal universe logic from brain_api to avoid code duplication.
+Simplified version that uses brain_api.universe directly.
 """
 
 from datetime import UTC, datetime
 
-# Import shared universe logic from brain_api
 from brain_api.universe import (
     HALAL_ETFS,
     get_halal_symbols,
-    is_us_ticker,
 )
 
 
@@ -17,7 +15,7 @@ class UniverseFilter:
     """Filter symbols to a specific universe.
 
     Supports:
-    - Halal stocks (from ETF holdings via brain_api)
+    - Halal stocks (from ETF holdings via brain_api.universe)
     - Custom symbol list
     - No filtering (all symbols)
     """
@@ -41,7 +39,6 @@ class UniverseFilter:
         Returns:
             UniverseFilter with halal symbols
         """
-        # Use shared logic from brain_api
         symbols = get_halal_symbols()
         all_symbols = {s.upper() for s in symbols}
 
@@ -115,3 +112,4 @@ class UniverseFilter:
     def etfs_used(self) -> list[str]:
         """List of ETF tickers used for halal universe."""
         return list(HALAL_ETFS)
+

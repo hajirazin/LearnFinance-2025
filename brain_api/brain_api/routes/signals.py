@@ -13,8 +13,8 @@ from brain_api.core.fundamentals import (
     FundamentalRatios,
     FundamentalsFetcher,
 )
+from brain_api.core.finbert import FinBERTScorer
 from brain_api.core.news_sentiment import (
-    FinBERTScorer,
     NewsFetcher,
     NewsSentimentResult,
     SentimentScorer,
@@ -201,12 +201,12 @@ def _symbol_to_response(
 ) -> SymbolSentimentResponse:
     """Convert internal SymbolSentiment to API response format.
 
-    Selects top K articles by article_score (most positive first).
+    Selects top K articles by score (most positive first).
     """
-    # Sort articles by article_score descending
+    # Sort articles by score descending
     sorted_articles = sorted(
         sentiment.scored_articles,
-        key=lambda a: a.finbert.article_score,
+        key=lambda a: a.sentiment.score,
         reverse=True,
     )
 
@@ -220,11 +220,11 @@ def _symbol_to_response(
             publisher=sa.article.publisher,
             link=sa.article.link,
             published=sa.article.published.isoformat() if sa.article.published else None,
-            finbert_label=sa.finbert.label,
-            finbert_p_pos=sa.finbert.p_pos,
-            finbert_p_neg=sa.finbert.p_neg,
-            finbert_p_neu=sa.finbert.p_neu,
-            article_score=sa.finbert.article_score,
+            finbert_label=sa.sentiment.label,
+            finbert_p_pos=sa.sentiment.p_pos,
+            finbert_p_neg=sa.sentiment.p_neg,
+            finbert_p_neu=sa.sentiment.p_neu,
+            article_score=sa.sentiment.score,
         )
         for sa in top_articles
     ]

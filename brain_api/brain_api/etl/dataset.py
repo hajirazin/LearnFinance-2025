@@ -1,5 +1,6 @@
 """HuggingFace dataset streaming loader with symbol extraction.
 
+Moved from news_sentiment_etl/core/dataset.py.
 Uses DuckDB for fast pre-filtering of parquet files.
 """
 
@@ -13,7 +14,8 @@ import duckdb
 from huggingface_hub import snapshot_download
 from rich.console import Console
 
-from news_sentiment_etl.core.config import ETLConfig
+from brain_api.core.ticker_aliases import expand_with_aliases, normalize_symbols
+from brain_api.etl.config import ETLConfig
 
 console = Console()
 
@@ -177,11 +179,11 @@ def _extract_date(row: dict, extra_fields: dict) -> str:
 
 class DuckDBArticleStream:
     """DuckDB-based article streamer with eager initialization.
-    
+
     Initializes DuckDB query and prints status BEFORE iteration starts,
     avoiding output buffering issues with tqdm.
     """
-    
+
     def __init__(
         self,
         config: ETLConfig,
@@ -189,15 +191,20 @@ class DuckDBArticleStream:
         cached_hashes: set[str] | None = None,
     ):
         self.config = config
+        # Store original halal symbols (current tickers only) for output filtering
         self.halal_symbols = halal_symbols
+        # Expand with historical aliases for SQL query (e.g., META → META + FB)
+        self.expanded_symbols = (
+            expand_with_aliases(halal_symbols) if halal_symbols else None
+        )
         self.cached_hashes = cached_hashes
         self.con = None
         self.result = None
         self.total_matching = 0
-        
+
         # Initialize eagerly (not lazily in generator)
         self._initialize()
-    
+
     def _initialize(self):
         """Initialize DuckDB connection and run COUNT query."""
         # Ensure dataset is downloaded locally (HF handles caching/resume)
@@ -209,17 +216,30 @@ class DuckDBArticleStream:
         parquet_pattern = str(local_path / "data" / "*" / "*.parquet")
         console.print(f"  Source: [cyan]{parquet_pattern}[/]")
 
-        # Build SQL WHERE clause for halal symbols
-        if self.halal_symbols:
+        # Build SQL WHERE clause for halal symbols (including historical aliases)
+        if self.expanded_symbols:
             symbol_conditions = " OR ".join(
-                f"extra_fields LIKE '%\"{sym}\"%'" for sym in self.halal_symbols
+                f"extra_fields LIKE '%\"{sym}\"%'" for sym in self.expanded_symbols
             )
             where_clause = f"""
                 WHERE extra_fields IS NOT NULL
                 AND LENGTH(text) >= 10
                 AND ({symbol_conditions})
             """
-            console.print(f"  Filtering to [green]{len(self.halal_symbols)}[/] halal symbols in SQL")
+            # Show how many symbols we're querying (expanded) vs original halal count
+            if self.halal_symbols and len(self.expanded_symbols) > len(
+                self.halal_symbols
+            ):
+                alias_count = len(self.expanded_symbols) - len(self.halal_symbols)
+                console.print(
+                    f"  Filtering to [green]{len(self.halal_symbols)}[/] halal symbols"
+                    f" + [yellow]{alias_count}[/] historical aliases in SQL"
+                )
+            else:
+                console.print(
+                    f"  Filtering to [green]{len(self.expanded_symbols)}[/]"
+                    " halal symbols in SQL"
+                )
         else:
             where_clause = """
                 WHERE extra_fields IS NOT NULL
@@ -236,32 +256,41 @@ class DuckDBArticleStream:
         self.con = duckdb.connect()
         count_query = f"SELECT COUNT(*) FROM '{parquet_pattern}' {where_clause}"
         self.total_matching = self.con.execute(count_query).fetchone()[0]
-        console.print(f"  Found [cyan]{self.total_matching:,}[/] halal articles (from 57M)")
-        
+        console.print(
+            f"  Found [cyan]{self.total_matching:,}[/] halal articles (from 57M)"
+        )
+
         # Show cache filtering info
         if self.cached_hashes:
-            console.print(f"  Cache has [yellow]{len(self.cached_hashes):,}[/] scored articles to skip")
+            console.print(
+                f"  Cache has [yellow]{len(self.cached_hashes):,}[/]"
+                " scored articles to skip"
+            )
             estimated_new = max(0, self.total_matching - len(self.cached_hashes))
             console.print(f"  Estimated new articles: [green]~{estimated_new:,}[/]")
         else:
-            console.print(f"  Cache filter: [dim]disabled[/]")
+            console.print("  Cache filter: [dim]disabled[/]")
 
         # Prepare the main query
-        query = f"SELECT date, text, extra_fields FROM '{parquet_pattern}' {where_clause}"
+        query = (
+            f"SELECT date, text, extra_fields FROM '{parquet_pattern}' {where_clause}"
+        )
         console.print("[bold green]✓ DuckDB query ready![/]")
         console.print()
-        
+
         # Execute query (cursor ready for iteration)
         self.result = self.con.execute(query)
         self._parquet_pattern = parquet_pattern
         self._where_clause = where_clause
-    
+
     def __iter__(self) -> Iterator[NewsArticle]:
         """Iterate through articles."""
         return self._stream_articles()
-    
+
     def _stream_articles(self) -> Iterator[NewsArticle]:
         """Stream articles from the prepared DuckDB result."""
+        import hashlib
+
         while True:
             chunk = self.result.fetchmany(10000)
             if not chunk:
@@ -275,6 +304,10 @@ class DuckDBArticleStream:
                 if not symbols:
                     continue
 
+                # Normalize historical tickers to current (e.g., FB → META)
+                symbols = normalize_symbols(symbols)
+
+                # Filter to halal symbols (using original set with current tickers)
                 if self.halal_symbols:
                     symbols = [s for s in symbols if s in self.halal_symbols]
                     if not symbols:
@@ -285,7 +318,6 @@ class DuckDBArticleStream:
                     continue
 
                 if self.cached_hashes:
-                    import hashlib
                     article_hash = hashlib.md5(text.encode()).hexdigest()[:16]
                     if article_hash in self.cached_hashes:
                         continue
@@ -302,7 +334,7 @@ class DuckDBArticleStream:
 
         if self.con:
             self.con.close()
-    
+
     def close(self):
         """Close the DuckDB connection."""
         if self.con:

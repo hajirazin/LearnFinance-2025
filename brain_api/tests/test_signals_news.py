@@ -8,10 +8,8 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from brain_api.core.news_sentiment import (
-    Article,
-    FinBERTResult,
-)
+from brain_api.core.finbert import SentimentScore
+from brain_api.core.news_sentiment import Article
 from brain_api.main import app
 from brain_api.routes.signals import (
     get_data_base_path,
@@ -79,11 +77,11 @@ class MockNewsFetcherPartial:
 class MockSentimentScorer:
     """Mock sentiment scorer that returns deterministic results."""
 
-    def score(self, text: str) -> FinBERTResult:
+    def score(self, text: str) -> SentimentScore:
         """Score a single text."""
         return self.score_batch([text])[0]
 
-    def score_batch(self, texts: list[str]) -> list[FinBERTResult]:
+    def score_batch(self, texts: list[str]) -> list[SentimentScore]:
         """Score batch of texts with deterministic results based on content."""
         results = []
         for text in texts:
@@ -93,34 +91,37 @@ class MockSentimentScorer:
             if "article 1" in text_lower:
                 # Positive sentiment
                 results.append(
-                    FinBERTResult(
+                    SentimentScore(
                         label="positive",
                         p_pos=0.8,
                         p_neg=0.1,
                         p_neu=0.1,
-                        article_score=0.7,
+                        score=0.7,
+                        confidence=0.8,
                     )
                 )
             elif "article 2" in text_lower:
                 # Negative sentiment
                 results.append(
-                    FinBERTResult(
+                    SentimentScore(
                         label="negative",
                         p_pos=0.1,
                         p_neg=0.75,
                         p_neu=0.15,
-                        article_score=-0.65,
+                        score=-0.65,
+                        confidence=0.75,
                     )
                 )
             else:
                 # Neutral sentiment for others
                 results.append(
-                    FinBERTResult(
+                    SentimentScore(
                         label="neutral",
                         p_pos=0.3,
                         p_neg=0.3,
                         p_neu=0.4,
-                        article_score=0.0,
+                        score=0.0,
+                        confidence=0.4,
                     )
                 )
 

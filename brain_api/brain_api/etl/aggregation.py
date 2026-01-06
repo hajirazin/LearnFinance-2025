@@ -1,4 +1,7 @@
-"""Daily sentiment dataclass for aggregation output."""
+"""Daily sentiment dataclass for aggregation output.
+
+Moved from news_sentiment_etl/core/aggregation.py.
+"""
 
 from dataclasses import dataclass
 
@@ -39,3 +42,4 @@ class DailySentiment:
             "p_neg_avg": self.p_neg_avg,
             "total_articles": self.total_articles,
         }
+

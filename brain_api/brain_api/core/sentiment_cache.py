@@ -1,8 +1,11 @@
-"""SQLite-based sentiment cache for FinBERT scores."""
+"""SQLite-based sentiment cache for FinBERT scores.
+
+Moved from news_sentiment_etl/core/cache.py and updated to use
+the unified SentimentScore from finbert.py.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,21 +15,9 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 
 if TYPE_CHECKING:
-    from news_sentiment_etl.core.sentiment import SentimentScore
+    from brain_api.core.finbert import SentimentScore
 
 console = Console()
-
-
-def compute_article_hash(text: str) -> str:
-    """Compute MD5 hash of article text for cache key.
-
-    Args:
-        text: Article text
-
-    Returns:
-        16-character hex hash
-    """
-    return hashlib.md5(text.encode()).hexdigest()[:16]
 
 
 @dataclass
@@ -109,7 +100,7 @@ class SentimentCache:
 
         return self._conn
 
-    def get(self, article_hash: str) -> SentimentScore | None:
+    def get(self, article_hash: str) -> "SentimentScore | None":
         """Get cached sentiment score by article hash.
 
         Args:
@@ -119,7 +110,7 @@ class SentimentCache:
             SentimentScore if found, None otherwise
         """
         # Import here to avoid circular import
-        from news_sentiment_etl.core.sentiment import SentimentScore
+        from brain_api.core.finbert import SentimentScore
 
         conn = self._ensure_connected()
         cursor = conn.execute(
@@ -146,7 +137,7 @@ class SentimentCache:
             label=row[5],
         )
 
-    def put(self, article_hash: str, score: SentimentScore) -> None:
+    def put(self, article_hash: str, score: "SentimentScore") -> None:
         """Store sentiment score in cache.
 
         Args:
@@ -175,7 +166,9 @@ class SentimentCache:
         conn.commit()
         self._stats.total_entries += 1
 
-    def get_batch(self, article_hashes: list[str]) -> dict[str, SentimentScore | None]:
+    def get_batch(
+        self, article_hashes: list[str]
+    ) -> dict[str, "SentimentScore | None"]:
         """Batch lookup of cached sentiment scores.
 
         Args:
@@ -185,7 +178,7 @@ class SentimentCache:
             Dict mapping hash -> SentimentScore (or None if not found)
         """
         # Import here to avoid circular import
-        from news_sentiment_etl.core.sentiment import SentimentScore
+        from brain_api.core.finbert import SentimentScore
 
         if not article_hashes:
             return {}
@@ -224,7 +217,7 @@ class SentimentCache:
         return results
 
     def put_batch(
-        self, hash_score_pairs: list[tuple[str, SentimentScore]]
+        self, hash_score_pairs: list[tuple[str, "SentimentScore"]]
     ) -> None:
         """Batch insert sentiment scores into cache.
 
@@ -321,7 +314,7 @@ class SentimentCache:
             List of DailySentiment objects
         """
         # Import here to avoid circular import
-        from news_sentiment_etl.core.aggregation import DailySentiment
+        from brain_api.etl.aggregation import DailySentiment
 
         conn = self._ensure_connected()
         cursor = conn.execute(

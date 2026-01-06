@@ -1,4 +1,7 @@
-"""Chunked Parquet and CSV output writer."""
+"""Chunked Parquet and CSV output writer.
+
+Moved from news_sentiment_etl/output/parquet_writer.py.
+"""
 
 from pathlib import Path
 
@@ -6,19 +9,21 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from news_sentiment_etl.core.aggregation import DailySentiment
+from brain_api.etl.aggregation import DailySentiment
 
 # Schema for the output Parquet file
-OUTPUT_SCHEMA = pa.schema([
-    ("date", pa.date32()),
-    ("symbol", pa.string()),
-    ("sentiment_score", pa.float32()),
-    ("article_count", pa.int32()),
-    ("avg_confidence", pa.float32()),
-    ("p_pos_avg", pa.float32()),
-    ("p_neg_avg", pa.float32()),
-    ("total_articles", pa.int32()),
-])
+OUTPUT_SCHEMA = pa.schema(
+    [
+        ("date", pa.date32()),
+        ("symbol", pa.string()),
+        ("sentiment_score", pa.float32()),
+        ("article_count", pa.int32()),
+        ("avg_confidence", pa.float32()),
+        ("p_pos_avg", pa.float32()),
+        ("p_neg_avg", pa.float32()),
+        ("total_articles", pa.int32()),
+    ]
+)
 
 
 class ParquetWriter:
@@ -123,10 +128,18 @@ class ParquetWriter:
         # Build DataFrame from chunks
         if not chunk_files:
             # No data - create empty DataFrame
-            df = pd.DataFrame(columns=[
-                "date", "symbol", "sentiment_score", "article_count",
-                "avg_confidence", "p_pos_avg", "p_neg_avg", "total_articles"
-            ])
+            df = pd.DataFrame(
+                columns=[
+                    "date",
+                    "symbol",
+                    "sentiment_score",
+                    "article_count",
+                    "avg_confidence",
+                    "p_pos_avg",
+                    "p_neg_avg",
+                    "total_articles",
+                ]
+            )
         else:
             # Read and merge all chunks
             tables = []

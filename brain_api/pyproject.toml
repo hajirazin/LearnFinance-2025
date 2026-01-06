@@ -26,6 +26,9 @@ dependencies = [
     # HuggingFace Hub for model/dataset storage
     "huggingface-hub>=0.20.0",
     "datasets>=2.16.0",
+    # ETL dependencies
+    "duckdb>=1.0.0",
+    "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]

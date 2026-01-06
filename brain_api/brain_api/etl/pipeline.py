@@ -1,27 +1,25 @@
-"""Main entrypoint for news sentiment ETL pipeline.
+"""Main ETL pipeline for news sentiment processing.
 
-Can be run as:
-1. CLI: python -m news_sentiment_etl.main [options]
-2. Cloud Function: deploy with handler() as entrypoint
+Moved and adapted from news_sentiment_etl/main.py.
+This module provides the run_pipeline function that can be called
+from the API endpoint or CLI.
 """
 
-import argparse
 import json
-import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, Callable
 
 from rich.console import Console
-from rich.table import Table
 from tqdm import tqdm
 
-from news_sentiment_etl.core.cache import SentimentCache, compute_article_hash
-from news_sentiment_etl.core.config import ETLConfig, get_hf_news_sentiment_repo
-from news_sentiment_etl.core.dataset import batch_articles, stream_articles
-from news_sentiment_etl.core.sentiment import FinBERTScorer
-from news_sentiment_etl.core.symbol_filter import UniverseFilter
-from news_sentiment_etl.output.parquet_writer import ParquetWriter, read_parquet_stats
+from brain_api.core.finbert import FinBERTScorer, compute_text_hash
+from brain_api.core.sentiment_cache import SentimentCache
+from brain_api.etl.config import ETLConfig, get_hf_news_sentiment_repo
+from brain_api.etl.dataset import batch_articles, stream_articles
+from brain_api.etl.parquet_writer import ParquetWriter, read_parquet_stats
+from brain_api.etl.symbol_filter import UniverseFilter
 
 console = Console()
 
@@ -54,17 +52,21 @@ def format_number(n: int) -> str:
     return str(n)
 
 
-def run_pipeline(config: ETLConfig) -> dict:
+def run_pipeline(
+    config: ETLConfig,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     """Run the full ETL pipeline.
 
     Args:
         config: ETL configuration
+        progress_callback: Optional callback for progress updates (for API jobs)
 
     Returns:
         Dict with pipeline results and statistics
     """
     start_time = time.time()
-    stats = {
+    stats: dict[str, Any] = {
         "started_at": datetime.now(UTC).isoformat(),
         "config": {
             "dataset": config.dataset_name,
@@ -74,6 +76,11 @@ def run_pipeline(config: ETLConfig) -> dict:
             "max_articles": config.max_articles,
         },
     }
+
+    def update_progress(progress: dict[str, Any]) -> None:
+        """Update progress via callback if provided."""
+        if progress_callback:
+            progress_callback(progress)
 
     # Initialize components
     console.print("[bold blue]🚀 Initializing pipeline...[/]")
@@ -108,7 +115,9 @@ def run_pipeline(config: ETLConfig) -> dict:
 
     # FinBERT scorer (lazy-loaded on first use, with cache)
     console.print("  FinBERT model will load on first use")
-    scorer = FinBERTScorer(use_gpu=config.use_gpu, cache=cache)
+    # Reset singleton to ensure fresh instance with cache
+    FinBERTScorer.reset()
+    scorer = FinBERTScorer(cache=cache, use_gpu=config.use_gpu)
     model_loaded = False
 
     # Writer (aggregation now happens via SQL in cache)
@@ -135,19 +144,21 @@ def run_pipeline(config: ETLConfig) -> dict:
     console.print("\n[bold blue]Processing articles...[/]")
     console.print(f"  Batch size: {config.batch_size}")
     if config.max_articles:
-        console.print(f"  Target: [yellow]{config.max_articles:,}[/] NEW articles to score")
+        console.print(
+            f"  Target: [yellow]{config.max_articles:,}[/] NEW articles to score"
+        )
     console.print()
 
     # Stream and process articles with DuckDB pre-filtering
     try:
         # Pass halal symbols to DuckDB for SQL-level filtering
         halal_symbols = universe.symbols if config.filter_to_halal else None
-        
+
         # Get cached hashes to skip already-processed articles
         cached_hashes = cache.get_all_cached_hashes()
-        
+
         article_stream = stream_articles(
-            config, 
+            config,
             halal_symbols=halal_symbols,
             cached_hashes=cached_hashes,
         )
@@ -179,7 +190,10 @@ def run_pipeline(config: ETLConfig) -> dict:
 
                 # Load FinBERT on first actual use (if there are uncached articles)
                 if not model_loaded:
-                    console.print(f"\n  [yellow]Loading FinBERT model (first halal match found)...[/]")
+                    console.print(
+                        "\n  [yellow]Loading FinBERT model"
+                        " (first halal match found)...[/]"
+                    )
                     # Trigger model load by accessing device
                     console.print(f"  Using device: [green]{scorer.device}[/]")
                     stats["device"] = scorer.device
@@ -188,7 +202,7 @@ def run_pipeline(config: ETLConfig) -> dict:
 
                 # Score batch (uses cache automatically)
                 texts = [a.text for a in filtered_batch]
-                scores, cache_hits, new_scores = scorer.score_batch(texts)
+                scores, cache_hits, new_scores = scorer.score_batch_with_stats(texts)
 
                 total_cache_hits += cache_hits
                 total_new_scores += new_scores
@@ -196,26 +210,45 @@ def run_pipeline(config: ETLConfig) -> dict:
                 # Store article-symbol associations ONLY if we scored new articles
                 if new_scores > 0:
                     for article in filtered_batch:
-                        article_hash = compute_article_hash(article.text)
-                        cache.store_article_symbols(article_hash, article.date, article.symbols)
+                        article_hash = compute_text_hash(article.text)
+                        cache.store_article_symbols(
+                            article_hash, article.date, article.symbols
+                        )
 
                 batches_processed += 1
-                
+
                 # Calculate throughput
                 elapsed = time.time() - start_time
                 articles_per_sec = total_articles / elapsed if elapsed > 0 else 0
-                
+
                 # Update progress bar with new scores
                 pbar.update(new_scores)
-                pbar.set_postfix({
-                    "cached": total_cache_hits,
-                    "scanned": format_number(total_articles),
-                    "rate": f"{articles_per_sec:.0f}/s",
-                })
+                pbar.set_postfix(
+                    {
+                        "cached": total_cache_hits,
+                        "scanned": format_number(total_articles),
+                        "rate": f"{articles_per_sec:.0f}/s",
+                    }
+                )
+
+                # Update progress callback
+                update_progress(
+                    {
+                        "status": "running",
+                        "total_articles": total_articles,
+                        "new_scores": total_new_scores,
+                        "cache_hits": total_cache_hits,
+                        "batches_processed": batches_processed,
+                        "elapsed_seconds": elapsed,
+                    }
+                )
 
                 # Check if we've scored enough NEW articles
                 if config.max_articles and total_new_scores >= config.max_articles:
-                    console.print(f"\n  [green]✓ Reached {config.max_articles:,} new articles scored[/]")
+                    console.print(
+                        f"\n  [green]✓ Reached {config.max_articles:,}"
+                        " new articles scored[/]"
+                    )
                     break
 
                 # Detailed stats every N batches
@@ -223,30 +256,65 @@ def run_pipeline(config: ETLConfig) -> dict:
                     now = time.time()
                     interval_articles = total_articles - last_stats_articles
                     interval_time = now - last_stats_time
-                    interval_rate = interval_articles / interval_time if interval_time > 0 else 0
+                    interval_rate = (
+                        interval_articles / interval_time if interval_time > 0 else 0
+                    )
 
                     # Estimate remaining time (based on new scores if we have a target)
                     if config.max_articles and total_new_scores > 0:
                         new_per_sec = total_new_scores / elapsed if elapsed > 0 else 0
                         remaining_new = config.max_articles - total_new_scores
-                        eta_seconds = remaining_new / new_per_sec if new_per_sec > 0 else 0
+                        eta_seconds = (
+                            remaining_new / new_per_sec if new_per_sec > 0 else 0
+                        )
                     else:
                         remaining_articles = ESTIMATED_TOTAL_ARTICLES - total_articles
-                        eta_seconds = remaining_articles / articles_per_sec if articles_per_sec > 0 else 0
+                        eta_seconds = (
+                            remaining_articles / articles_per_sec
+                            if articles_per_sec > 0
+                            else 0
+                        )
 
                     # Cache hit rate
                     total_scored = total_cache_hits + total_new_scores
-                    cache_hit_rate = (total_cache_hits / total_scored * 100) if total_scored > 0 else 0
+                    cache_hit_rate = (
+                        (total_cache_hits / total_scored * 100)
+                        if total_scored > 0
+                        else 0
+                    )
                     progress_pct = (total_articles / ESTIMATED_TOTAL_ARTICLES) * 100
 
                     console.print(f"\n  [dim]─── Batch {batches_processed} Stats ───[/]")
-                    console.print(f"  Scanned: [cyan]{format_number(total_articles)}[/] articles ({progress_pct:.2f}% of dataset)")
-                    console.print(f"  Elapsed: [cyan]{format_duration(elapsed)}[/] | ETA: [yellow]{format_duration(eta_seconds)}[/]")
-                    console.print(f"  Rate: [cyan]{articles_per_sec:.0f}[/] articles/sec (last interval: {interval_rate:.0f}/sec)")
-                    console.print(f"  Matched halal: [green]{articles_after_filter:,}[/] ({100*articles_after_filter/articles_with_symbols:.1f}%)")
-                    console.print(f"  Cache: [green]{total_cache_hits:,}[/] hits / [yellow]{total_new_scores:,}[/] new ({cache_hit_rate:.1f}% hit rate)")
-                    console.print(f"  Symbols found: [green]{len(symbols_seen)}[/] | Date range: {min(dates_seen) if dates_seen else 'N/A'} → {max(dates_seen) if dates_seen else 'N/A'}")
-                    console.print(f"  Article-symbol pairs in DB: [yellow]{cache.article_symbols_count:,}[/]")
+                    console.print(
+                        f"  Scanned: [cyan]{format_number(total_articles)}[/]"
+                        f" articles ({progress_pct:.2f}% of dataset)"
+                    )
+                    console.print(
+                        f"  Elapsed: [cyan]{format_duration(elapsed)}[/]"
+                        f" | ETA: [yellow]{format_duration(eta_seconds)}[/]"
+                    )
+                    console.print(
+                        f"  Rate: [cyan]{articles_per_sec:.0f}[/] articles/sec"
+                        f" (last interval: {interval_rate:.0f}/sec)"
+                    )
+                    console.print(
+                        f"  Matched halal: [green]{articles_after_filter:,}[/]"
+                        f" ({100*articles_after_filter/articles_with_symbols:.1f}%)"
+                    )
+                    console.print(
+                        f"  Cache: [green]{total_cache_hits:,}[/] hits"
+                        f" / [yellow]{total_new_scores:,}[/] new"
+                        f" ({cache_hit_rate:.1f}% hit rate)"
+                    )
+                    console.print(
+                        f"  Symbols found: [green]{len(symbols_seen)}[/]"
+                        f" | Date range: {min(dates_seen) if dates_seen else 'N/A'}"
+                        f" → {max(dates_seen) if dates_seen else 'N/A'}"
+                    )
+                    console.print(
+                        f"  Article-symbol pairs in DB:"
+                        f" [yellow]{cache.article_symbols_count:,}[/]"
+                    )
                     console.print()
 
                     last_stats_time = now
@@ -266,7 +334,9 @@ def run_pipeline(config: ETLConfig) -> dict:
                     }
                     with open(checkpoint_file, "w") as f:
                         json.dump(checkpoint, f)
-                    console.print(f"  [dim]💾 Checkpoint saved (batch {batches_processed})[/]")
+                    console.print(
+                        f"  [dim]💾 Checkpoint saved (batch {batches_processed})[/]"
+                    )
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Interrupted! Saving progress...[/]")
@@ -307,7 +377,9 @@ def run_pipeline(config: ETLConfig) -> dict:
                 api.repo_info(repo_id=hf_news_repo, repo_type="dataset")
             except Exception:
                 console.print(f"  Creating repository: [yellow]{hf_news_repo}[/]")
-                api.create_repo(repo_id=hf_news_repo, repo_type="dataset", exist_ok=True)
+                api.create_repo(
+                    repo_id=hf_news_repo, repo_type="dataset", exist_ok=True
+                )
 
             # Upload parquet file if it exists
             if "parquet" in output_paths:
@@ -324,19 +396,25 @@ def run_pipeline(config: ETLConfig) -> dict:
 
         except Exception as e:
             console.print(f"  [red]✗ HuggingFace upload failed: {e}[/]")
-            console.print("  [dim]Local files are still saved. Run manually with push script if needed.[/]")
+            console.print(
+                "  [dim]Local files are still saved."
+                " Run manually with push script if needed.[/]"
+            )
 
     elif config.local_only:
         console.print("\n[dim]HuggingFace upload skipped (--local-only)[/]")
     elif not hf_news_repo:
-        console.print("\n[dim]HuggingFace upload skipped (HF_NEWS_SENTIMENT_REPO not set)[/]")
+        console.print(
+            "\n[dim]HuggingFace upload skipped (HF_NEWS_SENTIMENT_REPO not set)[/]"
+        )
 
     # Get output stats (from parquet if available, else from csv)
     if "parquet" in output_paths:
         output_stats = read_parquet_stats(output_paths["parquet"])
-    else:
+    elif "csv" in output_paths:
         # Read stats from CSV
         import pandas as pd
+
         csv_path = output_paths["csv"]
         df = pd.read_csv(csv_path)
         output_stats = {
@@ -346,6 +424,8 @@ def run_pipeline(config: ETLConfig) -> dict:
             "symbol_count": df["symbol"].nunique() if len(df) > 0 else 0,
             "file_size_mb": round(csv_path.stat().st_size / (1024 * 1024), 2),
         }
+    else:
+        output_stats = {"row_count": 0}
 
     # Close cache and get final stats
     final_cache_size = cache.stats.total_entries
@@ -356,7 +436,7 @@ def run_pipeline(config: ETLConfig) -> dict:
 
     # Finalize stats
     elapsed = time.time() - start_time
-    output_info = {
+    output_info: dict[str, Any] = {
         "paths": {fmt: str(path) for fmt, path in output_paths.items()},
         "hf_url": hf_upload_url,
         **output_stats,
@@ -364,208 +444,43 @@ def run_pipeline(config: ETLConfig) -> dict:
     # Set device to N/A if model was never loaded
     if "device" not in stats:
         stats["device"] = "N/A (model not needed)"
-    stats.update({
-        "completed_at": datetime.now(UTC).isoformat(),
-        "elapsed_seconds": round(elapsed, 2),
-        "articles": {
-            "total_processed": total_articles,
-            "with_symbols": articles_with_symbols,
-            "after_universe_filter": articles_after_filter,
-        },
-        "cache": {
-            "hits": total_cache_hits,
-            "new_scores": total_new_scores,
-            "hit_rate_percent": round(cache_hit_rate, 2),
-            "total_cached": final_cache_size,
-            "new_entries": new_cache_entries,
-        },
-        "batches_processed": batches_processed,
-        "output": output_info,
-    })
+    stats.update(
+        {
+            "completed_at": datetime.now(UTC).isoformat(),
+            "elapsed_seconds": round(elapsed, 2),
+            "articles": {
+                "total_processed": total_articles,
+                "with_symbols": articles_with_symbols,
+                "after_universe_filter": articles_after_filter,
+            },
+            "cache": {
+                "hits": total_cache_hits,
+                "new_scores": total_new_scores,
+                "hit_rate_percent": round(cache_hit_rate, 2),
+                "total_cached": final_cache_size,
+                "new_entries": new_cache_entries,
+            },
+            "batches_processed": batches_processed,
+            "output": output_info,
+        }
+    )
 
     # Clean up checkpoint
     if checkpoint_file.exists():
         checkpoint_file.unlink()
 
+    # Final progress update
+    update_progress(
+        {
+            "status": "completed",
+            "total_articles": total_articles,
+            "new_scores": total_new_scores,
+            "cache_hits": total_cache_hits,
+            "batches_processed": batches_processed,
+            "elapsed_seconds": elapsed,
+            "output": output_info,
+        }
+    )
+
     return stats
-
-
-def main() -> int:
-    """CLI entrypoint."""
-    parser = argparse.ArgumentParser(
-        description="Process HuggingFace financial news into daily sentiment scores"
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("data/output"),
-        help="Output directory for Parquet files",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=256,
-        help="Batch size for FinBERT processing",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=0.1,
-        help="Sentiment threshold for bounded filtering",
-    )
-    parser.add_argument(
-        "--max-articles",
-        type=int,
-        default=None,
-        help="Maximum articles to process (for testing)",
-    )
-    parser.add_argument(
-        "--no-halal-filter",
-        action="store_true",
-        help="Disable filtering to halal universe",
-    )
-    parser.add_argument(
-        "--cpu",
-        action="store_true",
-        help="Force CPU usage (disable GPU)",
-    )
-    parser.add_argument(
-        "--hf-token",
-        type=str,
-        default=None,
-        help="HuggingFace token for gated datasets",
-    )
-    parser.add_argument(
-        "--local-only",
-        action="store_true",
-        help="Skip HuggingFace upload even if HF_NEWS_SENTIMENT_REPO is set",
-    )
-    parser.add_argument(
-        "--parquet",
-        type=str,
-        default=None,
-        metavar="FILENAME",
-        help="Output Parquet filename (e.g., 'output.parquet'). Default: daily_sentiment.parquet",
-    )
-    parser.add_argument(
-        "--csv",
-        type=str,
-        default=None,
-        metavar="FILENAME",
-        help="Output CSV filename (e.g., 'output.csv'). If specified, CSV will be generated.",
-    )
-
-    args = parser.parse_args()
-
-    # Determine output formats:
-    # - If neither --parquet nor --csv specified: default to parquet only
-    # - If --parquet specified: output parquet with that name
-    # - If --csv specified: output csv with that name
-    # - If both specified: output both
-    if args.parquet is None and args.csv is None:
-        output_parquet = "daily_sentiment.parquet"
-        output_csv = None
-    else:
-        output_parquet = args.parquet
-        output_csv = args.csv
-
-    # Build config
-    config = ETLConfig(
-        output_dir=args.output_dir,
-        output_parquet=output_parquet,
-        output_csv=output_csv,
-        batch_size=args.batch_size,
-        sentiment_threshold=args.threshold,
-        max_articles=args.max_articles,
-        filter_to_halal=not args.no_halal_filter,
-        use_gpu=False if args.cpu else None,
-        hf_token=args.hf_token,
-        local_only=args.local_only,
-    )
-
-    console.print()
-    console.print("[bold cyan]╔══════════════════════════════════════════╗[/]")
-    console.print("[bold cyan]║     News Sentiment ETL Pipeline          ║[/]")
-    console.print("[bold cyan]╚══════════════════════════════════════════╝[/]")
-    console.print()
-
-    try:
-        stats = run_pipeline(config)
-
-        console.print("\n[bold green]✅ Pipeline completed![/]")
-        console.print()
-
-        # Create summary table
-        table = Table(title="Pipeline Summary", show_header=True, header_style="bold cyan")
-        table.add_column("Metric", style="dim")
-        table.add_column("Value", justify="right")
-
-        table.add_row("Articles Processed", f"{stats['articles']['total_processed']:,}")
-        table.add_row("Articles with Halal Symbols", f"{stats['articles']['after_universe_filter']:,}")
-        table.add_row("Cache Hits", f"{stats['cache']['hits']:,}")
-        table.add_row("New Scores", f"{stats['cache']['new_scores']:,}")
-        table.add_row("Cache Hit Rate", f"{stats['cache']['hit_rate_percent']:.1f}%")
-        table.add_row("Total Cached", f"{stats['cache']['total_cached']:,}")
-        table.add_row("Output Rows", f"{stats['output']['row_count']:,}")
-        table.add_row("Unique Symbols", str(stats['output']['symbol_count']))
-        table.add_row("Date Range", f"{stats['output']['date_min']} → {stats['output']['date_max']}")
-        table.add_row("File Size", f"{stats['output']['file_size_mb']} MB")
-        table.add_row("Total Time", format_duration(stats['elapsed_seconds']))
-        table.add_row("Avg Rate", f"{stats['articles']['total_processed'] / stats['elapsed_seconds']:.0f} articles/sec")
-        table.add_row("Device Used", stats['device'])
-
-        console.print(table)
-
-        # Save stats
-        stats_path = config.output_dir / "pipeline_stats.json"
-        with open(stats_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        console.print(f"\n📊 Stats saved to: [green]{stats_path}[/]")
-        for fmt, path in stats['output']['paths'].items():
-            console.print(f"📁 {fmt.upper()}: [green]{path}[/]")
-
-        return 0
-
-    except Exception as e:
-        console.print(f"\n[bold red]Error:[/] {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-# Cloud Function handler
-def handler(request):
-    """Google Cloud Function entrypoint.
-
-    Args:
-        request: Flask request object
-
-    Returns:
-        JSON response with pipeline results
-    """
-    # Parse request
-    request_json = request.get_json(silent=True) or {}
-
-    config = ETLConfig(
-        output_dir=Path(request_json.get("output_dir", "/tmp/output")),
-        output_parquet=request_json.get("output_parquet", "daily_sentiment.parquet"),
-        output_csv=request_json.get("output_csv"),
-        batch_size=request_json.get("batch_size", 256),
-        sentiment_threshold=request_json.get("threshold", 0.1),
-        max_articles=request_json.get("max_articles"),
-        filter_to_halal=request_json.get("filter_to_halal", True),
-        use_gpu=request_json.get("use_gpu"),
-        hf_token=request_json.get("hf_token"),
-        local_only=request_json.get("local_only", False),
-    )
-
-    try:
-        stats = run_pipeline(config)
-        return {"status": "success", **stats}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}, 500
-
-
-if __name__ == "__main__":
-    sys.exit(main())
 

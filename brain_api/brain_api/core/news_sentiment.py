@@ -1,4 +1,10 @@
-"""News sentiment analysis using yfinance news + FinBERT scoring."""
+"""News sentiment analysis using yfinance news + FinBERT scoring.
+
+This module handles real-time news sentiment for inference:
+- Fetches news from yfinance for specific symbols
+- Scores with the unified FinBERT scorer
+- Aggregates per-symbol sentiment with recency weighting
+"""
 
 import json
 import math
@@ -9,7 +15,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import yfinance as yf
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
+from brain_api.core.finbert import FinBERTScorer, SentimentScore
 
 # ============================================================================
 # Data models
@@ -52,49 +59,17 @@ class Article:
 
 
 @dataclass
-class FinBERTResult:
-    """FinBERT sentiment classification result for an article."""
-
-    label: str  # "positive", "negative", or "neutral"
-    p_pos: float
-    p_neg: float
-    p_neu: float
-    article_score: float  # p_pos - p_neg, range [-1, 1]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "label": self.label,
-            "p_pos": self.p_pos,
-            "p_neg": self.p_neg,
-            "p_neu": self.p_neu,
-            "article_score": self.article_score,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "FinBERTResult":
-        """Create from dictionary."""
-        return cls(
-            label=data["label"],
-            p_pos=data["p_pos"],
-            p_neg=data["p_neg"],
-            p_neu=data["p_neu"],
-            article_score=data["article_score"],
-        )
-
-
-@dataclass
 class ScoredArticle:
     """An article with its FinBERT sentiment score."""
 
     article: Article
-    finbert: FinBERTResult
+    sentiment: SentimentScore
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "article": self.article.to_dict(),
-            "finbert": self.finbert.to_dict(),
+            "sentiment": self.sentiment.to_dict(),
         }
 
     @classmethod
@@ -102,7 +77,7 @@ class ScoredArticle:
         """Create from dictionary."""
         return cls(
             article=Article.from_dict(data["article"]),
-            finbert=FinBERTResult.from_dict(data["finbert"]),
+            sentiment=SentimentScore.from_dict(data["sentiment"]),
         )
 
 
@@ -159,11 +134,11 @@ class NewsFetcher(Protocol):
 class SentimentScorer(Protocol):
     """Protocol for scoring article sentiment."""
 
-    def score(self, text: str) -> FinBERTResult:
+    def score(self, text: str) -> SentimentScore:
         """Score the sentiment of a text."""
         ...
 
-    def score_batch(self, texts: list[str]) -> list[FinBERTResult]:
+    def score_batch(self, texts: list[str]) -> list[SentimentScore]:
         """Score sentiment for a batch of texts."""
         ...
 
@@ -203,16 +178,22 @@ class YFinanceNewsFetcher:
             if pub_date_str:
                 with suppress(ValueError, TypeError):
                     # Parse ISO format: "2025-12-29T21:55:58Z"
-                    published = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                    published = datetime.fromisoformat(
+                        pub_date_str.replace("Z", "+00:00")
+                    )
             # Fallback to old format (Unix timestamp)
             elif "providerPublishTime" in item:
                 with suppress(ValueError, OSError):
-                    published = datetime.fromtimestamp(item["providerPublishTime"], tz=UTC)
+                    published = datetime.fromtimestamp(
+                        item["providerPublishTime"], tz=UTC
+                    )
 
             # Extract article data from new structure
             # Publisher is now in content.provider.displayName
             provider = content.get("provider", {})
-            publisher = provider.get("displayName", "") if isinstance(provider, dict) else ""
+            publisher = (
+                provider.get("displayName", "") if isinstance(provider, dict) else ""
+            )
 
             # Link is now in content.canonicalUrl.url or content.clickThroughUrl.url
             link = ""
@@ -241,124 +222,6 @@ class YFinanceNewsFetcher:
                 articles.append(article)
 
         return articles
-
-
-# ============================================================================
-# FinBERT sentiment scorer implementation
-# ============================================================================
-
-
-class FinBERTScorer:
-    """Score article sentiment using FinBERT (ProsusAI/finbert).
-
-    This model is specifically trained on financial news and SEC filings,
-    making it well-suited for stock sentiment analysis.
-    """
-
-    _instance: "FinBERTScorer | None" = None
-    _pipeline = None
-
-    def __new__(cls) -> "FinBERTScorer":
-        """Singleton pattern to avoid loading model multiple times."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def _ensure_loaded(self) -> None:
-        """Lazy-load the model on first use."""
-        if self._pipeline is None:
-            model_name = "ProsusAI/finbert"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            self._pipeline = pipeline(
-                "sentiment-analysis",
-                model=model,
-                tokenizer=tokenizer,
-                return_all_scores=True,
-                truncation=True,
-                max_length=512,
-            )
-
-    def score(self, text: str) -> FinBERTResult:
-        """Score the sentiment of a single text.
-
-        Args:
-            text: Text to analyze (typically article title or title + summary)
-
-        Returns:
-            FinBERTResult with label, probabilities, and article_score
-        """
-        results = self.score_batch([text])
-        return results[0]
-
-    def score_batch(self, texts: list[str]) -> list[FinBERTResult]:
-        """Score sentiment for a batch of texts.
-
-        Args:
-            texts: List of texts to analyze
-
-        Returns:
-            List of FinBERTResult objects
-        """
-        self._ensure_loaded()
-
-        if not texts:
-            return []
-
-        # Run inference
-        try:
-            batch_results = self._pipeline(texts)
-        except Exception:
-            # Return neutral on error
-            return [
-                FinBERTResult(
-                    label="neutral",
-                    p_pos=0.33,
-                    p_neg=0.33,
-                    p_neu=0.34,
-                    article_score=0.0,
-                )
-                for _ in texts
-            ]
-
-        results = []
-        for scores in batch_results:
-            # scores is a list of dicts: [{'label': 'positive', 'score': ...}, ...]
-            p_pos = 0.0
-            p_neg = 0.0
-            p_neu = 0.0
-
-            for item in scores:
-                label = item["label"].lower()
-                score = item["score"]
-                if label == "positive":
-                    p_pos = score
-                elif label == "negative":
-                    p_neg = score
-                elif label == "neutral":
-                    p_neu = score
-
-            # Determine winning label
-            if p_pos >= p_neg and p_pos >= p_neu:
-                label = "positive"
-            elif p_neg >= p_pos and p_neg >= p_neu:
-                label = "negative"
-            else:
-                label = "neutral"
-
-            article_score = p_pos - p_neg
-
-            results.append(
-                FinBERTResult(
-                    label=label,
-                    p_pos=round(p_pos, 4),
-                    p_neg=round(p_neg, 4),
-                    p_neu=round(p_neu, 4),
-                    article_score=round(article_score, 4),
-                )
-            )
-
-        return results
 
 
 # ============================================================================
@@ -436,7 +299,7 @@ def aggregate_symbol_sentiment(
 
     for sa in scored_articles:
         weight = compute_recency_weight(sa.article.published, as_of, tau_days)
-        weighted_sum += weight * sa.finbert.article_score
+        weighted_sum += weight * sa.sentiment.score
         total_weight += weight
 
     sentiment_score = weighted_sum / total_weight if total_weight > 0 else 0.0
@@ -500,12 +363,12 @@ def process_symbol_news(
         texts.append(text)
 
     # Score all articles in batch
-    finbert_results = scorer.score_batch(texts)
+    sentiment_results = scorer.score_batch(texts)
 
     # Combine articles with scores
     scored_articles = [
-        ScoredArticle(article=article, finbert=finbert)
-        for article, finbert in zip(articles, finbert_results, strict=True)
+        ScoredArticle(article=article, sentiment=sentiment)
+        for article, sentiment in zip(articles, sentiment_results, strict=True)
     ]
 
     # Aggregate
@@ -737,9 +600,7 @@ def process_news_sentiment(
             run_id=cached["run_id"],
             attempt=cached["attempt"],
             as_of_date=cached["as_of_date"],
-            per_symbol=[
-                SymbolSentiment.from_dict(s) for s in cached["per_symbol"]
-            ],
+            per_symbol=[SymbolSentiment.from_dict(s) for s in cached["per_symbol"]],
             from_cache=True,
         )
 
@@ -778,4 +639,3 @@ def process_news_sentiment(
         per_symbol=sentiments,
         from_cache=False,
     )
-

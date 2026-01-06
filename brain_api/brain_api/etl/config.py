@@ -1,4 +1,7 @@
-"""Configuration for news sentiment ETL pipeline."""
+"""Configuration for news sentiment ETL pipeline.
+
+Moved from news_sentiment_etl/core/config.py.
+"""
 
 import os
 from dataclasses import dataclass, field
@@ -76,7 +79,7 @@ class ETLConfig:
             self.cache_dir = Path(self.cache_dir)
 
 
-# FinBERT model configuration
+# FinBERT model configuration (shared with brain_api.core.finbert)
 FINBERT_MODEL = "ProsusAI/finbert"
 FINBERT_MAX_LENGTH = 512
 
