@@ -16,9 +16,16 @@ ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
 
+# Alpaca News API environment variables
+ENV_ALPACA_API_KEY = "ALPACA_API_KEY"
+ENV_ALPACA_API_SECRET = "ALPACA_API_SECRET"
+
 # Defaults
 DEFAULT_LOOKBACK_YEARS = 15
 DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
+
+# Sentiment backfill limits
+SENTIMENT_BACKFILL_MAX_API_CALLS = 200  # Max Alpaca API calls per endpoint run
 
 
 def get_hf_token() -> str | None:
@@ -68,3 +75,13 @@ def resolve_training_window() -> tuple[date, date]:
     start_date = end_date - relativedelta(years=lookback_years)
 
     return start_date, end_date
+
+
+def get_alpaca_api_key() -> str:
+    """Get Alpaca API key from environment."""
+    return os.environ.get(ENV_ALPACA_API_KEY, "")
+
+
+def get_alpaca_api_secret() -> str:
+    """Get Alpaca API secret from environment."""
+    return os.environ.get(ENV_ALPACA_API_SECRET, "")
