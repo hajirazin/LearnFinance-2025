@@ -17,7 +17,6 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from brain_api.core.config import SENTIMENT_BACKFILL_MAX_API_CALLS
 from brain_api.core.finbert import FinBERTScorer, SentimentScore
 from brain_api.core.news_api.alpaca import ALPACA_EARLIEST_DATE, AlpacaNewsClient
 from brain_api.etl.gap_detection import categorize_gaps, find_gaps, get_gap_statistics
@@ -25,6 +24,9 @@ from brain_api.etl.parquet_writer import OUTPUT_SCHEMA
 from brain_api.universe.halal import get_halal_symbols
 
 logger = logging.getLogger(__name__)
+
+# Checkpoint interval: save to parquet every N API calls
+CHECKPOINT_INTERVAL = 1000
 
 
 @dataclass
@@ -35,11 +37,11 @@ class GapFillProgress:
     gaps_fillable: int = 0
     gaps_pre_api_date: int = 0
     api_calls_made: int = 0
-    api_calls_limit: int = SENTIMENT_BACKFILL_MAX_API_CALLS
     articles_fetched: int = 0
     articles_scored: int = 0
     rows_added: int = 0
     remaining_gaps: int = 0
+    checkpoints_saved: int = 0
     status: str = "pending"
     error: str | None = None
     current_phase: str = "initializing"
@@ -216,7 +218,6 @@ def fill_sentiment_gaps(
         GapFillResult with statistics and success status
     """
     progress = GapFillProgress()
-    progress.api_calls_limit = SENTIMENT_BACKFILL_MAX_API_CALLS
 
     def update_progress():
         if progress_callback:
@@ -288,19 +289,15 @@ def fill_sentiment_gaps(
         sorted_dates = sorted(date_to_symbols.keys(), reverse=True)
         if sorted_dates:
             logger.info(
-                f"Processing dates from {sorted_dates[0]} to {sorted_dates[-1]} "
-                f"(max {progress.api_calls_limit} API calls)"
+                f"Processing dates from {sorted_dates[0]} to {sorted_dates[-1]}"
             )
 
         articles_with_scores: list[tuple[datetime, str, SentimentScore]] = []
         checked_gaps_no_articles: list[tuple[date, str]] = []
         today = date.today()
+        last_checkpoint_calls = 0
 
         for gap_date in sorted_dates:
-            if progress.api_calls_made >= progress.api_calls_limit:
-                logger.info(f"API call limit reached ({progress.api_calls_limit})")
-                break
-
             gap_symbols = date_to_symbols[gap_date]
 
             # Fetch news for this date and symbols
@@ -340,29 +337,70 @@ def fill_sentiment_gaps(
 
             update_progress()
 
-        # Phase 4: Aggregate and write to parquet
-        logger.info("Phase 4: Aggregating sentiment and writing to parquet")
+            # Checkpoint: save to parquet every CHECKPOINT_INTERVAL API calls
+            calls_since_checkpoint = progress.api_calls_made - last_checkpoint_calls
+            if calls_since_checkpoint >= CHECKPOINT_INTERVAL:
+                logger.info(
+                    f"Checkpoint at {progress.api_calls_made} API calls - "
+                    f"saving to parquet"
+                )
+                progress.current_phase = "checkpoint_saving"
+                update_progress()
+
+                # Aggregate and write accumulated data
+                checkpoint_rows = _aggregate_daily_sentiment(articles_with_scores)
+                checkpoint_zero_rows = _create_zero_article_rows(
+                    checked_gaps_no_articles
+                )
+                all_checkpoint_rows = checkpoint_rows + checkpoint_zero_rows
+
+                if all_checkpoint_rows:
+                    rows_added = _append_to_parquet(all_checkpoint_rows, parquet_path)
+                    progress.rows_added += rows_added
+                    logger.info(
+                        f"Checkpoint saved {rows_added} rows "
+                        f"(total: {progress.rows_added})"
+                    )
+
+                # Clear buffers (data is now in parquet)
+                articles_with_scores.clear()
+                checked_gaps_no_articles.clear()
+
+                progress.checkpoints_saved += 1
+                last_checkpoint_calls = progress.api_calls_made
+                progress.current_phase = "fetching_and_scoring"
+                update_progress()
+
+        # Phase 4: Aggregate and write remaining data to parquet
+        logger.info("Phase 4: Writing remaining data to parquet")
         progress.current_phase = "writing_parquet"
         update_progress()
 
-        logger.info(
-            f"Aggregating {len(articles_with_scores)} article-symbol-score entries"
-        )
-        new_rows = _aggregate_daily_sentiment(articles_with_scores)
-        zero_rows = _create_zero_article_rows(checked_gaps_no_articles)
-        all_new_rows = new_rows + zero_rows
+        # Write any remaining data not yet checkpointed
+        if articles_with_scores or checked_gaps_no_articles:
+            logger.info(
+                f"Aggregating {len(articles_with_scores)} remaining "
+                f"article-symbol-score entries"
+            )
+            new_rows = _aggregate_daily_sentiment(articles_with_scores)
+            zero_rows = _create_zero_article_rows(checked_gaps_no_articles)
+            all_new_rows = new_rows + zero_rows
 
-        logger.info(
-            f"Writing {len(new_rows)} rows with articles + "
-            f"{len(zero_rows)} zero-article rows"
-        )
-        rows_added = _append_to_parquet(all_new_rows, parquet_path)
-        progress.rows_added = rows_added
+            logger.info(
+                f"Writing {len(new_rows)} rows with articles + "
+                f"{len(zero_rows)} zero-article rows"
+            )
+            rows_added = _append_to_parquet(all_new_rows, parquet_path)
+            progress.rows_added += rows_added
+        else:
+            logger.info("No remaining data to write (all saved in checkpoints)")
+            all_new_rows = []
 
-        # Calculate remaining gaps (exclude zero-article rows we just wrote)
-        filled_date_symbols = {(row["date"], row["symbol"]) for row in all_new_rows}
-        remaining = [g for g in fillable_gaps if g not in filled_date_symbols]
-        progress.remaining_gaps = len(remaining)
+        # Calculate remaining gaps by re-checking the parquet file
+        # (includes all checkpointed data plus final write)
+        updated_gaps = find_gaps(symbols, start_date, end_date, parquet_path)
+        updated_fillable, _ = categorize_gaps(updated_gaps, ALPACA_EARLIEST_DATE)
+        progress.remaining_gaps = len(updated_fillable)
 
         progress.status = "completed"
         progress.current_phase = "done"

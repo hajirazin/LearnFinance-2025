@@ -24,9 +24,6 @@ ENV_ALPACA_API_SECRET = "ALPACA_API_SECRET"
 DEFAULT_LOOKBACK_YEARS = 15
 DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
 
-# Sentiment backfill limits
-SENTIMENT_BACKFILL_MAX_API_CALLS = 200  # Max Alpaca API calls per endpoint run
-
 
 def get_hf_token() -> str | None:
     """Get HuggingFace API token from environment."""

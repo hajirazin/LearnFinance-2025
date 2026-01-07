@@ -323,11 +323,11 @@ def _update_gap_fill_progress(job_id: str, progress: GapFillProgress) -> None:
             "gaps_fillable": progress.gaps_fillable,
             "gaps_pre_api_date": progress.gaps_pre_api_date,
             "api_calls_made": progress.api_calls_made,
-            "api_calls_limit": progress.api_calls_limit,
             "articles_fetched": progress.articles_fetched,
             "articles_scored": progress.articles_scored,
             "rows_added": progress.rows_added,
             "remaining_gaps": progress.remaining_gaps,
+            "checkpoints_saved": progress.checkpoints_saved,
             "status": progress.status,
             "current_phase": progress.current_phase,
             "error": progress.error,
@@ -373,11 +373,11 @@ def _run_gap_fill_job(
                 "gaps_fillable": result.progress.gaps_fillable,
                 "gaps_pre_api_date": result.progress.gaps_pre_api_date,
                 "api_calls_made": result.progress.api_calls_made,
-                "api_calls_limit": result.progress.api_calls_limit,
                 "articles_fetched": result.progress.articles_fetched,
                 "articles_scored": result.progress.articles_scored,
                 "rows_added": result.progress.rows_added,
                 "remaining_gaps": result.progress.remaining_gaps,
+                "checkpoints_saved": result.progress.checkpoints_saved,
             },
         }
         if not result.success:
@@ -402,7 +402,7 @@ def start_sentiment_gaps_fill(
     The job:
     1. Reads data/output/daily_sentiment.parquet
     2. Identifies missing (date, symbol) pairs for halal symbols
-    3. Fetches news from Alpaca API (2015+ only, max 200 API calls)
+    3. Fetches news from Alpaca API (2015+ only, rate-limited to 200/min)
     4. Scores articles with FinBERT
     5. Appends new sentiment data to parquet
 
