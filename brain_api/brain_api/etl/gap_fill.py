@@ -325,6 +325,9 @@ def fill_sentiment_gaps(
                 scores = scorer.score_batch(texts)
                 progress.articles_scored += len(scores)
 
+                # Track which gap symbols got matched by articles
+                matched_symbols: set[str] = set()
+
                 # Map articles to their symbols and dates
                 for article, score in zip(articles, scores):
                     # Each article may be relevant to multiple symbols
@@ -333,6 +336,15 @@ def fill_sentiment_gaps(
                             articles_with_scores.append(
                                 (article.created_at, symbol, score)
                             )
+                            matched_symbols.add(symbol)
+
+                # Record unmatched gap symbols as zero-article (except today)
+                # This handles the case where Alpaca returns articles but none
+                # match the gap symbols we're looking for
+                if gap_date != today:
+                    for symbol in gap_symbols:
+                        if symbol not in matched_symbols:
+                            checked_gaps_no_articles.append((gap_date, symbol))
 
                 update_progress()
 

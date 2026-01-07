@@ -320,6 +320,97 @@ class TestZeroArticleRows:
             assert field in result[0], f"Missing field: {field}"
 
 
+class TestGapFillUnmatchedSymbols:
+    """Tests for gap fill handling of unmatched symbols."""
+
+    def test_unmatched_symbols_recorded_as_zero_article(self, tmp_path):
+        """When articles don't match gap symbols, those symbols get zero-article rows."""
+        from datetime import datetime
+        from unittest.mock import MagicMock
+
+        from brain_api.core.finbert import SentimentScore
+        from brain_api.core.news_api.alpaca import AlpacaNewsArticle
+        from brain_api.etl.gap_fill import fill_sentiment_gaps
+
+        import pandas as pd
+
+        # Create path for parquet (file doesn't need to exist - _append_to_parquet handles it)
+        parquet_path = tmp_path / "test_sentiment.parquet"
+
+        # Mock dependencies
+        with (
+            patch("brain_api.etl.gap_fill.get_halal_symbols") as mock_symbols,
+            patch("brain_api.etl.gap_fill.find_gaps") as mock_find_gaps,
+            patch("brain_api.etl.gap_fill.categorize_gaps") as mock_categorize,
+            patch("brain_api.etl.gap_fill.AlpacaNewsClient") as mock_client_cls,
+            patch("brain_api.etl.gap_fill.FinBERTScorer") as mock_scorer_cls,
+            patch("brain_api.etl.gap_fill.get_gap_statistics") as mock_stats,
+        ):
+            # Setup: 3 gap symbols to fill
+            mock_symbols.return_value = ["AAPL", "MSFT", "GOOGL"]
+
+            # Gap for a date in the past (not today)
+            gap_date = date(2024, 6, 15)
+            gaps = [(gap_date, "AAPL"), (gap_date, "MSFT"), (gap_date, "GOOGL")]
+            mock_find_gaps.return_value = gaps
+            mock_categorize.return_value = (gaps, [])  # All fillable
+
+            # Alpaca returns articles, but they mention OTHER symbols (not our gaps)
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_client.call_count = 1
+
+            # Return an article that mentions NVDA and TSLA (NOT AAPL, MSFT, GOOGL)
+            mock_article = AlpacaNewsArticle(
+                id="test123",
+                headline="NVDA and TSLA surge",
+                summary="Tech stocks rally",
+                author="Test",
+                created_at=datetime(2024, 6, 15, 10, 0, 0),
+                updated_at=datetime(2024, 6, 15, 10, 0, 0),
+                url="http://test.com",
+                symbols=["NVDA", "TSLA"],  # NOT matching our gap symbols
+                source="test",
+            )
+            mock_client.fetch_news_for_date.return_value = [mock_article]
+
+            # Scorer returns a score for the article
+            mock_scorer = MagicMock()
+            mock_scorer_cls.return_value = mock_scorer
+            mock_scorer.score_batch.return_value = [
+                SentimentScore(
+                    label="positive",
+                    p_pos=0.8,
+                    p_neg=0.1,
+                    p_neu=0.1,
+                    score=0.7,
+                    confidence=0.8,
+                )
+            ]
+
+            mock_stats.return_value = {"gaps_found": 0}
+
+            # Run gap fill
+            result = fill_sentiment_gaps(
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 12, 31),
+                parquet_path=parquet_path,
+            )
+
+            assert result.success
+
+            # Read the parquet file and check that AAPL, MSFT, GOOGL have zero-article rows
+            df = pd.read_parquet(parquet_path)
+
+            # All 3 symbols should have zero-article rows since articles didn't match
+            assert len(df) == 3
+            for symbol in ["AAPL", "MSFT", "GOOGL"]:
+                symbol_row = df[df["symbol"] == symbol]
+                assert len(symbol_row) == 1, f"Expected 1 row for {symbol}"
+                assert symbol_row.iloc[0]["article_count"] == 0
+                assert symbol_row.iloc[0]["sentiment_score"] == 0.0
+
+
 class TestSentimentGapsEndpoint:
     """Tests for /etl/sentiment-gaps endpoint."""
 
