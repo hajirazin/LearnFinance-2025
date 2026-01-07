@@ -1,5 +1,10 @@
 """FastAPI application entrypoint."""
 
+from dotenv import load_dotenv
+
+# Load .env file before other imports that may read environment variables
+load_dotenv()
+
 from fastapi import FastAPI
 
 from brain_api.routes import (

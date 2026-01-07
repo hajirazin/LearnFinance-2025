@@ -12,6 +12,9 @@ FastAPI service for LearnFinance-2025. This is the Python "brain" that will hand
 ```bash
 cd brain_api
 uv sync --all-extras
+
+# Copy environment variables template and fill in your values
+cp .env.example .env
 ```
 
 ## Run locally
@@ -50,9 +53,20 @@ uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `ALPHA_VANTAGE_API_KEY` | API key for Alpha Vantage historical fundamentals | For `/signals/fundamentals/historical` only |
+Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-loaded on startup via `python-dotenv`.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HF_TOKEN` | HuggingFace API token | None |
+| `HF_MODEL_REPO` | HuggingFace model repository (e.g., `username/learnfinance-models`) | None |
+| `HF_NEWS_SENTIMENT_REPO` | HuggingFace news sentiment dataset repository | None |
+| `HF_TWITTER_SENTIMENT_REPO` | HuggingFace twitter sentiment dataset repository | None |
+| `STORAGE_BACKEND` | Storage backend: `local` or `hf` | `local` |
+| `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
+| `ALPACA_API_SECRET` | Alpaca News API secret | None |
+| `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key (for historical fundamentals) | None |
+| `LSTM_TRAIN_LOOKBACK_YEARS` | Years of historical data for training | `15` |
+| `LSTM_TRAIN_WINDOW_END_DATE` | Override training window end date (YYYY-MM-DD) | Today |
 
 ### Data Sources
 

@@ -29,6 +29,8 @@ dependencies = [
     # ETL dependencies
     "duckdb>=1.0.0",
     "tqdm>=4.66.0",
+    # Environment variable loading
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
