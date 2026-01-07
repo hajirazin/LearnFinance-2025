@@ -1,6 +1,14 @@
 """FastAPI application entrypoint."""
 
+import logging
+
 from dotenv import load_dotenv
+
+# Configure logging to show INFO level logs from our modules
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s %(name)s: %(message)s",
+)
 
 # Load .env file before other imports that may read environment variables
 load_dotenv()

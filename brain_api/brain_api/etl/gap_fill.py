@@ -122,6 +122,32 @@ def _aggregate_daily_sentiment(
     return results
 
 
+def _create_zero_article_rows(
+    checked_gaps: list[tuple[date, str]],
+) -> list[dict]:
+    """Create parquet rows for gaps that were checked but had no articles.
+
+    Args:
+        checked_gaps: List of (date, symbol) tuples that were checked
+
+    Returns:
+        List of dicts with article_count=0 ready for parquet output
+    """
+    return [
+        {
+            "date": gap_date,
+            "symbol": symbol,
+            "sentiment_score": 0.0,
+            "article_count": 0,
+            "avg_confidence": 0.0,
+            "p_pos_avg": 0.0,
+            "p_neg_avg": 0.0,
+            "total_articles": 0,
+        }
+        for gap_date, symbol in checked_gaps
+    ]
+
+
 def _append_to_parquet(
     new_rows: list[dict],
     parquet_path: Path,
@@ -267,6 +293,8 @@ def fill_sentiment_gaps(
             )
 
         articles_with_scores: list[tuple[datetime, str, SentimentScore]] = []
+        checked_gaps_no_articles: list[tuple[date, str]] = []
+        today = date.today()
 
         for gap_date in sorted_dates:
             if progress.api_calls_made >= progress.api_calls_limit:
@@ -287,6 +315,10 @@ def fill_sentiment_gaps(
             update_progress()
 
             if not articles:
+                # Record gaps we checked but found no articles (except today)
+                if gap_date != today:
+                    for symbol in gap_symbols:
+                        checked_gaps_no_articles.append((gap_date, symbol))
                 continue
 
             # Score articles with FinBERT
@@ -317,11 +349,18 @@ def fill_sentiment_gaps(
             f"Aggregating {len(articles_with_scores)} article-symbol-score entries"
         )
         new_rows = _aggregate_daily_sentiment(articles_with_scores)
-        rows_added = _append_to_parquet(new_rows, parquet_path)
+        zero_rows = _create_zero_article_rows(checked_gaps_no_articles)
+        all_new_rows = new_rows + zero_rows
+
+        logger.info(
+            f"Writing {len(new_rows)} rows with articles + "
+            f"{len(zero_rows)} zero-article rows"
+        )
+        rows_added = _append_to_parquet(all_new_rows, parquet_path)
         progress.rows_added = rows_added
 
-        # Calculate remaining gaps
-        filled_date_symbols = {(row["date"], row["symbol"]) for row in new_rows}
+        # Calculate remaining gaps (exclude zero-article rows we just wrote)
+        filled_date_symbols = {(row["date"], row["symbol"]) for row in all_new_rows}
         remaining = [g for g in fillable_gaps if g not in filled_date_symbols]
         progress.remaining_gaps = len(remaining)
 

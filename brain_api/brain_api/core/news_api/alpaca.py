@@ -118,6 +118,12 @@ class AlpacaNewsClient:
         self._rate_limit()
         self._call_count += 1
 
+        logger.info(
+            f"Alpaca API call #{self._call_count}: "
+            f"symbols={symbols[:3]}{'...' if len(symbols) > 3 else ''}, "
+            f"date={start.date()}"
+        )
+
         params = {
             "symbols": ",".join(symbols),
             "start": start.isoformat() + "Z" if start.tzinfo is None else start.isoformat(),
@@ -135,8 +141,9 @@ class AlpacaNewsClient:
             )
             response.raise_for_status()
             data = response.json()
+            logger.info(f"Alpaca API call #{self._call_count}: returned {len(data.get('news', []))} articles")
         except requests.RequestException as e:
-            logger.error(f"Alpaca API request failed: {e}")
+            logger.error(f"Alpaca API call #{self._call_count} FAILED: {e}")
             return []
 
         articles = []
@@ -219,6 +226,12 @@ class AlpacaNewsClient:
             self._rate_limit()
             self._call_count += 1
 
+            logger.info(
+                f"Alpaca API batch call #{self._call_count}: "
+                f"symbols={symbols[:3]}{'...' if len(symbols) > 3 else ''}, "
+                f"fetched_so_far={len(all_articles)}"
+            )
+
             params = {
                 "symbols": ",".join(symbols),
                 "start": start.isoformat() + "Z" if start.tzinfo is None else start.isoformat(),
@@ -238,8 +251,9 @@ class AlpacaNewsClient:
                 )
                 response.raise_for_status()
                 data = response.json()
+                logger.info(f"Alpaca API batch call #{self._call_count}: returned {len(data.get('news', []))} articles")
             except requests.RequestException as e:
-                logger.error(f"Alpaca API request failed: {e}")
+                logger.error(f"Alpaca API batch call #{self._call_count} FAILED: {e}")
                 break
 
             news_items = data.get("news", [])

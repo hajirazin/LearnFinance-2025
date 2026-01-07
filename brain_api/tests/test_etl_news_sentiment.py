@@ -1,11 +1,13 @@
 """Tests for news sentiment ETL endpoints."""
 
 import time
+from datetime import date
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
+from brain_api.etl.gap_fill import _create_zero_article_rows
 
 client = TestClient(app)
 
@@ -258,6 +260,139 @@ class TestSentimentScore:
         assert restored.label == original.label
         assert restored.score == original.score
         assert restored.confidence == original.confidence
+
+
+class TestZeroArticleRows:
+    """Tests for zero-article gap tracking functionality."""
+
+    def test_create_zero_article_rows_empty_list(self):
+        """_create_zero_article_rows should return empty list for empty input."""
+        result = _create_zero_article_rows([])
+        assert result == []
+
+    def test_create_zero_article_rows_single_gap(self):
+        """_create_zero_article_rows should create row with correct structure."""
+        gaps = [(date(2025, 1, 15), "AAPL")]
+        result = _create_zero_article_rows(gaps)
+
+        assert len(result) == 1
+        row = result[0]
+        assert row["date"] == date(2025, 1, 15)
+        assert row["symbol"] == "AAPL"
+        assert row["sentiment_score"] == 0.0
+        assert row["article_count"] == 0
+        assert row["avg_confidence"] == 0.0
+        assert row["p_pos_avg"] == 0.0
+        assert row["p_neg_avg"] == 0.0
+        assert row["total_articles"] == 0
+
+    def test_create_zero_article_rows_multiple_gaps(self):
+        """_create_zero_article_rows should handle multiple gaps."""
+        gaps = [
+            (date(2025, 1, 15), "AAPL"),
+            (date(2025, 1, 15), "MSFT"),
+            (date(2025, 1, 16), "AAPL"),
+        ]
+        result = _create_zero_article_rows(gaps)
+
+        assert len(result) == 3
+        symbols = {row["symbol"] for row in result}
+        assert symbols == {"AAPL", "MSFT"}
+        dates = {row["date"] for row in result}
+        assert dates == {date(2025, 1, 15), date(2025, 1, 16)}
+
+    def test_create_zero_article_rows_all_fields_present(self):
+        """_create_zero_article_rows should include all required parquet fields."""
+        gaps = [(date(2025, 1, 15), "NVDA")]
+        result = _create_zero_article_rows(gaps)
+
+        required_fields = [
+            "date",
+            "symbol",
+            "sentiment_score",
+            "article_count",
+            "avg_confidence",
+            "p_pos_avg",
+            "p_neg_avg",
+            "total_articles",
+        ]
+        for field in required_fields:
+            assert field in result[0], f"Missing field: {field}"
+
+
+class TestSentimentGapsEndpoint:
+    """Tests for /etl/sentiment-gaps endpoint."""
+
+    def test_start_sentiment_gaps_job_returns_202(self):
+        """POST /etl/sentiment-gaps should return 202 with job_id."""
+        with patch("brain_api.routes.etl._run_gap_fill_job"):
+            response = client.post(
+                "/etl/sentiment-gaps",
+                json={"start_date": "2025-01-01"},
+            )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert "job_id" in data
+        assert data["status"] == "pending"
+        assert "message" in data
+
+    def test_start_sentiment_gaps_job_with_end_date(self):
+        """POST /etl/sentiment-gaps should accept end_date parameter."""
+        with patch("brain_api.routes.etl._run_gap_fill_job"):
+            response = client.post(
+                "/etl/sentiment-gaps",
+                json={
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-12-31",
+                },
+            )
+
+        assert response.status_code == 202
+
+    def test_get_sentiment_gaps_status_not_found(self):
+        """GET /etl/sentiment-gaps/{job_id} returns 404 for unknown job."""
+        response = client.get("/etl/sentiment-gaps/nonexistent")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_get_sentiment_gaps_status_after_creation(self):
+        """GET /etl/sentiment-gaps/{job_id} returns job status."""
+        with patch("brain_api.routes.etl._run_gap_fill_job"):
+            create_response = client.post(
+                "/etl/sentiment-gaps",
+                json={"start_date": "2025-01-01"},
+            )
+
+        job_id = create_response.json()["job_id"]
+        response = client.get(f"/etl/sentiment-gaps/{job_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["job_id"] == job_id
+        assert data["status"] in ["pending", "running", "completed", "failed"]
+        assert "started_at" in data
+        assert "config" in data
+
+    def test_sentiment_gaps_invalid_date_format(self):
+        """POST with invalid date format should return 400."""
+        response = client.post(
+            "/etl/sentiment-gaps",
+            json={"start_date": "not-a-date"},
+        )
+
+        # FastAPI returns 400 for date parsing errors
+        assert response.status_code == 400
+
+    def test_sentiment_gaps_missing_start_date(self):
+        """POST without start_date should return 422."""
+        response = client.post(
+            "/etl/sentiment-gaps",
+            json={},
+        )
+
+        assert response.status_code == 422
 
 
 
