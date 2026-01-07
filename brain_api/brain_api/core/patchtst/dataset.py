@@ -52,85 +52,68 @@ def build_dataset(
     prices: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> DatasetResult:
-    """Build training dataset for weekly return prediction.
+    """Build training dataset for next-day return prediction.
 
-    Creates samples aligned to trading weeks:
-    - Input: context_length days of multi-channel features ending at week start
-    - Target: weekly return (fri_close - mon_open) / mon_open
+    Creates samples for daily return prediction:
+    - Input: context_length days of multi-channel features ending at day t
+    - Target: next-day return (close_ret channel for day t+1)
 
     Args:
         aligned_features: Dict of symbol -> aligned multi-channel DataFrame
                          (output from align_multivariate_data)
-        prices: Dict of symbol -> raw OHLCV DataFrame (for computing weekly returns)
+        prices: Dict of symbol -> raw OHLCV DataFrame (not used, kept for compatibility)
         config: PatchTST configuration
 
     Returns:
-        DatasetResult with X, y (weekly returns), and feature_scaler
+        DatasetResult with X, y (next-day returns), and feature_scaler
     """
     all_sequences = []
     all_targets = []
 
     print(f"[PatchTST] Building dataset from {len(aligned_features)} symbols...")
     symbols_used = 0
-    total_weeks = 0
+    total_samples = 0
+
+    # Find close_ret channel index
+    try:
+        close_ret_idx = config.feature_names.index("close_ret")
+    except ValueError:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
 
     for symbol, features_df in aligned_features.items():
-        if symbol not in prices:
-            continue
-
-        price_df = prices[symbol]
-
-        # Ensure price_df has same index type
-        if not isinstance(price_df.index, pd.DatetimeIndex):
-            continue
-
-        # Extract trading weeks from features
-        weeks = extract_trading_weeks(features_df, min_days=config.min_week_days)
-
-        if len(weeks) < 2:
+        if len(features_df) < config.context_length + 1:
             continue
 
         symbol_samples = 0
 
-        # For each week (except the last), create a training sample
-        for i in range(len(weeks) - 1):
-            week = weeks[i + 1]  # Target week
-            week_start = week.index[0]
-            week_end = week.index[-1]
-
-            # Find position in features_df
-            try:
-                week_start_idx = features_df.index.get_loc(week_start)
-            except KeyError:
-                continue
-
-            # Check if we have enough history
-            if week_start_idx < config.context_length:
-                continue
-
-            # Extract input sequence
-            seq_start_idx = week_start_idx - config.context_length
-            seq_end_idx = week_start_idx
+        # Create samples: for each day t, predict day t+1's return
+        # We need at least context_length days of history, and at least 1 day ahead
+        for t in range(config.context_length, len(features_df) - 1):
+            # Extract input sequence: days [t-context_length, t)
+            seq_start_idx = t - config.context_length
+            seq_end_idx = t
 
             sequence = features_df.iloc[seq_start_idx:seq_end_idx].values
 
             if len(sequence) != config.context_length:
                 continue
 
-            # Compute target: weekly return
-            weekly_return = _compute_weekly_return(price_df, week_start, week_end)
-            if weekly_return is None:
+            # Target: next-day close return (day t+1)
+            next_day_close_ret = features_df.iloc[t + 1, close_ret_idx]
+
+            # Skip if target is NaN or Inf
+            if pd.isna(next_day_close_ret) or np.isinf(next_day_close_ret):
                 continue
 
             all_sequences.append(sequence)
-            all_targets.append([weekly_return])
+            all_targets.append([next_day_close_ret])
             symbol_samples += 1
 
         if symbol_samples > 0:
             symbols_used += 1
-            total_weeks += symbol_samples
+            total_samples += symbol_samples
 
-    print(f"[PatchTST] Dataset built: {total_weeks} weekly samples from {symbols_used} symbols")
+    print(f"[PatchTST] Dataset built: {total_samples} daily samples from {symbols_used} symbols")
 
     if not all_sequences:
         empty_X = np.array([]).reshape(0, config.context_length, config.num_input_channels)
@@ -151,6 +134,7 @@ def build_dataset(
     print(f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})")
     print(f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})")
     print(f"  Expected channels: {config.feature_names}")
+    print(f"  Target: next-day close_ret (channel {close_ret_idx})")
     
     # Verify no NaN/Inf in X
     x_nan_count = np.isnan(X).sum()

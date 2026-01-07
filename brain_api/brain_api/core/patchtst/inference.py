@@ -26,6 +26,7 @@ class InferenceFeatures:
     data_end_date: date | None
     has_news_data: bool
     has_fundamentals_data: bool
+    starting_price: float | None  # Starting price (last close before target week) for weekly return calculation
 
 
 @dataclass
@@ -82,6 +83,7 @@ def build_inference_features(
             data_end_date=None,
             has_news_data=has_news_data,
             has_fundamentals_data=has_fundamentals_data,
+            starting_price=None,
         )
 
     if not isinstance(prices_df.index, pd.DatetimeIndex):
@@ -93,6 +95,7 @@ def build_inference_features(
             data_end_date=None,
             has_news_data=has_news_data,
             has_fundamentals_data=has_fundamentals_data,
+            starting_price=None,
         )
 
     # Filter to data before cutoff
@@ -100,15 +103,16 @@ def build_inference_features(
     df = prices_df[prices_df.index < cutoff_ts].copy()
 
     if len(df) < config.context_length + 1:
-        return InferenceFeatures(
-            symbol=symbol,
-            features=None,
-            has_enough_history=False,
-            history_days_used=len(df),
-            data_end_date=df.index[-1].date() if len(df) > 0 else None,
-            has_news_data=has_news_data,
-            has_fundamentals_data=has_fundamentals_data,
-        )
+            return InferenceFeatures(
+                symbol=symbol,
+                features=None,
+                has_enough_history=False,
+                history_days_used=len(df),
+                data_end_date=df.index[-1].date() if len(df) > 0 else None,
+                has_news_data=has_news_data,
+                has_fundamentals_data=has_fundamentals_data,
+                starting_price=None,
+            )
 
     # Compute price features using shared utility
     features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
@@ -122,6 +126,7 @@ def build_inference_features(
             data_end_date=features_df.index[-1].date() if len(features_df) > 0 else None,
             has_news_data=has_news_data,
             has_fundamentals_data=has_fundamentals_data,
+            starting_price=None,
         )
 
     # Add news sentiment (forward-fill missing days)
@@ -170,6 +175,18 @@ def build_inference_features(
     sequence = features_df.iloc[-config.context_length:].values
     data_end_date = features_df.index[-1].date()
 
+    # Get starting price: last close price before cutoff_date (for weekly return calculation)
+    # This will be used as the base price for computing weekly return from daily predictions
+    starting_price = None
+    if len(df) > 0:
+        try:
+            # Get the last close price before cutoff_date
+            last_close = df.iloc[-1]["close"]
+            if pd.notna(last_close) and last_close > 0:
+                starting_price = float(last_close)
+        except (KeyError, IndexError):
+            pass
+
     return InferenceFeatures(
         symbol=symbol,
         features=sequence,
@@ -178,6 +195,7 @@ def build_inference_features(
         data_end_date=data_end_date,
         has_news_data=has_news_data,
         has_fundamentals_data=has_fundamentals_data,
+        starting_price=starting_price,
     )
 
 
@@ -186,14 +204,18 @@ def run_inference(
     feature_scaler: StandardScaler,
     features_list: list[InferenceFeatures],
     week_boundaries: WeekBoundaries,
+    config: PatchTSTConfig,
 ) -> list[SymbolPrediction]:
     """Run PatchTST inference on prepared multi-channel feature sequences.
+
+    Predicts 5 daily returns iteratively (Monday-Friday) and aggregates to weekly return.
 
     Args:
         model: Loaded PatchTSTForPrediction model in eval mode
         feature_scaler: Fitted StandardScaler from training
         features_list: List of InferenceFeatures (one per symbol)
         week_boundaries: Target week info for the response
+        config: PatchTST configuration (for feature names)
 
     Returns:
         List of SymbolPrediction results
@@ -223,29 +245,111 @@ def run_inference(
     if not valid_features:
         return predictions
 
-    # Batch inference for valid symbols
+    # Find close_ret channel index
+    try:
+        close_ret_idx = config.feature_names.index("close_ret")
+    except ValueError:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
+
+    # Prepare initial input sequences for all symbols
     # Shape: (n_samples, context_length, num_channels)
-    X = np.array([f.features for _, f in valid_features])
-
+    X_batch = np.array([f.features for _, f in valid_features])
+    
     # Scale features using the training scaler
-    original_shape = X.shape
-    X_flat = X.reshape(-1, X.shape[-1])
+    original_shape = X_batch.shape
+    X_flat = X_batch.reshape(-1, X_batch.shape[-1])
     X_scaled = feature_scaler.transform(X_flat)
-    X = X_scaled.reshape(original_shape)
-
-    # HuggingFace PatchTST expects shape (batch, sequence_length, num_channels)
-    # Our X is already in that shape, no transpose needed
-    X_tensor = torch.FloatTensor(X)
+    X_batch = X_scaled.reshape(original_shape)
 
     model.eval()
+    device = next(model.parameters()).device
+    
+    # Find indices for OHLCV channels (for constructing new day's features)
+    try:
+        open_ret_idx = config.feature_names.index("open_ret")
+        high_ret_idx = config.feature_names.index("high_ret")
+        low_ret_idx = config.feature_names.index("low_ret")
+        volume_ret_idx = config.feature_names.index("volume_ret")
+    except ValueError as e:
+        raise ValueError(f"Required channel not found in feature_names: {e}")
+
+    # Predict 5 daily returns iteratively (Monday through Friday)
+    # After each prediction, update the input sequence by:
+    # 1. Removing the oldest day (first row)
+    # 2. Adding the new day's features (constructed from prediction)
+    daily_returns = []
+    
+    # Current input sequences (will be updated each iteration)
+    X_current = X_batch.copy()  # Shape: (n_samples, context_length, num_channels)
+    
     with torch.no_grad():
-        outputs = model(past_values=X_tensor).prediction_outputs
-        # Extract close_ret channel only (index 3) for weekly return prediction
-        raw_predictions = outputs[:, 0, 3].cpu().numpy().flatten()
+        for day in range(5):
+            # Convert to tensor and move to device
+            X_tensor = torch.FloatTensor(X_current).to(device)
+            
+            # Predict next-day return
+            outputs = model(past_values=X_tensor).prediction_outputs
+            # Extract close_ret channel for next-day return prediction
+            day_returns = outputs[:, 0, close_ret_idx].cpu().numpy()  # Shape: (n_samples,)
+            daily_returns.append(day_returns)
+            
+            # Update input sequences for next iteration (except for the last day)
+            if day < 4:  # Don't need to update after Friday prediction
+                # Construct features for the predicted day
+                # We need to work in unscaled space, then scale everything together
+                # Get the last day's features in unscaled space for forward-filling
+                X_current_unscaled = feature_scaler.inverse_transform(
+                    X_current.reshape(-1, config.num_input_channels)
+                ).reshape(X_current.shape)
+                
+                new_day_features = np.zeros((len(valid_features), config.num_input_channels))
+                
+                for i in range(len(valid_features)):
+                    # Use predicted close_ret for OHLCV channels (in unscaled space)
+                    predicted_close_ret = day_returns[i]  # Already in unscaled space
+                    new_day_features[i, open_ret_idx] = predicted_close_ret
+                    new_day_features[i, high_ret_idx] = predicted_close_ret
+                    new_day_features[i, low_ret_idx] = predicted_close_ret
+                    new_day_features[i, close_ret_idx] = predicted_close_ret
+                    new_day_features[i, volume_ret_idx] = 0.0  # Assume no volume change
+                    
+                    # Forward-fill other channels (news, fundamentals) from the last day
+                    # These don't change day-to-day, so use the last row's unscaled values
+                    last_day_features_unscaled = X_current_unscaled[i, -1, :]
+                    for ch_idx in range(config.num_input_channels):
+                        if ch_idx not in [open_ret_idx, high_ret_idx, low_ret_idx, 
+                                         close_ret_idx, volume_ret_idx]:
+                            new_day_features[i, ch_idx] = last_day_features_unscaled[ch_idx]
+                
+                # Scale the new day's features
+                new_day_features_scaled = feature_scaler.transform(new_day_features)
+                
+                # Update sequences: remove oldest day, add new day
+                # X_current shape: (n_samples, context_length, num_channels)
+                # Remove first row, add new row at the end
+                X_current = np.concatenate([
+                    X_current[:, 1:, :],  # Remove oldest day (first row)
+                    new_day_features_scaled[:, np.newaxis, :]  # Add new day (add dimension for sequence)
+                ], axis=1)
+    
+    # Convert to numpy array: shape (5, n_samples)
+    daily_returns = np.array(daily_returns)
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):
-        weekly_return = float(raw_predictions[i])
+        # Get 5 daily returns for this symbol
+        symbol_daily_returns = daily_returns[:, i]  # Shape: (5,)
+        
+        # Compute weekly return from 5 daily returns
+        # Method 1: Compound returns: (1 + r1) * (1 + r2) * ... * (1 + r5) - 1
+        weekly_return = float(np.prod(1 + symbol_daily_returns) - 1)
+        
+        # Alternative: If we have starting_price, compute final price and return
+        # This is more accurate but requires starting_price
+        if feat.starting_price is not None and feat.starting_price > 0:
+            final_price = feat.starting_price * np.prod(1 + symbol_daily_returns)
+            weekly_return = (final_price - feat.starting_price) / feat.starting_price
+        
         weekly_return_pct = weekly_return * 100
         direction = classify_direction(weekly_return)
 

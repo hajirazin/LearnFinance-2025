@@ -524,6 +524,7 @@ def infer_patchtst(
         feature_scaler=artifacts.feature_scaler,
         features_list=features_list,
         week_boundaries=week_boundaries,
+        config=config,
     )
     t_infer = time.time() - t0
     logger.info(f"[PatchTST] Inference complete in {t_infer:.2f}s")

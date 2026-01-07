@@ -103,6 +103,12 @@ def train_model_pytorch(
     X_val_t = torch.FloatTensor(X_val).to(device)
     y_val_t = torch.FloatTensor(y_val).to(device)
 
+    # Find close_ret channel index
+    try:
+        close_ret_idx = config.feature_names.index("close_ret")
+    except ValueError:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
+
     # Create model
     model = _create_patchtst_model(config).to(device)
     criterion = nn.MSELoss()
@@ -138,11 +144,11 @@ def train_model_pytorch(
 
             optimizer.zero_grad()
 
-            # PatchTST outputs prediction_outputs of shape (batch, pred_len=1, channels=11)
-            # We use only close_ret channel (index 3) for weekly return prediction
+            # PatchTST outputs prediction_outputs of shape (batch, pred_len=1, channels)
+            # We use only close_ret channel for next-day return prediction
             model_outputs = model(past_values=batch_X).prediction_outputs
-            # Extract close_ret channel only (index 3)
-            outputs = model_outputs[:, 0, 3:4]  # Shape: (batch, 1)
+            # Extract close_ret channel only
+            outputs = model_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
 
             # CRITICAL VERIFICATION: Log model output shape and per-channel predictions
             if epoch == 0 and i == 0:
@@ -153,7 +159,7 @@ def train_model_pytorch(
                 # Reuse model_outputs we already computed - no extra forward pass
                 for ch_idx, ch_name in enumerate(config.feature_names):
                     pred_val = model_outputs[0, 0, ch_idx].item()
-                    is_target_channel = "← TARGET" if ch_idx == 3 else ""
+                    is_target_channel = "← TARGET" if ch_idx == close_ret_idx else ""
                     print(f"    [{ch_idx}] {ch_name}: {pred_val:.6f} {is_target_channel}")
                 print(f"  Batch target (y): {batch_y[0].item():.6f}")
                 print(f"  Batch prediction (close_ret): {outputs[0, 0].item():.6f}")
@@ -186,8 +192,8 @@ def train_model_pytorch(
         model.eval()
         with torch.no_grad():
             val_outputs = model(past_values=X_val_t).prediction_outputs
-            # Extract close_ret channel only (index 3)
-            val_outputs = val_outputs[:, 0, 3:4]  # Shape: (batch, 1)
+            # Extract close_ret channel only
+            val_outputs = val_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
             val_loss = criterion(val_outputs, y_val_t).item()
 
         # Learning rate scheduling
@@ -227,12 +233,13 @@ def train_model_pytorch(
     model.eval()
     with torch.no_grad():
         train_outputs = model(past_values=X_train_t).prediction_outputs
-        # Extract close_ret channel only (index 3)
-        train_outputs = train_outputs[:, 0, 3:4]  # Shape: (batch, 1)
+        # Extract close_ret channel only
+        train_outputs = train_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
         final_train_loss = criterion(train_outputs, y_train_t).item()
 
-    # Baseline: predict 0 return
-    baseline_loss = float(np.mean(y_val**2))
+    # Baseline: predict mean return (better than predicting 0)
+    y_val_mean = float(np.mean(y_val))
+    baseline_loss = float(np.mean((y_val - y_val_mean)**2))
 
     print(f"[PatchTST] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}")
     beats_baseline = best_val_loss < baseline_loss
