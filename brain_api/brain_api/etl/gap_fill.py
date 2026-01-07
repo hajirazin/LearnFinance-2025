@@ -316,28 +316,28 @@ def fill_sentiment_gaps(
                 if gap_date != today:
                     for symbol in gap_symbols:
                         checked_gaps_no_articles.append((gap_date, symbol))
-                continue
+            else:
+                # Score articles with FinBERT
+                texts = [
+                    f"{a.headline} {a.summary}".strip() if a.summary else a.headline
+                    for a in articles
+                ]
+                scores = scorer.score_batch(texts)
+                progress.articles_scored += len(scores)
 
-            # Score articles with FinBERT
-            texts = [
-                f"{a.headline} {a.summary}".strip() if a.summary else a.headline
-                for a in articles
-            ]
-            scores = scorer.score_batch(texts)
-            progress.articles_scored += len(scores)
+                # Map articles to their symbols and dates
+                for article, score in zip(articles, scores):
+                    # Each article may be relevant to multiple symbols
+                    for symbol in article.symbols:
+                        if symbol in gap_symbols:
+                            articles_with_scores.append(
+                                (article.created_at, symbol, score)
+                            )
 
-            # Map articles to their symbols and dates
-            for article, score in zip(articles, scores):
-                # Each article may be relevant to multiple symbols
-                for symbol in article.symbols:
-                    if symbol in gap_symbols:
-                        articles_with_scores.append(
-                            (article.created_at, symbol, score)
-                        )
-
-            update_progress()
+                update_progress()
 
             # Checkpoint: save to parquet every CHECKPOINT_INTERVAL API calls
+            # (runs regardless of whether articles were found)
             calls_since_checkpoint = progress.api_calls_made - last_checkpoint_calls
             if calls_since_checkpoint >= CHECKPOINT_INTERVAL:
                 logger.info(
