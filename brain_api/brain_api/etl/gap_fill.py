@@ -136,6 +136,7 @@ def _append_to_parquet(
         Number of rows added
     """
     if not new_rows:
+        logger.info("No new rows to append to parquet")
         return 0
 
     # Create DataFrame from new rows
@@ -145,6 +146,7 @@ def _append_to_parquet(
     # Read existing data if file exists
     if parquet_path.exists():
         existing_df = pd.read_parquet(parquet_path)
+        existing_count = len(existing_df)
         # Convert date column if needed
         if existing_df["date"].dtype == "object":
             existing_df["date"] = pd.to_datetime(existing_df["date"]).dt.date
@@ -152,8 +154,12 @@ def _append_to_parquet(
         # Merge: existing + new, deduplicate by (date, symbol)
         combined_df = pd.concat([existing_df, new_df], ignore_index=True)
         combined_df = combined_df.drop_duplicates(subset=["date", "symbol"], keep="last")
+        logger.info(
+            f"Merging {len(new_rows)} new rows with {existing_count:,} existing rows"
+        )
     else:
         combined_df = new_df
+        logger.info(f"Creating new parquet file with {len(new_rows)} rows")
 
     # Sort by date and symbol
     combined_df = combined_df.sort_values(["date", "symbol"]).reset_index(drop=True)
@@ -161,6 +167,7 @@ def _append_to_parquet(
     # Write back to parquet
     table = pa.Table.from_pandas(combined_df, schema=OUTPUT_SCHEMA)
     pq.write_table(table, parquet_path, compression="snappy")
+    logger.info(f"Wrote {len(combined_df):,} total rows to {parquet_path}")
 
     return len(new_rows)
 
@@ -191,18 +198,21 @@ def fill_sentiment_gaps(
 
     try:
         # Phase 1: Get halal symbols
+        logger.info("Phase 1: Getting halal symbols")
         progress.current_phase = "getting_symbols"
         update_progress()
 
         symbols = get_halal_symbols()
         if not symbols:
+            logger.error("No halal symbols found")
             progress.error = "No halal symbols found"
             progress.status = "failed"
             return GapFillResult(success=False, progress=progress)
 
-        logger.info(f"Found {len(symbols)} halal symbols")
+        logger.info(f"Found {len(symbols)} halal symbols: {symbols[:5]}...")
 
         # Phase 2: Detect gaps
+        logger.info("Phase 2: Detecting gaps in parquet")
         progress.current_phase = "detecting_gaps"
         update_progress()
 
@@ -214,11 +224,13 @@ def fill_sentiment_gaps(
         progress.gaps_pre_api_date = len(unfillable_gaps)
 
         logger.info(
-            f"Found {len(all_gaps)} gaps: "
-            f"{len(fillable_gaps)} fillable, {len(unfillable_gaps)} pre-2015"
+            f"Gap analysis: {len(all_gaps):,} total gaps, "
+            f"{len(fillable_gaps):,} fillable (2015+), "
+            f"{len(unfillable_gaps):,} unfillable (pre-2015)"
         )
 
         if not fillable_gaps:
+            logger.info("No fillable gaps found (all gaps are pre-2015)")
             progress.status = "completed"
             progress.current_phase = "done"
             progress.remaining_gaps = 0
@@ -235,6 +247,7 @@ def fill_sentiment_gaps(
             )
 
         # Phase 3: Fetch news from Alpaca and score
+        logger.info("Phase 3: Fetching news from Alpaca and scoring with FinBERT")
         progress.current_phase = "fetching_and_scoring"
         update_progress()
 
@@ -243,9 +256,15 @@ def fill_sentiment_gaps(
 
         # Group gaps by date for efficient API calls
         date_to_symbols = _group_gaps_by_date(fillable_gaps)
+        logger.info(f"Grouped gaps into {len(date_to_symbols)} unique dates")
 
         # Sort dates in reverse chronological order (most recent first)
         sorted_dates = sorted(date_to_symbols.keys(), reverse=True)
+        if sorted_dates:
+            logger.info(
+                f"Processing dates from {sorted_dates[0]} to {sorted_dates[-1]} "
+                f"(max {progress.api_calls_limit} API calls)"
+            )
 
         articles_with_scores: list[tuple[datetime, str, SentimentScore]] = []
 
@@ -290,9 +309,13 @@ def fill_sentiment_gaps(
             update_progress()
 
         # Phase 4: Aggregate and write to parquet
+        logger.info("Phase 4: Aggregating sentiment and writing to parquet")
         progress.current_phase = "writing_parquet"
         update_progress()
 
+        logger.info(
+            f"Aggregating {len(articles_with_scores)} article-symbol-score entries"
+        )
         new_rows = _aggregate_daily_sentiment(articles_with_scores)
         rows_added = _append_to_parquet(new_rows, parquet_path)
         progress.rows_added = rows_added
@@ -305,6 +328,12 @@ def fill_sentiment_gaps(
         progress.status = "completed"
         progress.current_phase = "done"
         update_progress()
+
+        logger.info(
+            f"Gap fill completed: {rows_added} rows added, "
+            f"{progress.api_calls_made} API calls made, "
+            f"{progress.remaining_gaps:,} gaps remaining"
+        )
 
         statistics = get_gap_statistics(
             symbols, start_date, end_date, parquet_path, ALPACA_EARLIEST_DATE

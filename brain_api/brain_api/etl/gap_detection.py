@@ -4,10 +4,13 @@ Identifies missing date-symbol pairs by comparing expected combinations
 against existing data in the output parquet file.
 """
 
+import logging
 from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def generate_date_range(start_date: date, end_date: date) -> list[date]:
@@ -40,10 +43,12 @@ def read_existing_coverage(
         Set of (date, symbol) tuples that have sentiment data
     """
     if not parquet_path.exists():
+        logger.info(f"Parquet file not found: {parquet_path}")
         return set()
 
     df = pd.read_parquet(parquet_path)
     if df.empty:
+        logger.info("Parquet file is empty")
         return set()
 
     # Convert date column to date objects if needed
@@ -52,7 +57,9 @@ def read_existing_coverage(
     elif hasattr(df["date"].dtype, "date"):
         df["date"] = df["date"].apply(lambda x: x if isinstance(x, date) else x.date())
 
-    return set(zip(df["date"], df["symbol"]))
+    result = set(zip(df["date"], df["symbol"]))
+    logger.info(f"Read {len(result):,} existing date-symbol pairs from parquet")
+    return result
 
 
 def find_gaps(
@@ -73,15 +80,22 @@ def find_gaps(
         List of (date, symbol) tuples that are missing, sorted in
         reverse chronological order (most recent first)
     """
+    logger.info(
+        f"Finding gaps for {len(symbols)} symbols "
+        f"from {start_date} to {end_date}"
+    )
+
     # Generate all expected (date, symbol) pairs
     all_dates = generate_date_range(start_date, end_date)
     all_pairs = {(d, symbol) for d in all_dates for symbol in symbols}
+    logger.info(f"Total expected date-symbol pairs: {len(all_pairs):,}")
 
     # Read existing coverage from parquet file
     existing = read_existing_coverage(parquet_path)
 
     # Find gaps
     gaps = all_pairs - existing
+    logger.info(f"Found {len(gaps):,} gaps (missing date-symbol pairs)")
 
     # Return sorted in reverse chronological order (today first)
     return sorted(gaps, key=lambda x: (x[0], x[1]), reverse=True)
