@@ -26,7 +26,7 @@ class LSTMArtifacts:
     version: str
 
 
-class LocalModelStorage(
+class LSTMLocalStorage(
     BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifacts]
 ):
     """Local filesystem storage for LSTM model artifacts.
@@ -68,3 +68,7 @@ class LocalModelStorage(
             model=model,
             version=version,
         )
+
+
+# Backward compatibility alias
+LocalModelStorage = LSTMLocalStorage

@@ -6,7 +6,8 @@ This module re-exports from model-specific submodules for backward compatibility
 # LSTM storage
 from brain_api.storage.lstm.local import (
     LSTMArtifacts,
-    LocalModelStorage,
+    LSTMLocalStorage,
+    LocalModelStorage,  # Backward compatibility alias
 )
 
 # PatchTST storage
@@ -79,7 +80,8 @@ def create_patchtst_metadata(
 __all__ = [
     # LSTM
     "LSTMArtifacts",
-    "LocalModelStorage",
+    "LSTMLocalStorage",
+    "LocalModelStorage",  # Backward compatibility alias
     "create_metadata",
     # PatchTST
     "PatchTSTArtifacts",

@@ -114,3 +114,4 @@ class UniverseFilter:
         return list(HALAL_ETFS)
 
 
+

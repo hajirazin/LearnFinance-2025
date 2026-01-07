@@ -89,3 +89,4 @@ def normalize_symbols(symbols: list[str]) -> list[str]:
     return normalized
 
 
+
