@@ -136,13 +136,30 @@ def build_inference_features(
                        "current_ratio", "debt_to_equity"]
     if fundamentals_df is not None and len(fundamentals_df) > 0:
         fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
+        
+        # Calculate days since last fundamental update for each date
+        fundamental_age_days = []
+        for date in features_df.index:
+            # Find the most recent fundamental date <= current date
+            available_dates = fundamentals_df.index[fundamentals_df.index <= date]
+            if len(available_dates) > 0:
+                last_update = available_dates[-1]
+                days_old = (date - last_update).days
+                fundamental_age_days.append(days_old)
+            else:
+                fundamental_age_days.append(999)  # Very old if no data
+        
+        # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
+        features_df["fundamental_age"] = pd.Series(fundamental_age_days, index=features_df.index) / 90.0
+        
         for col in fundamental_cols:
             if col in fund_aligned.columns:
                 features_df[col] = fund_aligned[col].fillna(0.0)
             else:
                 features_df[col] = 0.0
     else:
-        # No fundamentals - use zeros
+        # No fundamentals - use zeros and max age
+        features_df["fundamental_age"] = 1.0  # Max age (90+ days)
         for col in fundamental_cols:
             features_df[col] = 0.0
 
@@ -223,8 +240,8 @@ def run_inference(
     model.eval()
     with torch.no_grad():
         outputs = model(past_values=X_tensor).prediction_outputs
-        # Mean across channels and prediction length
-        raw_predictions = outputs.mean(dim=(1, 2)).cpu().numpy().flatten()
+        # Extract close_ret channel only (index 3) for weekly return prediction
+        raw_predictions = outputs[:, 0, 3].cpu().numpy().flatten()
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):

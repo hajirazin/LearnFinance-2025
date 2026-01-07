@@ -3,6 +3,7 @@
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from brain_api.core.features import compute_ohlcv_log_returns
@@ -82,7 +83,8 @@ def load_historical_fundamentals(
         and DatetimeIndex (quarterly dates, to be forward-filled later)
     """
     if cache_path is None:
-        cache_path = Path(__file__).parent.parent.parent / "data" / "raw" / "fundamentals"
+        # Use 4 levels up to reach brain_api/ root, then data/ (load_raw_response adds raw/fundamentals/)
+        cache_path = Path(__file__).parent.parent.parent.parent / "data"
 
     fundamentals: dict[str, pd.DataFrame] = {}
 
@@ -99,7 +101,7 @@ def load_historical_fundamentals(
 
     for symbol in symbols:
         try:
-            # Load cached responses
+            # Load cached responses (cache_path is base_path, load_raw_response adds raw/fundamentals/)
             income_data = load_raw_response(cache_path, symbol, "income_statement")
             balance_data = load_raw_response(cache_path, symbol, "balance_sheet")
 
@@ -209,18 +211,85 @@ def align_multivariate_data(
             fund_df = fundamentals[symbol]
             # Reindex to match price dates and forward-fill
             fund_aligned = fund_df.reindex(features_df.index, method="ffill")
+            
+            # Calculate days since last fundamental update for each date
+            fundamental_age_days = []
+            for date in features_df.index:
+                # Find the most recent fundamental date <= current date
+                available_dates = fund_df.index[fund_df.index <= date]
+                if len(available_dates) > 0:
+                    last_update = available_dates[-1]
+                    days_old = (date - last_update).days
+                    fundamental_age_days.append(days_old)
+                else:
+                    fundamental_age_days.append(999)  # Very old if no data
+            
+            # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
+            features_df["fundamental_age"] = pd.Series(fundamental_age_days, index=features_df.index) / 90.0
+            
             for col in fundamental_cols:
                 if col in fund_aligned.columns:
                     features_df[col] = fund_aligned[col].fillna(0.0)
                 else:
                     features_df[col] = 0.0
         else:
-            # No fundamentals - use zeros
+            # No fundamentals - use zeros and max age
+            features_df["fundamental_age"] = 1.0  # Max age (90+ days)
             for col in fundamental_cols:
                 features_df[col] = 0.0
 
         # Ensure column order matches config.feature_names
         features_df = features_df[config.feature_names]
+
+        # CRITICAL VERIFICATION: Channel count and data quality
+        assert len(features_df.columns) == config.num_input_channels, \
+            f"CRITICAL: Expected {config.num_input_channels} channels, got {len(features_df.columns)}"
+        
+        # Log for ALL symbols (not just first) to catch data quality issues
+        print(f"[PatchTST] VERIFY DATA QUALITY - {symbol}:")
+        print(f"  Shape: {features_df.shape} (rows, channels)")
+        print(f"  Columns: {features_df.columns.tolist()}")
+        
+        zero_filled_channels = []
+        channel_stats = {}
+        for ch_idx, ch_name in enumerate(config.feature_names):
+            ch_data = features_df[ch_name]
+            zero_count = (ch_data == 0).sum()
+            zero_pct = zero_count / len(ch_data) * 100
+            mean_val = ch_data.mean()
+            std_val = ch_data.std()
+            min_val = ch_data.min()
+            max_val = ch_data.max()
+            nan_count = ch_data.isna().sum()
+            
+            channel_stats[ch_name] = {
+                'mean': mean_val,
+                'std': std_val,
+                'min': min_val,
+                'max': max_val,
+                'zero_pct': zero_pct,
+                'zero_count': zero_count,
+                'nan_count': nan_count,
+            }
+            
+            if zero_pct == 100.0:
+                zero_filled_channels.append(ch_name)
+            
+            print(f"  [{ch_idx}] {ch_name}: mean={mean_val:.6f}, std={std_val:.6f}, "
+                  f"range=[{min_val:.6f}, {max_val:.6f}], zero={zero_pct:.1f}%, nan={nan_count}")
+        
+        if zero_filled_channels:
+            print(f"[PatchTST] CRITICAL WARNING: {symbol} has {len(zero_filled_channels)} completely zero-filled channels:")
+            for ch_name in zero_filled_channels:
+                print(f"    - {ch_name} (100% zeros)")
+        
+        # Check for NaNs and Inf
+        nan_count = features_df.isna().sum().sum()
+        inf_count = np.isinf(features_df.select_dtypes(include=[np.number])).sum().sum()
+        if nan_count > 0:
+            print(f"[PatchTST] CRITICAL WARNING: {symbol} has {nan_count} NaN values")
+        if inf_count > 0:
+            print(f"[PatchTST] CRITICAL WARNING: {symbol} has {inf_count} Inf values")
 
         if len(features_df) >= config.context_length:
             aligned[symbol] = features_df

@@ -144,12 +144,39 @@ def build_dataset(
     X = np.array(all_sequences)
     y = np.array(all_targets)
 
+    # CRITICAL VERIFICATION: Dataset shape and channel count
+    assert X.shape[2] == config.num_input_channels, \
+        f"CRITICAL: Expected {config.num_input_channels} channels in X, got {X.shape[2]}"
+    print(f"[PatchTST] VERIFY DATASET:")
+    print(f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})")
+    print(f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})")
+    print(f"  Expected channels: {config.feature_names}")
+    
+    # Verify no NaN/Inf in X
+    x_nan_count = np.isnan(X).sum()
+    x_inf_count = np.isinf(X).sum()
+    y_nan_count = np.isnan(y).sum()
+    y_inf_count = np.isinf(y).sum()
+    if x_nan_count > 0:
+        print(f"  ⚠️ CRITICAL: X has {x_nan_count} NaN values")
+    if x_inf_count > 0:
+        print(f"  ⚠️ CRITICAL: X has {x_inf_count} Inf values")
+    if y_nan_count > 0:
+        print(f"  ⚠️ CRITICAL: y has {y_nan_count} NaN values")
+    if y_inf_count > 0:
+        print(f"  ⚠️ CRITICAL: y has {y_inf_count} Inf values")
+
     # Fit feature scaler on input sequences
     original_shape = X.shape
     X_flat = X.reshape(-1, X.shape[-1])
     feature_scaler = StandardScaler()
     X_flat_scaled = feature_scaler.fit_transform(X_flat)
     X = X_flat_scaled.reshape(original_shape)
+
+    # Log data statistics after scaling
+    print(f"[PatchTST] Data statistics after scaling:")
+    print(f"  X: mean={X.mean():.6f}, std={X.std():.6f}, min={X.min():.6f}, max={X.max():.6f}")
+    print(f"  y: mean={y.mean():.6f}, std={y.std():.6f}, min={y.min():.6f}, max={y.max():.6f}")
 
     return DatasetResult(
         X=X,

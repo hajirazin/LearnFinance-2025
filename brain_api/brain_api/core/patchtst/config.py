@@ -22,7 +22,7 @@ class PatchTSTConfig:
     """
 
     # Model architecture
-    num_input_channels: int = 11  # OHLCV (5) + News (1) + Fundamentals (5)
+    num_input_channels: int = 12  # OHLCV (5) + News (1) + Fundamentals (5) + FundamentalAge (1)
     context_length: int = 60  # 60 trading days lookback (same as LSTM)
     prediction_length: int = 1  # Single output: weekly return
     patch_length: int = 16  # Standard patch size for PatchTST
@@ -40,6 +40,9 @@ class PatchTSTConfig:
     learning_rate: float = 0.001
     epochs: int = 100
     validation_split: float = 0.2
+    early_stopping_patience: int = 15  # Stop if val_loss doesn't improve for N epochs
+    weight_decay: float = 1e-5  # L2 regularization
+    max_grad_norm: float = 1.0  # Gradient clipping
 
     # Feature engineering
     use_returns: bool = True  # Use log returns for OHLCV (more stationary)
@@ -52,7 +55,7 @@ class PatchTSTConfig:
         "open_ret", "high_ret", "low_ret", "close_ret", "volume_ret",  # OHLCV
         "news_sentiment",  # News
         "gross_margin", "operating_margin", "net_margin",  # Fundamentals
-        "current_ratio", "debt_to_equity",
+        "current_ratio", "debt_to_equity", "fundamental_age",  # Fundamentals + age indicator
     ])
 
     def to_dict(self) -> dict[str, Any]:
@@ -72,6 +75,9 @@ class PatchTSTConfig:
             "learning_rate": self.learning_rate,
             "epochs": self.epochs,
             "validation_split": self.validation_split,
+            "early_stopping_patience": self.early_stopping_patience,
+            "weight_decay": self.weight_decay,
+            "max_grad_norm": self.max_grad_norm,
             "use_returns": self.use_returns,
             "min_week_days": self.min_week_days,
             "feature_names": self.feature_names,

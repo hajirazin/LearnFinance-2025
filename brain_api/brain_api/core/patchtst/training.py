@@ -106,12 +106,20 @@ def train_model_pytorch(
     # Create model
     model = _create_patchtst_model(config).to(device)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=config.learning_rate,
+        weight_decay=config.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=5
+    )
 
     # Training loop
     best_val_loss = float("inf")
     best_model_state = None
     best_epoch = 0
+    patience_counter = 0
     log_interval = max(1, config.epochs // 5)
 
     print("[PatchTST] Starting training...")
@@ -130,14 +138,43 @@ def train_model_pytorch(
 
             optimizer.zero_grad()
 
-            # PatchTST outputs prediction_outputs of shape (batch, pred_len, channels)
-            # We want the mean prediction across channels for each sample
-            outputs = model(past_values=batch_X).prediction_outputs
-            # Take mean across channels and prediction length
-            outputs = outputs.mean(dim=(1, 2)).unsqueeze(1)
+            # PatchTST outputs prediction_outputs of shape (batch, pred_len=1, channels=11)
+            # We use only close_ret channel (index 3) for weekly return prediction
+            model_outputs = model(past_values=batch_X).prediction_outputs
+            # Extract close_ret channel only (index 3)
+            outputs = model_outputs[:, 0, 3:4]  # Shape: (batch, 1)
+
+            # CRITICAL VERIFICATION: Log model output shape and per-channel predictions
+            if epoch == 0 and i == 0:
+                print(f"[PatchTST] VERIFY MODEL OUTPUT:")
+                print(f"  Full model_outputs shape: {model_outputs.shape} (batch, pred_len, channels)")
+                print(f"  Extracted outputs shape: {outputs.shape} (batch, 1) - using close_ret channel only")
+                print(f"  First sample per-channel predictions:")
+                # Reuse model_outputs we already computed - no extra forward pass
+                for ch_idx, ch_name in enumerate(config.feature_names):
+                    pred_val = model_outputs[0, 0, ch_idx].item()
+                    is_target_channel = "← TARGET" if ch_idx == 3 else ""
+                    print(f"    [{ch_idx}] {ch_name}: {pred_val:.6f} {is_target_channel}")
+                print(f"  Batch target (y): {batch_y[0].item():.6f}")
+                print(f"  Batch prediction (close_ret): {outputs[0, 0].item():.6f}")
 
             loss = criterion(outputs, batch_y)
             loss.backward()
+
+            # CRITICAL VERIFICATION: Gradient clipping and monitoring
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
+            if epoch == 0 and i == 0:
+                print(f"[PatchTST] VERIFY GRADIENTS:")
+                print(f"  Gradient norm: {grad_norm:.6f}")
+                if grad_norm > 10.0:
+                    print(f"  ⚠️ WARNING: Large gradient norm (possible exploding gradients)")
+                elif grad_norm < 0.001:
+                    print(f"  ⚠️ WARNING: Very small gradient norm (possible vanishing gradients)")
+            
+            # Log gradient norm every epoch for first 5 epochs to monitor training stability
+            if epoch < 5 and i == 0:
+                print(f"[PatchTST] Epoch {epoch + 1} batch 0: grad_norm={grad_norm:.6f}")
+
             optimizer.step()
 
             total_train_loss += loss.item()
@@ -149,18 +186,35 @@ def train_model_pytorch(
         model.eval()
         with torch.no_grad():
             val_outputs = model(past_values=X_val_t).prediction_outputs
-            val_outputs = val_outputs.mean(dim=(1, 2)).unsqueeze(1)
+            # Extract close_ret channel only (index 3)
+            val_outputs = val_outputs[:, 0, 3:4]  # Shape: (batch, 1)
             val_loss = criterion(val_outputs, y_val_t).item()
 
-        if (epoch + 1) % log_interval == 0 or epoch == 0:
-            print(f"[PatchTST] Epoch {epoch + 1}/{config.epochs}: train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}")
+        # Learning rate scheduling
+        scheduler.step(val_loss)
+        current_lr = optimizer.param_groups[0]['lr']
+
+        # CRITICAL VERIFICATION: Log EVERY epoch to detect overfitting patterns
+        loss_gap = avg_train_loss - val_loss
+        overfitting_indicator = "⚠️ OVERFITTING" if loss_gap < -0.001 else "✓ OK"
+        print(f"[PatchTST] Epoch {epoch + 1}/{config.epochs}: "
+              f"train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}, "
+              f"gap={loss_gap:.6f} {overfitting_indicator}, "
+              f"lr={current_lr:.6e}, patience={patience_counter}/{config.early_stopping_patience}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch + 1
+            patience_counter = 0
             best_model_state = {
                 k: v.cpu().clone() for k, v in model.state_dict().items()
             }
+        else:
+            patience_counter += 1
+            if patience_counter >= config.early_stopping_patience:
+                print(f"[PatchTST] Early stopping triggered at epoch {epoch + 1} "
+                      f"(val_loss didn't improve for {config.early_stopping_patience} epochs)")
+                break
 
     print(f"[PatchTST] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f}")
 
@@ -173,7 +227,8 @@ def train_model_pytorch(
     model.eval()
     with torch.no_grad():
         train_outputs = model(past_values=X_train_t).prediction_outputs
-        train_outputs = train_outputs.mean(dim=(1, 2)).unsqueeze(1)
+        # Extract close_ret channel only (index 3)
+        train_outputs = train_outputs[:, 0, 3:4]  # Shape: (batch, 1)
         final_train_loss = criterion(train_outputs, y_train_t).item()
 
     # Baseline: predict 0 return
