@@ -125,7 +125,7 @@ sequenceDiagram
   N8N->>Brain: Start_run(run_date_IST, portfolio, cash)
   Brain->>DB: Create_run(run_id, attempt=1, config_hash)
   Brain->>Brain: Build_halal_universe
-  Brain->>Brain: Screen_to_Top30_plus_holdings
+  Brain->>Brain: Screen_to_Top15_plus_holdings
   Brain->>Raw: Save_raw_inputs(news_social_market_snapshots)
   Brain->>Brain: MultiAgent_committee_synthesis
   Brain->>Brain: LSTM_inference
@@ -172,7 +172,7 @@ On submit:
 We start from all Nasdaq-500 stocks and apply the **halal filter across the full set**. From the resulting halal universe, we only run expensive pipelines (news/social/agents/models) for:
 
 - **Always**: your current holdings
-- **Plus**: a Top-30 candidate set chosen via cheap deterministic filters + ranking (liquidity, tradability, volatility/returns, simple momentum proxies, etc.)
+- **Plus**: a Top-15 candidate set chosen via cheap deterministic filters + ranking (liquidity, tradability, volatility/returns, simple momentum proxies, etc.)
 
 This keeps the system reliable and cost-bounded.
 

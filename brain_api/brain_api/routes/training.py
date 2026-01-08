@@ -40,10 +40,34 @@ from brain_api.core.patchtst import (
 from brain_api.storage.local import (
     LocalModelStorage,
     PatchTSTModelStorage,
+    PPOLSTMLocalStorage,
+    PPOPatchTSTLocalStorage,
     create_metadata,
     create_patchtst_metadata,
+    create_ppo_lstm_metadata,
+    create_ppo_patchtst_metadata,
 )
 from brain_api.universe import get_halal_universe
+
+# Import PPO LSTM training components
+from brain_api.core.ppo_lstm import (
+    DEFAULT_PPO_LSTM_CONFIG,
+    PPOLSTMConfig,
+    PPOFinetuneConfig,
+    build_training_data,
+    compute_version as ppo_lstm_compute_version,
+    train_ppo_lstm,
+    finetune_ppo_lstm,
+)
+
+# Import PPO PatchTST training components
+from brain_api.core.ppo_patchtst import (
+    DEFAULT_PPO_PATCHTST_CONFIG,
+    PPOPatchTSTConfig,
+    compute_version as ppo_patchtst_compute_version,
+    train_ppo_patchtst,
+    finetune_ppo_patchtst,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -569,4 +593,829 @@ def train_patchtst(
         hf_url=hf_url,
         num_input_channels=config.num_input_channels,
         signals_used=["ohlcv", "news_sentiment", "fundamentals"],
+    )
+
+
+# ============================================================================
+# PPO + LSTM Training Endpoint
+# ============================================================================
+
+
+class PPOLSTMTrainResponse(BaseModel):
+    """Response model for PPO + LSTM training endpoint."""
+
+    version: str
+    data_window_start: str  # YYYY-MM-DD
+    data_window_end: str  # YYYY-MM-DD
+    metrics: dict[str, Any]
+    promoted: bool
+    prior_version: str | None = None
+    symbols_used: list[str]
+
+
+def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
+    """Get the PPO + LSTM storage instance."""
+    return PPOLSTMLocalStorage()
+
+
+def get_ppo_lstm_config() -> PPOLSTMConfig:
+    """Get PPO + LSTM configuration."""
+    return DEFAULT_PPO_LSTM_CONFIG
+
+
+def get_top15_symbols() -> list[str]:
+    """Get top 15 symbols by liquidity from halal universe."""
+    universe = get_halal_universe()
+    stocks = universe["stocks"][:15]
+    return [stock["symbol"] for stock in stocks]
+
+
+@router.post("/ppo_lstm/full", response_model=PPOLSTMTrainResponse)
+def train_ppo_lstm_endpoint(
+    storage: PPOLSTMLocalStorage = Depends(get_ppo_lstm_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+    config: PPOLSTMConfig = Depends(get_ppo_lstm_config),
+) -> PPOLSTMTrainResponse:
+    """Train PPO portfolio allocator using LSTM forecasts.
+
+    This endpoint:
+    1. Loads historical price data and signals
+    2. Generates LSTM forecast features (from pre-trained LSTM)
+    3. Trains PPO policy for portfolio allocation
+    4. Evaluates on held-out data
+    5. Promotes if first model or beats prior
+
+    Returns:
+        Training result including version, metrics, and promotion status.
+    """
+    import time
+
+    import numpy as np
+
+    # Resolve window from API config
+    start_date, end_date = resolve_training_window()
+    logger.info(f"[PPO_LSTM] Starting training for {len(symbols)} symbols")
+    logger.info(f"[PPO_LSTM] Data window: {start_date} to {end_date}")
+    logger.info(f"[PPO_LSTM] Symbols: {symbols}")
+
+    # Compute deterministic version
+    version = ppo_lstm_compute_version(start_date, end_date, symbols, config)
+    logger.info(f"[PPO_LSTM] Computed version: {version}")
+
+    # Check if this version already exists (idempotent)
+    if storage.version_exists(version):
+        logger.info(f"[PPO_LSTM] Version {version} already exists (idempotent)")
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PPOLSTMTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    # Load price data
+    logger.info("[PPO_LSTM] Loading price data...")
+    t0 = time.time()
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[PPO_LSTM] Loaded prices for {len(prices_dict)}/{len(symbols)} symbols in {t_prices:.1f}s")
+
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available for training")
+
+    # Filter symbols to those with price data
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(f"Need at least 5 symbols with data, got {len(available_symbols)}")
+
+    # Resample prices to weekly (Friday close)
+    logger.info("[PPO_LSTM] Resampling prices to weekly...")
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    # Determine minimum length across all symbols
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    logger.info(f"[PPO_LSTM] Using {min_weeks} weeks of data")
+
+    # Align all price series
+    for symbol in available_symbols:
+        if symbol in weekly_prices:
+            weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    # Build placeholder signals and forecasts
+    signals = {}
+    lstm_predictions = {}
+    for symbol in available_symbols:
+        signals[symbol] = {
+            "news_sentiment": np.zeros(min_weeks - 1),
+            "gross_margin": np.zeros(min_weeks - 1),
+            "operating_margin": np.zeros(min_weeks - 1),
+            "net_margin": np.zeros(min_weeks - 1),
+            "current_ratio": np.zeros(min_weeks - 1),
+            "debt_to_equity": np.zeros(min_weeks - 1),
+            "fundamental_age": np.zeros(min_weeks - 1),
+        }
+        lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    # Build training data
+    training_data = build_training_data(
+        prices=weekly_prices,
+        signals=signals,
+        lstm_predictions=lstm_predictions,
+        symbol_order=available_symbols,
+    )
+
+    logger.info(f"[PPO_LSTM] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks")
+
+    # Train PPO
+    logger.info("[PPO_LSTM] Starting PPO training...")
+    t0 = time.time()
+    result = train_ppo_lstm(training_data, config)
+    t_train = time.time() - t0
+    logger.info(f"[PPO_LSTM] Training complete in {t_train:.1f}s")
+    logger.info(f"[PPO_LSTM] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr*100:.2f}%")
+
+    # Get prior version info
+    prior_version = storage.read_current_version()
+    prior_sharpe = None
+    if prior_version:
+        prior_metadata = storage.read_metadata(prior_version)
+        if prior_metadata:
+            prior_sharpe = prior_metadata["metrics"].get("eval_sharpe")
+
+    # Decide on promotion (first model auto-promotes)
+    if prior_version is None:
+        promoted = True
+        logger.info("[PPO_LSTM] First model - auto-promoting")
+    else:
+        promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+        logger.info(f"[PPO_LSTM] Promotion: {'YES' if promoted else 'NO'}")
+
+    # Create metadata
+    metadata = create_ppo_lstm_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=available_symbols,
+        config=config,
+        promoted=promoted,
+        prior_version=prior_version,
+        policy_loss=result.final_policy_loss,
+        value_loss=result.final_value_loss,
+        avg_episode_return=result.avg_episode_return,
+        avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe,
+        eval_cagr=result.eval_cagr,
+        eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    # Write artifacts
+    logger.info(f"[PPO_LSTM] Writing artifacts for version {version}...")
+    storage.write_artifacts(
+        version=version,
+        model=result.model,
+        scaler=result.scaler,
+        config=config,
+        symbol_order=available_symbols,
+        metadata=metadata,
+    )
+
+    # Promote if appropriate
+    if promoted:
+        storage.promote_version(version)
+        logger.info(f"[PPO_LSTM] Version {version} promoted to current")
+
+    return PPOLSTMTrainResponse(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        metrics={
+            "policy_loss": result.final_policy_loss,
+            "value_loss": result.final_value_loss,
+            "avg_episode_return": result.avg_episode_return,
+            "avg_episode_sharpe": result.avg_episode_sharpe,
+            "eval_sharpe": result.eval_sharpe,
+            "eval_cagr": result.eval_cagr,
+            "eval_max_drawdown": result.eval_max_drawdown,
+        },
+        promoted=promoted,
+        prior_version=prior_version,
+        symbols_used=available_symbols,
+    )
+
+
+# ============================================================================
+# PPO + LSTM Fine-tuning Endpoint (weekly)
+# ============================================================================
+
+
+@router.post("/ppo_lstm/finetune", response_model=PPOLSTMTrainResponse)
+def finetune_ppo_lstm_endpoint(
+    storage: PPOLSTMLocalStorage = Depends(get_ppo_lstm_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+) -> PPOLSTMTrainResponse:
+    """Fine-tune PPO + LSTM on recent 26-week data.
+
+    This endpoint is called weekly (Sunday cron) to adapt the model to
+    recent market conditions. It:
+    1. Loads the current promoted model
+    2. Fine-tunes on the last 26 weeks of data
+    3. Uses lower learning rate and fewer timesteps
+    4. Promotes if it beats the prior model
+
+    Requires a prior trained model to exist.
+
+    Returns:
+        Training result including version, metrics, and promotion status.
+    """
+    import time
+    from datetime import timedelta
+
+    import numpy as np
+
+    t_start = time.time()
+    logger.info("[PPO_LSTM Finetune] Starting fine-tuning")
+
+    # Load prior model (required for fine-tuning)
+    prior_version = storage.read_current_version()
+    if prior_version is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="No prior PPO_LSTM model to fine-tune. Train a full model first with POST /train/ppo_lstm/full"
+        )
+
+    logger.info(f"[PPO_LSTM Finetune] Loading prior model: {prior_version}")
+    prior_artifacts = storage.load_current_artifacts()
+    prior_config = prior_artifacts.config
+
+    # Use 26-week lookback for fine-tuning
+    finetune_config = PPOFinetuneConfig()
+    from datetime import date
+    end_date = date.today()
+    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)  # Extra buffer
+
+    logger.info(f"[PPO_LSTM Finetune] Data window: {start_date} to {end_date}")
+    logger.info(f"[PPO_LSTM Finetune] Symbols: {symbols}")
+
+    # Compute version for fine-tuned model
+    version = ppo_lstm_compute_version(start_date, end_date, symbols, prior_config)
+    version = f"{version}-ft"  # Mark as fine-tuned
+    logger.info(f"[PPO_LSTM Finetune] Version: {version}")
+
+    # Check if already exists (idempotent)
+    if storage.version_exists(version):
+        logger.info(f"[PPO_LSTM Finetune] Version {version} already exists (idempotent)")
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PPOLSTMTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    # Load recent price data
+    logger.info("[PPO_LSTM Finetune] Loading price data...")
+    t0 = time.time()
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[PPO_LSTM Finetune] Loaded prices in {t_prices:.1f}s")
+
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available")
+
+    # Filter and align symbols
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(f"Need at least 5 symbols, got {len(available_symbols)}")
+
+    # Resample to weekly
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    for symbol in available_symbols:
+        if symbol in weekly_prices:
+            weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    # Build training data
+    signals = {}
+    lstm_predictions = {}
+    for symbol in available_symbols:
+        signals[symbol] = {
+            "news_sentiment": np.zeros(min_weeks - 1),
+            "gross_margin": np.zeros(min_weeks - 1),
+            "operating_margin": np.zeros(min_weeks - 1),
+            "net_margin": np.zeros(min_weeks - 1),
+            "current_ratio": np.zeros(min_weeks - 1),
+            "debt_to_equity": np.zeros(min_weeks - 1),
+            "fundamental_age": np.zeros(min_weeks - 1),
+        }
+        lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = build_training_data(
+        prices=weekly_prices,
+        signals=signals,
+        lstm_predictions=lstm_predictions,
+        symbol_order=available_symbols,
+    )
+
+    logger.info(f"[PPO_LSTM Finetune] Training data: {training_data.n_weeks} weeks")
+
+    # Fine-tune
+    logger.info("[PPO_LSTM Finetune] Starting fine-tuning...")
+    t0 = time.time()
+    result = finetune_ppo_lstm(
+        training_data=training_data,
+        prior_model=prior_artifacts.model,
+        prior_scaler=prior_artifacts.scaler,
+        prior_config=prior_config,
+        finetune_config=finetune_config,
+    )
+    t_train = time.time() - t0
+    logger.info(f"[PPO_LSTM Finetune] Complete in {t_train:.1f}s")
+
+    # Get prior sharpe for comparison
+    prior_metadata = storage.read_metadata(prior_version)
+    prior_sharpe = prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+
+    # Decide on promotion (must beat prior)
+    promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+    logger.info(f"[PPO_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}")
+    logger.info(f"[PPO_LSTM Finetune] Promotion: {'YES' if promoted else 'NO'}")
+
+    # Create metadata
+    metadata = create_ppo_lstm_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=available_symbols,
+        config=prior_config,
+        promoted=promoted,
+        prior_version=prior_version,
+        policy_loss=result.final_policy_loss,
+        value_loss=result.final_value_loss,
+        avg_episode_return=result.avg_episode_return,
+        avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe,
+        eval_cagr=result.eval_cagr,
+        eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    # Write artifacts
+    storage.write_artifacts(
+        version=version,
+        model=result.model,
+        scaler=result.scaler,
+        config=prior_config,
+        symbol_order=available_symbols,
+        metadata=metadata,
+    )
+
+    # Promote if better
+    if promoted:
+        storage.promote_version(version)
+        logger.info(f"[PPO_LSTM Finetune] Version {version} promoted to current")
+
+    return PPOLSTMTrainResponse(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        metrics={
+            "policy_loss": result.final_policy_loss,
+            "value_loss": result.final_value_loss,
+            "avg_episode_return": result.avg_episode_return,
+            "avg_episode_sharpe": result.avg_episode_sharpe,
+            "eval_sharpe": result.eval_sharpe,
+            "eval_cagr": result.eval_cagr,
+            "eval_max_drawdown": result.eval_max_drawdown,
+        },
+        promoted=promoted,
+        prior_version=prior_version,
+        symbols_used=available_symbols,
+    )
+
+
+# ============================================================================
+# PPO + PatchTST Training Endpoint
+# ============================================================================
+
+
+class PPOPatchTSTTrainResponse(BaseModel):
+    """Response model for PPO + PatchTST training endpoint."""
+
+    version: str
+    data_window_start: str  # YYYY-MM-DD
+    data_window_end: str  # YYYY-MM-DD
+    metrics: dict[str, Any]
+    promoted: bool
+    prior_version: str | None = None
+    symbols_used: list[str]
+
+
+def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
+    """Get the PPO + PatchTST storage instance."""
+    return PPOPatchTSTLocalStorage()
+
+
+def get_ppo_patchtst_config() -> PPOPatchTSTConfig:
+    """Get PPO + PatchTST configuration."""
+    return DEFAULT_PPO_PATCHTST_CONFIG
+
+
+@router.post("/ppo_patchtst/full", response_model=PPOPatchTSTTrainResponse)
+def train_ppo_patchtst_endpoint(
+    storage: PPOPatchTSTLocalStorage = Depends(get_ppo_patchtst_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+    config: PPOPatchTSTConfig = Depends(get_ppo_patchtst_config),
+) -> PPOPatchTSTTrainResponse:
+    """Train PPO portfolio allocator using PatchTST forecasts.
+
+    This endpoint:
+    1. Loads historical price data and signals
+    2. Generates PatchTST forecast features (from pre-trained PatchTST)
+    3. Trains PPO policy for portfolio allocation
+    4. Evaluates on held-out data
+    5. Promotes if first model or beats prior
+
+    Returns:
+        Training result including version, metrics, and promotion status.
+    """
+    import time
+
+    import numpy as np
+
+    # Resolve window from API config
+    start_date, end_date = resolve_training_window()
+    logger.info(f"[PPO_PatchTST] Starting training for {len(symbols)} symbols")
+    logger.info(f"[PPO_PatchTST] Data window: {start_date} to {end_date}")
+    logger.info(f"[PPO_PatchTST] Symbols: {symbols}")
+
+    # Compute deterministic version
+    version = ppo_patchtst_compute_version(start_date, end_date, symbols, config)
+    logger.info(f"[PPO_PatchTST] Computed version: {version}")
+
+    # Check if this version already exists (idempotent)
+    if storage.version_exists(version):
+        logger.info(f"[PPO_PatchTST] Version {version} already exists (idempotent)")
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PPOPatchTSTTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    # Load price data
+    logger.info("[PPO_PatchTST] Loading price data...")
+    t0 = time.time()
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[PPO_PatchTST] Loaded prices for {len(prices_dict)}/{len(symbols)} symbols in {t_prices:.1f}s")
+
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available for training")
+
+    # Filter symbols to those with price data
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(f"Need at least 5 symbols with data, got {len(available_symbols)}")
+
+    # Resample prices to weekly (Friday close)
+    logger.info("[PPO_PatchTST] Resampling prices to weekly...")
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    # Determine minimum length across all symbols
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    logger.info(f"[PPO_PatchTST] Using {min_weeks} weeks of data")
+
+    # Align all price series
+    for symbol in available_symbols:
+        if symbol in weekly_prices:
+            weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    # Build placeholder signals and forecasts
+    signals = {}
+    patchtst_predictions = {}
+    for symbol in available_symbols:
+        signals[symbol] = {
+            "news_sentiment": np.zeros(min_weeks - 1),
+            "gross_margin": np.zeros(min_weeks - 1),
+            "operating_margin": np.zeros(min_weeks - 1),
+            "net_margin": np.zeros(min_weeks - 1),
+            "current_ratio": np.zeros(min_weeks - 1),
+            "debt_to_equity": np.zeros(min_weeks - 1),
+            "fundamental_age": np.zeros(min_weeks - 1),
+        }
+        patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    # Build training data (reuse from ppo_lstm)
+    training_data = build_training_data(
+        prices=weekly_prices,
+        signals=signals,
+        lstm_predictions=patchtst_predictions,  # Same structure, different source
+        symbol_order=available_symbols,
+    )
+
+    logger.info(f"[PPO_PatchTST] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks")
+
+    # Train PPO
+    logger.info("[PPO_PatchTST] Starting PPO training...")
+    t0 = time.time()
+    result = train_ppo_patchtst(training_data, config)
+    t_train = time.time() - t0
+    logger.info(f"[PPO_PatchTST] Training complete in {t_train:.1f}s")
+    logger.info(f"[PPO_PatchTST] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr*100:.2f}%")
+
+    # Get prior version info
+    prior_version = storage.read_current_version()
+    prior_sharpe = None
+    if prior_version:
+        prior_metadata = storage.read_metadata(prior_version)
+        if prior_metadata:
+            prior_sharpe = prior_metadata["metrics"].get("eval_sharpe")
+
+    # Decide on promotion (first model auto-promotes)
+    if prior_version is None:
+        promoted = True
+        logger.info("[PPO_PatchTST] First model - auto-promoting")
+    else:
+        promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+        logger.info(f"[PPO_PatchTST] Promotion: {'YES' if promoted else 'NO'}")
+
+    # Create metadata
+    metadata = create_ppo_patchtst_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=available_symbols,
+        config=config,
+        promoted=promoted,
+        prior_version=prior_version,
+        policy_loss=result.final_policy_loss,
+        value_loss=result.final_value_loss,
+        avg_episode_return=result.avg_episode_return,
+        avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe,
+        eval_cagr=result.eval_cagr,
+        eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    # Write artifacts
+    logger.info(f"[PPO_PatchTST] Writing artifacts for version {version}...")
+    storage.write_artifacts(
+        version=version,
+        model=result.model,
+        scaler=result.scaler,
+        config=config,
+        symbol_order=available_symbols,
+        metadata=metadata,
+    )
+
+    # Promote if appropriate
+    if promoted:
+        storage.promote_version(version)
+        logger.info(f"[PPO_PatchTST] Version {version} promoted to current")
+
+    return PPOPatchTSTTrainResponse(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        metrics={
+            "policy_loss": result.final_policy_loss,
+            "value_loss": result.final_value_loss,
+            "avg_episode_return": result.avg_episode_return,
+            "avg_episode_sharpe": result.avg_episode_sharpe,
+            "eval_sharpe": result.eval_sharpe,
+            "eval_cagr": result.eval_cagr,
+            "eval_max_drawdown": result.eval_max_drawdown,
+        },
+        promoted=promoted,
+        prior_version=prior_version,
+        symbols_used=available_symbols,
+    )
+
+
+# ============================================================================
+# PPO + PatchTST Fine-tuning Endpoint (weekly)
+# ============================================================================
+
+
+@router.post("/ppo_patchtst/finetune", response_model=PPOPatchTSTTrainResponse)
+def finetune_ppo_patchtst_endpoint(
+    storage: PPOPatchTSTLocalStorage = Depends(get_ppo_patchtst_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+) -> PPOPatchTSTTrainResponse:
+    """Fine-tune PPO + PatchTST on recent 26-week data.
+
+    This endpoint is called weekly (Sunday cron) to adapt the model to
+    recent market conditions. It:
+    1. Loads the current promoted model
+    2. Fine-tunes on the last 26 weeks of data
+    3. Uses lower learning rate and fewer timesteps
+    4. Promotes if it beats the prior model
+
+    Requires a prior trained model to exist.
+
+    Returns:
+        Training result including version, metrics, and promotion status.
+    """
+    import time
+    from datetime import timedelta
+
+    import numpy as np
+
+    t_start = time.time()
+    logger.info("[PPO_PatchTST Finetune] Starting fine-tuning")
+
+    # Load prior model (required for fine-tuning)
+    prior_version = storage.read_current_version()
+    if prior_version is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="No prior PPO_PatchTST model to fine-tune. Train a full model first with POST /train/ppo_patchtst/full"
+        )
+
+    logger.info(f"[PPO_PatchTST Finetune] Loading prior model: {prior_version}")
+    prior_artifacts = storage.load_current_artifacts()
+    prior_config = prior_artifacts.config
+
+    # Use 26-week lookback for fine-tuning
+    finetune_config = PPOFinetuneConfig()
+    from datetime import date
+    end_date = date.today()
+    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)  # Extra buffer
+
+    logger.info(f"[PPO_PatchTST Finetune] Data window: {start_date} to {end_date}")
+    logger.info(f"[PPO_PatchTST Finetune] Symbols: {symbols}")
+
+    # Compute version for fine-tuned model
+    version = ppo_patchtst_compute_version(start_date, end_date, symbols, prior_config)
+    version = f"{version}-ft"  # Mark as fine-tuned
+    logger.info(f"[PPO_PatchTST Finetune] Version: {version}")
+
+    # Check if already exists (idempotent)
+    if storage.version_exists(version):
+        logger.info(f"[PPO_PatchTST Finetune] Version {version} already exists (idempotent)")
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PPOPatchTSTTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    # Load recent price data
+    logger.info("[PPO_PatchTST Finetune] Loading price data...")
+    t0 = time.time()
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[PPO_PatchTST Finetune] Loaded prices in {t_prices:.1f}s")
+
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available")
+
+    # Filter and align symbols
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(f"Need at least 5 symbols, got {len(available_symbols)}")
+
+    # Resample to weekly
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    for symbol in available_symbols:
+        if symbol in weekly_prices:
+            weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    # Build training data
+    signals = {}
+    patchtst_predictions = {}
+    for symbol in available_symbols:
+        signals[symbol] = {
+            "news_sentiment": np.zeros(min_weeks - 1),
+            "gross_margin": np.zeros(min_weeks - 1),
+            "operating_margin": np.zeros(min_weeks - 1),
+            "net_margin": np.zeros(min_weeks - 1),
+            "current_ratio": np.zeros(min_weeks - 1),
+            "debt_to_equity": np.zeros(min_weeks - 1),
+            "fundamental_age": np.zeros(min_weeks - 1),
+        }
+        patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = build_training_data(
+        prices=weekly_prices,
+        signals=signals,
+        lstm_predictions=patchtst_predictions,  # Same structure
+        symbol_order=available_symbols,
+    )
+
+    logger.info(f"[PPO_PatchTST Finetune] Training data: {training_data.n_weeks} weeks")
+
+    # Fine-tune
+    logger.info("[PPO_PatchTST Finetune] Starting fine-tuning...")
+    t0 = time.time()
+    result = finetune_ppo_patchtst(
+        training_data=training_data,
+        prior_model=prior_artifacts.model,
+        prior_scaler=prior_artifacts.scaler,
+        prior_config=prior_config,
+        finetune_config=finetune_config,
+    )
+    t_train = time.time() - t0
+    logger.info(f"[PPO_PatchTST Finetune] Complete in {t_train:.1f}s")
+
+    # Get prior sharpe for comparison
+    prior_metadata = storage.read_metadata(prior_version)
+    prior_sharpe = prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+
+    # Decide on promotion (must beat prior)
+    promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+    logger.info(f"[PPO_PatchTST Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}")
+    logger.info(f"[PPO_PatchTST Finetune] Promotion: {'YES' if promoted else 'NO'}")
+
+    # Create metadata
+    metadata = create_ppo_patchtst_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=available_symbols,
+        config=prior_config,
+        promoted=promoted,
+        prior_version=prior_version,
+        policy_loss=result.final_policy_loss,
+        value_loss=result.final_value_loss,
+        avg_episode_return=result.avg_episode_return,
+        avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe,
+        eval_cagr=result.eval_cagr,
+        eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    # Write artifacts
+    storage.write_artifacts(
+        version=version,
+        model=result.model,
+        scaler=result.scaler,
+        config=prior_config,
+        symbol_order=available_symbols,
+        metadata=metadata,
+    )
+
+    # Promote if better
+    if promoted:
+        storage.promote_version(version)
+        logger.info(f"[PPO_PatchTST Finetune] Version {version} promoted to current")
+
+    return PPOPatchTSTTrainResponse(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        metrics={
+            "policy_loss": result.final_policy_loss,
+            "value_loss": result.final_value_loss,
+            "avg_episode_return": result.avg_episode_return,
+            "avg_episode_sharpe": result.avg_episode_sharpe,
+            "eval_sharpe": result.eval_sharpe,
+            "eval_cagr": result.eval_cagr,
+            "eval_max_drawdown": result.eval_max_drawdown,
+        },
+        promoted=promoted,
+        prior_version=prior_version,
+        symbols_used=available_symbols,
     )

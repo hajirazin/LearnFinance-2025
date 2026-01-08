@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from brain_api.routes import (
     allocation,
     etl,
+    experience,
     health,
     inference,
     root,
@@ -40,3 +41,4 @@ app.include_router(inference.router, prefix="/inference", tags=["inference"])
 app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(allocation.router, prefix="/allocation", tags=["allocation"])
 app.include_router(etl.router, prefix="/etl", tags=["etl"])
+app.include_router(experience.router, prefix="/experience", tags=["experience"])

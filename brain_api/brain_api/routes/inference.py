@@ -32,7 +32,15 @@ from brain_api.storage.local import (
     LocalModelStorage,
     PatchTSTArtifacts,
     PatchTSTModelStorage,
+    PPOLSTMArtifacts,
+    PPOLSTMLocalStorage,
+    PPOPatchTSTArtifacts,
+    PPOPatchTSTLocalStorage,
 )
+
+# Import PPO inference components
+from brain_api.core.ppo_lstm import run_ppo_inference
+from brain_api.core.ppo_patchtst import run_ppo_patchtst_inference
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -565,3 +573,335 @@ def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArt
 
     return _load_model_artifacts_generic("PatchTST", storage, PatchTSTHuggingFaceModelStorage)
 
+
+# ============================================================================
+# PPO + LSTM Inference Endpoint
+# ============================================================================
+
+
+class Position(BaseModel):
+    """A single position in the portfolio."""
+
+    symbol: str
+    market_value: float = Field(..., ge=0)
+
+
+class PortfolioSnapshot(BaseModel):
+    """Current portfolio state from Alpaca or similar broker."""
+
+    cash: float = Field(..., ge=0)
+    positions: list[Position] = Field(default_factory=list)
+
+
+class WeightChange(BaseModel):
+    """Weight change for a single symbol."""
+
+    symbol: str
+    current_weight: float
+    target_weight: float
+    change: float
+
+
+class PPOLSTMInferenceRequest(BaseModel):
+    """Request model for PPO + LSTM inference endpoint."""
+
+    portfolio: PortfolioSnapshot = Field(
+        ...,
+        description="Current portfolio state (cash + positions)",
+    )
+    as_of_date: str | None = Field(
+        None,
+        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
+    )
+
+
+class PPOLSTMInferenceResponse(BaseModel):
+    """Response model for PPO + LSTM inference endpoint."""
+
+    target_weights: dict[str, float]
+    turnover: float
+    target_week_start: str  # YYYY-MM-DD
+    target_week_end: str  # YYYY-MM-DD
+    model_version: str
+    weight_changes: list[WeightChange]
+
+
+def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
+    """Get the PPO + LSTM storage instance."""
+    return PPOLSTMLocalStorage()
+
+
+def get_ppo_lstm_as_of_date(request: PPOLSTMInferenceRequest) -> date:
+    """Get the as-of date from request or default to today."""
+    if request.as_of_date:
+        return date.fromisoformat(request.as_of_date)
+    return date.today()
+
+
+@router.post("/ppo_lstm", response_model=PPOLSTMInferenceResponse)
+def infer_ppo_lstm(
+    request: PPOLSTMInferenceRequest,
+    storage: PPOLSTMLocalStorage = Depends(get_ppo_lstm_storage),
+) -> PPOLSTMInferenceResponse:
+    """Get target portfolio weights from PPO policy.
+
+    This endpoint:
+    1. Loads the current PPO model
+    2. Normalizes the portfolio snapshot to weights
+    3. Builds state vector with current signals + LSTM forecasts
+    4. Runs PPO inference to get target weights
+    5. Returns target weights and turnover
+
+    Args:
+        request: Portfolio snapshot (cash + positions)
+
+    Returns:
+        Target weights and execution metadata
+    """
+    import time
+
+    t_start = time.time()
+    logger.info("[PPO_LSTM] Starting inference")
+
+    # Get as-of date
+    as_of = get_ppo_lstm_as_of_date(request)
+    logger.info(f"[PPO_LSTM] As-of date: {as_of}")
+
+    # Compute target week boundaries
+    week_boundaries = compute_week_boundaries(as_of)
+    logger.info(f"[PPO_LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+
+    # Load model artifacts
+    logger.info("[PPO_LSTM] Loading model artifacts...")
+    try:
+        artifacts = storage.load_current_artifacts()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e),
+        )
+
+    logger.info(f"[PPO_LSTM] Model loaded: version={artifacts.version}")
+
+    # Convert portfolio snapshot to values dict
+    cash_value = request.portfolio.cash
+    position_values = {
+        pos.symbol: pos.market_value
+        for pos in request.portfolio.positions
+    }
+
+    # Build placeholder signals (simplified - would fetch real data in production)
+    signals = {}
+    for symbol in artifacts.symbol_order:
+        signals[symbol] = {
+            "news_sentiment": 0.0,
+            "gross_margin": 0.0,
+            "operating_margin": 0.0,
+            "net_margin": 0.0,
+            "current_ratio": 0.0,
+            "debt_to_equity": 0.0,
+            "fundamental_age": 0.0,
+        }
+
+    # Build placeholder forecast features
+    forecast_features = {symbol: 0.0 for symbol in artifacts.symbol_order}
+
+    # Run inference
+    logger.info("[PPO_LSTM] Running inference...")
+    result = run_ppo_inference(
+        model=artifacts.model,
+        scaler=artifacts.scaler,
+        config=artifacts.config,
+        symbol_order=artifacts.symbol_order,
+        signals=signals,
+        forecast_features=forecast_features,
+        cash_value=cash_value,
+        position_values=position_values,
+        target_week_start=week_boundaries.target_week_start,
+        target_week_end=week_boundaries.target_week_end,
+        model_version=artifacts.version,
+    )
+
+    # Build weight changes list
+    weight_changes = []
+    for symbol in artifacts.symbol_order:
+        weight_changes.append(WeightChange(
+            symbol=symbol,
+            current_weight=result.current_weights.get(symbol, 0.0),
+            target_weight=result.target_weights.get(symbol, 0.0),
+            change=result.weight_changes.get(symbol, 0.0),
+        ))
+    # Add CASH
+    weight_changes.append(WeightChange(
+        symbol="CASH",
+        current_weight=result.current_weights.get("CASH", 0.0),
+        target_weight=result.target_weights.get("CASH", 0.0),
+        change=result.weight_changes.get("CASH", 0.0),
+    ))
+
+    t_total = time.time() - t_start
+    logger.info(f"[PPO_LSTM] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}")
+
+    return PPOLSTMInferenceResponse(
+        target_weights=result.target_weights,
+        turnover=result.turnover,
+        target_week_start=result.target_week_start,
+        target_week_end=result.target_week_end,
+        model_version=result.model_version,
+        weight_changes=weight_changes,
+    )
+
+
+# ============================================================================
+# PPO + PatchTST Inference Endpoint
+# ============================================================================
+
+
+class PPOPatchTSTInferenceRequest(BaseModel):
+    """Request model for PPO + PatchTST inference endpoint."""
+
+    portfolio: PortfolioSnapshot = Field(
+        ...,
+        description="Current portfolio state (cash + positions)",
+    )
+    as_of_date: str | None = Field(
+        None,
+        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
+    )
+
+
+class PPOPatchTSTInferenceResponse(BaseModel):
+    """Response model for PPO + PatchTST inference endpoint."""
+
+    target_weights: dict[str, float]
+    turnover: float
+    target_week_start: str  # YYYY-MM-DD
+    target_week_end: str  # YYYY-MM-DD
+    model_version: str
+    weight_changes: list[WeightChange]
+
+
+def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
+    """Get the PPO + PatchTST storage instance."""
+    return PPOPatchTSTLocalStorage()
+
+
+def get_ppo_patchtst_as_of_date(request: PPOPatchTSTInferenceRequest) -> date:
+    """Get the as-of date from request or default to today."""
+    if request.as_of_date:
+        return date.fromisoformat(request.as_of_date)
+    return date.today()
+
+
+@router.post("/ppo_patchtst", response_model=PPOPatchTSTInferenceResponse)
+def infer_ppo_patchtst(
+    request: PPOPatchTSTInferenceRequest,
+    storage: PPOPatchTSTLocalStorage = Depends(get_ppo_patchtst_storage),
+) -> PPOPatchTSTInferenceResponse:
+    """Get target portfolio weights from PPO + PatchTST policy.
+
+    This endpoint:
+    1. Loads the current PPO + PatchTST model
+    2. Normalizes the portfolio snapshot to weights
+    3. Builds state vector with current signals + PatchTST forecasts
+    4. Runs PPO inference to get target weights
+    5. Returns target weights and turnover
+
+    Args:
+        request: Portfolio snapshot (cash + positions)
+
+    Returns:
+        Target weights and execution metadata
+    """
+    import time
+
+    t_start = time.time()
+    logger.info("[PPO_PatchTST] Starting inference")
+
+    # Get as-of date
+    as_of = get_ppo_patchtst_as_of_date(request)
+    logger.info(f"[PPO_PatchTST] As-of date: {as_of}")
+
+    # Compute target week boundaries
+    week_boundaries = compute_week_boundaries(as_of)
+    logger.info(f"[PPO_PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+
+    # Load model artifacts
+    logger.info("[PPO_PatchTST] Loading model artifacts...")
+    try:
+        artifacts = storage.load_current_artifacts()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=str(e),
+        )
+
+    logger.info(f"[PPO_PatchTST] Model loaded: version={artifacts.version}")
+
+    # Convert portfolio snapshot to values dict
+    cash_value = request.portfolio.cash
+    position_values = {
+        pos.symbol: pos.market_value
+        for pos in request.portfolio.positions
+    }
+
+    # Build placeholder signals
+    signals = {}
+    for symbol in artifacts.symbol_order:
+        signals[symbol] = {
+            "news_sentiment": 0.0,
+            "gross_margin": 0.0,
+            "operating_margin": 0.0,
+            "net_margin": 0.0,
+            "current_ratio": 0.0,
+            "debt_to_equity": 0.0,
+            "fundamental_age": 0.0,
+        }
+
+    # Build placeholder forecast features
+    forecast_features = {symbol: 0.0 for symbol in artifacts.symbol_order}
+
+    # Run inference
+    logger.info("[PPO_PatchTST] Running inference...")
+    result = run_ppo_patchtst_inference(
+        model=artifacts.model,
+        scaler=artifacts.scaler,
+        config=artifacts.config,
+        symbol_order=artifacts.symbol_order,
+        signals=signals,
+        forecast_features=forecast_features,
+        cash_value=cash_value,
+        position_values=position_values,
+        target_week_start=week_boundaries.target_week_start,
+        target_week_end=week_boundaries.target_week_end,
+        model_version=artifacts.version,
+    )
+
+    # Build weight changes list
+    weight_changes = []
+    for symbol in artifacts.symbol_order:
+        weight_changes.append(WeightChange(
+            symbol=symbol,
+            current_weight=result.current_weights.get(symbol, 0.0),
+            target_weight=result.target_weights.get(symbol, 0.0),
+            change=result.weight_changes.get(symbol, 0.0),
+        ))
+    # Add CASH
+    weight_changes.append(WeightChange(
+        symbol="CASH",
+        current_weight=result.current_weights.get("CASH", 0.0),
+        target_weight=result.target_weights.get("CASH", 0.0),
+        change=result.weight_changes.get("CASH", 0.0),
+    ))
+
+    t_total = time.time() - t_start
+    logger.info(f"[PPO_PatchTST] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}")
+
+    return PPOPatchTSTInferenceResponse(
+        target_weights=result.target_weights,
+        turnover=result.turnover,
+        target_week_start=result.target_week_start,
+        target_week_end=result.target_week_end,
+        model_version=result.model_version,
+        weight_changes=weight_changes,
+    )
