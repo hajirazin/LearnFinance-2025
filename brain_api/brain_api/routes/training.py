@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from brain_api.core.config import (
@@ -108,6 +108,21 @@ from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
 # Import shared data loading for RL training
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.walkforward import build_forecast_features
+from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
+
+
+def _snapshots_available(forecaster_type: str) -> bool:
+    """Check if forecaster snapshots are available for walk-forward inference.
+
+    Args:
+        forecaster_type: "lstm" or "patchtst"
+
+    Returns:
+        True if at least one snapshot exists
+    """
+    storage = SnapshotLocalStorage(forecaster_type)
+    snapshots = storage.list_snapshots()
+    return len(snapshots) > 0
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +207,7 @@ def get_trainer() -> Trainer:
 
 @router.post("/lstm", response_model=LSTMTrainResponse)
 def train_lstm(
+    skip_snapshot: bool = Query(False, description="Skip saving snapshot (by default saves snapshot for current + all historical years)"),
     storage: LocalModelStorage = Depends(get_storage),
     symbols: list[str] = Depends(get_symbols),
     config: LSTMConfig = Depends(get_config),
@@ -208,6 +224,13 @@ def train_lstm(
     Uses API config for data window (default: last 15 years).
     Fetches price data from yfinance for the halal universe.
     Writes versioned artifacts and promotes if evaluation passes.
+
+    By default, also saves snapshots for all historical years (for walk-forward
+    forecast generation in RL training). Use skip_snapshot=true to disable.
+
+    Args:
+        skip_snapshot: If True, skips saving snapshots. By default (False),
+                      saves snapshot for current training window + all historical years.
 
     Returns:
         Training result including version, metrics, and promotion status.
@@ -350,6 +373,47 @@ def train_lstm(
             logger.error(f"Failed to upload model to HuggingFace: {e}")
             # Don't fail the training request if HF upload fails
 
+    # Save snapshots (unless skip_snapshot=True)
+    if not skip_snapshot:
+        from brain_api.storage.forecaster_snapshots import (
+            SnapshotLocalStorage,
+            create_snapshot_metadata,
+        )
+        snapshot_storage = SnapshotLocalStorage("lstm")
+
+        # Save snapshot for current training window
+        if not snapshot_storage.snapshot_exists(end_date):
+            snapshot_metadata = create_snapshot_metadata(
+                forecaster_type="lstm",
+                cutoff_date=end_date,
+                data_window_start=start_date.isoformat(),
+                data_window_end=end_date.isoformat(),
+                symbols=list(prices.keys()),
+                config=config,
+                train_loss=result.train_loss,
+                val_loss=result.val_loss,
+            )
+            snapshot_storage.write_snapshot(
+                cutoff_date=end_date,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=snapshot_metadata,
+            )
+            logger.info(f"[LSTM] Saved snapshot for cutoff {end_date}")
+
+            # Upload to HuggingFace if in HF mode
+            if storage_backend == "hf":
+                try:
+                    snapshot_storage.upload_snapshot_to_hf(end_date)
+                    logger.info(f"[LSTM] Uploaded snapshot {end_date} to HuggingFace")
+                except Exception as e:
+                    logger.error(f"[LSTM] Failed to upload snapshot to HF: {e}")
+
+        # Also backfill all historical snapshots
+        logger.info("[LSTM] Backfilling historical snapshots...")
+        _backfill_lstm_snapshots(symbols, config, start_date, end_date, snapshot_storage, storage_backend)
+
     return LSTMTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -364,6 +428,86 @@ def train_lstm(
         hf_repo=hf_repo,
         hf_url=hf_url,
     )
+
+
+def _backfill_lstm_snapshots(
+    symbols: list[str],
+    config: LSTMConfig,
+    start_date: "date",
+    end_date: "date",
+    snapshot_storage: "SnapshotLocalStorage",
+    storage_backend: str = "local",
+) -> None:
+    """Backfill LSTM snapshots for all historical years.
+
+    For each year from (start_year + 4) to end_year-1, trains a snapshot
+    on data up to Dec 31 of that year. Uses 4-year bootstrap period.
+
+    Args:
+        symbols: List of stock symbols
+        config: LSTM configuration
+        start_date: Training data start date
+        end_date: Training data end date
+        snapshot_storage: Storage instance
+        storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
+    """
+    import time
+    from datetime import date
+    from brain_api.storage.forecaster_snapshots import create_snapshot_metadata
+
+    start_year = start_date.year
+    end_year = end_date.year
+    bootstrap_years = 4
+
+    for year in range(start_year + bootstrap_years, end_year):
+        cutoff_date = date(year, 12, 31)
+
+        if snapshot_storage.snapshot_exists(cutoff_date):
+            logger.info(f"[LSTM Backfill] Snapshot for {cutoff_date} already exists, skipping")
+            continue
+
+        logger.info(f"[LSTM Backfill] Training snapshot for cutoff {cutoff_date}")
+
+        t0 = time.time()
+        prices = load_prices_yfinance(symbols, start_date, cutoff_date)
+        if len(prices) == 0:
+            logger.warning(f"[LSTM Backfill] No price data for cutoff {cutoff_date}, skipping")
+            continue
+
+        dataset = build_dataset(prices, config)
+        if len(dataset.X) == 0:
+            logger.warning(f"[LSTM Backfill] Empty dataset for cutoff {cutoff_date}, skipping")
+            continue
+
+        result = train_model_pytorch(dataset.X, dataset.y, dataset.feature_scaler, config)
+
+        metadata = create_snapshot_metadata(
+            forecaster_type="lstm",
+            cutoff_date=cutoff_date,
+            data_window_start=start_date.isoformat(),
+            data_window_end=cutoff_date.isoformat(),
+            symbols=list(prices.keys()),
+            config=config,
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+        )
+
+        snapshot_storage.write_snapshot(
+            cutoff_date=cutoff_date,
+            model=result.model,
+            feature_scaler=result.feature_scaler,
+            config=config,
+            metadata=metadata,
+        )
+        logger.info(f"[LSTM Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s")
+
+        # Upload to HuggingFace if in HF mode
+        if storage_backend == "hf":
+            try:
+                snapshot_storage.upload_snapshot_to_hf(cutoff_date)
+                logger.info(f"[LSTM Backfill] Uploaded snapshot {cutoff_date} to HuggingFace")
+            except Exception as e:
+                logger.error(f"[LSTM Backfill] Failed to upload snapshot to HF: {e}")
 
 
 # ============================================================================
@@ -421,6 +565,7 @@ def get_patchtst_trainer() -> PatchTSTTrainer:
 
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
+    skip_snapshot: bool = Query(False, description="Skip saving snapshot (by default saves snapshot for current + all historical years)"),
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
     symbols: list[str] = Depends(get_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
@@ -443,6 +588,13 @@ def train_patchtst(
 
     Uses API config for data window (default: last 15 years).
     Writes versioned artifacts and promotes if evaluation passes.
+
+    By default, also saves snapshots for all historical years (for walk-forward
+    forecast generation in RL training). Use skip_snapshot=true to disable.
+
+    Args:
+        skip_snapshot: If True, skips saving snapshots. By default (False),
+                      saves snapshot for current training window + all historical years.
 
     Returns:
         Training result including version, metrics, and promotion status.
@@ -521,6 +673,9 @@ def train_patchtst(
     dataset = dataset_builder(aligned_features, prices, config)
     t_dataset = time.time() - t0
     logger.info(f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples")
+
+    # Save symbols list before freeing prices (needed for snapshot)
+    available_symbols = list(prices.keys())
 
     # Free aligned features and prices - no longer needed after dataset is built
     del aligned_features, prices
@@ -618,6 +773,47 @@ def train_patchtst(
             logger.error(f"[PatchTST] Failed to upload model to HuggingFace: {e}")
             # Don't fail the training request if HF upload fails
 
+    # Save snapshots (unless skip_snapshot=True)
+    if not skip_snapshot:
+        from brain_api.storage.forecaster_snapshots import (
+            SnapshotLocalStorage,
+            create_snapshot_metadata,
+        )
+        snapshot_storage = SnapshotLocalStorage("patchtst")
+
+        # Save snapshot for current training window
+        if not snapshot_storage.snapshot_exists(end_date):
+            snapshot_metadata = create_snapshot_metadata(
+                forecaster_type="patchtst",
+                cutoff_date=end_date,
+                data_window_start=start_date.isoformat(),
+                data_window_end=end_date.isoformat(),
+                symbols=available_symbols,
+                config=config,
+                train_loss=result.train_loss,
+                val_loss=result.val_loss,
+            )
+            snapshot_storage.write_snapshot(
+                cutoff_date=end_date,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=snapshot_metadata,
+            )
+            logger.info(f"[PatchTST] Saved snapshot for cutoff {end_date}")
+
+            # Upload to HuggingFace if in HF mode
+            if storage_backend == "hf":
+                try:
+                    snapshot_storage.upload_snapshot_to_hf(end_date)
+                    logger.info(f"[PatchTST] Uploaded snapshot {end_date} to HuggingFace")
+                except Exception as e:
+                    logger.error(f"[PatchTST] Failed to upload snapshot to HF: {e}")
+
+        # Also backfill all historical snapshots
+        logger.info("[PatchTST] Backfilling historical snapshots...")
+        _backfill_patchtst_snapshots(symbols, config, start_date, end_date, snapshot_storage, storage_backend)
+
     return PatchTSTTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -634,6 +830,94 @@ def train_patchtst(
         num_input_channels=config.num_input_channels,
         signals_used=["ohlcv", "news_sentiment", "fundamentals"],
     )
+
+
+def _backfill_patchtst_snapshots(
+    symbols: list[str],
+    config: "PatchTSTConfig",
+    start_date: "date",
+    end_date: "date",
+    snapshot_storage: "SnapshotLocalStorage",
+    storage_backend: str = "local",
+) -> None:
+    """Backfill PatchTST snapshots for all historical years.
+
+    For each year from (start_year + 4) to end_year-1, trains a snapshot
+    on data up to Dec 31 of that year. Uses 4-year bootstrap period.
+
+    Args:
+        symbols: List of stock symbols
+        config: PatchTST configuration
+        start_date: Training data start date
+        end_date: Training data end date
+        snapshot_storage: Storage instance
+        storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
+    """
+    import time
+    from datetime import date
+    from brain_api.storage.forecaster_snapshots import create_snapshot_metadata
+
+    start_year = start_date.year
+    end_year = end_date.year
+    bootstrap_years = 4
+
+    for year in range(start_year + bootstrap_years, end_year):
+        cutoff_date = date(year, 12, 31)
+
+        if snapshot_storage.snapshot_exists(cutoff_date):
+            logger.info(f"[PatchTST Backfill] Snapshot for {cutoff_date} already exists, skipping")
+            continue
+
+        logger.info(f"[PatchTST Backfill] Training snapshot for cutoff {cutoff_date}")
+
+        t0 = time.time()
+        prices = patchtst_load_prices(symbols, start_date, cutoff_date)
+        if len(prices) == 0:
+            logger.warning(f"[PatchTST Backfill] No price data for cutoff {cutoff_date}, skipping")
+            continue
+
+        news_sentiment = load_historical_news_sentiment(symbols, start_date, cutoff_date)
+        fundamentals = load_historical_fundamentals(symbols, start_date, cutoff_date)
+        aligned_features = align_multivariate_data(prices, news_sentiment, fundamentals, config)
+
+        if len(aligned_features) == 0:
+            logger.warning(f"[PatchTST Backfill] No aligned features for cutoff {cutoff_date}, skipping")
+            continue
+
+        dataset = patchtst_build_dataset(aligned_features, prices, config)
+        if len(dataset.X) == 0:
+            logger.warning(f"[PatchTST Backfill] Empty dataset for cutoff {cutoff_date}, skipping")
+            continue
+
+        result = patchtst_train_model(dataset.X, dataset.y, dataset.feature_scaler, config)
+
+        metadata = create_snapshot_metadata(
+            forecaster_type="patchtst",
+            cutoff_date=cutoff_date,
+            data_window_start=start_date.isoformat(),
+            data_window_end=cutoff_date.isoformat(),
+            symbols=list(prices.keys()),
+            config=config,
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+        )
+
+        snapshot_storage.write_snapshot(
+            cutoff_date=cutoff_date,
+            model=result.model,
+            feature_scaler=result.feature_scaler,
+            config=config,
+            metadata=metadata,
+        )
+        logger.info(f"[PatchTST Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s")
+
+        # Upload to HuggingFace if in HF mode
+        if storage_backend == "hf":
+            try:
+                snapshot_storage.upload_snapshot_to_hf(cutoff_date)
+                logger.info(f"[PatchTST Backfill] Uploaded snapshot {cutoff_date} to HuggingFace")
+            except Exception as e:
+                logger.error(f"[PatchTST Backfill] Failed to upload snapshot to HF: {e}")
 
 
 # ============================================================================
@@ -790,14 +1074,15 @@ def train_ppo_lstm_endpoint(
                 "fundamental_age": np.ones(min_weeks - 1),
             }
 
-    # Generate walk-forward forecast features (momentum proxy, no look-ahead bias)
-    logger.info("[PPO_LSTM] Generating walk-forward forecast features...")
+    # Generate walk-forward forecast features (use snapshots if available)
+    use_snapshots = _snapshots_available("lstm")
+    logger.info(f"[PPO_LSTM] Generating walk-forward forecast features (snapshots={use_snapshots})...")
     lstm_predictions = build_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
         forecaster_type="lstm",
-        use_model_snapshots=False,  # Use momentum proxy for now
+        use_model_snapshots=use_snapshots,
     )
 
     # Align forecast features to common week count
@@ -1068,13 +1353,14 @@ def finetune_ppo_lstm_endpoint(
                 "fundamental_age": np.ones(min_weeks - 1),
             }
 
-    # Generate walk-forward forecast features
+    # Generate walk-forward forecast features (use snapshots if available)
+    use_snapshots = _snapshots_available("lstm")
     lstm_predictions = build_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
         forecaster_type="lstm",
-        use_model_snapshots=False,
+        use_model_snapshots=use_snapshots,
     )
 
     # Align forecast features
@@ -1345,14 +1631,15 @@ def train_ppo_patchtst_endpoint(
                 "fundamental_age": np.ones(min_weeks - 1),
             }
 
-    # Generate walk-forward forecast features (momentum proxy, no look-ahead bias)
-    logger.info("[PPO_PatchTST] Generating walk-forward forecast features...")
+    # Generate walk-forward forecast features (use snapshots if available)
+    use_snapshots = _snapshots_available("patchtst")
+    logger.info(f"[PPO_PatchTST] Generating walk-forward forecast features (snapshots={use_snapshots})...")
     patchtst_predictions = build_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
         forecaster_type="patchtst",
-        use_model_snapshots=False,  # Use momentum proxy for now
+        use_model_snapshots=use_snapshots,
     )
 
     # Align forecast features to common week count
@@ -1622,13 +1909,14 @@ def finetune_ppo_patchtst_endpoint(
                 "fundamental_age": np.ones(min_weeks - 1),
             }
 
-    # Generate walk-forward forecast features
+    # Generate walk-forward forecast features (use snapshots if available)
+    use_snapshots = _snapshots_available("patchtst")
     patchtst_predictions = build_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
         forecaster_type="patchtst",
-        use_model_snapshots=False,
+        use_model_snapshots=use_snapshots,
     )
 
     # Align forecast features
@@ -1835,7 +2123,8 @@ def train_sac_lstm_endpoint(
             signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
             signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
-    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", False)
+    use_snapshots = _snapshots_available("lstm")
+    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", use_snapshots)
     for symbol in available_symbols:
         if symbol not in lstm_predictions:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
@@ -1932,7 +2221,8 @@ def finetune_sac_lstm_endpoint(
             signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
             signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
-    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", False)
+    use_snapshots = _snapshots_available("lstm")
+    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", use_snapshots)
     for symbol in available_symbols:
         if symbol not in lstm_predictions:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
@@ -2044,7 +2334,8 @@ def train_sac_patchtst_endpoint(
             signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
             signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
-    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", False)
+    use_snapshots = _snapshots_available("patchtst")
+    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", use_snapshots)
     for symbol in available_symbols:
         if symbol not in patchtst_predictions:
             patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
@@ -2141,7 +2432,8 @@ def finetune_sac_patchtst_endpoint(
             signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
             signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
-    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", False)
+    use_snapshots = _snapshots_available("patchtst")
+    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", use_snapshots)
     for symbol in available_symbols:
         if symbol not in patchtst_predictions:
             patchtst_predictions[symbol] = np.zeros(min_weeks - 1)

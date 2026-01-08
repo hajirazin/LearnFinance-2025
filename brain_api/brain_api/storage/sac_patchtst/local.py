@@ -7,7 +7,7 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -369,7 +369,7 @@ def create_sac_patchtst_metadata(
     return {
         "model_type": "sac_patchtst",
         "version": version,
-        "training_timestamp": datetime.utcnow().isoformat(),
+        "training_timestamp": datetime.now(timezone.utc).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,

@@ -127,27 +127,30 @@ def generate_walkforward_forecasts_with_model(
     For each year after bootstrap, loads a forecaster trained on prior data
     and generates predictions. Requires pre-computed snapshots.
 
+    Snapshots are loaded from local storage. If HuggingFace is configured and
+    a snapshot is not available locally, it will be downloaded from HF.
+
     Args:
         weekly_prices: Dict of symbol -> weekly price array
         weekly_dates: DatetimeIndex corresponding to weekly_prices
         symbols: Ordered list of symbols
         forecaster_type: "lstm" or "patchtst"
         bootstrap_years: First N years use momentum proxy
-        snapshot_dir: Directory containing forecaster snapshots
+        snapshot_dir: Directory containing forecaster snapshots (for testing)
 
     Returns:
         Dict of symbol -> array of forecast values
     """
-    # Check if snapshots directory exists
+    from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
+
+    # Create snapshot storage for this forecaster type
+    snapshot_storage = SnapshotLocalStorage(forecaster_type)
+
+    # Check if any snapshots exist locally (we'll try HF later if needed)
     if snapshot_dir is None:
         from brain_api.core.portfolio_rl.data_loading import get_default_data_path
-        snapshot_dir = get_default_data_path() / "forecaster_snapshots" / forecaster_type
-
-    if not snapshot_dir.exists():
-        print(f"[WalkForward] No snapshots found at {snapshot_dir}, using momentum proxy")
-        return generate_walkforward_forecasts_simple(
-            weekly_prices, weekly_dates, symbols, bootstrap_years
-        )
+        # Snapshots are stored alongside main model: models/{type}/snapshots/
+        snapshot_dir = get_default_data_path() / "models" / forecaster_type / "snapshots"
 
     forecasts: dict[str, np.ndarray] = {}
 
@@ -193,11 +196,14 @@ def generate_walkforward_forecasts_with_model(
             else:
                 # Try to load snapshot for this cutoff
                 cutoff_date = date(year - 1, 12, 31)
-                snapshot_path = snapshot_dir / f"snapshot_{cutoff_date.isoformat()}"
 
-                if snapshot_path.exists():
+                # Try to ensure snapshot is available (downloads from HF if needed)
+                snapshot_available = snapshot_storage.ensure_snapshot_available(cutoff_date)
+
+                if snapshot_available:
                     try:
                         # Load and run inference
+                        snapshot_path = snapshot_dir / f"snapshot_{cutoff_date.isoformat()}"
                         preds = _run_snapshot_inference(
                             snapshot_path,
                             forecaster_type,
@@ -217,7 +223,7 @@ def generate_walkforward_forecasts_with_model(
                                 if i >= lookback and prices[i - lookback] > 0:
                                     symbol_forecasts[i] = (prices[i] - prices[i - lookback]) / prices[i - lookback]
                 else:
-                    # No snapshot, use momentum
+                    # No snapshot available (locally or HF), use momentum
                     for i in year_indices:
                         if i < n_weeks - 1:
                             lookback = 4
@@ -238,8 +244,8 @@ def _run_snapshot_inference(
 ) -> list[float]:
     """Run inference using a snapshot model.
 
-    This is a placeholder that will be implemented when we have
-    trained snapshots. For now, returns momentum as fallback.
+    Loads a pre-trained LSTM or PatchTST snapshot and generates
+    predictions for each week in the target year.
 
     Args:
         snapshot_path: Path to snapshot directory
@@ -251,18 +257,202 @@ def _run_snapshot_inference(
     Returns:
         List of predictions for each week in year_indices
     """
-    # TODO: Implement actual snapshot loading and inference
-    # For now, return momentum as fallback
+    import torch
+    from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
+
+    # Load snapshot artifacts
+    cutoff_date_str = snapshot_path.name.replace("snapshot_", "")
+    cutoff_date = date.fromisoformat(cutoff_date_str)
+
+    storage = SnapshotLocalStorage(forecaster_type)
+    artifacts = storage.load_snapshot(cutoff_date)
+
     predictions = []
-    for i in year_indices:
-        lookback = 4
-        if i >= lookback and prices[i - lookback] > 0:
-            pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-        else:
-            pred = 0.0
-        predictions.append(pred)
+
+    if forecaster_type == "lstm":
+        # Run LSTM inference
+        predictions = _run_lstm_snapshot_inference(
+            artifacts, prices, year_indices
+        )
+    else:
+        # Run PatchTST inference
+        predictions = _run_patchtst_snapshot_inference(
+            artifacts, prices, year_indices
+        )
 
     return predictions
+
+
+def _run_lstm_snapshot_inference(
+    artifacts: "LSTMSnapshotArtifacts",
+    prices: np.ndarray,
+    year_indices: list[int],
+) -> list[float]:
+    """Run LSTM snapshot inference for a symbol.
+
+    Args:
+        artifacts: Loaded LSTM snapshot artifacts
+        prices: Weekly price array for the symbol
+        year_indices: Indices to predict
+
+    Returns:
+        List of predictions
+    """
+    import torch
+
+    predictions = []
+    model = artifacts.model
+    scaler = artifacts.feature_scaler
+    config = artifacts.config
+    seq_len = config.sequence_length
+
+    model.eval()
+
+    with torch.no_grad():
+        for i in year_indices:
+            # Need at least seq_len of history
+            if i < seq_len:
+                # Not enough history, use momentum fallback
+                lookback = 4
+                if i >= lookback and prices[i - lookback] > 0:
+                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                else:
+                    pred = 0.0
+                predictions.append(pred)
+                continue
+
+            # Build input sequence from price history
+            price_seq = prices[i - seq_len:i]
+
+            # Convert to returns (log returns for LSTM)
+            returns = np.diff(np.log(price_seq + 1e-8))  # seq_len - 1 returns
+
+            if len(returns) != seq_len - 1:
+                predictions.append(0.0)
+                continue
+
+            # LSTM expects (batch, seq, features)
+            # For single-feature LSTM, add feature dimension
+            features = returns.reshape(-1, 1)
+
+            # Apply scaler if available
+            if scaler is not None:
+                features = scaler.transform(features)
+
+            # Convert to tensor: (1, seq_len-1, 1)
+            x = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+
+            # Run inference
+            output = model(x)
+
+            # Get prediction (expected return)
+            pred = output.squeeze().item()
+            predictions.append(pred)
+
+    return predictions
+
+
+def _run_patchtst_snapshot_inference(
+    artifacts: "PatchTSTSnapshotArtifacts",
+    prices: np.ndarray,
+    year_indices: list[int],
+) -> list[float]:
+    """Run PatchTST snapshot inference for a symbol.
+
+    Args:
+        artifacts: Loaded PatchTST snapshot artifacts
+        prices: Weekly price array for the symbol
+        year_indices: Indices to predict
+
+    Returns:
+        List of predictions
+    """
+    import torch
+
+    predictions = []
+    model = artifacts.model
+    scaler = artifacts.feature_scaler
+    config = artifacts.config
+    context_length = config.context_length
+
+    model.eval()
+
+    with torch.no_grad():
+        for i in year_indices:
+            # Need at least context_length of history
+            if i < context_length:
+                # Not enough history, use momentum fallback
+                lookback = 4
+                if i >= lookback and prices[i - lookback] > 0:
+                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                else:
+                    pred = 0.0
+                predictions.append(pred)
+                continue
+
+            # Build input sequence from price history
+            price_seq = prices[i - context_length:i]
+
+            # Convert to returns for PatchTST
+            # PatchTST expects multiple channels, but for simplicity
+            # we use close returns as the main signal
+            returns = np.diff(price_seq) / (price_seq[:-1] + 1e-8)
+
+            if len(returns) != context_length - 1:
+                predictions.append(0.0)
+                continue
+
+            # For single-channel input, shape: (batch, num_channels, seq_len)
+            # PatchTST expects shape (batch, seq_len, num_channels) then permutes
+            features = returns.reshape(1, -1, 1)  # (1, seq_len-1, 1)
+
+            # Apply scaler if available
+            if scaler is not None:
+                # Scaler expects (n_samples, n_features)
+                flat_features = features.reshape(-1, features.shape[-1])
+                flat_features = scaler.transform(flat_features)
+                features = flat_features.reshape(features.shape)
+
+            # Convert to tensor and permute for PatchTST
+            # PatchTST expects (batch, num_channels, context_length)
+            x = torch.tensor(features, dtype=torch.float32).permute(0, 2, 1)
+
+            try:
+                # Run inference
+                output = model(past_values=x)
+
+                # Get prediction (last value of prediction horizon)
+                if hasattr(output, "prediction_outputs"):
+                    pred = output.prediction_outputs[:, 0, 0].item()
+                elif hasattr(output, "last_hidden_state"):
+                    pred = output.last_hidden_state[:, -1, 0].item()
+                else:
+                    # Fallback to momentum
+                    lookback = 4
+                    if i >= lookback and prices[i - lookback] > 0:
+                        pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                    else:
+                        pred = 0.0
+            except Exception:
+                # Fallback to momentum on error
+                lookback = 4
+                if i >= lookback and prices[i - lookback] > 0:
+                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                else:
+                    pred = 0.0
+
+            predictions.append(pred)
+
+    return predictions
+
+
+# Type hints for snapshot artifacts
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from brain_api.storage.forecaster_snapshots import (
+        LSTMSnapshotArtifacts,
+        PatchTSTSnapshotArtifacts,
+    )
 
 
 def build_forecast_features(

@@ -121,12 +121,12 @@ def create_ppo_lstm_metadata(
     eval_max_drawdown: float,
 ) -> dict:
     """Create metadata dict for PPO + LSTM training run."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     return {
         "model_type": "ppo_lstm",
         "version": version,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,
@@ -165,12 +165,12 @@ def create_ppo_patchtst_metadata(
     eval_max_drawdown: float,
 ) -> dict:
     """Create metadata dict for PPO + PatchTST training run."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     return {
         "model_type": "ppo_patchtst",
         "version": version,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,

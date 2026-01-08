@@ -8,7 +8,7 @@ This module provides:
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -322,7 +322,7 @@ def label_experience(
             # Update record
             record.reward = reward
             record.realized_return = realized_return
-            record.labeled_at = datetime.utcnow().isoformat()
+            record.labeled_at = datetime.now(timezone.utc).isoformat()
             
             storage.update(record)
             records_labeled += 1
