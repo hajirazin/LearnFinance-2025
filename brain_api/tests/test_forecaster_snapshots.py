@@ -318,14 +318,14 @@ class TestSnapshotIntegration:
         from brain_api.routes.training import _snapshots_available
 
         # No snapshots exist initially
-        with patch('brain_api.routes.training.SnapshotLocalStorage') as mock_storage:
+        with patch('brain_api.routes.training.dependencies.SnapshotLocalStorage') as mock_storage:
             mock_instance = MagicMock()
             mock_instance.list_snapshots.return_value = []
             mock_storage.return_value = mock_instance
             assert _snapshots_available("lstm") is False
 
         # After adding snapshots
-        with patch('brain_api.routes.training.SnapshotLocalStorage') as mock_storage:
+        with patch('brain_api.routes.training.dependencies.SnapshotLocalStorage') as mock_storage:
             mock_instance = MagicMock()
             mock_instance.list_snapshots.return_value = [date(2019, 12, 31)]
             mock_storage.return_value = mock_instance

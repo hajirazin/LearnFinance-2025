@@ -17,7 +17,7 @@ from brain_api.core.ppo_patchtst.training import (
     train_ppo_patchtst,
     finetune_ppo_patchtst,
 )
-from brain_api.core.ppo_lstm.training import PPOFinetuneConfig
+from brain_api.core.ppo_lstm.finetune import PPOFinetuneConfig
 from brain_api.core.ppo_patchtst.inference import (
     run_ppo_patchtst_inference,
 )

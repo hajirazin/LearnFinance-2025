@@ -9,12 +9,18 @@ from brain_api.core.ppo_lstm.config import (
     PPOLSTMConfig,
     DEFAULT_PPO_LSTM_CONFIG,
 )
-from brain_api.core.ppo_lstm.training import (
-    PPOTrainingResult,
-    PPOFinetuneConfig,
-    train_ppo_lstm,
-    finetune_ppo_lstm,
+from brain_api.core.ppo_lstm.data import (
+    TrainingData,
     build_training_data,
+)
+from brain_api.core.ppo_lstm.train import (
+    PPOTrainingResult,
+    train_ppo_lstm,
+    evaluate_policy,
+)
+from brain_api.core.ppo_lstm.finetune import (
+    PPOFinetuneConfig,
+    finetune_ppo_lstm,
 )
 from brain_api.core.ppo_lstm.inference import (
     PPOInferenceResult,
@@ -31,10 +37,13 @@ __all__ = [
     # Config
     "PPOLSTMConfig",
     "DEFAULT_PPO_LSTM_CONFIG",
+    # Data
+    "TrainingData",
+    "build_training_data",
     # Training (full)
     "PPOTrainingResult",
     "train_ppo_lstm",
-    "build_training_data",
+    "evaluate_policy",
     # Training (fine-tune)
     "PPOFinetuneConfig",
     "finetune_ppo_lstm",
@@ -48,4 +57,3 @@ __all__ = [
     # Version
     "compute_version",
 ]
-

@@ -161,7 +161,7 @@ def client_with_mocks(temp_storage, monkeypatch):
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
 
     # Monkeypatch the data loaders in the inference module
-    import brain_api.routes.inference as inference_module
+    from brain_api.routes.inference import patchtst as inference_module
 
     monkeypatch.setattr(inference_module, "patchtst_load_prices", mock_price_loader)
     monkeypatch.setattr(inference_module, "load_historical_news_sentiment", mock_news_loader)

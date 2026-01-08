@@ -17,13 +17,10 @@ from brain_api.core.portfolio_rl.env import PortfolioEnv
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.ppo_patchtst.config import PPOPatchTSTConfig
 from brain_api.core.ppo_lstm.model import PPOActorCritic
-from brain_api.core.ppo_lstm.training import (
-    TrainingData,
-    PPOTrainer,
-    PPOFinetuneConfig,
-    evaluate_policy,
-    build_training_data,
-)
+from brain_api.core.ppo_lstm.data import TrainingData, build_training_data
+from brain_api.core.ppo_lstm.trainer import PPOTrainer
+from brain_api.core.ppo_lstm.finetune import PPOFinetuneConfig
+from brain_api.core.ppo_lstm.train import evaluate_policy
 from brain_api.core.portfolio_rl.config import PPOConfig
 from brain_api.core.training_utils import get_device
 import torch

@@ -18,7 +18,7 @@ from brain_api.core.ppo_lstm import (
     PPOTrainingResult,
 )
 from brain_api.core.ppo_lstm.model import PPOActorCritic
-from brain_api.core.ppo_lstm.training import TrainingData
+from brain_api.core.ppo_lstm.data import TrainingData
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.main import app
 from brain_api.routes.training import (
@@ -204,8 +204,8 @@ def client_for_inference(trained_model_storage):
 def test_train_ppo_lstm_returns_200(client_with_mocks, monkeypatch):
     """POST /train/ppo_lstm returns 200."""
     # Patch the training to use mock price loader
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
     assert response.status_code == 200
@@ -213,8 +213,8 @@ def test_train_ppo_lstm_returns_200(client_with_mocks, monkeypatch):
 
 def test_train_ppo_lstm_returns_required_fields(client_with_mocks, monkeypatch):
     """POST /train/ppo_lstm returns all required response fields."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
     assert response.status_code == 200
@@ -237,8 +237,8 @@ def test_train_ppo_lstm_returns_required_fields(client_with_mocks, monkeypatch):
 
 def test_train_ppo_lstm_first_model_auto_promoted(client_with_mocks, monkeypatch):
     """First PPO model is automatically promoted."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
     assert response.status_code == 200
@@ -251,8 +251,8 @@ def test_train_ppo_lstm_first_model_auto_promoted(client_with_mocks, monkeypatch
 
 def test_train_ppo_lstm_idempotent(client_with_mocks, monkeypatch):
     """Calling POST /train/ppo_lstm twice returns the same version."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response1 = client_with_mocks.post("/train/ppo_lstm/full", json={})
     assert response1.status_code == 200
@@ -437,8 +437,8 @@ def test_finetune_ppo_lstm_returns_400_without_prior_model(client_with_mocks):
 
 def test_finetune_ppo_lstm_returns_200_with_prior_model(client_for_inference, monkeypatch):
     """POST /train/ppo_lstm/finetune returns 200 when prior model exists."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     # Use the trained_model_storage fixture (which has a prior model)
     response = client_for_inference.post("/train/ppo_lstm/finetune", json={})
@@ -447,8 +447,8 @@ def test_finetune_ppo_lstm_returns_200_with_prior_model(client_for_inference, mo
 
 def test_finetune_ppo_lstm_returns_required_fields(client_for_inference, monkeypatch):
     """POST /train/ppo_lstm/finetune returns all required response fields."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response = client_for_inference.post("/train/ppo_lstm/finetune", json={})
     assert response.status_code == 200
@@ -466,8 +466,8 @@ def test_finetune_ppo_lstm_returns_required_fields(client_for_inference, monkeyp
 
 def test_finetune_ppo_lstm_idempotent(client_for_inference, monkeypatch):
     """Calling POST /train/ppo_lstm/finetune twice returns the same version."""
-    from brain_api.routes import training
-    monkeypatch.setattr(training, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import ppo_lstm
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
     
     response1 = client_for_inference.post("/train/ppo_lstm/finetune", json={})
     assert response1.status_code == 200
