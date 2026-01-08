@@ -22,7 +22,7 @@ Authentication:
     Recommended: Run `huggingface-cli login` once, then no HF_TOKEN needed.
 
 Environment Variables:
-    HF_MODEL_REPO: Target model repository (e.g., 'username/learnfinance-lstm')
+    HF_LSTM_MODEL_REPO: Target LSTM model repository (e.g., 'username/learnfinance-lstm')
     HF_NEWS_SENTIMENT_REPO: Target news sentiment dataset repo (e.g., 'username/learnfinance-news-sentiment')
     HF_TOKEN: (Optional) HuggingFace API token - not needed if logged in via CLI
 """
@@ -43,14 +43,14 @@ def push_model(version: str, make_current: bool = False) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    from brain_api.core.config import get_hf_model_repo
+    from brain_api.core.config import get_hf_lstm_model_repo
     from brain_api.storage.huggingface import HuggingFaceModelStorage
     from brain_api.storage.local import LocalModelStorage
 
     # Check HF repo is configured
-    hf_repo = get_hf_model_repo()
+    hf_repo = get_hf_lstm_model_repo()
     if not hf_repo:
-        print("Error: HF_MODEL_REPO environment variable not set")
+        print("Error: HF_LSTM_MODEL_REPO environment variable not set")
         return 1
 
     # Load local storage

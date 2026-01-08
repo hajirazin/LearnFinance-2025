@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from brain_api.core.config import (
-    get_hf_model_repo,
+    get_hf_lstm_model_repo,
+    get_hf_ppo_lstm_model_repo,
+    get_hf_ppo_patchtst_model_repo,
     get_storage_backend,
     resolve_training_window,
 )
@@ -288,7 +290,7 @@ def train_lstm(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_model_repo()
+    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" and hf_model_repo:
         try:
@@ -556,7 +558,7 @@ def train_patchtst(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_model_repo()
+    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" and hf_model_repo:
         try:
@@ -611,6 +613,8 @@ class PPOLSTMTrainResponse(BaseModel):
     promoted: bool
     prior_version: str | None = None
     symbols_used: list[str]
+    hf_repo: str | None = None  # HuggingFace repo if uploaded
+    hf_url: str | None = None  # URL to model on HuggingFace
 
 
 def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
@@ -793,6 +797,32 @@ def train_ppo_lstm_endpoint(
         storage.promote_version(version)
         logger.info(f"[PPO_LSTM] Version {version} promoted to current")
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_ppo_lstm_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.scaler,
+                config=config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[PPO_LSTM] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[PPO_LSTM] Failed to upload model to HuggingFace: {e}")
+            # Don't fail the training request if HF upload fails
+
     return PPOLSTMTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -809,6 +839,8 @@ def train_ppo_lstm_endpoint(
         promoted=promoted,
         prior_version=prior_version,
         symbols_used=available_symbols,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
     )
 
 
@@ -993,6 +1025,31 @@ def finetune_ppo_lstm_endpoint(
         storage.promote_version(version)
         logger.info(f"[PPO_LSTM Finetune] Version {version} promoted to current")
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_ppo_lstm_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.scaler,
+                config=prior_config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[PPO_LSTM Finetune] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[PPO_LSTM Finetune] Failed to upload model to HuggingFace: {e}")
+
     return PPOLSTMTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -1009,6 +1066,8 @@ def finetune_ppo_lstm_endpoint(
         promoted=promoted,
         prior_version=prior_version,
         symbols_used=available_symbols,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
     )
 
 
@@ -1027,6 +1086,8 @@ class PPOPatchTSTTrainResponse(BaseModel):
     promoted: bool
     prior_version: str | None = None
     symbols_used: list[str]
+    hf_repo: str | None = None  # HuggingFace repo if uploaded
+    hf_url: str | None = None  # URL to model on HuggingFace
 
 
 def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
@@ -1202,6 +1263,31 @@ def train_ppo_patchtst_endpoint(
         storage.promote_version(version)
         logger.info(f"[PPO_PatchTST] Version {version} promoted to current")
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_ppo_patchtst_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.scaler,
+                config=config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[PPO_PatchTST] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[PPO_PatchTST] Failed to upload model to HuggingFace: {e}")
+
     return PPOPatchTSTTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -1218,6 +1304,8 @@ def train_ppo_patchtst_endpoint(
         promoted=promoted,
         prior_version=prior_version,
         symbols_used=available_symbols,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
     )
 
 
@@ -1402,6 +1490,31 @@ def finetune_ppo_patchtst_endpoint(
         storage.promote_version(version)
         logger.info(f"[PPO_PatchTST Finetune] Version {version} promoted to current")
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_ppo_patchtst_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.scaler,
+                config=prior_config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[PPO_PatchTST Finetune] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[PPO_PatchTST Finetune] Failed to upload model to HuggingFace: {e}")
+
     return PPOPatchTSTTrainResponse(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -1418,4 +1531,6 @@ def finetune_ppo_patchtst_endpoint(
         promoted=promoted,
         prior_version=prior_version,
         symbols_used=available_symbols,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
     )

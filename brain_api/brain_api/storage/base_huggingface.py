@@ -17,7 +17,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from brain_api.core.config import get_hf_model_repo, get_hf_token
+from brain_api.core.config import get_hf_lstm_model_repo, get_hf_token
 
 logger = logging.getLogger(__name__)
 
@@ -67,20 +67,20 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
 
         Args:
             repo_id: HuggingFace repo ID (e.g., 'username/learnfinance-model').
-                     Defaults to HF_MODEL_REPO env var.
+                     Defaults to HF_LSTM_MODEL_REPO env var for LSTM.
             token: HuggingFace API token. If None, uses HF_TOKEN env var or
                    cached token from `huggingface-cli login`.
             local_cache: Optional local storage for caching downloaded models.
         """
-        self.repo_id = repo_id or get_hf_model_repo()
+        self.repo_id = repo_id or get_hf_lstm_model_repo()
         self.token = token or get_hf_token()
         self.local_cache = local_cache or self._create_local_storage()
         self.api = HfApi(token=self.token)
 
         if not self.repo_id:
             raise ValueError(
-                "HuggingFace model repo not configured. "
-                "Set HF_MODEL_REPO environment variable or pass repo_id."
+                f"HuggingFace {self.model_type.upper()} model repo not configured. "
+                f"Set HF_{self.model_type.upper()}_MODEL_REPO environment variable or pass repo_id."
             )
 
     @property

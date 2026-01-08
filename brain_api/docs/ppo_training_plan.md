@@ -291,6 +291,27 @@ class PPOFinetuneConfig:
     learning_rate: float = 1e-4    # Lower LR for fine-tuning
 ```
 
+#### HuggingFace Hub Upload
+
+All 4 PPO training endpoints support optional HuggingFace Hub upload, controlled by environment variables:
+
+| Environment Variable | Model Type | Description |
+|---------------------|------------|-------------|
+| `HF_PPO_LSTM_MODEL_REPO` | PPO + LSTM | HuggingFace repo for PPO LSTM allocator |
+| `HF_PPO_PATCHTST_MODEL_REPO` | PPO + PatchTST | HuggingFace repo for PPO PatchTST allocator |
+| `STORAGE_BACKEND` | All | Set to `"hf"` to enable upload |
+| `HF_TOKEN` | All | HuggingFace API token |
+
+Example configuration:
+```bash
+export STORAGE_BACKEND="hf"
+export HF_TOKEN="hf_xxxxxxxxxxxx"
+export HF_PPO_LSTM_MODEL_REPO="username/learnfinance-ppo-lstm"
+export HF_PPO_PATCHTST_MODEL_REPO="username/learnfinance-ppo-patchtst"
+```
+
+Response includes `hf_repo` and `hf_url` when upload is enabled and successful.
+
 #### Experience Buffer (for future reward labeling)
 
 - Persist weekly transitions to `data/experience/<run_id>.json` as described in `CLAUDE.md`.

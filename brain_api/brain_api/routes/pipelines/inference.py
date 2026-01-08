@@ -13,7 +13,7 @@ from typing import Any, Generic, Protocol, TypeVar
 
 from fastapi import HTTPException
 
-from brain_api.core.config import get_hf_model_repo, get_storage_backend
+from brain_api.core.config import get_hf_lstm_model_repo, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def load_model_with_fallback(
 
     # Try HuggingFace if configured
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_model_repo()
+    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" or hf_model_repo:
         if hf_model_repo:

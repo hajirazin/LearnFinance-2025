@@ -58,7 +58,10 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `HF_TOKEN` | HuggingFace API token | None |
-| `HF_MODEL_REPO` | HuggingFace model repository (e.g., `username/learnfinance-models`) | None |
+| `HF_LSTM_MODEL_REPO` | HuggingFace LSTM forecaster model repository | None |
+| `HF_PATCHTST_MODEL_REPO` | HuggingFace PatchTST forecaster model repository | None |
+| `HF_PPO_LSTM_MODEL_REPO` | HuggingFace PPO+LSTM allocator model repository | None |
+| `HF_PPO_PATCHTST_MODEL_REPO` | HuggingFace PPO+PatchTST allocator model repository | None |
 | `HF_NEWS_SENTIMENT_REPO` | HuggingFace news sentiment dataset repository | None |
 | `HF_TWITTER_SENTIMENT_REPO` | HuggingFace twitter sentiment dataset repository | None |
 | `STORAGE_BACKEND` | Storage backend: `local` or `hf` | `local` |

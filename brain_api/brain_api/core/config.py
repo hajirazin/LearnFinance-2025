@@ -11,7 +11,10 @@ ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
 
 # HuggingFace Hub environment variables
 ENV_HF_TOKEN = "HF_TOKEN"
-ENV_HF_MODEL_REPO = "HF_MODEL_REPO"
+ENV_HF_LSTM_MODEL_REPO = "HF_LSTM_MODEL_REPO"  # LSTM forecaster
+ENV_HF_PATCHTST_MODEL_REPO = "HF_PATCHTST_MODEL_REPO"  # PatchTST forecaster
+ENV_HF_PPO_LSTM_MODEL_REPO = "HF_PPO_LSTM_MODEL_REPO"  # PPO + LSTM allocator
+ENV_HF_PPO_PATCHTST_MODEL_REPO = "HF_PPO_PATCHTST_MODEL_REPO"  # PPO + PatchTST allocator
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
@@ -30,9 +33,24 @@ def get_hf_token() -> str | None:
     return os.environ.get(ENV_HF_TOKEN)
 
 
-def get_hf_model_repo() -> str | None:
-    """Get HuggingFace model repository name (e.g., 'username/learnfinance-lstm')."""
-    return os.environ.get(ENV_HF_MODEL_REPO)
+def get_hf_lstm_model_repo() -> str | None:
+    """Get HuggingFace LSTM model repository name (e.g., 'username/learnfinance-lstm')."""
+    return os.environ.get(ENV_HF_LSTM_MODEL_REPO)
+
+
+def get_hf_patchtst_model_repo() -> str | None:
+    """Get HuggingFace PatchTST model repository name."""
+    return os.environ.get(ENV_HF_PATCHTST_MODEL_REPO)
+
+
+def get_hf_ppo_lstm_model_repo() -> str | None:
+    """Get HuggingFace PPO + LSTM model repository name."""
+    return os.environ.get(ENV_HF_PPO_LSTM_MODEL_REPO)
+
+
+def get_hf_ppo_patchtst_model_repo() -> str | None:
+    """Get HuggingFace PPO + PatchTST model repository name."""
+    return os.environ.get(ENV_HF_PPO_PATCHTST_MODEL_REPO)
 
 
 def get_hf_news_sentiment_repo() -> str | None:

@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING, Any
 
+from brain_api.core.config import get_hf_patchtst_model_repo
 from brain_api.storage.base_huggingface import BaseHuggingFaceModelStorage, HFModelInfo
 from brain_api.storage.patchtst.local import PatchTSTArtifacts, PatchTSTModelStorage
 
@@ -30,6 +31,24 @@ class PatchTSTHuggingFaceModelStorage(
     Versions are managed as git tags/branches on the HF repo.
     The 'main' branch typically points to the current promoted version.
     """
+
+    def __init__(
+        self,
+        repo_id: str | None = None,
+        token: str | None = None,
+        local_cache: PatchTSTModelStorage | None = None,
+    ):
+        """Initialize PatchTST HuggingFace model storage.
+
+        Args:
+            repo_id: HuggingFace repo ID. Defaults to HF_PATCHTST_MODEL_REPO env var.
+            token: HuggingFace API token.
+            local_cache: Optional local storage for caching downloaded models.
+        """
+        # Use PatchTST-specific repo if no explicit repo_id provided
+        if repo_id is None:
+            repo_id = get_hf_patchtst_model_repo()
+        super().__init__(repo_id=repo_id, token=token, local_cache=local_cache)
 
     @property
     def model_type(self) -> str:

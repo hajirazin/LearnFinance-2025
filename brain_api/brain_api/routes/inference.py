@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from brain_api.core.config import get_hf_model_repo, get_storage_backend
+from brain_api.core.config import get_hf_lstm_model_repo, get_storage_backend
 from brain_api.core.lstm import (
     SymbolPrediction as LSTMSymbolPrediction,
     build_inference_features,
@@ -307,7 +307,7 @@ def _load_model_artifacts_generic(
 
     # Try HuggingFace if configured
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_model_repo()
+    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" or hf_model_repo:
         if hf_model_repo:

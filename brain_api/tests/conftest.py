@@ -10,7 +10,12 @@ import pytest
 
 # HuggingFace-related environment variables that should not affect tests
 HF_ENV_VARS = [
-    "HF_MODEL_REPO",
+    "HF_LSTM_MODEL_REPO",
+    "HF_PATCHTST_MODEL_REPO",
+    "HF_PPO_LSTM_MODEL_REPO",
+    "HF_PPO_PATCHTST_MODEL_REPO",
+    "HF_NEWS_SENTIMENT_REPO",
+    "HF_TWITTER_SENTIMENT_REPO",
     "HF_DATASET_REPO",
     "HF_TOKEN",
     "HUGGINGFACE_TOKEN",
