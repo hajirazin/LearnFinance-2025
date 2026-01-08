@@ -71,6 +71,44 @@ from brain_api.core.ppo_patchtst import (
     finetune_ppo_patchtst,
 )
 
+# Import SAC LSTM training components
+from brain_api.core.sac_lstm import (
+    DEFAULT_SAC_LSTM_CONFIG,
+    SACLSTMConfig,
+    build_training_data as sac_build_training_data,
+    compute_version as sac_lstm_compute_version,
+    train_sac_lstm,
+    finetune_sac_lstm,
+)
+
+# Import SAC PatchTST training components
+from brain_api.core.sac_patchtst import (
+    DEFAULT_SAC_PATCHTST_CONFIG,
+    SACPatchTSTConfig,
+    compute_version as sac_patchtst_compute_version,
+    train_sac_patchtst,
+    finetune_sac_patchtst,
+)
+
+# Import SAC storage
+from brain_api.storage.local import (
+    SACLSTMLocalStorage,
+    SACPatchTSTLocalStorage,
+    create_sac_lstm_metadata,
+    create_sac_patchtst_metadata,
+)
+
+# Import SAC config utilities
+from brain_api.core.config import (
+    get_hf_sac_lstm_model_repo,
+    get_hf_sac_patchtst_model_repo,
+)
+from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
+
+# Import shared data loading for RL training
+from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
+from brain_api.core.portfolio_rl.walkforward import build_forecast_features
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -709,25 +747,71 @@ def train_ppo_lstm_endpoint(
     min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
     logger.info(f"[PPO_LSTM] Using {min_weeks} weeks of data")
 
+    # Get weekly date index for walk-forward forecasts
+    first_symbol = available_symbols[0]
+    weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
     # Align all price series
     for symbol in available_symbols:
         if symbol in weekly_prices:
             weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
-    # Build placeholder signals and forecasts
-    signals = {}
-    lstm_predictions = {}
+    # Load REAL historical signals (news sentiment, fundamentals)
+    logger.info("[PPO_LSTM] Loading historical signals (news, fundamentals)...")
+    signals = build_rl_training_signals(
+        prices_dict=prices_dict,
+        symbols=available_symbols,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Align signals to the common week count
     for symbol in available_symbols:
-        signals[symbol] = {
-            "news_sentiment": np.zeros(min_weeks - 1),
-            "gross_margin": np.zeros(min_weeks - 1),
-            "operating_margin": np.zeros(min_weeks - 1),
-            "net_margin": np.zeros(min_weeks - 1),
-            "current_ratio": np.zeros(min_weeks - 1),
-            "debt_to_equity": np.zeros(min_weeks - 1),
-            "fundamental_age": np.zeros(min_weeks - 1),
-        }
-        lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                else:
+                    # Pad with zeros if not enough data
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    signals[symbol][signal_name] = padded
+        else:
+            # No signals for this symbol, use zeros
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features (momentum proxy, no look-ahead bias)
+    logger.info("[PPO_LSTM] Generating walk-forward forecast features...")
+    lstm_predictions = build_forecast_features(
+        weekly_prices=weekly_prices,
+        weekly_dates=weekly_dates,
+        symbols=available_symbols,
+        forecaster_type="lstm",
+        use_model_snapshots=False,  # Use momentum proxy for now
+    )
+
+    # Align forecast features to common week count
+    for symbol in available_symbols:
+        if symbol in lstm_predictions:
+            pred_arr = lstm_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr):] = pred_arr
+                lstm_predictions[symbol] = padded
+        else:
+            lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
     # Build training data
     training_data = build_training_data(
@@ -738,6 +822,7 @@ def train_ppo_lstm_endpoint(
     )
 
     logger.info(f"[PPO_LSTM] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks")
+    logger.info(f"[PPO_LSTM] Signals loaded for {len([s for s in signals if 'news_sentiment' in signals[s]])} symbols")
 
     # Train PPO
     logger.info("[PPO_LSTM] Starting PPO training...")
@@ -942,24 +1027,68 @@ def finetune_ppo_lstm_endpoint(
             weekly_prices[symbol] = weekly.values
 
     min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+
+    # Get weekly date index for walk-forward forecasts
+    first_symbol = available_symbols[0]
+    weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
     for symbol in available_symbols:
         if symbol in weekly_prices:
             weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
-    # Build training data
-    signals = {}
-    lstm_predictions = {}
+    # Load REAL historical signals
+    logger.info("[PPO_LSTM Finetune] Loading historical signals...")
+    signals = build_rl_training_signals(
+        prices_dict=prices_dict,
+        symbols=available_symbols,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Align signals to the common week count
     for symbol in available_symbols:
-        signals[symbol] = {
-            "news_sentiment": np.zeros(min_weeks - 1),
-            "gross_margin": np.zeros(min_weeks - 1),
-            "operating_margin": np.zeros(min_weeks - 1),
-            "net_margin": np.zeros(min_weeks - 1),
-            "current_ratio": np.zeros(min_weeks - 1),
-            "debt_to_equity": np.zeros(min_weeks - 1),
-            "fundamental_age": np.zeros(min_weeks - 1),
-        }
-        lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                else:
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    signals[symbol][signal_name] = padded
+        else:
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features
+    lstm_predictions = build_forecast_features(
+        weekly_prices=weekly_prices,
+        weekly_dates=weekly_dates,
+        symbols=available_symbols,
+        forecaster_type="lstm",
+        use_model_snapshots=False,
+    )
+
+    # Align forecast features
+    for symbol in available_symbols:
+        if symbol in lstm_predictions:
+            pred_arr = lstm_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr):] = pred_arr
+                lstm_predictions[symbol] = padded
+        else:
+            lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
     training_data = build_training_data(
         prices=weekly_prices,
@@ -1175,25 +1304,69 @@ def train_ppo_patchtst_endpoint(
     min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
     logger.info(f"[PPO_PatchTST] Using {min_weeks} weeks of data")
 
+    # Get weekly date index for walk-forward forecasts
+    first_symbol = available_symbols[0]
+    weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
     # Align all price series
     for symbol in available_symbols:
         if symbol in weekly_prices:
             weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
-    # Build placeholder signals and forecasts
-    signals = {}
-    patchtst_predictions = {}
+    # Load REAL historical signals (news sentiment, fundamentals)
+    logger.info("[PPO_PatchTST] Loading historical signals (news, fundamentals)...")
+    signals = build_rl_training_signals(
+        prices_dict=prices_dict,
+        symbols=available_symbols,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Align signals to the common week count
     for symbol in available_symbols:
-        signals[symbol] = {
-            "news_sentiment": np.zeros(min_weeks - 1),
-            "gross_margin": np.zeros(min_weeks - 1),
-            "operating_margin": np.zeros(min_weeks - 1),
-            "net_margin": np.zeros(min_weeks - 1),
-            "current_ratio": np.zeros(min_weeks - 1),
-            "debt_to_equity": np.zeros(min_weeks - 1),
-            "fundamental_age": np.zeros(min_weeks - 1),
-        }
-        patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                else:
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    signals[symbol][signal_name] = padded
+        else:
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features (momentum proxy, no look-ahead bias)
+    logger.info("[PPO_PatchTST] Generating walk-forward forecast features...")
+    patchtst_predictions = build_forecast_features(
+        weekly_prices=weekly_prices,
+        weekly_dates=weekly_dates,
+        symbols=available_symbols,
+        forecaster_type="patchtst",
+        use_model_snapshots=False,  # Use momentum proxy for now
+    )
+
+    # Align forecast features to common week count
+    for symbol in available_symbols:
+        if symbol in patchtst_predictions:
+            pred_arr = patchtst_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                patchtst_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr):] = pred_arr
+                patchtst_predictions[symbol] = padded
+        else:
+            patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
 
     # Build training data (reuse from ppo_lstm)
     training_data = build_training_data(
@@ -1204,6 +1377,7 @@ def train_ppo_patchtst_endpoint(
     )
 
     logger.info(f"[PPO_PatchTST] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks")
+    logger.info(f"[PPO_PatchTST] Signals loaded for {len([s for s in signals if 'news_sentiment' in signals[s]])} symbols")
 
     # Train PPO
     logger.info("[PPO_PatchTST] Starting PPO training...")
@@ -1407,24 +1581,68 @@ def finetune_ppo_patchtst_endpoint(
             weekly_prices[symbol] = weekly.values
 
     min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+
+    # Get weekly date index for walk-forward forecasts
+    first_symbol = available_symbols[0]
+    weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
     for symbol in available_symbols:
         if symbol in weekly_prices:
             weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
-    # Build training data
-    signals = {}
-    patchtst_predictions = {}
+    # Load REAL historical signals
+    logger.info("[PPO_PatchTST Finetune] Loading historical signals...")
+    signals = build_rl_training_signals(
+        prices_dict=prices_dict,
+        symbols=available_symbols,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # Align signals to the common week count
     for symbol in available_symbols:
-        signals[symbol] = {
-            "news_sentiment": np.zeros(min_weeks - 1),
-            "gross_margin": np.zeros(min_weeks - 1),
-            "operating_margin": np.zeros(min_weeks - 1),
-            "net_margin": np.zeros(min_weeks - 1),
-            "current_ratio": np.zeros(min_weeks - 1),
-            "debt_to_equity": np.zeros(min_weeks - 1),
-            "fundamental_age": np.zeros(min_weeks - 1),
-        }
-        patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                else:
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    signals[symbol][signal_name] = padded
+        else:
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features
+    patchtst_predictions = build_forecast_features(
+        weekly_prices=weekly_prices,
+        weekly_dates=weekly_dates,
+        symbols=available_symbols,
+        forecaster_type="patchtst",
+        use_model_snapshots=False,
+    )
+
+    # Align forecast features
+    for symbol in available_symbols:
+        if symbol in patchtst_predictions:
+            pred_arr = patchtst_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                patchtst_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr):] = pred_arr
+                patchtst_predictions[symbol] = padded
+        else:
+            patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
 
     training_data = build_training_data(
         prices=weekly_prices,
@@ -1533,4 +1751,427 @@ def finetune_ppo_patchtst_endpoint(
         symbols_used=available_symbols,
         hf_repo=hf_repo,
         hf_url=hf_url,
+    )
+
+
+# ============================================================================
+# SAC + LSTM Training Endpoints
+# ============================================================================
+
+
+class SACLSTMTrainResponse(BaseModel):
+    """Response model for SAC + LSTM training endpoint."""
+
+    version: str
+    data_window_start: str
+    data_window_end: str
+    metrics: dict[str, float]
+    promoted: bool
+    prior_version: str | None
+    symbols_used: list[str]
+    hf_repo: str | None = None
+    hf_url: str | None = None
+
+
+def get_sac_lstm_storage() -> SACLSTMLocalStorage:
+    """Get the SAC + LSTM storage instance."""
+    return SACLSTMLocalStorage()
+
+
+def get_sac_lstm_config() -> SACLSTMConfig:
+    """Get SAC + LSTM configuration."""
+    return DEFAULT_SAC_LSTM_CONFIG
+
+
+@router.post("/sac_lstm/full", response_model=SACLSTMTrainResponse)
+def train_sac_lstm_endpoint(
+    storage: SACLSTMLocalStorage = Depends(get_sac_lstm_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+    config: SACLSTMConfig = Depends(get_sac_lstm_config),
+) -> SACLSTMTrainResponse:
+    """Train SAC portfolio allocator using LSTM forecasts."""
+    import time
+    import numpy as np
+
+    start_date, end_date = resolve_training_window()
+    logger.info(f"[SAC_LSTM] Starting training for {len(symbols)} symbols")
+    version = sac_lstm_compute_version(start_date, end_date, symbols, config)
+
+    if storage.version_exists(version):
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return SACLSTMTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    available_symbols = [s for s in symbols if s in prices_dict]
+
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    first_symbol = available_symbols[0]
+    weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
+    for symbol in available_symbols:
+        if symbol in weekly_prices:
+            weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    signals = build_rl_training_signals(prices_dict, available_symbols, start_date, end_date)
+    for symbol in available_symbols:
+        if symbol not in signals:
+            signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
+            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
+
+    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", False)
+    for symbol in available_symbols:
+        if symbol not in lstm_predictions:
+            lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = sac_build_training_data(weekly_prices, signals, lstm_predictions, available_symbols)
+    result = train_sac_lstm(training_data, config)
+
+    prior_version = storage.read_current_version()
+    prior_cagr = None
+    if prior_version:
+        prior_metadata = storage.read_metadata(prior_version)
+        if prior_metadata:
+            prior_cagr = prior_metadata["metrics"].get("eval_cagr")
+
+    promoted = prior_version is None or prior_cagr is None or result.eval_cagr > prior_cagr
+
+    metadata = create_sac_lstm_metadata(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        symbols=available_symbols, config=config, promoted=promoted, prior_version=prior_version,
+        actor_loss=result.final_actor_loss, critic_loss=result.final_critic_loss,
+        avg_episode_return=result.avg_episode_return, avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe, eval_cagr=result.eval_cagr, eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    storage.write_artifacts(version, result.actor, result.critic, result.critic_target, result.log_alpha,
+                            result.scaler, config, available_symbols, metadata)
+    if promoted:
+        storage.promote_version(version)
+
+    return SACLSTMTrainResponse(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
+                 "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
+                 "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
+        promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
+    )
+
+
+@router.post("/sac_lstm/finetune", response_model=SACLSTMTrainResponse)
+def finetune_sac_lstm_endpoint(
+    storage: SACLSTMLocalStorage = Depends(get_sac_lstm_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+) -> SACLSTMTrainResponse:
+    """Fine-tune SAC + LSTM on recent data. Requires prior trained model."""
+    import time
+    from datetime import timedelta
+    import numpy as np
+
+    prior_version = storage.read_current_version()
+    if prior_version is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="No prior SAC_LSTM model. Train with POST /train/sac_lstm/full first")
+
+    prior_artifacts = storage.load_current_artifacts()
+    prior_config = prior_artifacts.config
+
+    finetune_config = SACFinetuneConfig()
+    from datetime import date
+    end_date = date.today()
+    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)
+
+    version = f"{sac_lstm_compute_version(start_date, end_date, symbols, prior_config)}-ft"
+
+    if storage.version_exists(version):
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return SACLSTMTrainResponse(
+                version=version, data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"], metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"], prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    available_symbols = [s for s in symbols if s in prices_dict]
+
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    weekly_df = prices_dict[available_symbols[0]]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
+    for symbol in available_symbols:
+        weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    signals = build_rl_training_signals(prices_dict, available_symbols, start_date, end_date)
+    for symbol in available_symbols:
+        if symbol not in signals:
+            signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
+            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
+
+    lstm_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "lstm", False)
+    for symbol in available_symbols:
+        if symbol not in lstm_predictions:
+            lstm_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = sac_build_training_data(weekly_prices, signals, lstm_predictions, available_symbols)
+    result = finetune_sac_lstm(training_data, prior_artifacts.actor, prior_artifacts.critic,
+                               prior_artifacts.critic_target, prior_artifacts.log_alpha,
+                               prior_artifacts.scaler, prior_config, finetune_config)
+
+    prior_metadata = storage.read_metadata(prior_version)
+    prior_cagr = prior_metadata["metrics"].get("eval_cagr") if prior_metadata else None
+    promoted = prior_cagr is None or result.eval_cagr > prior_cagr
+
+    metadata = create_sac_lstm_metadata(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        symbols=available_symbols, config=prior_config, promoted=promoted, prior_version=prior_version,
+        actor_loss=result.final_actor_loss, critic_loss=result.final_critic_loss,
+        avg_episode_return=result.avg_episode_return, avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe, eval_cagr=result.eval_cagr, eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    storage.write_artifacts(version, result.actor, result.critic, result.critic_target, result.log_alpha,
+                            result.scaler, prior_config, available_symbols, metadata)
+    if promoted:
+        storage.promote_version(version)
+
+    return SACLSTMTrainResponse(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
+                 "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
+                 "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
+        promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
+    )
+
+
+# ============================================================================
+# SAC + PatchTST Training Endpoints
+# ============================================================================
+
+
+class SACPatchTSTTrainResponse(BaseModel):
+    """Response model for SAC + PatchTST training endpoint."""
+
+    version: str
+    data_window_start: str
+    data_window_end: str
+    metrics: dict[str, float]
+    promoted: bool
+    prior_version: str | None
+    symbols_used: list[str]
+    hf_repo: str | None = None
+    hf_url: str | None = None
+
+
+def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
+    """Get the SAC + PatchTST storage instance."""
+    return SACPatchTSTLocalStorage()
+
+
+def get_sac_patchtst_config() -> SACPatchTSTConfig:
+    """Get SAC + PatchTST configuration."""
+    return DEFAULT_SAC_PATCHTST_CONFIG
+
+
+@router.post("/sac_patchtst/full", response_model=SACPatchTSTTrainResponse)
+def train_sac_patchtst_endpoint(
+    storage: SACPatchTSTLocalStorage = Depends(get_sac_patchtst_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+    config: SACPatchTSTConfig = Depends(get_sac_patchtst_config),
+) -> SACPatchTSTTrainResponse:
+    """Train SAC portfolio allocator using PatchTST forecasts."""
+    import time
+    import numpy as np
+
+    start_date, end_date = resolve_training_window()
+    logger.info(f"[SAC_PatchTST] Starting training for {len(symbols)} symbols")
+    version = sac_patchtst_compute_version(start_date, end_date, symbols, config)
+
+    if storage.version_exists(version):
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return SACPatchTSTTrainResponse(
+                version=version, data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"], metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"], prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    available_symbols = [s for s in symbols if s in prices_dict]
+
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    weekly_df = prices_dict[available_symbols[0]]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
+    for symbol in available_symbols:
+        weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    signals = build_rl_training_signals(prices_dict, available_symbols, start_date, end_date)
+    for symbol in available_symbols:
+        if symbol not in signals:
+            signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
+            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
+
+    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", False)
+    for symbol in available_symbols:
+        if symbol not in patchtst_predictions:
+            patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = sac_build_training_data(weekly_prices, signals, patchtst_predictions, available_symbols)
+    result = train_sac_patchtst(training_data, config)
+
+    prior_version = storage.read_current_version()
+    prior_cagr = None
+    if prior_version:
+        prior_metadata = storage.read_metadata(prior_version)
+        if prior_metadata:
+            prior_cagr = prior_metadata["metrics"].get("eval_cagr")
+
+    promoted = prior_version is None or prior_cagr is None or result.eval_cagr > prior_cagr
+
+    metadata = create_sac_patchtst_metadata(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        symbols=available_symbols, config=config, promoted=promoted, prior_version=prior_version,
+        actor_loss=result.final_actor_loss, critic_loss=result.final_critic_loss,
+        avg_episode_return=result.avg_episode_return, avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe, eval_cagr=result.eval_cagr, eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    storage.write_artifacts(version, result.actor, result.critic, result.critic_target, result.log_alpha,
+                            result.scaler, config, available_symbols, metadata)
+    if promoted:
+        storage.promote_version(version)
+
+    return SACPatchTSTTrainResponse(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
+                 "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
+                 "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
+        promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
+    )
+
+
+@router.post("/sac_patchtst/finetune", response_model=SACPatchTSTTrainResponse)
+def finetune_sac_patchtst_endpoint(
+    storage: SACPatchTSTLocalStorage = Depends(get_sac_patchtst_storage),
+    symbols: list[str] = Depends(get_top15_symbols),
+) -> SACPatchTSTTrainResponse:
+    """Fine-tune SAC + PatchTST on recent data. Requires prior trained model."""
+    import time
+    from datetime import timedelta
+    import numpy as np
+
+    prior_version = storage.read_current_version()
+    if prior_version is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="No prior SAC_PatchTST model. Train with POST /train/sac_patchtst/full first")
+
+    prior_artifacts = storage.load_current_artifacts()
+    prior_config = prior_artifacts.config
+
+    finetune_config = SACFinetuneConfig()
+    from datetime import date
+    end_date = date.today()
+    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)
+
+    version = f"{sac_patchtst_compute_version(start_date, end_date, symbols, prior_config)}-ft"
+
+    if storage.version_exists(version):
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return SACPatchTSTTrainResponse(
+                version=version, data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"], metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"], prior_version=existing_metadata.get("prior_version"),
+                symbols_used=existing_metadata["symbols"],
+            )
+
+    prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+    available_symbols = [s for s in symbols if s in prices_dict]
+
+    weekly_prices = {}
+    for symbol in available_symbols:
+        df = prices_dict[symbol]
+        if df is not None and len(df) > 0:
+            weekly = df["close"].resample("W-FRI").last().dropna()
+            weekly_prices[symbol] = weekly.values
+
+    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    weekly_df = prices_dict[available_symbols[0]]["close"].resample("W-FRI").last().dropna()
+    weekly_dates = weekly_df.index[-min_weeks:]
+
+    for symbol in available_symbols:
+        weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
+
+    signals = build_rl_training_signals(prices_dict, available_symbols, start_date, end_date)
+    for symbol in available_symbols:
+        if symbol not in signals:
+            signals[symbol] = {k: np.zeros(min_weeks - 1) for k in ["news_sentiment", "gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]}
+            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
+
+    patchtst_predictions = build_forecast_features(weekly_prices, weekly_dates, available_symbols, "patchtst", False)
+    for symbol in available_symbols:
+        if symbol not in patchtst_predictions:
+            patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
+
+    training_data = sac_build_training_data(weekly_prices, signals, patchtst_predictions, available_symbols)
+    result = finetune_sac_patchtst(training_data, prior_artifacts.actor, prior_artifacts.critic,
+                                    prior_artifacts.critic_target, prior_artifacts.log_alpha,
+                                    prior_artifacts.scaler, prior_config, finetune_config)
+
+    prior_metadata = storage.read_metadata(prior_version)
+    prior_cagr = prior_metadata["metrics"].get("eval_cagr") if prior_metadata else None
+    promoted = prior_cagr is None or result.eval_cagr > prior_cagr
+
+    metadata = create_sac_patchtst_metadata(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        symbols=available_symbols, config=prior_config, promoted=promoted, prior_version=prior_version,
+        actor_loss=result.final_actor_loss, critic_loss=result.final_critic_loss,
+        avg_episode_return=result.avg_episode_return, avg_episode_sharpe=result.avg_episode_sharpe,
+        eval_sharpe=result.eval_sharpe, eval_cagr=result.eval_cagr, eval_max_drawdown=result.eval_max_drawdown,
+    )
+
+    storage.write_artifacts(version, result.actor, result.critic, result.critic_target, result.log_alpha,
+                            result.scaler, prior_config, available_symbols, metadata)
+    if promoted:
+        storage.promote_version(version)
+
+    return SACPatchTSTTrainResponse(
+        version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
+        metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
+                 "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
+                 "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
+        promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
     )

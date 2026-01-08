@@ -28,6 +28,20 @@ from brain_api.storage.ppo_patchtst.local import (
     PPOPatchTSTLocalStorage,
 )
 
+# SAC + LSTM storage
+from brain_api.storage.sac_lstm.local import (
+    SACLSTMArtifacts,
+    SACLSTMLocalStorage,
+    create_sac_lstm_metadata,
+)
+
+# SAC + PatchTST storage
+from brain_api.storage.sac_patchtst.local import (
+    SACPatchTSTArtifacts,
+    SACPatchTSTLocalStorage,
+    create_sac_patchtst_metadata,
+)
+
 # Shared utilities
 from brain_api.storage.base import DEFAULT_DATA_PATH
 from brain_api.storage.metadata import create_training_metadata
@@ -195,6 +209,14 @@ __all__ = [
     "PPOPatchTSTArtifacts",
     "PPOPatchTSTLocalStorage",
     "create_ppo_patchtst_metadata",
+    # SAC + LSTM
+    "SACLSTMArtifacts",
+    "SACLSTMLocalStorage",
+    "create_sac_lstm_metadata",
+    # SAC + PatchTST
+    "SACPatchTSTArtifacts",
+    "SACPatchTSTLocalStorage",
+    "create_sac_patchtst_metadata",
     # Shared
     "DEFAULT_DATA_PATH",
     "create_training_metadata",
