@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader, TensorDataset
 from transformers import PatchTSTConfig as HFPatchTSTConfig
 from transformers import PatchTSTForPrediction
 
@@ -95,13 +96,31 @@ def train_model_pytorch(
     print(f"[PatchTST] Config: {config.epochs} epochs, batch_size={config.batch_size}, lr={config.learning_rate}")
     print(f"[PatchTST] Channels: {config.num_input_channels}, context_length={config.context_length}")
 
-    # Convert to tensors
-    # HuggingFace PatchTST expects shape (batch, sequence_length, num_channels)
-    # Our X is already in that shape, no transpose needed
-    X_train_t = torch.FloatTensor(X_train).to(device)
-    y_train_t = torch.FloatTensor(y_train).to(device)
-    X_val_t = torch.FloatTensor(X_val).to(device)
-    y_val_t = torch.FloatTensor(y_val).to(device)
+    # Create DataLoaders for memory-efficient batch loading
+    # Keep data on CPU and only move batches to GPU on demand
+    train_dataset = TensorDataset(
+        torch.from_numpy(X_train).float(),
+        torch.from_numpy(y_train).float()
+    )
+    val_dataset = TensorDataset(
+        torch.from_numpy(X_val).float(),
+        torch.from_numpy(y_val).float()
+    )
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=0,  # Keep simple for compatibility
+        pin_memory=True if device.type == 'cuda' else False,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=True if device.type == 'cuda' else False,
+    )
 
     # Find close_ret channel index
     try:
@@ -133,14 +152,14 @@ def train_model_pytorch(
     for epoch in range(config.epochs):
         model.train()
 
-        indices = torch.randperm(len(X_train_t), device=device)
         total_train_loss = 0.0
         n_batches = 0
+        first_batch_logged = False
 
-        for i in range(0, len(indices), config.batch_size):
-            batch_idx = indices[i : i + config.batch_size]
-            batch_X = X_train_t[batch_idx]
-            batch_y = y_train_t[batch_idx]
+        for batch_X, batch_y in train_loader:
+            # Move batch to device (memory-efficient: only one batch at a time)
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
 
             optimizer.zero_grad()
 
@@ -151,7 +170,8 @@ def train_model_pytorch(
             outputs = model_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
 
             # CRITICAL VERIFICATION: Log model output shape and per-channel predictions
-            if epoch == 0 and i == 0:
+            if epoch == 0 and not first_batch_logged:
+                first_batch_logged = True
                 print(f"[PatchTST] VERIFY MODEL OUTPUT:")
                 print(f"  Full model_outputs shape: {model_outputs.shape} (batch, pred_len, channels)")
                 print(f"  Extracted outputs shape: {outputs.shape} (batch, 1) - using close_ret channel only")
@@ -167,34 +187,40 @@ def train_model_pytorch(
             loss = criterion(outputs, batch_y)
             loss.backward()
 
-            # CRITICAL VERIFICATION: Gradient clipping and monitoring
+            # Gradient clipping
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
-            if epoch == 0 and i == 0:
+            if epoch == 0 and n_batches == 0:
                 print(f"[PatchTST] VERIFY GRADIENTS:")
                 print(f"  Gradient norm: {grad_norm:.6f}")
                 if grad_norm > 10.0:
-                    print(f"  ⚠️ WARNING: Large gradient norm (possible exploding gradients)")
+                    print(f"  WARNING: Large gradient norm (possible exploding gradients)")
                 elif grad_norm < 0.001:
-                    print(f"  ⚠️ WARNING: Very small gradient norm (possible vanishing gradients)")
-            
-            # Log gradient norm every epoch for first 5 epochs to monitor training stability
-            if epoch < 5 and i == 0:
-                print(f"[PatchTST] Epoch {epoch + 1} batch 0: grad_norm={grad_norm:.6f}")
+                    print(f"  WARNING: Very small gradient norm (possible vanishing gradients)")
 
             optimizer.step()
 
             total_train_loss += loss.item()
             n_batches += 1
+            
+            # Explicit cleanup to reduce memory pressure
+            del batch_X, batch_y, model_outputs, outputs, loss
 
         avg_train_loss = total_train_loss / n_batches
 
-        # Validation
+        # Validation (batch by batch to save memory)
         model.eval()
+        total_val_loss = 0.0
+        n_val_batches = 0
         with torch.no_grad():
-            val_outputs = model(past_values=X_val_t).prediction_outputs
-            # Extract close_ret channel only
-            val_outputs = val_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
-            val_loss = criterion(val_outputs, y_val_t).item()
+            for val_X, val_y in val_loader:
+                val_X = val_X.to(device)
+                val_y = val_y.to(device)
+                val_outputs = model(past_values=val_X).prediction_outputs
+                val_outputs = val_outputs[:, 0, close_ret_idx:close_ret_idx+1]
+                total_val_loss += criterion(val_outputs, val_y).item()
+                n_val_batches += 1
+                del val_X, val_y, val_outputs
+        val_loss = total_val_loss / n_val_batches
 
         # Learning rate scheduling
         scheduler.step(val_loss)
@@ -222,6 +248,12 @@ def train_model_pytorch(
                       f"(val_loss didn't improve for {config.early_stopping_patience} epochs)")
                 break
 
+    # Clear GPU cache to free memory after training loop
+    if device.type == 'mps':
+        torch.mps.empty_cache()
+    elif device.type == 'cuda':
+        torch.cuda.empty_cache()
+
     print(f"[PatchTST] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f}")
 
     # Restore best model on CPU
@@ -229,13 +261,20 @@ def train_model_pytorch(
     if best_model_state is not None:
         model_cpu.load_state_dict(best_model_state)
 
-    # Final metrics
+    # Final metrics (batch by batch to save memory)
     model.eval()
+    total_final_train_loss = 0.0
+    n_final_batches = 0
     with torch.no_grad():
-        train_outputs = model(past_values=X_train_t).prediction_outputs
-        # Extract close_ret channel only
-        train_outputs = train_outputs[:, 0, close_ret_idx:close_ret_idx+1]  # Shape: (batch, 1)
-        final_train_loss = criterion(train_outputs, y_train_t).item()
+        for train_X, train_y in train_loader:
+            train_X = train_X.to(device)
+            train_y = train_y.to(device)
+            train_outputs = model(past_values=train_X).prediction_outputs
+            train_outputs = train_outputs[:, 0, close_ret_idx:close_ret_idx+1]
+            total_final_train_loss += criterion(train_outputs, train_y).item()
+            n_final_batches += 1
+            del train_X, train_y, train_outputs
+    final_train_loss = total_final_train_loss / n_final_batches
 
     # Baseline: predict mean return (better than predicting 0)
     y_val_mean = float(np.mean(y_val))
@@ -244,6 +283,12 @@ def train_model_pytorch(
     print(f"[PatchTST] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}")
     beats_baseline = best_val_loss < baseline_loss
     print(f"[PatchTST] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline")
+
+    # Final GPU cache cleanup before returning
+    if device.type == 'mps':
+        torch.mps.empty_cache()
+    elif device.type == 'cuda':
+        torch.cuda.empty_cache()
 
     return TrainingResult(
         model=model_cpu,

@@ -142,20 +142,19 @@ def build_inference_features(
     if fundamentals_df is not None and len(fundamentals_df) > 0:
         fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
         
-        # Calculate days since last fundamental update for each date
-        fundamental_age_days = []
-        for date in features_df.index:
-            # Find the most recent fundamental date <= current date
-            available_dates = fundamentals_df.index[fundamentals_df.index <= date]
-            if len(available_dates) > 0:
-                last_update = available_dates[-1]
-                days_old = (date - last_update).days
-                fundamental_age_days.append(days_old)
-            else:
-                fundamental_age_days.append(999)  # Very old if no data
+        # Vectorized calculation of days since last fundamental update
+        fund_dates = fundamentals_df.index.values
+        if len(fund_dates) > 0:
+            positions = np.searchsorted(fund_dates, features_df.index.values, side='right')
+            valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
+            last_updates = fund_dates[valid_positions]
+            days_old = (features_df.index.values - last_updates).astype('timedelta64[D]').astype(float)
+            days_old[positions == 0] = 999.0
+        else:
+            days_old = np.full(len(features_df), 999.0)
         
         # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
-        features_df["fundamental_age"] = pd.Series(fundamental_age_days, index=features_df.index) / 90.0
+        features_df["fundamental_age"] = days_old / 90.0
         
         for col in fundamental_cols:
             if col in fund_aligned.columns:
@@ -274,66 +273,62 @@ def run_inference(
         raise ValueError(f"Required channel not found in feature_names: {e}")
 
     # Predict 5 daily returns iteratively (Monday through Friday)
-    # After each prediction, update the input sequence by:
-    # 1. Removing the oldest day (first row)
-    # 2. Adding the new day's features (constructed from prediction)
-    daily_returns = []
+    # Pre-allocate arrays to avoid memory fragmentation
+    n_samples = len(valid_features)
+    daily_returns = np.zeros((5, n_samples), dtype=np.float32)
     
-    # Current input sequences (will be updated each iteration)
-    X_current = X_batch.copy()  # Shape: (n_samples, context_length, num_channels)
+    # Pre-compute OHLCV channel mask for vectorized operations
+    ohlcv_indices = np.array([open_ret_idx, high_ret_idx, low_ret_idx, close_ret_idx, volume_ret_idx])
+    non_ohlcv_mask = np.ones(config.num_input_channels, dtype=bool)
+    non_ohlcv_mask[ohlcv_indices] = False
+    
+    # Pre-allocate working arrays (reused each iteration to reduce memory allocation)
+    X_current = X_batch  # No copy needed - we'll modify in place
+    new_day_features = np.zeros((n_samples, config.num_input_channels), dtype=np.float32)
     
     with torch.no_grad():
         for day in range(5):
             # Convert to tensor and move to device
-            X_tensor = torch.FloatTensor(X_current).to(device)
+            X_tensor = torch.from_numpy(X_current).float().to(device)
             
             # Predict next-day return
             outputs = model(past_values=X_tensor).prediction_outputs
             # Extract close_ret channel for next-day return prediction
-            day_returns = outputs[:, 0, close_ret_idx].cpu().numpy()  # Shape: (n_samples,)
-            daily_returns.append(day_returns)
+            daily_returns[day] = outputs[:, 0, close_ret_idx].cpu().numpy()
+            
+            # Explicit cleanup of GPU tensor
+            del X_tensor, outputs
             
             # Update input sequences for next iteration (except for the last day)
             if day < 4:  # Don't need to update after Friday prediction
-                # Construct features for the predicted day
-                # We need to work in unscaled space, then scale everything together
-                # Get the last day's features in unscaled space for forward-filling
-                X_current_unscaled = feature_scaler.inverse_transform(
-                    X_current.reshape(-1, config.num_input_channels)
-                ).reshape(X_current.shape)
+                # Get the last day's scaled features for non-OHLCV channels (forward-fill)
+                # Instead of inverse transform + transform, work directly in scaled space
+                # for non-OHLCV channels since they just get copied forward
+                last_day_scaled = X_current[:, -1, :]
                 
-                new_day_features = np.zeros((len(valid_features), config.num_input_channels))
+                # Vectorized feature construction
+                # Set OHLCV returns to predicted close_ret (in scaled space)
+                # Note: predicted returns are already in unscaled space, need to scale them
+                pred_returns = daily_returns[day].reshape(-1, 1)
+                # Scale the predicted returns using scaler's mean/std for close_ret
+                scaled_pred = (pred_returns - feature_scaler.mean_[close_ret_idx]) / feature_scaler.scale_[close_ret_idx]
                 
-                for i in range(len(valid_features)):
-                    # Use predicted close_ret for OHLCV channels (in unscaled space)
-                    predicted_close_ret = day_returns[i]  # Already in unscaled space
-                    new_day_features[i, open_ret_idx] = predicted_close_ret
-                    new_day_features[i, high_ret_idx] = predicted_close_ret
-                    new_day_features[i, low_ret_idx] = predicted_close_ret
-                    new_day_features[i, close_ret_idx] = predicted_close_ret
-                    new_day_features[i, volume_ret_idx] = 0.0  # Assume no volume change
-                    
-                    # Forward-fill other channels (news, fundamentals) from the last day
-                    # These don't change day-to-day, so use the last row's unscaled values
-                    last_day_features_unscaled = X_current_unscaled[i, -1, :]
-                    for ch_idx in range(config.num_input_channels):
-                        if ch_idx not in [open_ret_idx, high_ret_idx, low_ret_idx, 
-                                         close_ret_idx, volume_ret_idx]:
-                            new_day_features[i, ch_idx] = last_day_features_unscaled[ch_idx]
+                # Fill new_day_features vectorized
+                new_day_features[:, open_ret_idx] = scaled_pred.ravel()
+                new_day_features[:, high_ret_idx] = scaled_pred.ravel()
+                new_day_features[:, low_ret_idx] = scaled_pred.ravel()
+                new_day_features[:, close_ret_idx] = scaled_pred.ravel()
+                # Scale volume_ret (0.0 in unscaled space)
+                new_day_features[:, volume_ret_idx] = -feature_scaler.mean_[volume_ret_idx] / feature_scaler.scale_[volume_ret_idx]
                 
-                # Scale the new day's features
-                new_day_features_scaled = feature_scaler.transform(new_day_features)
+                # Copy non-OHLCV channels from last day (already scaled)
+                new_day_features[:, non_ohlcv_mask] = last_day_scaled[:, non_ohlcv_mask]
                 
-                # Update sequences: remove oldest day, add new day
-                # X_current shape: (n_samples, context_length, num_channels)
-                # Remove first row, add new row at the end
-                X_current = np.concatenate([
-                    X_current[:, 1:, :],  # Remove oldest day (first row)
-                    new_day_features_scaled[:, np.newaxis, :]  # Add new day (add dimension for sequence)
-                ], axis=1)
+                # Update sequences in-place: shift left and add new day
+                X_current[:, :-1, :] = X_current[:, 1:, :]
+                X_current[:, -1, :] = new_day_features
     
-    # Convert to numpy array: shape (5, n_samples)
-    daily_returns = np.array(daily_returns)
+    # Transpose to get shape (5, n_samples) - already in correct shape
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):

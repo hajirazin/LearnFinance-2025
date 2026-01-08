@@ -202,7 +202,8 @@ def test_train_patchtst_returns_required_fields(client_with_mocks):
     assert isinstance(data["metrics"], dict)
 
     # Check PatchTST-specific fields
-    assert data["num_input_channels"] == 11  # Default config
+    # 12 channels: OHLCV (5) + News (1) + Fundamentals (5) + FundamentalAge (1)
+    assert data["num_input_channels"] == 12  # Default config
     assert "ohlcv" in data["signals_used"]
     assert "news_sentiment" in data["signals_used"]
     assert "fundamentals" in data["signals_used"]

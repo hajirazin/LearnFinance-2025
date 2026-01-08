@@ -88,7 +88,8 @@ def build_dataset(
 
         # Create samples: for each day t, predict day t+1's return
         # We need at least context_length days of history, and at least 1 day ahead
-        for t in range(config.context_length, len(features_df) - 1):
+        # Use sample_stride to reduce dataset size (5=weekly-like sampling, 1=daily)
+        for t in range(config.context_length, len(features_df) - 1, config.sample_stride):
             # Extract input sequence: days [t-context_length, t)
             seq_start_idx = t - config.context_length
             seq_end_idx = t
@@ -113,7 +114,7 @@ def build_dataset(
             symbols_used += 1
             total_samples += symbol_samples
 
-    print(f"[PatchTST] Dataset built: {total_samples} daily samples from {symbols_used} symbols")
+    print(f"[PatchTST] Dataset built: {total_samples} samples from {symbols_used} symbols (stride={config.sample_stride})")
 
     if not all_sequences:
         empty_X = np.array([]).reshape(0, config.context_length, config.num_input_channels)

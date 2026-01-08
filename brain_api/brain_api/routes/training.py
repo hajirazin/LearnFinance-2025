@@ -444,6 +444,9 @@ def train_patchtst(
     t_align = time.time() - t0
     logger.info(f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s")
 
+    # Free intermediate data no longer needed (prices still needed for dataset_builder)
+    del news_sentiment, fundamentals
+
     if len(aligned_features) == 0:
         logger.error("[PatchTST] No aligned features - cannot train model")
         raise ValueError("No aligned features could be built from available data")
@@ -454,6 +457,9 @@ def train_patchtst(
     dataset = dataset_builder(aligned_features, prices, config)
     t_dataset = time.time() - t0
     logger.info(f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples")
+
+    # Free aligned features and prices - no longer needed after dataset is built
+    del aligned_features, prices
 
     if len(dataset.X) == 0:
         logger.error("[PatchTST] Dataset is empty - cannot train model")

@@ -43,6 +43,7 @@ class PatchTSTConfig:
     early_stopping_patience: int = 15  # Stop if val_loss doesn't improve for N epochs
     weight_decay: float = 1e-5  # L2 regularization
     max_grad_norm: float = 1.0  # Gradient clipping
+    sample_stride: int = 5  # Sample every Nth day (5=weekly samples, 1=daily, reduces dataset 5x)
 
     # Feature engineering
     use_returns: bool = True  # Use log returns for OHLCV (more stationary)
@@ -78,6 +79,7 @@ class PatchTSTConfig:
             "early_stopping_patience": self.early_stopping_patience,
             "weight_decay": self.weight_decay,
             "max_grad_norm": self.max_grad_norm,
+            "sample_stride": self.sample_stride,
             "use_returns": self.use_returns,
             "min_week_days": self.min_week_days,
             "feature_names": self.feature_names,
