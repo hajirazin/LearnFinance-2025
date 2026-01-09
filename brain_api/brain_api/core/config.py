@@ -3,8 +3,6 @@
 import os
 from datetime import date
 
-from dateutil.relativedelta import relativedelta
-
 # Environment variable names
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
@@ -88,11 +86,12 @@ def resolve_training_window() -> tuple[date, date]:
     """Resolve the training data window from API config/environment.
 
     Reads:
-    - LSTM_TRAIN_LOOKBACK_YEARS: number of years to look back (default: 10)
+    - LSTM_TRAIN_LOOKBACK_YEARS: number of years to look back (default: 15)
     - LSTM_TRAIN_WINDOW_END_DATE: optional override for end date (YYYY-MM-DD)
 
     Returns:
         Tuple of (start_date, end_date) as date objects.
+        Start date is anchored to January 1st of (end_year - lookback_years).
     """
     # Get lookback years from env or use default
     lookback_str = os.environ.get(ENV_LSTM_LOOKBACK_YEARS, "")
@@ -102,8 +101,8 @@ def resolve_training_window() -> tuple[date, date]:
     end_date_str = os.environ.get(ENV_LSTM_WINDOW_END_DATE, "")
     end_date = date.fromisoformat(end_date_str) if end_date_str else date.today()
 
-    # Compute start date
-    start_date = end_date - relativedelta(years=lookback_years)
+    # Compute start date (anchored to January 1st of year)
+    start_date = date(end_date.year - lookback_years, 1, 1)
 
     return start_date, end_date
 
