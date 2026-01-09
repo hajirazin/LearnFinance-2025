@@ -10,7 +10,6 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.distributions import Normal
 
 LOG_STD_MIN = -20
@@ -262,7 +261,7 @@ def soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
         source: Source network.
         tau: Interpolation coefficient (0 < tau <= 1).
     """
-    for target_param, source_param in zip(target.parameters(), source.parameters()):
+    for target_param, source_param in zip(target.parameters(), source.parameters(), strict=False):
         target_param.data.copy_(
             tau * source_param.data + (1 - tau) * target_param.data
         )

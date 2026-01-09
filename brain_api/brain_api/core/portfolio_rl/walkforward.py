@@ -79,7 +79,7 @@ def generate_walkforward_forecasts_simple(
         return forecasts
 
     start_year = weekly_dates[0].year
-    end_year = weekly_dates[-1].year
+    weekly_dates[-1].year
 
     for symbol in symbols:
         if symbol not in weekly_prices:
@@ -211,7 +211,7 @@ def generate_walkforward_forecasts_with_model(
                             prices,
                             year_indices,
                         )
-                        for idx, pred in zip(year_indices, preds):
+                        for idx, pred in zip(year_indices, preds, strict=False):
                             if idx < n_weeks - 1:
                                 symbol_forecasts[idx] = pred
                     except Exception as e:
@@ -257,7 +257,6 @@ def _run_snapshot_inference(
     Returns:
         List of predictions for each week in year_indices
     """
-    import torch
     from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 
     # Load snapshot artifacts
@@ -448,6 +447,7 @@ def _run_patchtst_snapshot_inference(
 
 # Type hints for snapshot artifacts
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from brain_api.storage.forecaster_snapshots import (
         LSTMSnapshotArtifacts,

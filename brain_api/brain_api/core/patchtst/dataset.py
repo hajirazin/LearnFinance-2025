@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from brain_api.core.inference_utils import extract_trading_weeks
 from brain_api.core.patchtst.config import PatchTSTConfig
 
 
@@ -77,10 +76,10 @@ def build_dataset(
     # Find close_ret channel index
     try:
         close_ret_idx = config.feature_names.index("close_ret")
-    except ValueError:
-        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
+    except ValueError as e:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}") from e
 
-    for symbol, features_df in aligned_features.items():
+    for _symbol, features_df in aligned_features.items():
         if len(features_df) < config.context_length + 1:
             continue
 
@@ -131,12 +130,12 @@ def build_dataset(
     # CRITICAL VERIFICATION: Dataset shape and channel count
     assert X.shape[2] == config.num_input_channels, \
         f"CRITICAL: Expected {config.num_input_channels} channels in X, got {X.shape[2]}"
-    print(f"[PatchTST] VERIFY DATASET:")
+    print("[PatchTST] VERIFY DATASET:")
     print(f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})")
     print(f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})")
     print(f"  Expected channels: {config.feature_names}")
     print(f"  Target: next-day close_ret (channel {close_ret_idx})")
-    
+
     # Verify no NaN/Inf in X
     x_nan_count = np.isnan(X).sum()
     x_inf_count = np.isinf(X).sum()
@@ -159,7 +158,7 @@ def build_dataset(
     X = X_flat_scaled.reshape(original_shape)
 
     # Log data statistics after scaling
-    print(f"[PatchTST] Data statistics after scaling:")
+    print("[PatchTST] Data statistics after scaling:")
     print(f"  X: mean={X.mean():.6f}, std={X.std():.6f}, min={X.min():.6f}, max={X.max():.6f}")
     print(f"  y: mean={y.mean():.6f}, std={y.std():.6f}, min={y.min():.6f}, max={y.max():.6f}")
 

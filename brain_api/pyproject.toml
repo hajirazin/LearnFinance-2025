@@ -89,4 +89,12 @@ known-first-party = ["brain_api"]
 "brain_api/routes/**.py" = [
     "B008",  # Allow Depends() in FastAPI route defaults
 ]
+# Files with intentional deferred/late imports
+"brain_api/main.py" = ["E402"]
+"brain_api/routes/training/__init__.py" = ["E402"]
+"brain_api/core/portfolio_rl/walkforward.py" = ["E402", "B018", "SIM102"]
+# Files with intentional nested if for readability
+"brain_api/storage/base_huggingface.py" = ["SIM102"]
+"brain_api/routes/inference/helpers.py" = ["SIM102"]
+"brain_api/routes/pipelines/inference.py" = ["SIM102"]
 

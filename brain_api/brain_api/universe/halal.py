@@ -37,9 +37,7 @@ def is_us_ticker(symbol: str) -> bool:
         return False
     if "." in symbol:
         return False
-    if symbol[0].isdigit():
-        return False
-    return True
+    return not symbol[0].isdigit()
 
 
 def _fetch_etf_holdings(ticker: str) -> list[dict]:

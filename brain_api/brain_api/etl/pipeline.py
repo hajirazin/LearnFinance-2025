@@ -7,9 +7,9 @@ from the API endpoint or CLI.
 
 import json
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from rich.console import Console
 from tqdm import tqdm
@@ -202,7 +202,7 @@ def run_pipeline(
 
                 # Score batch (uses cache automatically)
                 texts = [a.text for a in filtered_batch]
-                scores, cache_hits, new_scores = scorer.score_batch_with_stats(texts)
+                _scores, cache_hits, new_scores = scorer.score_batch_with_stats(texts)
 
                 total_cache_hits += cache_hits
                 total_new_scores += new_scores

@@ -39,7 +39,7 @@ class QuarterlyStatement:
 @dataclass
 class FundamentalRatios:
     """Computed financial ratios for a symbol at a point in time.
-    
+
     5 core ratios for PPO:
     - Profitability: gross_margin, operating_margin, net_margin
     - Liquidity: current_ratio
@@ -48,18 +48,18 @@ class FundamentalRatios:
 
     symbol: str
     as_of_date: str  # The fiscal_date_ending used
-    
+
     # Profitability
     gross_margin: float | None  # grossProfit / totalRevenue
     operating_margin: float | None  # operatingIncome / totalRevenue
     net_margin: float | None  # netIncome / totalRevenue
-    
+
     # Liquidity
     current_ratio: float | None  # totalCurrentAssets / totalCurrentLiabilities
-    
+
     # Leverage
     debt_to_equity: float | None  # shortLongTermDebtTotal / totalShareholderEquity
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -76,7 +76,7 @@ class FundamentalRatios:
 @dataclass
 class FetchRecord:
     """Record of a fetched statement file."""
-    
+
     symbol: str
     endpoint: str  # "income_statement" or "balance_sheet"
     file_path: str
@@ -88,7 +88,7 @@ class FetchRecord:
 @dataclass
 class FundamentalsResult:
     """Result of fundamentals fetch operation."""
-    
+
     symbol: str
     income_statements: list[QuarterlyStatement]
     balance_sheets: list[QuarterlyStatement]

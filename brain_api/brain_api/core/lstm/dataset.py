@@ -72,12 +72,9 @@ def build_dataset(
 
         # Compute features using shared utility
         features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
-        
+
         # Align original df with features (first row dropped when using returns)
-        if config.use_returns:
-            df_aligned = df.iloc[1:]
-        else:
-            df_aligned = df
+        df_aligned = df.iloc[1:] if config.use_returns else df
 
         # Extract trading weeks from the aligned data
         weeks = extract_trading_weeks(df_aligned, min_days=config.min_week_days)

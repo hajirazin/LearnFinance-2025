@@ -4,11 +4,16 @@ This module re-exports from model-specific submodules for backward compatibility
 """
 
 # LSTM storage
+# Shared utilities
+from datetime import UTC
+
+from brain_api.storage.base import DEFAULT_DATA_PATH
 from brain_api.storage.lstm.local import (
+    LocalModelStorage,  # Backward compatibility alias
     LSTMArtifacts,
     LSTMLocalStorage,
-    LocalModelStorage,  # Backward compatibility alias
 )
+from brain_api.storage.metadata import create_training_metadata
 
 # PatchTST storage
 from brain_api.storage.patchtst.local import (
@@ -41,10 +46,6 @@ from brain_api.storage.sac_patchtst.local import (
     SACPatchTSTLocalStorage,
     create_sac_patchtst_metadata,
 )
-
-# Shared utilities
-from brain_api.storage.base import DEFAULT_DATA_PATH
-from brain_api.storage.metadata import create_training_metadata
 
 
 def create_metadata(
@@ -121,12 +122,12 @@ def create_ppo_lstm_metadata(
     eval_max_drawdown: float,
 ) -> dict:
     """Create metadata dict for PPO + LSTM training run."""
-    from datetime import datetime, timezone
-    
+    from datetime import datetime
+
     return {
         "model_type": "ppo_lstm",
         "version": version,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,
@@ -165,12 +166,12 @@ def create_ppo_patchtst_metadata(
     eval_max_drawdown: float,
 ) -> dict:
     """Create metadata dict for PPO + PatchTST training run."""
-    from datetime import datetime, timezone
-    
+    from datetime import datetime
+
     return {
         "model_type": "ppo_patchtst",
         "version": version,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,
@@ -192,32 +193,32 @@ def create_ppo_patchtst_metadata(
 
 
 __all__ = [
+    # Shared
+    "DEFAULT_DATA_PATH",
     # LSTM
     "LSTMArtifacts",
     "LSTMLocalStorage",
     "LocalModelStorage",  # Backward compatibility alias
-    "create_metadata",
-    # PatchTST
-    "PatchTSTArtifacts",
-    "PatchTSTModelStorage",
-    "create_patchtst_metadata",
     # PPO + LSTM
     "PPOLSTMArtifacts",
     "PPOLSTMLocalStorage",
-    "create_ppo_lstm_metadata",
     # PPO + PatchTST
     "PPOPatchTSTArtifacts",
     "PPOPatchTSTLocalStorage",
-    "create_ppo_patchtst_metadata",
+    # PatchTST
+    "PatchTSTArtifacts",
+    "PatchTSTModelStorage",
     # SAC + LSTM
     "SACLSTMArtifacts",
     "SACLSTMLocalStorage",
-    "create_sac_lstm_metadata",
     # SAC + PatchTST
     "SACPatchTSTArtifacts",
     "SACPatchTSTLocalStorage",
+    "create_metadata",
+    "create_patchtst_metadata",
+    "create_ppo_lstm_metadata",
+    "create_ppo_patchtst_metadata",
+    "create_sac_lstm_metadata",
     "create_sac_patchtst_metadata",
-    # Shared
-    "DEFAULT_DATA_PATH",
     "create_training_metadata",
 ]

@@ -9,21 +9,20 @@ This environment simulates weekly portfolio rebalancing with:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
-from brain_api.core.portfolio_rl.config import PPOConfig, DEFAULT_PPO_CONFIG
+from brain_api.core.portfolio_rl.config import DEFAULT_PPO_CONFIG, PPOConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
-    enforce_constraints,
     compute_turnover,
+    enforce_constraints,
 )
 from brain_api.core.portfolio_rl.rewards import compute_reward
 from brain_api.core.portfolio_rl.state import (
     StateSchema,
     build_state_vector,
-    extract_portfolio_weights_from_state,
 )
 
 
@@ -38,19 +37,19 @@ class EnvStep:
 
 class PortfolioEnv:
     """Weekly portfolio rebalancing environment.
-    
+
     Episode structure:
     - One episode = one year (52 weeks) or until data ends
     - Each step = one week
     - Action = raw logits for portfolio weights
     - State = signals + forecast + current portfolio weights
-    
+
     The environment is stateful and tracks:
     - Current portfolio weights
     - Current week index within episode
     - Episode year
     """
-    
+
     def __init__(
         self,
         symbol_returns: np.ndarray,
@@ -60,7 +59,7 @@ class PortfolioEnv:
         config: PPOConfig | None = None,
     ):
         """Initialize environment.
-        
+
         Args:
             symbol_returns: Weekly returns for each symbol.
                            Shape: (n_weeks, n_stocks).
@@ -76,44 +75,44 @@ class PortfolioEnv:
         self.forecast_features = forecast_features
         self.symbol_order = symbol_order
         self.config = config or DEFAULT_PPO_CONFIG
-        
+
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
-        
+
         # State schema
         self.schema = StateSchema(n_stocks=self.n_stocks)
-        
+
         # Episode state
         self.current_week_idx: int = 0
         self.current_weights: np.ndarray = self._initial_weights()
         self.episode_start_week: int = 0
-        
+
         # For tracking
         self.episode_returns: list[float] = []
         self.episode_turnovers: list[float] = []
-    
+
     @property
     def state_dim(self) -> int:
         """Dimension of state vector."""
         return self.schema.state_dim
-    
+
     @property
     def action_dim(self) -> int:
         """Dimension of action vector (n_stocks + 1 for CASH)."""
         return self.n_stocks + 1
-    
+
     def _initial_weights(self) -> np.ndarray:
         """Get initial portfolio weights (100% CASH)."""
         weights = np.zeros(self.action_dim)
         weights[-1] = 1.0  # CASH is last
         return weights
-    
+
     def _build_state(self, week_idx: int) -> np.ndarray:
         """Build state vector for a given week.
-        
+
         Args:
             week_idx: Index of the week.
-        
+
         Returns:
             State vector.
         """
@@ -125,14 +124,14 @@ class PortfolioEnv:
             signals_dict[symbol] = {}
             for signal_idx, signal_name in enumerate(signal_names):
                 signals_dict[symbol][signal_name] = float(week_signals[stock_idx, signal_idx])
-        
+
         # Get forecast features for this week
         week_forecasts = self.forecast_features[week_idx]  # (n_stocks,)
         forecast_dict = {
             symbol: float(week_forecasts[stock_idx])
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
-        
+
         return build_state_vector(
             signals=signals_dict,
             forecast_features=forecast_dict,
@@ -140,13 +139,13 @@ class PortfolioEnv:
             symbol_order=self.symbol_order,
             schema=self.schema,
         )
-    
+
     def reset(self, start_week: int | None = None) -> np.ndarray:
         """Reset environment for a new episode.
-        
+
         Args:
             start_week: Starting week index. If None, randomly sampled.
-        
+
         Returns:
             Initial state vector.
         """
@@ -160,57 +159,57 @@ class PortfolioEnv:
                 self.episode_start_week = np.random.randint(0, max_start)
             else:
                 self.episode_start_week = 0
-        
+
         self.current_week_idx = self.episode_start_week
         self.current_weights = self._initial_weights()
         self.episode_returns = []
         self.episode_turnovers = []
-        
+
         return self._build_state(self.current_week_idx)
-    
+
     def step(self, action: np.ndarray) -> EnvStep:
         """Take one step in the environment.
-        
+
         Args:
             action: Raw logits for portfolio weights (n_stocks + 1).
-        
+
         Returns:
             EnvStep with next_state, reward, done, info.
         """
         # Convert action to weights via softmax
         target_weights = apply_softmax_to_weights(action)
-        
+
         # Enforce constraints
         target_weights = enforce_constraints(
             target_weights,
             cash_buffer=self.config.cash_buffer,
             max_position_weight=self.config.max_position_weight,
         )
-        
+
         # Compute turnover
         turnover = compute_turnover(self.current_weights, target_weights)
-        
+
         # Get weekly returns for stocks (CASH return = 0)
         stock_returns = self.symbol_returns[self.current_week_idx]  # (n_stocks,)
         asset_returns = np.zeros(self.action_dim)
         asset_returns[:self.n_stocks] = stock_returns
         # CASH return is 0 (could add risk-free rate if desired)
-        
+
         # Compute portfolio return using target weights
         # (assumes rebalance happens at week start)
         portfolio_return = float(np.dot(target_weights, asset_returns))
-        
+
         # Compute reward
         reward = compute_reward(portfolio_return, turnover, self.config)
-        
+
         # Track for episode statistics
         self.episode_returns.append(portfolio_return)
         self.episode_turnovers.append(turnover)
-        
+
         # Update state
         self.current_weights = target_weights
         self.current_week_idx += 1
-        
+
         # Check if episode is done
         # Done if: (1) 52 weeks passed, or (2) end of data
         weeks_in_episode = self.current_week_idx - self.episode_start_week
@@ -218,36 +217,36 @@ class PortfolioEnv:
             weeks_in_episode >= 52  # ~1 year
             or self.current_week_idx >= self.n_weeks
         )
-        
+
         # Build next state (if not done)
         if done:
             next_state = np.zeros(self.state_dim)  # Dummy state
         else:
             next_state = self._build_state(self.current_week_idx)
-        
+
         info = {
             "portfolio_return": portfolio_return,
             "turnover": turnover,
             "target_weights": target_weights.tolist(),
             "week_idx": self.current_week_idx - 1,
         }
-        
+
         return EnvStep(
             next_state=next_state,
             reward=reward,
             done=done,
             info=info,
         )
-    
+
     def get_episode_metrics(self) -> dict[str, float]:
         """Get metrics for the current episode.
-        
+
         Returns:
             Dict with episode statistics.
         """
         returns = np.array(self.episode_returns)
         turnovers = np.array(self.episode_turnovers)
-        
+
         if len(returns) == 0:
             return {
                 "episode_return": 0.0,
@@ -255,15 +254,15 @@ class PortfolioEnv:
                 "avg_turnover": 0.0,
                 "n_weeks": 0,
             }
-        
+
         # Cumulative return
         cumulative_return = float(np.prod(1 + returns) - 1)
-        
+
         # Sharpe (not annualized for episode)
         mean_return = np.mean(returns)
         std_return = np.std(returns, ddof=1) if len(returns) > 1 else 1e-10
         episode_sharpe = mean_return / max(std_return, 1e-10)
-        
+
         return {
             "episode_return": cumulative_return,
             "episode_sharpe": float(episode_sharpe),
@@ -280,16 +279,16 @@ def create_env_from_data(
     config: PPOConfig | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
-    
+
     Helper function to convert from dict format to array format.
-    
+
     Args:
         prices: Dict of symbol -> array of prices (for computing returns).
         signals: Dict of symbol -> dict of signal_name -> array of values.
         forecasts: Dict of symbol -> array of forecast values.
         symbol_order: Ordered list of symbols.
         config: PPO configuration.
-    
+
     Returns:
         PortfolioEnv instance.
     """
@@ -298,7 +297,7 @@ def create_env_from_data(
     n_weeks = len(prices[first_symbol]) - 1  # -1 because we compute returns
     n_stocks = len(symbol_order)
     n_signals = 7  # news + 5 fundamentals + fundamental_age
-    
+
     # Build returns array
     symbol_returns = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
@@ -306,7 +305,7 @@ def create_env_from_data(
         # Weekly returns
         returns = (price_series[1:] - price_series[:-1]) / price_series[:-1]
         symbol_returns[:, stock_idx] = returns[:n_weeks]
-    
+
     # Build signals array
     signal_names = [
         "news_sentiment", "gross_margin", "operating_margin",
@@ -318,13 +317,13 @@ def create_env_from_data(
         for signal_idx, signal_name in enumerate(signal_names):
             signal_values = symbol_signals.get(signal_name, np.zeros(n_weeks))
             signals_array[:, stock_idx, signal_idx] = signal_values[:n_weeks]
-    
+
     # Build forecasts array
     forecast_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         forecast_values = forecasts.get(symbol, np.zeros(n_weeks))
         forecast_array[:, stock_idx] = forecast_values[:n_weeks]
-    
+
     return PortfolioEnv(
         symbol_returns=symbol_returns,
         signals=signals_array,

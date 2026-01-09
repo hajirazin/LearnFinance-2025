@@ -6,7 +6,6 @@ common orchestration logic DRY.
 """
 
 import logging
-import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Generic, Protocol, TypeVar
@@ -55,13 +54,13 @@ def compute_data_window(
     extra_days: int = 30,
 ) -> tuple[date, date]:
     """Compute the data fetch window for inference.
-    
+
     Args:
         target_week_start: First trading day of target prediction week
         context_length: Model's required history length (in trading days)
         buffer_multiplier: Multiplier for weekends/holidays
         extra_days: Additional safety buffer
-        
+
     Returns:
         Tuple of (data_start, data_end) dates
     """

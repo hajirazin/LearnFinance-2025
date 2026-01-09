@@ -4,7 +4,7 @@ Provides async job-based API for long-running ETL operations.
 """
 
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -421,7 +421,7 @@ def start_sentiment_gaps_fill(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid start_date format: {e}. Use YYYY-MM-DD.",
-        )
+        ) from e
 
     if request.end_date:
         try:
@@ -430,7 +430,7 @@ def start_sentiment_gaps_fill(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid end_date format: {e}. Use YYYY-MM-DD.",
-            )
+            ) from e
     else:
         end_date = date.today()
 

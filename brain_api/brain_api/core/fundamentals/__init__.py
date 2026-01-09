@@ -17,27 +17,22 @@ This approach ensures:
 """
 
 # Models
-from brain_api.core.fundamentals.models import (
-    FetchRecord,
-    FundamentalRatios,
-    FundamentalsResult,
-    QuarterlyStatement,
-)
-
-# Index
-from brain_api.core.fundamentals.index import FundamentalsIndex
-
 # Client
 from brain_api.core.fundamentals.client import (
     AlphaVantageClient,
     RealAlphaVantageClient,
 )
 
-# Storage
-from brain_api.core.fundamentals.storage import (
-    get_fundamentals_dir,
-    load_raw_response,
-    save_raw_response,
+# Fetcher
+from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
+
+# Index
+from brain_api.core.fundamentals.index import FundamentalsIndex
+from brain_api.core.fundamentals.models import (
+    FetchRecord,
+    FundamentalRatios,
+    FundamentalsResult,
+    QuarterlyStatement,
 )
 
 # Parser
@@ -47,30 +42,34 @@ from brain_api.core.fundamentals.parser import (
     parse_quarterly_statements,
 )
 
-# Fetcher
-from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
+# Storage
+from brain_api.core.fundamentals.storage import (
+    get_fundamentals_dir,
+    load_raw_response,
+    save_raw_response,
+)
 
 __all__ = [
-    # Models
-    "QuarterlyStatement",
-    "FundamentalRatios",
-    "FetchRecord",
-    "FundamentalsResult",
-    # Index
-    "FundamentalsIndex",
     # Client
     "AlphaVantageClient",
+    "FetchRecord",
+    "FundamentalRatios",
+    # Fetcher
+    "FundamentalsFetcher",
+    # Index
+    "FundamentalsIndex",
+    "FundamentalsResult",
+    # Models
+    "QuarterlyStatement",
     "RealAlphaVantageClient",
+    "compute_ratios",
     # Storage
     "get_fundamentals_dir",
-    "save_raw_response",
+    "get_statement_as_of",
     "load_raw_response",
     # Parser
     "parse_quarterly_statements",
-    "get_statement_as_of",
-    "compute_ratios",
-    # Fetcher
-    "FundamentalsFetcher",
+    "save_raw_response",
 ]
 
 

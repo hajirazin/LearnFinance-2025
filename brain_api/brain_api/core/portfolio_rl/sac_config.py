@@ -1,6 +1,6 @@
 """SAC configuration for portfolio RL."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

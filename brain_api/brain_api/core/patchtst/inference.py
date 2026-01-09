@@ -141,7 +141,7 @@ def build_inference_features(
                        "current_ratio", "debt_to_equity"]
     if fundamentals_df is not None and len(fundamentals_df) > 0:
         fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
-        
+
         # Vectorized calculation of days since last fundamental update
         fund_dates = fundamentals_df.index.values
         if len(fund_dates) > 0:
@@ -152,10 +152,10 @@ def build_inference_features(
             days_old[positions == 0] = 999.0
         else:
             days_old = np.full(len(features_df), 999.0)
-        
+
         # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
         features_df["fundamental_age"] = days_old / 90.0
-        
+
         for col in fundamental_cols:
             if col in fund_aligned.columns:
                 features_df[col] = fund_aligned[col].fillna(0.0)
@@ -247,13 +247,13 @@ def run_inference(
     # Find close_ret channel index
     try:
         close_ret_idx = config.feature_names.index("close_ret")
-    except ValueError:
-        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
+    except ValueError as e:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}") from e
 
     # Prepare initial input sequences for all symbols
     # Shape: (n_samples, context_length, num_channels)
     X_batch = np.array([f.features for _, f in valid_features])
-    
+
     # Scale features using the training scaler
     original_shape = X_batch.shape
     X_flat = X_batch.reshape(-1, X_batch.shape[-1])
@@ -262,7 +262,7 @@ def run_inference(
 
     model.eval()
     device = next(model.parameters()).device
-    
+
     # Find indices for OHLCV channels (for constructing new day's features)
     try:
         open_ret_idx = config.feature_names.index("open_ret")
@@ -270,49 +270,49 @@ def run_inference(
         low_ret_idx = config.feature_names.index("low_ret")
         volume_ret_idx = config.feature_names.index("volume_ret")
     except ValueError as e:
-        raise ValueError(f"Required channel not found in feature_names: {e}")
+        raise ValueError(f"Required channel not found in feature_names: {e}") from e
 
     # Predict 5 daily returns iteratively (Monday through Friday)
     # Pre-allocate arrays to avoid memory fragmentation
     n_samples = len(valid_features)
     daily_returns = np.zeros((5, n_samples), dtype=np.float32)
-    
+
     # Pre-compute OHLCV channel mask for vectorized operations
     ohlcv_indices = np.array([open_ret_idx, high_ret_idx, low_ret_idx, close_ret_idx, volume_ret_idx])
     non_ohlcv_mask = np.ones(config.num_input_channels, dtype=bool)
     non_ohlcv_mask[ohlcv_indices] = False
-    
+
     # Pre-allocate working arrays (reused each iteration to reduce memory allocation)
     X_current = X_batch  # No copy needed - we'll modify in place
     new_day_features = np.zeros((n_samples, config.num_input_channels), dtype=np.float32)
-    
+
     with torch.no_grad():
         for day in range(5):
             # Convert to tensor and move to device
             X_tensor = torch.from_numpy(X_current).float().to(device)
-            
+
             # Predict next-day return
             outputs = model(past_values=X_tensor).prediction_outputs
             # Extract close_ret channel for next-day return prediction
             daily_returns[day] = outputs[:, 0, close_ret_idx].cpu().numpy()
-            
+
             # Explicit cleanup of GPU tensor
             del X_tensor, outputs
-            
+
             # Update input sequences for next iteration (except for the last day)
             if day < 4:  # Don't need to update after Friday prediction
                 # Get the last day's scaled features for non-OHLCV channels (forward-fill)
                 # Instead of inverse transform + transform, work directly in scaled space
                 # for non-OHLCV channels since they just get copied forward
                 last_day_scaled = X_current[:, -1, :]
-                
+
                 # Vectorized feature construction
                 # Set OHLCV returns to predicted close_ret (in scaled space)
                 # Note: predicted returns are already in unscaled space, need to scale them
                 pred_returns = daily_returns[day].reshape(-1, 1)
                 # Scale the predicted returns using scaler's mean/std for close_ret
                 scaled_pred = (pred_returns - feature_scaler.mean_[close_ret_idx]) / feature_scaler.scale_[close_ret_idx]
-                
+
                 # Fill new_day_features vectorized
                 new_day_features[:, open_ret_idx] = scaled_pred.ravel()
                 new_day_features[:, high_ret_idx] = scaled_pred.ravel()
@@ -320,31 +320,31 @@ def run_inference(
                 new_day_features[:, close_ret_idx] = scaled_pred.ravel()
                 # Scale volume_ret (0.0 in unscaled space)
                 new_day_features[:, volume_ret_idx] = -feature_scaler.mean_[volume_ret_idx] / feature_scaler.scale_[volume_ret_idx]
-                
+
                 # Copy non-OHLCV channels from last day (already scaled)
                 new_day_features[:, non_ohlcv_mask] = last_day_scaled[:, non_ohlcv_mask]
-                
+
                 # Update sequences in-place: shift left and add new day
                 X_current[:, :-1, :] = X_current[:, 1:, :]
                 X_current[:, -1, :] = new_day_features
-    
+
     # Transpose to get shape (5, n_samples) - already in correct shape
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):
         # Get 5 daily returns for this symbol
         symbol_daily_returns = daily_returns[:, i]  # Shape: (5,)
-        
+
         # Compute weekly return from 5 daily returns
         # Method 1: Compound returns: (1 + r1) * (1 + r2) * ... * (1 + r5) - 1
         weekly_return = float(np.prod(1 + symbol_daily_returns) - 1)
-        
+
         # Alternative: If we have starting_price, compute final price and return
         # This is more accurate but requires starting_price
         if feat.starting_price is not None and feat.starting_price > 0:
             final_price = feat.starting_price * np.prod(1 + symbol_daily_returns)
             weekly_return = (final_price - feat.starting_price) / feat.starting_price
-        
+
         weekly_return_pct = weekly_return * 100
         direction = classify_direction(weekly_return)
 

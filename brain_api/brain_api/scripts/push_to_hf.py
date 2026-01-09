@@ -28,7 +28,6 @@ Environment Variables:
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -92,13 +91,13 @@ def push_model(version: str, make_current: bool = False) -> int:
             make_current=make_current,
         )
 
-        print(f"✓ Model uploaded successfully!")
+        print("✓ Model uploaded successfully!")
         print(f"  Repo: {hf_info.repo_id}")
         print(f"  Version: {hf_info.version}")
         print(f"  URL: https://huggingface.co/{hf_info.repo_id}/tree/{version}")
 
         if make_current:
-            print(f"  ✓ Set as current (main branch)")
+            print("  ✓ Set as current (main branch)")
 
         return 0
 
@@ -152,7 +151,7 @@ def push_news_sentiment(parquet_path: str) -> int:
 
         url = hf_storage.push_news_sentiment(df)
 
-        print(f"✓ News sentiment uploaded successfully!")
+        print("✓ News sentiment uploaded successfully!")
         print(f"  URL: {url}")
 
         return 0

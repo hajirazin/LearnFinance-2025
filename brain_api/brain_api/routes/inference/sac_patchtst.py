@@ -11,7 +11,11 @@ from brain_api.core.sac_patchtst import run_sac_inference as run_sac_patchtst_in
 from brain_api.storage.local import SACPatchTSTLocalStorage
 
 from .dependencies import get_sac_patchtst_as_of_date, get_sac_patchtst_storage
-from .models import SACPatchTSTInferenceRequest, SACPatchTSTInferenceResponse, WeightChange
+from .models import (
+    SACPatchTSTInferenceRequest,
+    SACPatchTSTInferenceResponse,
+    WeightChange,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,7 +60,7 @@ def infer_sac_patchtst(
         raise HTTPException(
             status_code=503,
             detail=str(e),
-        )
+        ) from e
 
     logger.info(f"[SAC_PatchTST] Model loaded: version={artifacts.version}")
 
@@ -92,7 +96,7 @@ def infer_sac_patchtst(
         }
 
     # Build placeholder forecast features
-    forecast_features = {symbol: 0.0 for symbol in artifacts.symbol_order}
+    forecast_features = dict.fromkeys(artifacts.symbol_order, 0.0)
 
     # Run inference
     logger.info("[SAC_PatchTST] Running inference...")

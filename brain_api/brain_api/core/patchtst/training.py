@@ -106,27 +106,27 @@ def train_model_pytorch(
         torch.from_numpy(X_val).float(),
         torch.from_numpy(y_val).float()
     )
-    
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=0,  # Keep simple for compatibility
-        pin_memory=True if device.type == 'cuda' else False,
+        pin_memory=device.type == 'cuda',
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
         shuffle=False,
         num_workers=0,
-        pin_memory=True if device.type == 'cuda' else False,
+        pin_memory=device.type == 'cuda',
     )
 
     # Find close_ret channel index
     try:
         close_ret_idx = config.feature_names.index("close_ret")
-    except ValueError:
-        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}")
+    except ValueError as e:
+        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}") from e
 
     # Create model
     model = _create_patchtst_model(config).to(device)
@@ -145,7 +145,7 @@ def train_model_pytorch(
     best_model_state = None
     best_epoch = 0
     patience_counter = 0
-    log_interval = max(1, config.epochs // 5)
+    max(1, config.epochs // 5)
 
     print("[PatchTST] Starting training...")
 
@@ -172,10 +172,10 @@ def train_model_pytorch(
             # CRITICAL VERIFICATION: Log model output shape and per-channel predictions
             if epoch == 0 and not first_batch_logged:
                 first_batch_logged = True
-                print(f"[PatchTST] VERIFY MODEL OUTPUT:")
+                print("[PatchTST] VERIFY MODEL OUTPUT:")
                 print(f"  Full model_outputs shape: {model_outputs.shape} (batch, pred_len, channels)")
                 print(f"  Extracted outputs shape: {outputs.shape} (batch, 1) - using close_ret channel only")
-                print(f"  First sample per-channel predictions:")
+                print("  First sample per-channel predictions:")
                 # Reuse model_outputs we already computed - no extra forward pass
                 for ch_idx, ch_name in enumerate(config.feature_names):
                     pred_val = model_outputs[0, 0, ch_idx].item()
@@ -190,18 +190,18 @@ def train_model_pytorch(
             # Gradient clipping
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
             if epoch == 0 and n_batches == 0:
-                print(f"[PatchTST] VERIFY GRADIENTS:")
+                print("[PatchTST] VERIFY GRADIENTS:")
                 print(f"  Gradient norm: {grad_norm:.6f}")
                 if grad_norm > 10.0:
-                    print(f"  WARNING: Large gradient norm (possible exploding gradients)")
+                    print("  WARNING: Large gradient norm (possible exploding gradients)")
                 elif grad_norm < 0.001:
-                    print(f"  WARNING: Very small gradient norm (possible vanishing gradients)")
+                    print("  WARNING: Very small gradient norm (possible vanishing gradients)")
 
             optimizer.step()
 
             total_train_loss += loss.item()
             n_batches += 1
-            
+
             # Explicit cleanup to reduce memory pressure
             del batch_X, batch_y, model_outputs, outputs, loss
 

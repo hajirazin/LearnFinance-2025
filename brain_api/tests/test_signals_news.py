@@ -815,7 +815,7 @@ def test_historical_sentiment_returns_all_requested_combos(client_with_parquet):
     assert response.status_code == 200
 
     data = response.json()
-    # 2 symbols × 2 dates = 4 data points
+    # 2 symbols x 2 dates = 4 data points
     assert len(data["data"]) == 4
 
     # Group by symbol
@@ -877,7 +877,7 @@ def test_historical_sentiment_multiple_symbols(client_with_parquet):
     assert response.status_code == 200
 
     data = response.json()
-    # 2 symbols × 2 dates = 4 data points
+    # 2 symbols x 2 dates = 4 data points
     assert len(data["data"]) == 4
 
     symbols_in_response = {p["symbol"] for p in data["data"]}

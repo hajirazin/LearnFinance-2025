@@ -8,45 +8,45 @@ This is structurally identical to ppo_lstm, but uses PatchTST as the
 forecast provider instead of LSTM.
 """
 
-from brain_api.core.ppo_patchtst.config import (
-    PPOPatchTSTConfig,
-    DEFAULT_PPO_PATCHTST_CONFIG,
-)
-from brain_api.core.ppo_patchtst.training import (
-    PPOPatchTSTTrainingResult,
-    train_ppo_patchtst,
-    finetune_ppo_patchtst,
-)
 from brain_api.core.ppo_lstm.finetune import PPOFinetuneConfig
-from brain_api.core.ppo_patchtst.inference import (
-    run_ppo_patchtst_inference,
-)
-from brain_api.core.ppo_patchtst.version import compute_version
 
 # Reuse model from ppo_lstm (identical architecture)
 from brain_api.core.ppo_lstm.model import (
+    PPOActorCritic,
     PPOPolicy,
     PPOValueNetwork,
-    PPOActorCritic,
 )
+from brain_api.core.ppo_patchtst.config import (
+    DEFAULT_PPO_PATCHTST_CONFIG,
+    PPOPatchTSTConfig,
+)
+from brain_api.core.ppo_patchtst.inference import (
+    run_ppo_patchtst_inference,
+)
+from brain_api.core.ppo_patchtst.training import (
+    PPOPatchTSTTrainingResult,
+    finetune_ppo_patchtst,
+    train_ppo_patchtst,
+)
+from brain_api.core.ppo_patchtst.version import compute_version
 
 __all__ = [
-    # Config
-    "PPOPatchTSTConfig",
     "DEFAULT_PPO_PATCHTST_CONFIG",
-    # Training (full)
-    "PPOPatchTSTTrainingResult",
-    "train_ppo_patchtst",
+    "PPOActorCritic",
     # Training (fine-tune)
     "PPOFinetuneConfig",
-    "finetune_ppo_patchtst",
-    # Inference
-    "run_ppo_patchtst_inference",
+    # Config
+    "PPOPatchTSTConfig",
+    # Training (full)
+    "PPOPatchTSTTrainingResult",
     # Model (shared with ppo_lstm)
     "PPOPolicy",
     "PPOValueNetwork",
-    "PPOActorCritic",
     # Version
     "compute_version",
+    "finetune_ppo_patchtst",
+    # Inference
+    "run_ppo_patchtst_inference",
+    "train_ppo_patchtst",
 ]
 

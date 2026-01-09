@@ -172,7 +172,7 @@ def get_historical_fundamentals(
 ) -> HistoricalFundamentalsResponse:
     """Get HISTORICAL fundamental ratios for training (date range).
 
-    Returns n symbols × m quarterly periods as a flat list. Each entry represents
+    Returns n symbols x m quarterly periods as a flat list. Each entry represents
     the financial ratios that would have been available at that point in time.
 
     Data source: Alpha Vantage (INCOME_STATEMENT + BALANCE_SHEET)

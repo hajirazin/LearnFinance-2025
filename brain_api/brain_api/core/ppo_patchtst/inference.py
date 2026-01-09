@@ -9,12 +9,14 @@ from __future__ import annotations
 from datetime import date
 
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
-from brain_api.core.ppo_patchtst.config import PPOPatchTSTConfig
-from brain_api.core.ppo_lstm.model import PPOActorCritic
 from brain_api.core.ppo_lstm.inference import (
     PPOInferenceResult,
+)
+from brain_api.core.ppo_lstm.inference import (
     run_ppo_inference as _run_ppo_inference_base,
 )
+from brain_api.core.ppo_lstm.model import PPOActorCritic
+from brain_api.core.ppo_patchtst.config import PPOPatchTSTConfig
 
 
 def run_ppo_patchtst_inference(
@@ -31,10 +33,10 @@ def run_ppo_patchtst_inference(
     model_version: str,
 ) -> PPOInferenceResult:
     """Run PPO inference to get target portfolio weights.
-    
+
     This is functionally identical to run_ppo_inference from ppo_lstm,
     but expects PatchTST forecasts instead of LSTM forecasts.
-    
+
     Args:
         model: Trained PPO model.
         scaler: Fitted state scaler.
@@ -47,7 +49,7 @@ def run_ppo_patchtst_inference(
         target_week_start: Start of target week.
         target_week_end: End of target week.
         model_version: Model version string.
-    
+
     Returns:
         PPOInferenceResult with target weights and metadata.
     """

@@ -8,8 +8,8 @@ from brain_api.core.config import get_hf_lstm_model_repo, get_storage_backend
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
 from brain_api.core.patchtst import SymbolPrediction as PatchTSTSymbolPrediction
 from brain_api.storage.local import (
-    LSTMArtifacts,
     LocalModelStorage,
+    LSTMArtifacts,
     PatchTSTArtifacts,
     PatchTSTModelStorage,
 )

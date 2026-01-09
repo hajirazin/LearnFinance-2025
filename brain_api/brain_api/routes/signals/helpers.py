@@ -77,28 +77,28 @@ def result_to_response(
 
 def get_yfinance_ratios(symbol: str, as_of_date: str) -> RatiosResponse | None:
     """Fetch current fundamental ratios from yfinance.
-    
+
     yfinance ticker.info contains pre-computed ratios from the latest filings.
     No rate limits, no caching needed.
     """
     import yfinance as yf
-    
+
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info or {}
-        
+
         # yfinance provides these as decimals (e.g., 0.45 for 45%)
         gross_margin = info.get("grossMargins")
         operating_margin = info.get("operatingMargins")
         net_margin = info.get("profitMargins")
         current_ratio = info.get("currentRatio")
         debt_to_equity = info.get("debtToEquity")
-        
+
         # debtToEquity from yfinance is as percentage (e.g., 150 for 1.5x)
         # Normalize to ratio
         if debt_to_equity is not None and debt_to_equity > 10:
             debt_to_equity = debt_to_equity / 100
-        
+
         return RatiosResponse(
             symbol=symbol,
             as_of_date=as_of_date,

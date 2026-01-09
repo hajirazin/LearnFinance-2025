@@ -19,9 +19,11 @@ from brain_api.core.ppo_lstm import (
     PPOFinetuneConfig,
     PPOLSTMConfig,
     build_training_data,
-    compute_version as ppo_lstm_compute_version,
     finetune_ppo_lstm,
     train_ppo_lstm,
+)
+from brain_api.core.ppo_lstm import (
+    compute_version as ppo_lstm_compute_version,
 )
 from brain_api.storage.local import PPOLSTMLocalStorage, create_ppo_lstm_metadata
 
@@ -310,7 +312,7 @@ def finetune_ppo_lstm_endpoint(
     Returns:
         Training result including version, metrics, and promotion status.
     """
-    t_start = time.time()
+    time.time()
     logger.info("[PPO_LSTM Finetune] Starting fine-tuning")
 
     # Load prior model (required for fine-tuning)

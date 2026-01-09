@@ -17,18 +17,18 @@ def compute_version(
     start_date: date,
     end_date: date,
     symbols: list[str],
-    config: "PPOPatchTSTConfig",
+    config: PPOPatchTSTConfig,
 ) -> str:
     """Compute deterministic version string for PPO + PatchTST model.
-    
+
     Version format: v{end_date}-{hash}
-    
+
     Args:
         start_date: Training data start date.
         end_date: Training data end date.
         symbols: List of symbols used for training.
         config: PPO configuration.
-    
+
     Returns:
         Version string like "v2025-01-08-abc123def456".
     """
@@ -39,9 +39,9 @@ def compute_version(
         "config": config.to_dict(),
         "model_type": "ppo_patchtst",
     }
-    
+
     hash_str = str(hash_input).encode("utf-8")
     hash_digest = hashlib.sha256(hash_str).hexdigest()[:12]
-    
+
     return f"v{end_date.isoformat()}-{hash_digest}"
 

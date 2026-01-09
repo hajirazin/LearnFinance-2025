@@ -11,20 +11,18 @@ from typing import Any
 
 import numpy as np
 import torch
-from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.portfolio_rl.env import PortfolioEnv
-from brain_api.core.portfolio_rl.scaler import PortfolioScaler
-from brain_api.core.portfolio_rl.sac_config import SACConfig, SACFinetuneConfig
-from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
-from brain_api.core.portfolio_rl.sac_trainer import SACTrainer, action_to_weights
 from brain_api.core.portfolio_rl.eval import (
-    compute_sharpe_ratio,
     compute_cagr,
     compute_max_drawdown,
+    compute_sharpe_ratio,
 )
+from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
+from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
+from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
+from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac_lstm.config import SACLSTMConfig
-from brain_api.core.training_utils import get_device
 
 
 @dataclass
@@ -219,7 +217,7 @@ def train_sac_lstm(
 
     # Train SAC
     trainer = SACTrainer(train_env_normalized, config)
-    history = trainer.train(total_timesteps=config.total_timesteps)
+    trainer.train(total_timesteps=config.total_timesteps)
 
     # Get trained models
     sac_result = trainer.get_result()
@@ -307,7 +305,7 @@ def finetune_sac_lstm(
             param_group['lr'] = finetune_config.alpha_lr
 
     # Fine-tune
-    history = trainer.train(total_timesteps=finetune_config.total_timesteps)
+    trainer.train(total_timesteps=finetune_config.total_timesteps)
 
     # Get result
     sac_result = trainer.get_result()
@@ -339,7 +337,7 @@ def finetune_sac_lstm(
 
 def evaluate_policy(
     actor: GaussianActor,
-    env: "NormalizedEnv",
+    env: NormalizedEnv,
     config: SACLSTMConfig,
 ) -> tuple[float, float, float]:
     """Evaluate policy on environment.

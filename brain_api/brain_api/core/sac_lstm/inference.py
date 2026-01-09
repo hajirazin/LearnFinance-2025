@@ -10,14 +10,14 @@ import torch
 
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
-    enforce_constraints,
     compute_turnover,
+    enforce_constraints,
 )
 from brain_api.core.portfolio_rl.state import build_state_vector
 
 if TYPE_CHECKING:
-    from brain_api.core.portfolio_rl.scaler import PortfolioScaler
     from brain_api.core.portfolio_rl.sac_networks import GaussianActor
+    from brain_api.core.portfolio_rl.scaler import PortfolioScaler
     from brain_api.core.sac_lstm.config import SACLSTMConfig
 
 
@@ -32,9 +32,9 @@ class SACInferenceResult:
 
 
 def run_sac_inference(
-    actor: "GaussianActor",
-    scaler: "PortfolioScaler",
-    config: "SACLSTMConfig",
+    actor: GaussianActor,
+    scaler: PortfolioScaler,
+    config: SACLSTMConfig,
     symbol_order: list[str],
     current_weights: np.ndarray,
     signals: dict[str, dict[str, float]],

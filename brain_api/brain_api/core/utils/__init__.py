@@ -5,10 +5,10 @@ from brain_api.core.utils.formatting import format_duration, format_number
 from brain_api.core.utils.symbols import get_halal_symbols
 
 __all__ = [
-    "parse_as_of_date",
     "format_duration",
     "format_number",
     "get_halal_symbols",
+    "parse_as_of_date",
 ]
 
 

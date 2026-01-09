@@ -21,9 +21,9 @@ flowchart TB
     end
     
     subgraph storage [Storage]
-        subgraph local [Local Storage]
-            G[data/models/lstm/snapshots/]
-            H[data/models/patchtst/snapshots/]
+        subgraph local [Local Storage - Flat Structure]
+            G[data/models/lstm/snapshot-2020-12-31/]
+            H[data/models/patchtst/snapshot-2020-12-31/]
         end
         subgraph hf [HuggingFace Same Repo]
             I[HF_LSTM_MODEL_REPO<br/>Branch: snapshot-2020-12-31]
@@ -104,51 +104,58 @@ curl -X POST http://localhost:8000/train/sac_patchtst/full
 
 ## Storage Structure
 
-### Local Storage
+### Local Storage (Flat Structure)
 
-Snapshots are stored alongside the main model in the same folder structure:
+Snapshots are stored as **siblings** to main model versions, not in a nested `snapshots/` folder:
 
 ```
 data/models/
 ├── lstm/
-│   ├── current              # Pointer to current version
-│   ├── v2024-01-01-abc123/  # Main model versions
-│   └── snapshots/           # Historical snapshots
-│       ├── snapshot_2019-12-31/
-│       │   ├── weights.pt
-│       │   ├── feature_scaler.pkl
-│       │   ├── config.json
-│       │   └── metadata.json
-│       ├── snapshot_2020-12-31/
-│       └── ...
+│   ├── current                    # Pointer to current main version
+│   ├── v2024-01-01-abc123/        # Main model version
+│   │   ├── weights.pt
+│   │   ├── feature_scaler.pkl
+│   │   ├── config.json
+│   │   └── metadata.json
+│   ├── snapshot-2019-12-31/       # Snapshot (same flat structure)
+│   │   ├── weights.pt
+│   │   ├── feature_scaler.pkl
+│   │   ├── config.json
+│   │   └── metadata.json
+│   ├── snapshot-2020-12-31/       # Another snapshot
+│   └── ...
 └── patchtst/
     ├── current
     ├── v2024-01-01-def456/
-    └── snapshots/
-        ├── snapshot_2019-12-31/
-        └── ...
+    ├── snapshot-2019-12-31/
+    └── ...
 ```
+
+**Pattern-based identification:**
+- Main models: `v{date}-{hash}` (e.g., `v2024-01-01-abc123`)
+- Snapshots: `snapshot-{date}` (e.g., `snapshot-2020-12-31`)
 
 ### HuggingFace Storage
 
-Snapshots use the **same HF repo** as the main model but with different **branch naming**:
+Snapshots use the **same HF repo** as the main model with **identical branch naming**:
 
-| Type | HF Branch Example |
-|------|------------------|
-| Main model | `v2024-01-01-abc123` |
-| Main (current) | `main` |
-| Snapshot | `snapshot-2019-12-31` |
-| Snapshot | `snapshot-2020-12-31` |
+| Type | HF Branch | Local Folder |
+|------|-----------|--------------|
+| Main model | `v2024-01-01-abc123` | `v2024-01-01-abc123/` |
+| Main (current) | `main` | `current` (symlink) |
+| Snapshot | `snapshot-2019-12-31` | `snapshot-2019-12-31/` |
+| Snapshot | `snapshot-2020-12-31` | `snapshot-2020-12-31/` |
 
-This means:
-- **No additional env vars needed** - uses existing `HF_LSTM_MODEL_REPO` and `HF_PATCHTST_MODEL_REPO`
+**Key design decisions:**
+- **Flat structure** - both local and HF have identical flat file layout (no subfolders)
+- **Pattern-based identification** - `snapshot-*` vs `v*` distinguishes snapshots from main models
+- **Same repo** - uses existing `HF_LSTM_MODEL_REPO` and `HF_PATCHTST_MODEL_REPO`
 - **Clean separation** - snapshot branches are prefixed with `snapshot-`
-- **Same tooling** - works with standard HF Hub operations
 
 **Benefits of this structure:**
 - Main model and snapshots in same repo (easier to manage)
-- Unified versioning and storage
-- Fewer environment variables needed
+- Consistent structure between local and HF
+- Pattern-based identification (no special metadata needed)
 - Local is always populated; HF is additional sync layer
 
 ---
@@ -212,10 +219,34 @@ storage.sync_all_hf_to_local()
 
 ## Idempotency
 
-- Snapshots are identified by `snapshot_{cutoff_date}` (e.g., `snapshot_2019-12-31`)
+- Snapshots are identified by `snapshot-{cutoff_date}` (e.g., `snapshot-2019-12-31`)
 - If a snapshot already exists, it will be skipped
-- Re-running training with `backfill_snapshots=true` only trains missing snapshots
+- Re-running training only trains missing snapshots
 - Safe to run multiple times without duplicating work
+
+## Data Loading Optimization
+
+Snapshot backfill is optimized to load data **once** and filter incrementally:
+
+```python
+# LSTM: loads prices once for full window
+prices_full = load_prices_yfinance(symbols, start_date, end_date)
+for cutoff_date in snapshots_needed:
+    prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
+    # Train and save snapshot...
+
+# PatchTST: loads prices, news sentiment, fundamentals once
+prices_full = load_prices(symbols, start_date, end_date)
+news_full = load_historical_news_sentiment(symbols, start_date, end_date)
+fundamentals_full = load_historical_fundamentals(symbols, start_date, end_date)
+for cutoff_date in snapshots_needed:
+    prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
+    news = _filter_signals_by_cutoff(news_full, cutoff_date)
+    fundamentals = _filter_signals_by_cutoff(fundamentals_full, cutoff_date)
+    # Train and save snapshot...
+```
+
+This avoids re-downloading data for each snapshot year, significantly speeding up backfill.
 
 ---
 

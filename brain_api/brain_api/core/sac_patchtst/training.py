@@ -7,25 +7,23 @@ as a forecast feature in the state vector.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import torch
 
-from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
-from brain_api.core.sac_patchtst.config import SACPatchTSTConfig
+from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
+from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 
 # Reuse training infrastructure from sac_lstm
 from brain_api.core.sac_lstm.training import (
-    TrainingData,
-    build_training_data,
-    create_env_from_training_data,
     NormalizedEnv,
+    TrainingData,
+    create_env_from_training_data,
     evaluate_policy,
 )
-from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
+from brain_api.core.sac_patchtst.config import SACPatchTSTConfig
 
 
 @dataclass
@@ -99,7 +97,7 @@ def train_sac_patchtst(
 
     # Train SAC
     trainer = SACTrainer(train_env_normalized, config)
-    history = trainer.train(total_timesteps=config.total_timesteps)
+    trainer.train(total_timesteps=config.total_timesteps)
 
     # Get trained models
     sac_result = trainer.get_result()
@@ -187,7 +185,7 @@ def finetune_sac_patchtst(
             param_group['lr'] = finetune_config.alpha_lr
 
     # Fine-tune
-    history = trainer.train(total_timesteps=finetune_config.total_timesteps)
+    trainer.train(total_timesteps=finetune_config.total_timesteps)
 
     # Get result
     sac_result = trainer.get_result()

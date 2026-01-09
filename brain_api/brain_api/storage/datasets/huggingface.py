@@ -167,7 +167,7 @@ df = dataset["train"].to_pandas()
                 return dataset["train"].to_pandas()
             else:
                 # Try first available split
-                first_split = list(dataset.keys())[0]
+                first_split = next(iter(dataset.keys()))
                 return dataset[first_split].to_pandas()
 
         except Exception as e:

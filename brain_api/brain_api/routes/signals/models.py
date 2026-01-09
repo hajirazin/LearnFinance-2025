@@ -2,7 +2,6 @@
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # Configuration constants
 # ============================================================================
@@ -176,7 +175,7 @@ class HistoricalFundamentalsRequest(BaseModel):
 
 class RatiosResponse(BaseModel):
     """Financial ratios for a symbol at a point in time.
-    
+
     5 core ratios for PPO:
     - Profitability: gross_margin, operating_margin, net_margin
     - Liquidity: current_ratio
@@ -216,7 +215,7 @@ class FundamentalsResponse(BaseModel):
 
 
 class HistoricalFundamentalsResponse(BaseModel):
-    """Response model for historical fundamentals endpoint (n symbols × m dates)."""
+    """Response model for historical fundamentals endpoint (n symbols x m dates)."""
 
     start_date: str
     end_date: str

@@ -10,10 +10,13 @@ decision horizon (Mon open → Fri close).
 """
 
 # Config
+# Re-export shared utilities for backward compatibility
+from brain_api.core.inference_utils import (
+    WeekBoundaries,
+    compute_week_boundaries,
+    extract_trading_weeks,
+)
 from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
-
-# Version
-from brain_api.core.patchtst.version import compute_version
 
 # Data loaders
 from brain_api.core.patchtst.data_loaders import (
@@ -25,9 +28,6 @@ from brain_api.core.patchtst.data_loaders import (
 # Dataset
 from brain_api.core.patchtst.dataset import DatasetResult, build_dataset
 
-# Training
-from brain_api.core.patchtst.training import TrainingResult, train_model_pytorch
-
 # Inference
 from brain_api.core.patchtst.inference import (
     InferenceFeatures,
@@ -36,42 +36,41 @@ from brain_api.core.patchtst.inference import (
     run_inference,
 )
 
-# Re-export shared utilities for backward compatibility
-from brain_api.core.inference_utils import (
-    WeekBoundaries,
-    compute_week_boundaries,
-    extract_trading_weeks,
-)
+# Training
+from brain_api.core.patchtst.training import TrainingResult, train_model_pytorch
+
+# Version
+from brain_api.core.patchtst.version import compute_version
 from brain_api.core.prices import load_prices_yfinance
 from brain_api.core.training_utils import evaluate_for_promotion, get_device
 
 __all__ = [
-    # Config
-    "PatchTSTConfig",
     "DEFAULT_CONFIG",
-    # Version
-    "compute_version",
-    # Data loaders
-    "load_historical_news_sentiment",
-    "load_historical_fundamentals",
-    "align_multivariate_data",
     # Dataset
     "DatasetResult",
-    "build_dataset",
-    # Training
-    "TrainingResult",
-    "train_model_pytorch",
     # Inference
     "InferenceFeatures",
+    # Config
+    "PatchTSTConfig",
     "SymbolPrediction",
-    "build_inference_features",
-    "run_inference",
+    # Training
+    "TrainingResult",
     # Shared utilities (backward compat)
     "WeekBoundaries",
+    "align_multivariate_data",
+    "build_dataset",
+    "build_inference_features",
+    # Version
+    "compute_version",
     "compute_week_boundaries",
-    "extract_trading_weeks",
-    "load_prices_yfinance",
-    "get_device",
     "evaluate_for_promotion",
+    "extract_trading_weeks",
+    "get_device",
+    "load_historical_fundamentals",
+    # Data loaders
+    "load_historical_news_sentiment",
+    "load_prices_yfinance",
+    "run_inference",
+    "train_model_pytorch",
 ]
 

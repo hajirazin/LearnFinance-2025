@@ -87,22 +87,18 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
     @abstractmethod
     def model_type(self) -> str:
         """Return model type identifier (e.g., 'lstm', 'patchtst')."""
-        pass
 
     @abstractmethod
     def _create_local_storage(self) -> LocalStorageT:
         """Create local storage instance for caching."""
-        pass
 
     @abstractmethod
     def _load_config(self, config_dict: dict[str, Any]) -> ConfigT:
         """Load config from dictionary."""
-        pass
 
     @abstractmethod
     def _create_model(self, config: ConfigT) -> ModelT:
         """Create model instance from config."""
-        pass
 
     @abstractmethod
     def _create_artifacts(
@@ -113,12 +109,10 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
         version: str,
     ) -> ArtifactsT:
         """Create artifacts instance."""
-        pass
 
     @abstractmethod
     def _generate_readme(self, version: str, metadata: dict[str, Any]) -> str:
         """Generate README content for the model card."""
-        pass
 
     def _ensure_repo_exists(self) -> None:
         """Create the HF repo if it doesn't exist."""

@@ -7,7 +7,6 @@ import os
 
 import pytest
 
-
 # HuggingFace-related environment variables that should not affect tests
 HF_ENV_VARS = [
     "HF_LSTM_MODEL_REPO",

@@ -11,13 +11,13 @@ from brain_api.core.fundamentals.models import FetchRecord
 
 class FundamentalsIndex:
     """SQLite index for tracking fetched fundamental data.
-    
+
     This doesn't store the actual data - just metadata about what's been fetched.
     """
 
     def __init__(self, cache_dir: Path):
         """Initialize the index.
-        
+
         Args:
             cache_dir: Directory to store the index database
         """
@@ -32,7 +32,7 @@ class FundamentalsIndex:
             return self._conn
 
         self._conn = sqlite3.connect(str(self.db_path))
-        
+
         # Track fetched files
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS fetch_log (
@@ -45,7 +45,7 @@ class FundamentalsIndex:
                 PRIMARY KEY (symbol, endpoint)
             )
         """)
-        
+
         # Track API rate limit usage
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS api_calls (
@@ -54,24 +54,24 @@ class FundamentalsIndex:
                 PRIMARY KEY (call_date)
             )
         """)
-        
+
         self._conn.commit()
         return self._conn
 
     def get_fetch_record(self, symbol: str, endpoint: str) -> FetchRecord | None:
         """Get the fetch record for a symbol/endpoint pair.
-        
+
         Args:
             symbol: Stock ticker
             endpoint: "income_statement" or "balance_sheet"
-            
+
         Returns:
             FetchRecord if exists, None otherwise
         """
         conn = self._ensure_connected()
         cursor = conn.execute(
             """
-            SELECT symbol, endpoint, file_path, fetched_at, 
+            SELECT symbol, endpoint, file_path, fetched_at,
                    latest_annual_date, latest_quarterly_date
             FROM fetch_log
             WHERE symbol = ? AND endpoint = ?
@@ -99,7 +99,7 @@ class FundamentalsIndex:
         latest_quarterly_date: str | None,
     ) -> None:
         """Record that a file was fetched.
-        
+
         Args:
             symbol: Stock ticker
             endpoint: "income_statement" or "balance_sheet"
@@ -121,7 +121,7 @@ class FundamentalsIndex:
 
     def get_api_calls_today(self) -> int:
         """Get the number of API calls made today.
-        
+
         Returns:
             Number of API calls made today
         """
@@ -136,16 +136,16 @@ class FundamentalsIndex:
 
     def increment_api_calls(self, count: int = 1) -> int:
         """Increment the API call counter for today.
-        
+
         Args:
             count: Number of calls to add
-            
+
         Returns:
             New total for today
         """
         conn = self._ensure_connected()
         today = date.today().isoformat()
-        
+
         # Use upsert
         conn.execute(
             """
@@ -157,12 +157,12 @@ class FundamentalsIndex:
             (today, count),
         )
         conn.commit()
-        
+
         return self.get_api_calls_today()
 
     def get_all_fetched_symbols(self) -> list[str]:
         """Get all symbols that have been fetched.
-        
+
         Returns:
             List of unique symbols
         """

@@ -8,7 +8,7 @@ Tests for:
 import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -477,7 +477,7 @@ def test_historical_fundamentals_returns_required_fields(client_with_historical_
 
 
 def test_historical_fundamentals_returns_flat_list(client_with_historical_mock):
-    """POST /signals/fundamentals/historical returns flat list of n×m ratios."""
+    """POST /signals/fundamentals/historical returns flat list of n x m ratios."""
     response = client_with_historical_mock.post(
         "/signals/fundamentals/historical",
         json={

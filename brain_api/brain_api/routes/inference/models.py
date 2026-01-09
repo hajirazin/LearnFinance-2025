@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
 from brain_api.core.patchtst import SymbolPrediction as PatchTSTSymbolPrediction
 
-
 # Re-export for backward compatibility
 SymbolPrediction = LSTMSymbolPrediction
 

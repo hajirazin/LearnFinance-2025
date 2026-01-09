@@ -100,7 +100,7 @@ class SentimentCache:
 
         return self._conn
 
-    def get(self, article_hash: str) -> "SentimentScore | None":
+    def get(self, article_hash: str) -> SentimentScore | None:
         """Get cached sentiment score by article hash.
 
         Args:
@@ -137,7 +137,7 @@ class SentimentCache:
             label=row[5],
         )
 
-    def put(self, article_hash: str, score: "SentimentScore") -> None:
+    def put(self, article_hash: str, score: SentimentScore) -> None:
         """Store sentiment score in cache.
 
         Args:
@@ -168,7 +168,7 @@ class SentimentCache:
 
     def get_batch(
         self, article_hashes: list[str]
-    ) -> dict[str, "SentimentScore | None"]:
+    ) -> dict[str, SentimentScore | None]:
         """Batch lookup of cached sentiment scores.
 
         Args:
@@ -196,7 +196,7 @@ class SentimentCache:
             article_hashes,
         )
 
-        results: dict[str, SentimentScore | None] = {h: None for h in article_hashes}
+        results: dict[str, SentimentScore | None] = dict.fromkeys(article_hashes)
         for row in cursor:
             article_hash = row[0]
             results[article_hash] = SentimentScore(
@@ -217,7 +217,7 @@ class SentimentCache:
         return results
 
     def put_batch(
-        self, hash_score_pairs: list[tuple[str, "SentimentScore"]]
+        self, hash_score_pairs: list[tuple[str, SentimentScore]]
     ) -> None:
         """Batch insert sentiment scores into cache.
 
@@ -319,7 +319,7 @@ class SentimentCache:
         conn = self._ensure_connected()
         cursor = conn.execute(
             """
-            SELECT 
+            SELECT
                 a.date,
                 a.symbol,
                 SUM(c.confidence * c.score) / SUM(c.confidence) as sentiment_score,

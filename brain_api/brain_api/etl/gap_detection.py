@@ -57,7 +57,7 @@ def read_existing_coverage(
     elif hasattr(df["date"].dtype, "date"):
         df["date"] = df["date"].apply(lambda x: x if isinstance(x, date) else x.date())
 
-    result = set(zip(df["date"], df["symbol"]))
+    result = set(zip(df["date"], df["symbol"], strict=False))
     logger.info(f"Read {len(result):,} existing date-symbol pairs from parquet")
     return result
 

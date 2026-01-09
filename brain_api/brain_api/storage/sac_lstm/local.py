@@ -7,14 +7,14 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import torch
 
-from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
+from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac_lstm.config import SACLSTMConfig
 from brain_api.storage.base import DEFAULT_DATA_PATH
 
@@ -369,7 +369,7 @@ def create_sac_lstm_metadata(
     return {
         "model_type": "sac_lstm",
         "version": version,
-        "training_timestamp": datetime.now(timezone.utc).isoformat(),
+        "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,

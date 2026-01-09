@@ -11,7 +11,6 @@ from typing import Any, Protocol, TypeVar
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-
 # Type variable for model types
 ModelT = TypeVar("ModelT")
 ConfigT = TypeVar("ConfigT")
@@ -28,7 +27,7 @@ class ModelConfig(Protocol):
 @dataclass
 class BaseInferenceFeatures:
     """Base features prepared for inference for a single symbol.
-    
+
     Model-specific implementations may add additional fields.
     """
 
@@ -42,7 +41,7 @@ class BaseInferenceFeatures:
 @dataclass
 class BasePrediction:
     """Base prediction result for a single symbol.
-    
+
     Model-specific implementations may add additional fields.
     """
 
@@ -76,11 +75,11 @@ class BaseTrainingResult:
 
 def classify_direction(weekly_return: float, threshold: float = 0.001) -> str:
     """Classify predicted return into direction.
-    
+
     Args:
         weekly_return: Predicted weekly return (decimal, e.g., 0.025 for 2.5%)
         threshold: Minimum absolute return for UP/DOWN classification
-        
+
     Returns:
         "UP" if return > threshold
         "DOWN" if return < -threshold

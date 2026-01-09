@@ -211,7 +211,7 @@ def align_multivariate_data(
             fund_df = fundamentals[symbol]
             # Reindex to match price dates and forward-fill
             fund_aligned = fund_df.reindex(features_df.index, method="ffill")
-            
+
             # Vectorized calculation of days since last fundamental update
             # Use searchsorted to find the position of each date in the sorted fund_df index
             fund_dates = fund_df.index.values
@@ -229,10 +229,10 @@ def align_multivariate_data(
                 days_old[positions == 0] = 999.0
             else:
                 days_old = np.full(len(features_df), 999.0)
-            
+
             # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
             features_df["fundamental_age"] = days_old / 90.0
-            
+
             for col in fundamental_cols:
                 if col in fund_aligned.columns:
                     features_df[col] = fund_aligned[col].fillna(0.0)
@@ -250,11 +250,11 @@ def align_multivariate_data(
         # CRITICAL VERIFICATION: Channel count
         assert len(features_df.columns) == config.num_input_channels, \
             f"CRITICAL: Expected {config.num_input_channels} channels, got {len(features_df.columns)}"
-        
+
         # Quick data quality check (no heavy stats computation)
         nan_count = features_df.isna().sum().sum()
         inf_count = np.isinf(features_df.select_dtypes(include=[np.number])).sum().sum()
-        
+
         # Only log warnings for problematic symbols
         if nan_count > 0:
             print(f"[PatchTST] WARNING: {symbol} has {nan_count} NaN values")

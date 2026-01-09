@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import date
 
+import pandas as pd
 from fastapi import APIRouter, Depends, Query
 
 from brain_api.core.config import (
@@ -14,12 +15,22 @@ from brain_api.core.config import (
 from brain_api.core.patchtst import (
     PatchTSTConfig,
     align_multivariate_data,
-    build_dataset as patchtst_build_dataset,
-    compute_version as patchtst_compute_version,
-    evaluate_for_promotion as patchtst_evaluate_for_promotion,
     load_historical_fundamentals,
     load_historical_news_sentiment,
+)
+from brain_api.core.patchtst import (
+    build_dataset as patchtst_build_dataset,
+)
+from brain_api.core.patchtst import (
+    compute_version as patchtst_compute_version,
+)
+from brain_api.core.patchtst import (
+    evaluate_for_promotion as patchtst_evaluate_for_promotion,
+)
+from brain_api.core.patchtst import (
     load_prices_yfinance as patchtst_load_prices,
+)
+from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
 from brain_api.storage.forecaster_snapshots import (
@@ -314,6 +325,68 @@ def train_patchtst(
     )
 
 
+def _filter_prices_by_cutoff(
+    prices: dict[str, pd.DataFrame],
+    cutoff_date: date,
+) -> dict[str, pd.DataFrame]:
+    """Filter price DataFrames to include only data up to cutoff_date.
+
+    Args:
+        prices: Dict mapping symbol -> DataFrame with DatetimeIndex
+        cutoff_date: Include data up to and including this date
+
+    Returns:
+        Filtered dict with same structure, excluding symbols with no data after filtering
+    """
+    cutoff_ts = pd.Timestamp(cutoff_date)
+    return {
+        symbol: df[df.index <= cutoff_ts].copy()
+        for symbol, df in prices.items()
+        if len(df[df.index <= cutoff_ts]) > 0
+    }
+
+
+def _filter_signals_by_cutoff(
+    signals: dict[str, pd.DataFrame],
+    cutoff_date: date,
+) -> dict[str, pd.DataFrame]:
+    """Filter signal DataFrames to include only data up to cutoff_date.
+
+    Works with both DatetimeIndex and regular index (will try to convert).
+
+    Args:
+        signals: Dict mapping symbol -> DataFrame
+        cutoff_date: Include data up to and including this date
+
+    Returns:
+        Filtered dict with same structure, excluding symbols with no data after filtering
+    """
+    cutoff_ts = pd.Timestamp(cutoff_date)
+    result = {}
+
+    for symbol, df in signals.items():
+        if df.empty:
+            continue
+
+        # Handle both DatetimeIndex and regular index
+        if isinstance(df.index, pd.DatetimeIndex):
+            filtered = df[df.index <= cutoff_ts]
+        else:
+            # Try to convert index to datetime for comparison
+            try:
+                idx = pd.to_datetime(df.index)
+                mask = idx <= cutoff_ts
+                filtered = df[mask]
+            except (ValueError, TypeError):
+                # If conversion fails, include all data
+                filtered = df
+
+        if len(filtered) > 0:
+            result[symbol] = filtered.copy()
+
+    return result
+
+
 def _backfill_patchtst_snapshots(
     symbols: list[str],
     config: PatchTSTConfig,
@@ -327,6 +400,10 @@ def _backfill_patchtst_snapshots(
     For each year from (start_year + 4) to end_year-1, trains a snapshot
     on data up to Dec 31 of that year. Uses 4-year bootstrap period.
 
+    Optimization: Loads all data (prices, news sentiment, fundamentals) ONCE
+    for the full window and filters incrementally by year instead of
+    re-downloading for each snapshot.
+
     Args:
         symbols: List of stock symbols
         config: PatchTST configuration
@@ -339,23 +416,56 @@ def _backfill_patchtst_snapshots(
     end_year = end_date.year
     bootstrap_years = 4
 
+    # Check if any snapshots need to be created
+    snapshots_needed = []
     for year in range(start_year + bootstrap_years, end_year):
         cutoff_date = date(year, 12, 31)
+        if not snapshot_storage.snapshot_exists(cutoff_date):
+            snapshots_needed.append(cutoff_date)
 
-        if snapshot_storage.snapshot_exists(cutoff_date):
-            logger.info(f"[PatchTST Backfill] Snapshot for {cutoff_date} already exists, skipping")
-            continue
+    if not snapshots_needed:
+        logger.info("[PatchTST Backfill] All snapshots already exist, nothing to do")
+        return
 
+    logger.info(f"[PatchTST Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}")
+
+    # Load ALL data ONCE for full window
+    logger.info("[PatchTST Backfill] Loading prices for full window (single download)...")
+    t0 = time.time()
+    prices_full = patchtst_load_prices(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[PatchTST Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s")
+
+    if len(prices_full) == 0:
+        logger.warning("[PatchTST Backfill] No price data loaded, cannot create snapshots")
+        return
+
+    logger.info("[PatchTST Backfill] Loading news sentiment for full window (single download)...")
+    t0 = time.time()
+    news_full = load_historical_news_sentiment(symbols, start_date, end_date)
+    t_news = time.time() - t0
+    logger.info(f"[PatchTST Backfill] Loaded news sentiment for {len(news_full)} symbols in {t_news:.1f}s")
+
+    logger.info("[PatchTST Backfill] Loading fundamentals for full window (single download)...")
+    t0 = time.time()
+    fundamentals_full = load_historical_fundamentals(symbols, start_date, end_date)
+    t_fund = time.time() - t0
+    logger.info(f"[PatchTST Backfill] Loaded fundamentals for {len(fundamentals_full)} symbols in {t_fund:.1f}s")
+
+    # Train each snapshot using filtered data
+    for cutoff_date in snapshots_needed:
         logger.info(f"[PatchTST Backfill] Training snapshot for cutoff {cutoff_date}")
-
         t0 = time.time()
-        prices = patchtst_load_prices(symbols, start_date, cutoff_date)
+
+        # Filter all data sources to cutoff (no re-download!)
+        prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
             logger.warning(f"[PatchTST Backfill] No price data for cutoff {cutoff_date}, skipping")
             continue
 
-        news_sentiment = load_historical_news_sentiment(symbols, start_date, cutoff_date)
-        fundamentals = load_historical_fundamentals(symbols, start_date, cutoff_date)
+        news_sentiment = _filter_signals_by_cutoff(news_full, cutoff_date)
+        fundamentals = _filter_signals_by_cutoff(fundamentals_full, cutoff_date)
+
         aligned_features = align_multivariate_data(prices, news_sentiment, fundamentals, config)
 
         if len(aligned_features) == 0:

@@ -1,29 +1,23 @@
 """Tests for forecaster snapshot training, storage, and walk-forward inference."""
 
-import json
-import shutil
-import tempfile
 from datetime import date
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
-import pytest
 import torch
 from sklearn.preprocessing import StandardScaler
 
-from brain_api.storage.forecaster_snapshots import (
-    SnapshotLocalStorage,
-    LSTMSnapshotArtifacts,
-    PatchTSTSnapshotArtifacts,
-    create_snapshot_metadata,
-)
 from brain_api.core.portfolio_rl.walkforward import (
     build_forecast_features,
-    generate_walkforward_forecasts_simple,
-    generate_walkforward_forecasts_with_model,
     compute_momentum_proxy,
+    generate_walkforward_forecasts_simple,
+)
+from brain_api.storage.forecaster_snapshots import (
+    LSTMSnapshotArtifacts,
+    PatchTSTSnapshotArtifacts,
+    SnapshotLocalStorage,
+    create_snapshot_metadata,
 )
 
 
@@ -37,10 +31,11 @@ class TestSnapshotLocalStorage:
         assert storage.base_path == tmp_path
 
     def test_snapshot_path(self, tmp_path):
-        """Test snapshot path generation."""
+        """Test snapshot path generation (flat structure, sibling to main versions)."""
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        expected = tmp_path / "models" / "lstm" / "snapshots" / "snapshot_2019-12-31"
+        # New flat structure: models/lstm/snapshot-2019-12-31 (not in snapshots/ subfolder)
+        expected = tmp_path / "models" / "lstm" / "snapshot-2019-12-31"
         assert storage._snapshot_path(cutoff) == expected
 
     def test_snapshot_exists_false(self, tmp_path):
@@ -349,14 +344,16 @@ class TestPatchTSTSnapshots:
         """Test PatchTST storage is properly typed."""
         storage = SnapshotLocalStorage("patchtst", base_path=tmp_path)
         assert storage.forecaster_type == "patchtst"
-        expected = tmp_path / "models" / "patchtst" / "snapshots"
-        assert storage._snapshots_path == expected
+        # New flat structure: models path where snapshots live as siblings to main versions
+        expected = tmp_path / "models" / "patchtst"
+        assert storage._models_path == expected
 
     def test_patchtst_snapshot_path(self, tmp_path):
-        """Test PatchTST snapshot path generation."""
+        """Test PatchTST snapshot path generation (flat structure)."""
         storage = SnapshotLocalStorage("patchtst", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        expected = tmp_path / "models" / "patchtst" / "snapshots" / "snapshot_2019-12-31"
+        # New flat structure: models/patchtst/snapshot-2019-12-31 (not in snapshots/ subfolder)
+        expected = tmp_path / "models" / "patchtst" / "snapshot-2019-12-31"
         assert storage._snapshot_path(cutoff) == expected
 
 
@@ -390,7 +387,9 @@ class TestSnapshotInferenceHelpers:
 
     def test_patchtst_inference_fallback_short_history(self):
         """Test PatchTST inference falls back with short history."""
-        from brain_api.core.portfolio_rl.walkforward import _run_patchtst_snapshot_inference
+        from brain_api.core.portfolio_rl.walkforward import (
+            _run_patchtst_snapshot_inference,
+        )
 
         # Create mock artifacts
         mock_config = MagicMock()

@@ -1,7 +1,6 @@
 """SAC + PatchTST training endpoints."""
 
 import logging
-import time
 from datetime import date, timedelta
 
 import numpy as np
@@ -19,11 +18,16 @@ from brain_api.core.portfolio_rl.walkforward import build_forecast_features
 from brain_api.core.sac_lstm import build_training_data as sac_build_training_data
 from brain_api.core.sac_patchtst import (
     SACPatchTSTConfig,
-    compute_version as sac_patchtst_compute_version,
     finetune_sac_patchtst,
     train_sac_patchtst,
 )
-from brain_api.storage.local import SACPatchTSTLocalStorage, create_sac_patchtst_metadata
+from brain_api.core.sac_patchtst import (
+    compute_version as sac_patchtst_compute_version,
+)
+from brain_api.storage.local import (
+    SACPatchTSTLocalStorage,
+    create_sac_patchtst_metadata,
+)
 
 from .dependencies import (
     get_sac_patchtst_config,

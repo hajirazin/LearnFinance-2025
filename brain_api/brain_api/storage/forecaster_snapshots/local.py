@@ -11,11 +11,9 @@ as the main model but with different branch naming convention:
 
 import json
 import logging
-import os
 import pickle
-import tempfile
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -71,24 +69,25 @@ class PatchTSTSnapshotArtifacts:
 class SnapshotLocalStorage:
     """Local filesystem storage for forecaster snapshots.
 
-    Snapshots are stored alongside the main model under:
-        {base_path}/models/{forecaster_type}/snapshots/snapshot_{cutoff_date}/
+    Snapshots are stored as siblings to main model versions with flat structure:
+        {base_path}/models/{forecaster_type}/snapshot-{cutoff_date}/
             - weights.pt            (PyTorch model weights)
             - feature_scaler.pkl    (sklearn StandardScaler)
             - config.json           (model hyperparameters)
             - metadata.json         (training info)
 
     Example:
-        data/models/lstm/snapshots/snapshot_2019-12-31/
-        data/models/lstm/snapshots/snapshot_2020-12-31/
-        data/models/patchtst/snapshots/snapshot_2019-12-31/
+        data/models/lstm/v2024-01-01-abc123/    # Main model version
+        data/models/lstm/snapshot-2019-12-31/   # Snapshot (same flat structure)
+        data/models/lstm/snapshot-2020-12-31/   # Snapshot
+        data/models/patchtst/snapshot-2019-12-31/
 
-    This keeps snapshots in the same repo/folder as the main model,
-    enabling unified versioning and storage.
+    Pattern-based identification:
+        - Main model: v{date}-{hash}
+        - Snapshot: snapshot-{date}
 
     HuggingFace Support:
-        Snapshots can also be uploaded to/downloaded from HuggingFace Hub.
-        Uses the same repo as the main model but with different branch naming:
+        Snapshots use the same repo as the main model with branch naming:
         - Main model versions: v2025-01-05-abc123
         - Snapshot branches: snapshot-2024-12-31
     """
@@ -111,8 +110,8 @@ class SnapshotLocalStorage:
         self.base_path = Path(base_path)
         self.forecaster_type = forecaster_type
         self._hf_token = hf_token
-        # Store snapshots alongside main model: models/{type}/snapshots/
-        self._snapshots_path = self.base_path / "models" / forecaster_type / "snapshots"
+        # Models directory where both main versions and snapshots live as siblings
+        self._models_path = self.base_path / "models" / forecaster_type
 
     def _get_hf_repo(self) -> str | None:
         """Get the HuggingFace repo ID for this forecaster type."""
@@ -130,8 +129,8 @@ class SnapshotLocalStorage:
         return f"snapshot-{cutoff_date.isoformat()}"
 
     def _snapshot_path(self, cutoff_date: date) -> Path:
-        """Get the path for a specific snapshot."""
-        return self._snapshots_path / f"snapshot_{cutoff_date.isoformat()}"
+        """Get the path for a specific snapshot (sibling to main versions)."""
+        return self._models_path / f"snapshot-{cutoff_date.isoformat()}"
 
     def snapshot_exists(self, cutoff_date: date) -> bool:
         """Check if a snapshot already exists."""
@@ -143,14 +142,14 @@ class SnapshotLocalStorage:
         Returns:
             Sorted list of cutoff dates.
         """
-        if not self._snapshots_path.exists():
+        if not self._models_path.exists():
             return []
 
         cutoff_dates = []
-        for entry in self._snapshots_path.iterdir():
-            if entry.is_dir() and entry.name.startswith("snapshot_"):
+        for entry in self._models_path.iterdir():
+            if entry.is_dir() and entry.name.startswith("snapshot-"):
                 try:
-                    date_str = entry.name.replace("snapshot_", "")
+                    date_str = entry.name.replace("snapshot-", "")
                     cutoff_dates.append(date.fromisoformat(date_str))
                 except ValueError:
                     continue
@@ -549,7 +548,7 @@ def create_snapshot_metadata(
     return {
         "forecaster_type": forecaster_type,
         "cutoff_date": cutoff_date.isoformat(),
-        "training_timestamp": datetime.now(timezone.utc).isoformat(),
+        "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {
             "start": data_window_start,
             "end": data_window_end,

@@ -1,6 +1,6 @@
 """Tests for HRP allocation endpoint."""
 
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import patch
 
 import numpy as np

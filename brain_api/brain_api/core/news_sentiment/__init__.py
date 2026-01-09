@@ -7,23 +7,19 @@ This module handles real-time news sentiment for inference:
 """
 
 # Models
+# Aggregation
+from brain_api.core.news_sentiment.aggregation import (
+    aggregate_symbol_sentiment,
+    compute_recency_weight,
+)
+
+# Fetcher
+from brain_api.core.news_sentiment.fetcher import YFinanceNewsFetcher
 from brain_api.core.news_sentiment.models import (
     Article,
     NewsSentimentResult,
     ScoredArticle,
     SymbolSentiment,
-)
-
-# Protocols
-from brain_api.core.news_sentiment.protocols import NewsFetcher, SentimentScorer
-
-# Fetcher
-from brain_api.core.news_sentiment.fetcher import YFinanceNewsFetcher
-
-# Aggregation
-from brain_api.core.news_sentiment.aggregation import (
-    aggregate_symbol_sentiment,
-    compute_recency_weight,
 )
 
 # Persistence
@@ -42,30 +38,33 @@ from brain_api.core.news_sentiment.processor import (
     process_symbol_news,
 )
 
+# Protocols
+from brain_api.core.news_sentiment.protocols import NewsFetcher, SentimentScorer
+
 __all__ = [
     # Models
     "Article",
-    "ScoredArticle",
-    "SymbolSentiment",
-    "NewsSentimentResult",
     # Protocols
     "NewsFetcher",
+    "NewsSentimentResult",
+    "ScoredArticle",
     "SentimentScorer",
+    "SymbolSentiment",
     # Fetcher
     "YFinanceNewsFetcher",
+    "aggregate_symbol_sentiment",
     # Aggregation
     "compute_recency_weight",
-    "aggregate_symbol_sentiment",
+    "get_features_path",
     # Persistence
     "get_raw_news_path",
-    "get_features_path",
-    "save_raw_news",
-    "save_features",
     "load_cached_features",
     "load_cached_symbol",
+    "process_news_sentiment",
     # Processor
     "process_symbol_news",
-    "process_news_sentiment",
+    "save_features",
+    "save_raw_news",
 ]
 
 

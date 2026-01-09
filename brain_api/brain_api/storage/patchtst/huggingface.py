@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from brain_api.core.patchtst import PatchTSTConfig
 
 # Re-export HFModelInfo for backward compatibility
-__all__ = ["PatchTSTHuggingFaceModelStorage", "HFModelInfo"]
+__all__ = ["HFModelInfo", "PatchTSTHuggingFaceModelStorage"]
 
 
 class PatchTSTHuggingFaceModelStorage(

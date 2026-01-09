@@ -32,7 +32,7 @@ def get_data_base_path() -> Path:
 
 def get_sentiment_parquet_path() -> Path:
     """Get the path to the historical sentiment parquet file.
-    
+
     The parquet is at project root /data/output/, not brain_api/data/.
     Uses __file__ to get the correct path regardless of working directory.
     """

@@ -27,12 +27,12 @@ class RealAlphaVantageClient:
     def __init__(
         self,
         api_key: str,
-        index: "FundamentalsIndex",
+        index: FundamentalsIndex,
         daily_limit: int = 25,
         request_delay: float = 12.0,  # ~5 requests/minute for free tier
     ):
         """Initialize the client.
-        
+
         Args:
             api_key: Alpha Vantage API key
             index: FundamentalsIndex for rate limit tracking
@@ -54,7 +54,7 @@ class RealAlphaVantageClient:
 
     def _check_daily_limit(self) -> bool:
         """Check if daily API limit has been reached.
-        
+
         Returns:
             True if we can make more calls, False if limit reached
         """
@@ -63,41 +63,41 @@ class RealAlphaVantageClient:
 
     def _fetch_endpoint(self, function: str, symbol: str) -> dict[str, Any] | None:
         """Fetch data from Alpha Vantage API.
-        
+
         Args:
             function: API function name (INCOME_STATEMENT, BALANCE_SHEET)
             symbol: Stock ticker
-            
+
         Returns:
             API response as dict, or None if rate limited/error
         """
         import requests
-        
+
         if not self._check_daily_limit():
             return None
-        
+
         self._rate_limit()
-        
+
         url = "https://www.alphavantage.co/query"
         params = {
             "function": function,
             "symbol": symbol,
             "apikey": self.api_key,
         }
-        
+
         try:
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
+
             # Check for error responses
             if "Error Message" in data or "Note" in data:
                 # "Note" typically means rate limit hit
                 return None
-            
+
             self.index.increment_api_calls()
             return data
-            
+
         except Exception:
             return None
 

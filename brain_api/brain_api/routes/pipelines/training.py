@@ -7,9 +7,10 @@ common orchestration logic DRY.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ def check_idempotent_version(
     model_name: str,
 ) -> dict[str, Any] | None:
     """Check if version already exists (idempotent training).
-    
+
     Returns existing metadata if version exists, None otherwise.
     """
     if storage.version_exists(version):
@@ -91,13 +92,13 @@ def get_prior_version_info(
     model_name: str,
 ) -> tuple[str | None, float | None]:
     """Get prior version and its validation loss.
-    
+
     Returns:
         Tuple of (prior_version, prior_val_loss)
     """
     prior_version = storage.read_current_version()
     prior_val_loss = None
-    
+
     if prior_version:
         logger.info(f"[{model_name}] Prior version: {prior_version}")
         prior_metadata = storage.read_metadata(prior_version)
@@ -106,7 +107,7 @@ def get_prior_version_info(
             logger.info(f"[{model_name}] Prior val_loss: {prior_val_loss}")
     else:
         logger.info(f"[{model_name}] No prior version exists (first model)")
-    
+
     return prior_version, prior_val_loss
 
 
@@ -118,7 +119,7 @@ def execute_promotion(
     model_name: str,
 ) -> None:
     """Handle model promotion logic.
-    
+
     Promotes if:
     - Model passed evaluation (promoted=True)
     - OR this is the first model (so inference has something)
@@ -131,7 +132,7 @@ def execute_promotion(
 
 class TrainingPipeline(Generic[ConfigT, DatasetT, ModelT]):
     """Generic training pipeline for ML models.
-    
+
     Subclasses should implement the abstract methods to customize
     data loading, dataset building, and model training.
     """
@@ -145,7 +146,7 @@ class TrainingPipeline(Generic[ConfigT, DatasetT, ModelT]):
         create_metadata_fn: Callable[..., dict[str, Any]],
     ):
         """Initialize the training pipeline.
-        
+
         Args:
             model_name: Name for logging (e.g., "LSTM", "PatchTST")
             storage: Model storage backend
@@ -170,7 +171,7 @@ class TrainingPipeline(Generic[ConfigT, DatasetT, ModelT]):
         train_fn: Callable[[DatasetT, ConfigT], tuple[ModelT, Any, TrainingMetrics]],
     ) -> TrainingOutcome:
         """Execute the full training pipeline.
-        
+
         Args:
             symbols: List of symbols to train on
             config: Model configuration
@@ -179,7 +180,7 @@ class TrainingPipeline(Generic[ConfigT, DatasetT, ModelT]):
             load_data_fn: Function that returns dict of loaded data
             build_dataset_fn: Function that builds dataset from loaded data
             train_fn: Function that trains model and returns (model, scaler, metrics)
-            
+
         Returns:
             TrainingOutcome with version, metrics, and promotion status
         """

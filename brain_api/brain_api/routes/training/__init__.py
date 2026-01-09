@@ -11,23 +11,6 @@ This module provides training endpoints for various model types:
 
 from fastapi import APIRouter
 
-from .lstm import router as lstm_router
-from .patchtst import router as patchtst_router
-from .ppo_lstm import router as ppo_lstm_router
-from .ppo_patchtst import router as ppo_patchtst_router
-from .sac_lstm import router as sac_lstm_router
-from .sac_patchtst import router as sac_patchtst_router
-
-# Re-export response models for backward compatibility
-from .models import (
-    LSTMTrainResponse,
-    PatchTSTTrainResponse,
-    PPOLSTMTrainResponse,
-    PPOPatchTSTTrainResponse,
-    SACLSTMTrainResponse,
-    SACPatchTSTTrainResponse,
-)
-
 # Re-export dependencies for backward compatibility
 from .dependencies import (
     get_config,
@@ -58,7 +41,23 @@ from .dependencies import (
 
 # Re-export internal functions for backward compatibility
 from .lstm import _backfill_lstm_snapshots
+from .lstm import router as lstm_router
+
+# Re-export response models for backward compatibility
+from .models import (
+    LSTMTrainResponse,
+    PatchTSTTrainResponse,
+    PPOLSTMTrainResponse,
+    PPOPatchTSTTrainResponse,
+    SACLSTMTrainResponse,
+    SACPatchTSTTrainResponse,
+)
 from .patchtst import _backfill_patchtst_snapshots
+from .patchtst import router as patchtst_router
+from .ppo_lstm import router as ppo_lstm_router
+from .ppo_patchtst import router as ppo_patchtst_router
+from .sac_lstm import router as sac_lstm_router
+from .sac_patchtst import router as sac_patchtst_router
 
 # Backward compat alias for _snapshots_available
 _snapshots_available = snapshots_available
@@ -78,14 +77,17 @@ router.include_router(sac_lstm_router)
 router.include_router(sac_patchtst_router)
 
 __all__ = [
-    "router",
     # Response models
     "LSTMTrainResponse",
-    "PatchTSTTrainResponse",
     "PPOLSTMTrainResponse",
     "PPOPatchTSTTrainResponse",
+    "PatchTSTTrainResponse",
     "SACLSTMTrainResponse",
     "SACPatchTSTTrainResponse",
+    "SnapshotLocalStorage",  # Re-exported for test patching compatibility
+    "_backfill_lstm_snapshots",
+    "_backfill_patchtst_snapshots",
+    "_snapshots_available",
     # Dependencies
     "get_config",
     "get_dataset_builder",
@@ -110,10 +112,8 @@ __all__ = [
     "get_symbols",
     "get_top15_symbols",
     "get_trainer",
+    "router",
     # Backward compat exports
     "snapshots_available",
-    "_snapshots_available",
-    "_backfill_lstm_snapshots",
-    "_backfill_patchtst_snapshots",
 ]
 

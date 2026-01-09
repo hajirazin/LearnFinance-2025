@@ -9,18 +9,17 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
-from brain_api.core.patchtst import DatasetResult, PatchTSTConfig, TrainingResult
+from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
-    get_patchtst_config,
     get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
     get_patchtst_fundamentals_loader,
     get_patchtst_news_loader,
     get_patchtst_price_loader,
     get_patchtst_storage,
-    get_symbols,
     get_patchtst_trainer,
+    get_symbols,
 )
 from brain_api.storage.local import PatchTSTModelStorage
 
@@ -71,7 +70,7 @@ def mock_data_aligner(prices, news_sentiment, fundamentals, config):
 
     # Return mock aligned features for each symbol in prices
     aligned = {}
-    for symbol in prices.keys():
+    for symbol in prices:
         dates = pd.date_range(start="2020-01-01", periods=100, freq="B")
         aligned[symbol] = pd.DataFrame(
             np.random.randn(100, config.num_input_channels),
@@ -369,11 +368,12 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
 
 def test_train_patchtst_version_differs_from_lstm():
     """PatchTST version hash differs from LSTM even with same window/symbols."""
-    from brain_api.core.lstm import compute_version as lstm_compute_version
-    from brain_api.core.lstm import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
-    from brain_api.core.patchtst import compute_version as patchtst_compute_version
-    from brain_api.core.patchtst import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
     from datetime import date
+
+    from brain_api.core.lstm import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
+    from brain_api.core.lstm import compute_version as lstm_compute_version
+    from brain_api.core.patchtst import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
+    from brain_api.core.patchtst import compute_version as patchtst_compute_version
 
     start = date(2015, 1, 1)
     end = date(2025, 1, 1)

@@ -7,25 +7,24 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from brain_api.core.portfolio_rl.sac_buffer import ReplayBuffer, BatchSample
-from brain_api.core.portfolio_rl.sac_networks import (
-    GaussianActor,
-    TwinCritic,
-    soft_update,
-    hard_update,
-)
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     enforce_constraints,
 )
+from brain_api.core.portfolio_rl.sac_buffer import BatchSample, ReplayBuffer
+from brain_api.core.portfolio_rl.sac_networks import (
+    GaussianActor,
+    TwinCritic,
+    hard_update,
+    soft_update,
+)
 
 if TYPE_CHECKING:
-    from brain_api.core.portfolio_rl.sac_config import SACConfig
     from brain_api.core.portfolio_rl.env import PortfolioEnv
+    from brain_api.core.portfolio_rl.sac_config import SACConfig
 
 
 @dataclass
@@ -53,8 +52,8 @@ class SACTrainer:
 
     def __init__(
         self,
-        env: "PortfolioEnv",
-        config: "SACConfig",
+        env: PortfolioEnv,
+        config: SACConfig,
     ):
         """Initialize SAC trainer.
 
@@ -271,7 +270,7 @@ class SACTrainer:
         state = self.env.reset()
         episode_return = 0.0
 
-        for step in range(total_timesteps):
+        for _step in range(total_timesteps):
             self.total_steps += 1
 
             # Select action
@@ -296,7 +295,7 @@ class SACTrainer:
             if self.replay_buffer.is_ready(self.config.batch_size):
                 for _ in range(self.config.gradient_steps_per_env_step):
                     batch = self.replay_buffer.sample(self.config.batch_size)
-                    critic_loss, actor_loss, alpha_loss = self._update(batch)
+                    critic_loss, actor_loss, _alpha_loss = self._update(batch)
 
                     history["critic_loss"].append(critic_loss)
                     history["actor_loss"].append(actor_loss)

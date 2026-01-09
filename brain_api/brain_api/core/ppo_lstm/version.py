@@ -17,21 +17,21 @@ def compute_version(
     start_date: date,
     end_date: date,
     symbols: list[str],
-    config: "PPOLSTMConfig",
+    config: PPOLSTMConfig,
 ) -> str:
     """Compute deterministic version string for PPO model.
-    
+
     Version format: v{end_date}-{hash}
-    
+
     The hash is computed from all inputs that affect the model,
     ensuring reproducibility and idempotency.
-    
+
     Args:
         start_date: Training data start date.
         end_date: Training data end date.
         symbols: List of symbols used for training.
         config: PPO configuration.
-    
+
     Returns:
         Version string like "v2025-01-08-abc123def456".
     """
@@ -43,10 +43,10 @@ def compute_version(
         "config": config.to_dict(),
         "model_type": "ppo_lstm",
     }
-    
+
     # Create hash
     hash_str = str(hash_input).encode("utf-8")
     hash_digest = hashlib.sha256(hash_str).hexdigest()[:12]
-    
+
     return f"v{end_date.isoformat()}-{hash_digest}"
 

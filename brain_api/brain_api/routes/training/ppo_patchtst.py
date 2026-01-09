@@ -18,11 +18,16 @@ from brain_api.core.portfolio_rl.walkforward import build_forecast_features
 from brain_api.core.ppo_lstm import PPOFinetuneConfig, build_training_data
 from brain_api.core.ppo_patchtst import (
     PPOPatchTSTConfig,
-    compute_version as ppo_patchtst_compute_version,
     finetune_ppo_patchtst,
     train_ppo_patchtst,
 )
-from brain_api.storage.local import PPOPatchTSTLocalStorage, create_ppo_patchtst_metadata
+from brain_api.core.ppo_patchtst import (
+    compute_version as ppo_patchtst_compute_version,
+)
+from brain_api.storage.local import (
+    PPOPatchTSTLocalStorage,
+    create_ppo_patchtst_metadata,
+)
 
 from .dependencies import (
     get_ppo_patchtst_config,
@@ -306,7 +311,7 @@ def finetune_ppo_patchtst_endpoint(
     Returns:
         Training result including version, metrics, and promotion status.
     """
-    t_start = time.time()
+    time.time()
     logger.info("[PPO_PatchTST Finetune] Starting fine-tuning")
 
     # Load prior model (required for fine-tuning)

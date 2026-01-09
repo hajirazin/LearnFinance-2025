@@ -6,7 +6,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 
-from brain_api.core.lstm import InferenceFeatures, build_inference_features, run_inference
+from brain_api.core.lstm import (
+    InferenceFeatures,
+    build_inference_features,
+    run_inference,
+)
 from brain_api.storage.local import LocalModelStorage
 
 from .dependencies import (

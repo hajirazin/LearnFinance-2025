@@ -8,7 +8,7 @@ Usage:
     # Simple scoring (no cache)
     scorer = FinBERTScorer()
     result = scorer.score("Apple reports record earnings")
-    
+
     # With caching (for ETL)
     from brain_api.core.sentiment_cache import SentimentCache
     cache = SentimentCache(Path("data/cache"))
@@ -92,7 +92,7 @@ class SentimentScore:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SentimentScore":
+    def from_dict(cls, data: dict) -> SentimentScore:
         """Create from dictionary."""
         return cls(
             label=data["label"],
@@ -123,17 +123,17 @@ class FinBERTScorer:
         results, hits, new = scorer.score_batch_with_stats(texts)
     """
 
-    _instance: "FinBERTScorer | None" = None
+    _instance: FinBERTScorer | None = None
     _pipeline = None
     _device: str = "cpu"
-    _cache: "SentimentCache | None" = None
+    _cache: SentimentCache | None = None
     _use_gpu: bool | None = None
 
     def __new__(
         cls,
-        cache: "SentimentCache | None" = None,
+        cache: SentimentCache | None = None,
         use_gpu: bool | None = None,
-    ) -> "FinBERTScorer":
+    ) -> FinBERTScorer:
         """Create or return singleton instance.
 
         Args:
@@ -211,7 +211,7 @@ class FinBERTScorer:
         return self._device
 
     @property
-    def cache(self) -> "SentimentCache | None":
+    def cache(self) -> SentimentCache | None:
         """Return the cache instance if set."""
         return self._cache
 
@@ -268,14 +268,14 @@ class FinBERTScorer:
 
         if self._cache is not None:
             cached = self._cache.get_batch(hashes)
-            for i, (text, h) in enumerate(zip(texts, hashes)):
+            for i, (text, h) in enumerate(zip(texts, hashes, strict=False)):
                 if cached.get(h) is not None:
                     results[i] = cached[h]
                 else:
                     texts_to_score.append((i, text, h))
         else:
             texts_to_score = [
-                (i, text, h) for i, (text, h) in enumerate(zip(texts, hashes))
+                (i, text, h) for i, (text, h) in enumerate(zip(texts, hashes, strict=False))
             ]
 
         cache_hits = len(texts) - len(texts_to_score)
@@ -302,7 +302,7 @@ class FinBERTScorer:
             # Process results and save to cache
             new_cache_entries: list[tuple[str, SentimentScore]] = []
 
-            for (orig_idx, _, text_hash), scores in zip(texts_to_score, batch_results):
+            for (orig_idx, _, text_hash), scores in zip(texts_to_score, batch_results, strict=False):
                 p_pos = 0.0
                 p_neg = 0.0
                 p_neu = 0.0

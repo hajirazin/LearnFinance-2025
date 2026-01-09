@@ -55,7 +55,7 @@ def infer_ppo_lstm(
         raise HTTPException(
             status_code=503,
             detail=str(e),
-        )
+        ) from e
 
     logger.info(f"[PPO_LSTM] Model loaded: version={artifacts.version}")
 
@@ -80,7 +80,7 @@ def infer_ppo_lstm(
         }
 
     # Build placeholder forecast features
-    forecast_features = {symbol: 0.0 for symbol in artifacts.symbol_order}
+    forecast_features = dict.fromkeys(artifacts.symbol_order, 0.0)
 
     # Run inference
     logger.info("[PPO_LSTM] Running inference...")

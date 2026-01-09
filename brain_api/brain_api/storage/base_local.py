@@ -58,17 +58,14 @@ class BaseLocalModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT]):
     @abstractmethod
     def model_type(self) -> str:
         """Return model type identifier (e.g., 'lstm', 'patchtst')."""
-        pass
 
     @abstractmethod
     def _load_config(self, config_dict: dict[str, Any]) -> ConfigT:
         """Load config from dictionary."""
-        pass
 
     @abstractmethod
     def _create_model(self, config: ConfigT) -> ModelT:
         """Create model instance from config."""
-        pass
 
     @abstractmethod
     def _create_artifacts(
@@ -79,7 +76,6 @@ class BaseLocalModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT]):
         version: str,
     ) -> ArtifactsT:
         """Create artifacts dataclass instance."""
-        pass
 
     def _version_path(self, version: str) -> Path:
         """Get the path for a specific version."""

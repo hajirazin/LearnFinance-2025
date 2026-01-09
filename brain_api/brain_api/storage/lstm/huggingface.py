@@ -4,10 +4,10 @@ from typing import Any
 
 from brain_api.core.lstm import LSTMConfig, LSTMModel
 from brain_api.storage.base_huggingface import BaseHuggingFaceModelStorage, HFModelInfo
-from brain_api.storage.lstm.local import LSTMArtifacts, LocalModelStorage
+from brain_api.storage.lstm.local import LocalModelStorage, LSTMArtifacts
 
 # Re-export HFModelInfo for backward compatibility
-__all__ = ["HuggingFaceModelStorage", "HFModelInfo"]
+__all__ = ["HFModelInfo", "HuggingFaceModelStorage"]
 
 
 class HuggingFaceModelStorage(

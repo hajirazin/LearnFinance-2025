@@ -329,7 +329,7 @@ def fill_sentiment_gaps(
                 matched_symbols: set[str] = set()
 
                 # Map articles to their symbols and dates
-                for article, score in zip(articles, scores):
+                for article, score in zip(articles, scores, strict=False):
                     # Each article may be relevant to multiple symbols
                     for symbol in article.symbols:
                         if symbol in gap_symbols:

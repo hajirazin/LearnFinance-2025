@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from brain_api.main import app
 from brain_api.etl.gap_fill import _create_zero_article_rows
+from brain_api.main import app
 
 client = TestClient(app)
 
@@ -328,11 +328,11 @@ class TestGapFillUnmatchedSymbols:
         from datetime import datetime
         from unittest.mock import MagicMock
 
+        import pandas as pd
+
         from brain_api.core.finbert import SentimentScore
         from brain_api.core.news_api.alpaca import AlpacaNewsArticle
         from brain_api.etl.gap_fill import fill_sentiment_gaps
-
-        import pandas as pd
 
         # Create path for parquet (file doesn't need to exist - _append_to_parquet handles it)
         parquet_path = tmp_path / "test_sentiment.parquet"

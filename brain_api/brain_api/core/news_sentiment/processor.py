@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 
 def process_symbol_news(
     symbol: str,
-    fetcher: "NewsFetcher",
-    scorer: "SentimentScorer",
+    fetcher: NewsFetcher,
+    scorer: SentimentScorer,
     max_articles: int,
     as_of: datetime,
     tau_days: float = 7.0,
@@ -86,8 +86,8 @@ def process_symbol_news(
 
 def process_news_sentiment(
     symbols: list[str],
-    fetcher: "NewsFetcher",
-    scorer: "SentimentScorer",
+    fetcher: NewsFetcher,
+    scorer: SentimentScorer,
     as_of_date: date,
     max_articles_per_symbol: int = 10,
     run_id: str | None = None,

@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import date
 
+import pandas as pd
 from fastapi import APIRouter, Depends, Query
 
 from brain_api.core.config import (
@@ -261,6 +262,27 @@ def train_lstm(
     )
 
 
+def _filter_prices_by_cutoff(
+    prices: dict[str, pd.DataFrame],
+    cutoff_date: date,
+) -> dict[str, pd.DataFrame]:
+    """Filter price DataFrames to include only data up to cutoff_date.
+
+    Args:
+        prices: Dict mapping symbol -> DataFrame with DatetimeIndex
+        cutoff_date: Include data up to and including this date
+
+    Returns:
+        Filtered dict with same structure, excluding symbols with no data after filtering
+    """
+    cutoff_ts = pd.Timestamp(cutoff_date)
+    return {
+        symbol: df[df.index <= cutoff_ts].copy()
+        for symbol, df in prices.items()
+        if len(df[df.index <= cutoff_ts]) > 0
+    }
+
+
 def _backfill_lstm_snapshots(
     symbols: list[str],
     config: LSTMConfig,
@@ -274,6 +296,9 @@ def _backfill_lstm_snapshots(
     For each year from (start_year + 4) to end_year-1, trains a snapshot
     on data up to Dec 31 of that year. Uses 4-year bootstrap period.
 
+    Optimization: Loads prices ONCE for the full window and filters incrementally
+    by year instead of re-downloading for each snapshot.
+
     Args:
         symbols: List of stock symbols
         config: LSTM configuration
@@ -286,17 +311,37 @@ def _backfill_lstm_snapshots(
     end_year = end_date.year
     bootstrap_years = 4
 
+    # Check if any snapshots need to be created
+    snapshots_needed = []
     for year in range(start_year + bootstrap_years, end_year):
         cutoff_date = date(year, 12, 31)
+        if not snapshot_storage.snapshot_exists(cutoff_date):
+            snapshots_needed.append(cutoff_date)
 
-        if snapshot_storage.snapshot_exists(cutoff_date):
-            logger.info(f"[LSTM Backfill] Snapshot for {cutoff_date} already exists, skipping")
-            continue
+    if not snapshots_needed:
+        logger.info("[LSTM Backfill] All snapshots already exist, nothing to do")
+        return
 
+    logger.info(f"[LSTM Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}")
+
+    # Load prices ONCE for full window
+    logger.info("[LSTM Backfill] Loading prices for full window (single download)...")
+    t0 = time.time()
+    prices_full = load_prices_yfinance(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(f"[LSTM Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s")
+
+    if len(prices_full) == 0:
+        logger.warning("[LSTM Backfill] No price data loaded, cannot create snapshots")
+        return
+
+    # Train each snapshot using filtered prices
+    for cutoff_date in snapshots_needed:
         logger.info(f"[LSTM Backfill] Training snapshot for cutoff {cutoff_date}")
-
         t0 = time.time()
-        prices = load_prices_yfinance(symbols, start_date, cutoff_date)
+
+        # Filter prices to cutoff (no re-download!)
+        prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
             logger.warning(f"[LSTM Backfill] No price data for cutoff {cutoff_date}, skipping")
             continue

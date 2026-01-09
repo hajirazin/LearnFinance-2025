@@ -13,23 +13,22 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from brain_api.core.portfolio_rl.scaler import PortfolioScaler
+from brain_api.core.ppo_lstm.model import PPOActorCritic
 from brain_api.core.ppo_patchtst import (
     PPOPatchTSTConfig,
     PPOPatchTSTTrainingResult,
 )
-from brain_api.core.ppo_lstm.model import PPOActorCritic
-from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.main import app
-from brain_api.routes.training import (
-    get_ppo_patchtst_storage,
-    get_ppo_patchtst_config,
-    get_top15_symbols,
-)
 from brain_api.routes.inference import (
     get_ppo_patchtst_storage as get_inference_storage,
 )
+from brain_api.routes.training import (
+    get_ppo_patchtst_config,
+    get_ppo_patchtst_storage,
+    get_top15_symbols,
+)
 from brain_api.storage.ppo_patchtst import PPOPatchTSTLocalStorage
-
 
 # ============================================================================
 # Test fixtures and mocks
@@ -78,18 +77,18 @@ def create_mock_training_result(config: PPOPatchTSTConfig) -> PPOPatchTSTTrainin
     n_stocks = config.n_stocks
     state_dim = n_stocks * 7 + n_stocks + n_stocks + 1
     action_dim = n_stocks + 1
-    
+
     model = PPOActorCritic(
         state_dim=state_dim,
         action_dim=action_dim,
         hidden_sizes=config.hidden_sizes,
         activation=config.activation,
     )
-    
+
     scaler = PortfolioScaler.create(n_stocks=n_stocks)
     dummy_states = np.random.randn(10, state_dim)
     scaler.fit(dummy_states)
-    
+
     return PPOPatchTSTTrainingResult(
         model=model,
         scaler=scaler,
@@ -116,18 +115,18 @@ def temp_storage():
 def client_with_mocks(temp_storage):
     """Create test client with mocked dependencies."""
     app.dependency_overrides.clear()
-    
+
     app.dependency_overrides[get_ppo_patchtst_storage] = lambda: temp_storage
     app.dependency_overrides[get_top15_symbols] = mock_symbols
     app.dependency_overrides[get_ppo_patchtst_config] = mock_config
     app.dependency_overrides[get_inference_storage] = lambda: temp_storage
-    
+
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-    
+
     client = TestClient(app)
     yield client
-    
+
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
@@ -138,10 +137,10 @@ def trained_model_storage():
     """Create storage with a pre-trained model for inference tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PPOPatchTSTLocalStorage(base_path=tmpdir)
-        
+
         config = mock_config()
         result = create_mock_training_result(config)
-        
+
         version = "v2025-01-01-test123"
         metadata = {
             "model_type": "ppo_patchtst",
@@ -156,7 +155,7 @@ def trained_model_storage():
             "promoted": True,
             "prior_version": None,
         }
-        
+
         storage.write_artifacts(
             version=version,
             model=result.model,
@@ -166,7 +165,7 @@ def trained_model_storage():
             metadata=metadata,
         )
         storage.promote_version(version)
-        
+
         yield storage
 
 
@@ -178,10 +177,10 @@ def client_for_inference(trained_model_storage):
     app.dependency_overrides[get_inference_storage] = lambda: trained_model_storage
     app.dependency_overrides[get_ppo_patchtst_storage] = lambda: trained_model_storage
     app.dependency_overrides[get_top15_symbols] = mock_symbols
-    
+
     client = TestClient(app)
     yield client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -194,7 +193,7 @@ def test_train_ppo_patchtst_returns_200(client_with_mocks, monkeypatch):
     """POST /train/ppo_patchtst returns 200."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response = client_with_mocks.post("/train/ppo_patchtst/full", json={})
     assert response.status_code == 200
 
@@ -203,10 +202,10 @@ def test_train_ppo_patchtst_returns_required_fields(client_with_mocks, monkeypat
     """POST /train/ppo_patchtst returns all required response fields."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response = client_with_mocks.post("/train/ppo_patchtst/full", json={})
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "version" in data
     assert "data_window_start" in data
@@ -220,10 +219,10 @@ def test_train_ppo_patchtst_first_model_auto_promoted(client_with_mocks, monkeyp
     """First PPO + PatchTST model is automatically promoted."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response = client_with_mocks.post("/train/ppo_patchtst/full", json={})
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["promoted"] is True
     assert data["prior_version"] is None
@@ -233,15 +232,15 @@ def test_train_ppo_patchtst_idempotent(client_with_mocks, monkeypatch):
     """Calling POST /train/ppo_patchtst twice returns the same version."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response1 = client_with_mocks.post("/train/ppo_patchtst/full", json={})
     assert response1.status_code == 200
     version1 = response1.json()["version"]
-    
+
     response2 = client_with_mocks.post("/train/ppo_patchtst/full", json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
-    
+
     assert version1 == version2
 
 
@@ -290,7 +289,7 @@ def test_infer_ppo_patchtst_returns_target_weights(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "target_weights" in data
     assert "turnover" in data
@@ -310,7 +309,7 @@ def test_infer_ppo_patchtst_enforces_cash_buffer(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
     cash_weight = data["target_weights"]["CASH"]
     assert cash_weight >= 0.02, f"Cash weight {cash_weight} is below 2% buffer"
@@ -328,9 +327,9 @@ def test_infer_ppo_patchtst_enforces_max_position(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
-    
+
     for symbol, weight in data["target_weights"].items():
         if symbol != "CASH":
             assert weight <= 0.20 + 0.001, f"Weight for {symbol} ({weight}) exceeds 20% max"
@@ -348,7 +347,7 @@ def test_infer_ppo_patchtst_weights_sum_to_one(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
     total_weight = sum(data["target_weights"].values())
     assert abs(total_weight - 1.0) < 0.001, f"Weights sum to {total_weight}, not 1.0"
@@ -369,7 +368,7 @@ def test_infer_ppo_patchtst_with_existing_positions(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "target_weights" in data
     assert "turnover" in data
@@ -389,7 +388,7 @@ def test_infer_ppo_patchtst_returns_week_boundaries(client_for_inference):
         }
     )
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "target_week_start" in data
     assert "target_week_end" in data
@@ -412,7 +411,7 @@ def test_finetune_ppo_patchtst_returns_200_with_prior_model(client_for_inference
     """POST /train/ppo_patchtst/finetune returns 200 when prior model exists."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response = client_for_inference.post("/train/ppo_patchtst/finetune", json={})
     assert response.status_code == 200
 
@@ -421,10 +420,10 @@ def test_finetune_ppo_patchtst_returns_required_fields(client_for_inference, mon
     """POST /train/ppo_patchtst/finetune returns all required response fields."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response = client_for_inference.post("/train/ppo_patchtst/finetune", json={})
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "version" in data
     assert "-ft" in data["version"]  # Fine-tune marker
@@ -440,14 +439,14 @@ def test_finetune_ppo_patchtst_idempotent(client_for_inference, monkeypatch):
     """Calling POST /train/ppo_patchtst/finetune twice returns the same version."""
     from brain_api.routes.training import ppo_patchtst
     monkeypatch.setattr(ppo_patchtst, "load_prices_yfinance", mock_price_loader)
-    
+
     response1 = client_for_inference.post("/train/ppo_patchtst/finetune", json={})
     assert response1.status_code == 200
     version1 = response1.json()["version"]
-    
+
     response2 = client_for_inference.post("/train/ppo_patchtst/finetune", json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
-    
+
     assert version1 == version2
 

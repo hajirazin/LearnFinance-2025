@@ -10,7 +10,11 @@ from brain_api.core.ppo_patchtst import run_ppo_patchtst_inference
 from brain_api.storage.local import PPOPatchTSTLocalStorage
 
 from .dependencies import get_ppo_patchtst_as_of_date, get_ppo_patchtst_storage
-from .models import PPOPatchTSTInferenceRequest, PPOPatchTSTInferenceResponse, WeightChange
+from .models import (
+    PPOPatchTSTInferenceRequest,
+    PPOPatchTSTInferenceResponse,
+    WeightChange,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -55,7 +59,7 @@ def infer_ppo_patchtst(
         raise HTTPException(
             status_code=503,
             detail=str(e),
-        )
+        ) from e
 
     logger.info(f"[PPO_PatchTST] Model loaded: version={artifacts.version}")
 
@@ -80,7 +84,7 @@ def infer_ppo_patchtst(
         }
 
     # Build placeholder forecast features
-    forecast_features = {symbol: 0.0 for symbol in artifacts.symbol_order}
+    forecast_features = dict.fromkeys(artifacts.symbol_order, 0.0)
 
     # Run inference
     logger.info("[PPO_PatchTST] Running inference...")
