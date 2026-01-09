@@ -8,12 +8,14 @@
     "docker@latest",
     "docker-compose@latest",
     "jq@latest",
-    "curl@latest"
+    "curl@latest",
+    "pre-commit@latest"
   ],
   "shell": {
     "init_hook": [
       "echo '🚀 Devbox environment ready for LearnFinance-2025'",
-      "echo '   Run \"devbox run --list\" to see available commands'"
+      "echo '   Run \"devbox run --list\" to see available commands'",
+      "pre-commit install --install-hooks"
     ],
     "scripts": {
       "colima:start": ["colima start"],

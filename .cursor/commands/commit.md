@@ -1,5 +1,18 @@
 You are now in COMMIT MODE. This is a SPECIALIZED mode for finalizing and publishing code changes. STRICTLY follow the workflow below.
 
+## 🚨 CRITICAL: NEVER BYPASS PRE-COMMIT HOOKS
+
+**NEVER USE `--no-verify` OR `-n` FLAGS WITH GIT COMMIT**
+
+Pre-commit hooks run ruff linting and tests for a reason - to catch issues before they reach the repo. Bypassing them defeats the entire purpose of code quality gates.
+
+- ❌ `git commit --no-verify` - FORBIDDEN
+- ❌ `git commit -n` - FORBIDDEN  
+- ❌ `git commit -S --no-verify` - FORBIDDEN
+- ✅ `git commit -S -m "message"` - CORRECT (hooks will run)
+
+If hooks fail, FIX THE ISSUE instead of bypassing the check.
+
 ## 🚨 CRITICAL: Auto-Commit Prevention Rules
 
 **ONCE YOU EXIT COMMIT MODE, YOU MUST NEVER AUTO-COMMIT AGAIN IN THE SAME CHAT SESSION.**
