@@ -7,7 +7,11 @@ from datetime import date, timedelta
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
-from brain_api.core.config import resolve_training_window
+from brain_api.core.config import (
+    get_hf_sac_lstm_model_repo,
+    get_storage_backend,
+    resolve_training_window,
+)
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
@@ -113,12 +117,39 @@ def train_sac_lstm_endpoint(
     if promoted:
         storage.promote_version(version)
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_sac_lstm_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.actor,
+                feature_scaler=result.scaler,
+                config=config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[SAC_LSTM] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[SAC_LSTM] Failed to upload model to HuggingFace: {e}")
+            # Don't fail the training request if HF upload fails
+
     return SACLSTMTrainResponse(
         version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
         metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
                  "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
                  "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
         promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
+        hf_repo=hf_repo, hf_url=hf_url,
     )
 
 
@@ -202,11 +233,38 @@ def finetune_sac_lstm_endpoint(
     if promoted:
         storage.promote_version(version)
 
+    # Optionally push to HuggingFace Hub
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+    hf_model_repo = get_hf_sac_lstm_model_repo()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.actor,
+                feature_scaler=result.scaler,
+                config=prior_config,
+                metadata=metadata,
+                make_current=promoted,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"[SAC_LSTM] Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"[SAC_LSTM] Failed to upload model to HuggingFace: {e}")
+            # Don't fail the training request if HF upload fails
+
     return SACLSTMTrainResponse(
         version=version, data_window_start=start_date.isoformat(), data_window_end=end_date.isoformat(),
         metrics={"actor_loss": result.final_actor_loss, "critic_loss": result.final_critic_loss,
                  "avg_episode_return": result.avg_episode_return, "avg_episode_sharpe": result.avg_episode_sharpe,
                  "eval_sharpe": result.eval_sharpe, "eval_cagr": result.eval_cagr, "eval_max_drawdown": result.eval_max_drawdown},
         promoted=promoted, prior_version=prior_version, symbols_used=available_symbols,
+        hf_repo=hf_repo, hf_url=hf_url,
     )
 

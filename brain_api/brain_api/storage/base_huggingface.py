@@ -186,6 +186,19 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
             # Upload all files to the version branch/tag
             logger.info(f"Uploading {self.model_type.upper()} model {version} to {self.repo_id}")
 
+            # Create the version branch first (huggingface_hub 0.21+ requires explicit branch creation)
+            try:
+                self.api.create_branch(
+                    repo_id=self.repo_id,
+                    repo_type="model",
+                    branch=version,
+                )
+                logger.info(f"Created branch {version} on {self.repo_id}")
+            except Exception as e:
+                # Branch may already exist, which is fine
+                if "already exists" not in str(e).lower() and "reference already exists" not in str(e).lower():
+                    logger.warning(f"Could not create branch {version}: {e}")
+
             self.api.upload_folder(
                 folder_path=tmpdir,
                 repo_id=self.repo_id,

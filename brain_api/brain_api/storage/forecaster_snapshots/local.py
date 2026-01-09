@@ -353,6 +353,19 @@ class SnapshotLocalStorage:
             f"to {repo_id} (branch: {branch_name})"
         )
 
+        # Create the snapshot branch first (huggingface_hub 0.21+ requires explicit branch creation)
+        try:
+            api.create_branch(
+                repo_id=repo_id,
+                repo_type="model",
+                branch=branch_name,
+            )
+            logger.info(f"Created branch {branch_name} on {repo_id}")
+        except Exception as e:
+            # Branch may already exist, which is fine
+            if "already exists" not in str(e).lower() and "reference already exists" not in str(e).lower():
+                logger.warning(f"Could not create branch {branch_name}: {e}")
+
         api.upload_folder(
             folder_path=str(snapshot_dir),
             repo_id=repo_id,
