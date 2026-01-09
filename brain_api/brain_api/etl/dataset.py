@@ -386,6 +386,3 @@ def batch_articles(
     # Yield remaining
     if batch:
         yield batch
-
-
-

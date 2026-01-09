@@ -484,6 +484,3 @@ class TestSentimentGapsEndpoint:
         )
 
         assert response.status_code == 422
-
-
-

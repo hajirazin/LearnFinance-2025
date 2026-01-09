@@ -17,4 +17,3 @@ __all__ = [
     "SnapshotLocalStorage",
     "create_snapshot_metadata",
 ]
-

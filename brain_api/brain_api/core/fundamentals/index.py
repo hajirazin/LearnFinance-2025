@@ -115,7 +115,14 @@ class FundamentalsIndex:
             (symbol, endpoint, file_path, fetched_at, latest_annual_date, latest_quarterly_date)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (symbol, endpoint, file_path, now, latest_annual_date, latest_quarterly_date),
+            (
+                symbol,
+                endpoint,
+                file_path,
+                now,
+                latest_annual_date,
+                latest_quarterly_date,
+            ),
         )
         conn.commit()
 
@@ -175,5 +182,3 @@ class FundamentalsIndex:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
-
-

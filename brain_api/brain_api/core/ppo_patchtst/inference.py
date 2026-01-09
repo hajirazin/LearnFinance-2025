@@ -67,4 +67,3 @@ def run_ppo_patchtst_inference(
         target_week_end=target_week_end,
         model_version=model_version,
     )
-

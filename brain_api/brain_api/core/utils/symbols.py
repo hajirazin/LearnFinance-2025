@@ -24,5 +24,3 @@ def get_halal_universe_data() -> dict[str, Any]:
     from brain_api.universe import get_halal_universe
 
     return get_halal_universe()
-
-

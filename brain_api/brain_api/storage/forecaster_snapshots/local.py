@@ -133,8 +133,32 @@ class SnapshotLocalStorage:
         return self._models_path / f"snapshot-{cutoff_date.isoformat()}"
 
     def snapshot_exists(self, cutoff_date: date) -> bool:
-        """Check if a snapshot already exists."""
+        """Check if a snapshot already exists locally."""
         return self._snapshot_path(cutoff_date).exists()
+
+    def snapshot_exists_anywhere(
+        self, cutoff_date: date, check_hf: bool = False
+    ) -> bool:
+        """Check if snapshot exists locally OR on HuggingFace (if check_hf=True).
+
+        This is useful when deciding whether to create a new snapshot during training.
+        When STORAGE_BACKEND=hf, we should check HF to avoid redundant training.
+
+        Args:
+            cutoff_date: The snapshot cutoff date to check
+            check_hf: If True, also check HuggingFace for the snapshot
+
+        Returns:
+            True if snapshot exists locally or on HF (when check_hf=True)
+        """
+        if self.snapshot_exists(cutoff_date):
+            return True
+
+        if check_hf:
+            hf_snapshots = self.list_hf_snapshots()
+            return cutoff_date in hf_snapshots
+
+        return False
 
     def list_snapshots(self) -> list[date]:
         """List all available snapshot cutoff dates.
@@ -337,7 +361,9 @@ class SnapshotLocalStorage:
             return None
 
         if not self.snapshot_exists(cutoff_date):
-            logger.warning(f"Snapshot {cutoff_date} does not exist locally, cannot upload")
+            logger.warning(
+                f"Snapshot {cutoff_date} does not exist locally, cannot upload"
+            )
             return None
 
         token = self._get_hf_token()
@@ -362,7 +388,10 @@ class SnapshotLocalStorage:
             logger.info(f"Created branch {branch_name} on {repo_id}")
         except Exception as e:
             # Branch may already exist, which is fine
-            if "already exists" not in str(e).lower() and "reference already exists" not in str(e).lower():
+            if (
+                "already exists" not in str(e).lower()
+                and "reference already exists" not in str(e).lower()
+            ):
                 logger.warning(f"Could not create branch {branch_name}: {e}")
 
         api.upload_folder(
@@ -416,20 +445,25 @@ class SnapshotLocalStorage:
             snapshot_dir.mkdir(parents=True, exist_ok=True)
 
             src_path = Path(local_dir)
-            for file_name in ["weights.pt", "feature_scaler.pkl", "config.json", "metadata.json"]:
+            for file_name in [
+                "weights.pt",
+                "feature_scaler.pkl",
+                "config.json",
+                "metadata.json",
+            ]:
                 src_file = src_path / file_name
                 if src_file.exists():
                     dst_file = snapshot_dir / file_name
                     # Copy file content
                     dst_file.write_bytes(src_file.read_bytes())
 
-            logger.info(f"Successfully downloaded snapshot {cutoff_date} to {snapshot_dir}")
+            logger.info(
+                f"Successfully downloaded snapshot {cutoff_date} to {snapshot_dir}"
+            )
             return True
 
         except Exception as e:
-            logger.warning(
-                f"Failed to download snapshot {cutoff_date} from HF: {e}"
-            )
+            logger.warning(f"Failed to download snapshot {cutoff_date} from HF: {e}")
             return False
 
     def ensure_snapshot_available(self, cutoff_date: date) -> bool:
@@ -560,4 +594,3 @@ def create_snapshot_metadata(
             "val_loss": val_loss,
         },
     }
-

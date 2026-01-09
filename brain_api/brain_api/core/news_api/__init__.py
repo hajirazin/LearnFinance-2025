@@ -3,4 +3,3 @@
 from brain_api.core.news_api.alpaca import AlpacaNewsClient
 
 __all__ = ["AlpacaNewsClient"]
-

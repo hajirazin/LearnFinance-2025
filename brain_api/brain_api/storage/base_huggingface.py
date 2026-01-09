@@ -37,7 +37,9 @@ class HFModelInfo:
     revision: str  # Git commit/tag on HF
 
 
-class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, LocalStorageT]):
+class BaseHuggingFaceModelStorage(
+    ABC, Generic[ConfigT, ModelT, ArtifactsT, LocalStorageT]
+):
     """Base HuggingFace Hub storage for model artifacts.
 
     Stores model artifacts as files in a HuggingFace Model repository:
@@ -178,7 +180,9 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
                 f.write(readme_content)
 
             # Upload all files to the version branch/tag
-            logger.info(f"Uploading {self.model_type.upper()} model {version} to {self.repo_id}")
+            logger.info(
+                f"Uploading {self.model_type.upper()} model {version} to {self.repo_id}"
+            )
 
             # Create the version branch first (huggingface_hub 0.21+ requires explicit branch creation)
             try:
@@ -190,7 +194,10 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
                 logger.info(f"Created branch {version} on {self.repo_id}")
             except Exception as e:
                 # Branch may already exist, which is fine
-                if "already exists" not in str(e).lower() and "reference already exists" not in str(e).lower():
+                if (
+                    "already exists" not in str(e).lower()
+                    and "reference already exists" not in str(e).lower()
+                ):
                     logger.warning(f"Could not create branch {version}: {e}")
 
             self.api.upload_folder(
@@ -236,10 +243,14 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
         # Check local cache first
         if use_cache and version:
             if self.local_cache.version_exists(version):
-                logger.info(f"Loading {self.model_type.upper()} model {version} from local cache")
+                logger.info(
+                    f"Loading {self.model_type.upper()} model {version} from local cache"
+                )
                 return self.local_cache.load_current_artifacts()
 
-        logger.info(f"Downloading {self.model_type.upper()} model from {self.repo_id} (revision: {revision})")
+        logger.info(
+            f"Downloading {self.model_type.upper()} model from {self.repo_id} (revision: {revision})"
+        )
 
         # Download all files to a temp directory
         local_dir = snapshot_download(
@@ -277,7 +288,9 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
 
         # Cache locally if we have a version
         if use_cache and actual_version and actual_version != "main":
-            logger.info(f"Caching {self.model_type.upper()} model {actual_version} locally")
+            logger.info(
+                f"Caching {self.model_type.upper()} model {actual_version} locally"
+            )
             metadata_path = local_path / "metadata.json"
             metadata = {}
             if metadata_path.exists():
@@ -315,19 +328,34 @@ class BaseHuggingFaceModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT, Loca
         except Exception:
             return None
 
+    def get_current_metadata(self) -> dict[str, Any] | None:
+        """Get metadata for current (main branch) version without downloading model.
+
+        This is useful for checking prior version info when local storage is empty
+        (e.g., in GCP where local storage is ephemeral).
+
+        Returns:
+            Full metadata dict if available, None otherwise.
+        """
+        try:
+            metadata_path = hf_hub_download(
+                repo_id=self.repo_id,
+                filename="metadata.json",
+                repo_type="model",
+                token=self.token,
+            )
+            with open(metadata_path) as f:
+                return json.load(f)
+        except Exception:
+            return None
+
     def list_versions(self) -> list[str]:
         """List all available model versions (branches) on HF Hub."""
         try:
             refs = self.api.list_repo_refs(repo_id=self.repo_id, repo_type="model")
             versions = [
-                branch.name
-                for branch in refs.branches
-                if branch.name.startswith("v")
+                branch.name for branch in refs.branches if branch.name.startswith("v")
             ]
             return sorted(versions, reverse=True)
         except Exception:
             return []
-
-
-
-

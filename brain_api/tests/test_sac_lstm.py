@@ -398,4 +398,3 @@ class TestSACLSTMStorage:
         # Verify can load current artifacts
         loaded = temp_storage.load_current_artifacts()
         assert loaded.version == version
-

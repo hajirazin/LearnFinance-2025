@@ -136,8 +136,15 @@ class PPOTrainer:
                 next_value = values[t + 1]
                 next_non_terminal = 1.0 - float(dones[t])
 
-            delta = rewards[t] + self.config.gamma * next_value * next_non_terminal - values[t]
-            gae = delta + self.config.gamma * self.config.gae_lambda * next_non_terminal * gae
+            delta = (
+                rewards[t]
+                + self.config.gamma * next_value * next_non_terminal
+                - values[t]
+            )
+            gae = (
+                delta
+                + self.config.gamma * self.config.gae_lambda * next_non_terminal * gae
+            )
             advantages[t] = gae
             returns[t] = advantages[t] + values[t]
 
@@ -208,11 +215,14 @@ class PPOTrainer:
                 # Policy loss (clipped surrogate objective)
                 ratio = (log_probs - batch_old_log_probs).exp()
                 surr1 = ratio * batch_advantages
-                surr2 = torch.clamp(
-                    ratio,
-                    1.0 - self.config.clip_epsilon,
-                    1.0 + self.config.clip_epsilon,
-                ) * batch_advantages
+                surr2 = (
+                    torch.clamp(
+                        ratio,
+                        1.0 - self.config.clip_epsilon,
+                        1.0 + self.config.clip_epsilon,
+                    )
+                    * batch_advantages
+                )
                 policy_loss = -torch.min(surr1, surr2).mean()
 
                 # Value loss
@@ -270,7 +280,9 @@ class PPOTrainer:
             "episode_sharpe": [],
         }
 
-        print(f"[PPO] Starting training for {total_timesteps} timesteps ({n_rollouts} rollouts)")
+        print(
+            f"[PPO] Starting training for {total_timesteps} timesteps ({n_rollouts} rollouts)"
+        )
         print(f"[PPO] Device: {self.device}")
 
         for rollout_idx in range(n_rollouts):
@@ -301,4 +313,3 @@ class PPOTrainer:
 
         print("[PPO] Training complete")
         return history
-

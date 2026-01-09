@@ -164,4 +164,3 @@ def allocate_hrp(
         lookback_days=result.lookback_days,
         as_of_date=result.as_of_date,
     )
-

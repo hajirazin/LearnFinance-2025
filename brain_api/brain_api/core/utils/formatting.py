@@ -36,5 +36,3 @@ def format_number(n: int) -> str:
     elif n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return str(n)
-
-

@@ -50,7 +50,9 @@ def infer_sac_patchtst(
 
     # Compute target week boundaries
     week_boundaries = compute_week_boundaries(as_of)
-    logger.info(f"[SAC_PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+    logger.info(
+        f"[SAC_PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
+    )
 
     # Load model artifacts
     logger.info("[SAC_PatchTST] Loading model artifacts...")
@@ -67,8 +69,7 @@ def infer_sac_patchtst(
     # Convert portfolio snapshot to values dict
     cash_value = request.portfolio.cash
     position_values = {
-        pos.symbol: pos.market_value
-        for pos in request.portfolio.positions
+        pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
 
     # Compute total portfolio value
@@ -116,22 +117,28 @@ def infer_sac_patchtst(
     for symbol in artifacts.symbol_order:
         current_w = current_weights[artifacts.symbol_order.index(symbol)]
         target_w = result.allocation.get(symbol, 0.0)
-        weight_changes.append(WeightChange(
-            symbol=symbol,
-            current_weight=current_w,
-            target_weight=target_w,
-            change=target_w - current_w,
-        ))
+        weight_changes.append(
+            WeightChange(
+                symbol=symbol,
+                current_weight=current_w,
+                target_weight=target_w,
+                change=target_w - current_w,
+            )
+        )
     # Add CASH
-    weight_changes.append(WeightChange(
-        symbol="CASH",
-        current_weight=current_weights[-1],
-        target_weight=result.allocation.get("CASH", 0.0),
-        change=result.allocation.get("CASH", 0.0) - current_weights[-1],
-    ))
+    weight_changes.append(
+        WeightChange(
+            symbol="CASH",
+            current_weight=current_weights[-1],
+            target_weight=result.allocation.get("CASH", 0.0),
+            change=result.allocation.get("CASH", 0.0) - current_weights[-1],
+        )
+    )
 
     t_total = time.time() - t_start
-    logger.info(f"[SAC_PatchTST] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}")
+    logger.info(
+        f"[SAC_PatchTST] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}"
+    )
 
     return SACPatchTSTInferenceResponse(
         target_weights=result.allocation,
@@ -141,4 +148,3 @@ def infer_sac_patchtst(
         model_version=result.model_version,
         weight_changes=weight_changes,
     )
-

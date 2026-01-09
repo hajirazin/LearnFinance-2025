@@ -17,7 +17,10 @@ __all__ = ["HFModelInfo", "PatchTSTHuggingFaceModelStorage"]
 
 class PatchTSTHuggingFaceModelStorage(
     BaseHuggingFaceModelStorage[
-        "PatchTSTConfig", "PatchTSTForPrediction", PatchTSTArtifacts, PatchTSTModelStorage
+        "PatchTSTConfig",
+        "PatchTSTForPrediction",
+        PatchTSTArtifacts,
+        PatchTSTModelStorage,
     ]
 ):
     """HuggingFace Hub storage for PatchTST model artifacts.
@@ -101,8 +104,8 @@ Multi-signal PatchTST transformer model for predicting weekly stock returns.
 
 - **Version**: {version}
 - **Model Type**: PatchTST (Patch Time Series Transformer)
-- **Training Window**: {metadata.get('data_window', {}).get('start', 'N/A')} to {metadata.get('data_window', {}).get('end', 'N/A')}
-- **Symbols**: {len(metadata.get('symbols', []))} stocks
+- **Training Window**: {metadata.get("data_window", {}).get("start", "N/A")} to {metadata.get("data_window", {}).get("end", "N/A")}
+- **Symbols**: {len(metadata.get("symbols", []))} stocks
 
 ## Input Channels (11 total)
 
@@ -112,9 +115,9 @@ Multi-signal PatchTST transformer model for predicting weekly stock returns.
 
 ## Metrics
 
-- Train Loss: {metadata.get('metrics', {}).get('train_loss', 'N/A')}
-- Validation Loss: {metadata.get('metrics', {}).get('val_loss', 'N/A')}
-- Baseline Loss: {metadata.get('metrics', {}).get('baseline_loss', 'N/A')}
+- Train Loss: {metadata.get("metrics", {}).get("train_loss", "N/A")}
+- Validation Loss: {metadata.get("metrics", {}).get("val_loss", "N/A")}
+- Baseline Loss: {metadata.get("metrics", {}).get("baseline_loss", "N/A")}
 
 ## Usage
 

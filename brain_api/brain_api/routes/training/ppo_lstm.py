@@ -33,6 +33,7 @@ from .dependencies import (
     get_top15_symbols,
     snapshots_available,
 )
+from .helpers import get_prior_version_info
 from .models import PPOLSTMTrainResponse
 
 router = APIRouter()
@@ -87,7 +88,9 @@ def train_ppo_lstm_endpoint(
     t0 = time.time()
     prices_dict = load_prices_yfinance(symbols, start_date, end_date)
     t_prices = time.time() - t0
-    logger.info(f"[PPO_LSTM] Loaded prices for {len(prices_dict)}/{len(symbols)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[PPO_LSTM] Loaded prices for {len(prices_dict)}/{len(symbols)} symbols in {t_prices:.1f}s"
+    )
 
     if len(prices_dict) == 0:
         raise ValueError("No price data available for training")
@@ -95,7 +98,9 @@ def train_ppo_lstm_endpoint(
     # Filter symbols to those with price data
     available_symbols = [s for s in symbols if s in prices_dict]
     if len(available_symbols) < 5:
-        raise ValueError(f"Need at least 5 symbols with data, got {len(available_symbols)}")
+        raise ValueError(
+            f"Need at least 5 symbols with data, got {len(available_symbols)}"
+        )
 
     # Resample prices to weekly (Friday close)
     logger.info("[PPO_LSTM] Resampling prices to weekly...")
@@ -107,7 +112,9 @@ def train_ppo_lstm_endpoint(
             weekly_prices[symbol] = weekly.values
 
     # Determine minimum length across all symbols
-    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    min_weeks = min(
+        len(weekly_prices[s]) for s in available_symbols if s in weekly_prices
+    )
     logger.info(f"[PPO_LSTM] Using {min_weeks} weeks of data")
 
     # Get weekly date index for walk-forward forecasts
@@ -135,11 +142,13 @@ def train_ppo_lstm_endpoint(
             for signal_name in signals[symbol]:
                 signal_arr = signals[symbol][signal_name]
                 if len(signal_arr) >= min_weeks:
-                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1 :]
                 else:
                     # Pad with zeros if not enough data
                     padded = np.zeros(min_weeks - 1)
-                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    padded[-len(signal_arr) :] = (
+                        signal_arr[: min_weeks - 1] if len(signal_arr) > 0 else 0
+                    )
                     signals[symbol][signal_name] = padded
         else:
             # No signals for this symbol, use zeros
@@ -155,7 +164,9 @@ def train_ppo_lstm_endpoint(
 
     # Generate walk-forward forecast features (use snapshots if available)
     use_snapshots = snapshots_available("lstm")
-    logger.info(f"[PPO_LSTM] Generating walk-forward forecast features (snapshots={use_snapshots})...")
+    logger.info(
+        f"[PPO_LSTM] Generating walk-forward forecast features (snapshots={use_snapshots})..."
+    )
     lstm_predictions = build_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
@@ -169,10 +180,10 @@ def train_ppo_lstm_endpoint(
         if symbol in lstm_predictions:
             pred_arr = lstm_predictions[symbol]
             if len(pred_arr) >= min_weeks - 1:
-                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
             else:
                 padded = np.zeros(min_weeks - 1)
-                padded[-len(pred_arr):] = pred_arr
+                padded[-len(pred_arr) :] = pred_arr
                 lstm_predictions[symbol] = padded
         else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
@@ -185,8 +196,12 @@ def train_ppo_lstm_endpoint(
         symbol_order=available_symbols,
     )
 
-    logger.info(f"[PPO_LSTM] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks")
-    logger.info(f"[PPO_LSTM] Signals loaded for {len([s for s in signals if 'news_sentiment' in signals[s]])} symbols")
+    logger.info(
+        f"[PPO_LSTM] Training data: {training_data.n_weeks} weeks, {training_data.n_stocks} stocks"
+    )
+    logger.info(
+        f"[PPO_LSTM] Signals loaded for {len([s for s in signals if 'news_sentiment' in signals[s]])} symbols"
+    )
 
     # Train PPO
     logger.info("[PPO_LSTM] Starting PPO training...")
@@ -194,15 +209,32 @@ def train_ppo_lstm_endpoint(
     result = train_ppo_lstm(training_data, config)
     t_train = time.time() - t0
     logger.info(f"[PPO_LSTM] Training complete in {t_train:.1f}s")
-    logger.info(f"[PPO_LSTM] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr*100:.2f}%")
+    logger.info(
+        f"[PPO_LSTM] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr * 100:.2f}%"
+    )
 
-    # Get prior version info
-    prior_version = storage.read_current_version()
-    prior_sharpe = None
+    # Get prior version info (checks local, then HF if needed)
+    from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+    hf_model_repo = get_hf_ppo_lstm_model_repo()
+    prior_info = get_prior_version_info(
+        local_storage=storage,
+        hf_storage_class=HuggingFaceModelStorage,
+        hf_model_repo=hf_model_repo,
+    )
+    prior_version = prior_info.version
+    prior_sharpe = (
+        prior_info.metadata.get("metrics", {}).get("eval_sharpe")
+        if prior_info.metadata
+        else None
+    )
+
     if prior_version:
-        prior_metadata = storage.read_metadata(prior_version)
-        if prior_metadata:
-            prior_sharpe = prior_metadata["metrics"].get("eval_sharpe")
+        logger.info(
+            f"[PPO_LSTM] Prior version: {prior_version}, eval_sharpe: {prior_sharpe}"
+        )
+    else:
+        logger.info("[PPO_LSTM] No prior version exists (first model)")
 
     # Decide on promotion (first model auto-promotes)
     if prior_version is None:
@@ -250,12 +282,9 @@ def train_ppo_lstm_endpoint(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_ppo_lstm_model_repo()
 
     if storage_backend == "hf" and hf_model_repo:
         try:
-            from brain_api.storage.huggingface import HuggingFaceModelStorage
-
             hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
             hf_info = hf_storage.upload_model(
                 version=version,
@@ -320,7 +349,7 @@ def finetune_ppo_lstm_endpoint(
     if prior_version is None:
         raise HTTPException(
             status_code=400,
-            detail="No prior PPO_LSTM model to fine-tune. Train a full model first with POST /train/ppo_lstm/full"
+            detail="No prior PPO_LSTM model to fine-tune. Train a full model first with POST /train/ppo_lstm/full",
         )
 
     logger.info(f"[PPO_LSTM Finetune] Loading prior model: {prior_version}")
@@ -330,7 +359,9 @@ def finetune_ppo_lstm_endpoint(
     # Use 26-week lookback for fine-tuning
     finetune_config = PPOFinetuneConfig()
     end_date = date.today()
-    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)  # Extra buffer
+    start_date = end_date - timedelta(
+        weeks=finetune_config.lookback_weeks + 4
+    )  # Extra buffer
 
     logger.info(f"[PPO_LSTM Finetune] Data window: {start_date} to {end_date}")
     logger.info(f"[PPO_LSTM Finetune] Symbols: {symbols}")
@@ -342,7 +373,9 @@ def finetune_ppo_lstm_endpoint(
 
     # Check if already exists (idempotent)
     if storage.version_exists(version):
-        logger.info(f"[PPO_LSTM Finetune] Version {version} already exists (idempotent)")
+        logger.info(
+            f"[PPO_LSTM Finetune] Version {version} already exists (idempotent)"
+        )
         existing_metadata = storage.read_metadata(version)
         if existing_metadata:
             return PPOLSTMTrainResponse(
@@ -378,7 +411,9 @@ def finetune_ppo_lstm_endpoint(
             weekly = df["close"].resample("W-FRI").last().dropna()
             weekly_prices[symbol] = weekly.values
 
-    min_weeks = min(len(weekly_prices[s]) for s in available_symbols if s in weekly_prices)
+    min_weeks = min(
+        len(weekly_prices[s]) for s in available_symbols if s in weekly_prices
+    )
 
     # Get weekly date index for walk-forward forecasts
     first_symbol = available_symbols[0]
@@ -404,10 +439,12 @@ def finetune_ppo_lstm_endpoint(
             for signal_name in signals[symbol]:
                 signal_arr = signals[symbol][signal_name]
                 if len(signal_arr) >= min_weeks:
-                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1:]
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1 :]
                 else:
                     padded = np.zeros(min_weeks - 1)
-                    padded[-len(signal_arr):] = signal_arr[:min_weeks - 1] if len(signal_arr) > 0 else 0
+                    padded[-len(signal_arr) :] = (
+                        signal_arr[: min_weeks - 1] if len(signal_arr) > 0 else 0
+                    )
                     signals[symbol][signal_name] = padded
         else:
             signals[symbol] = {
@@ -435,10 +472,10 @@ def finetune_ppo_lstm_endpoint(
         if symbol in lstm_predictions:
             pred_arr = lstm_predictions[symbol]
             if len(pred_arr) >= min_weeks - 1:
-                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1):]
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
             else:
                 padded = np.zeros(min_weeks - 1)
-                padded[-len(pred_arr):] = pred_arr
+                padded[-len(pred_arr) :] = pred_arr
                 lstm_predictions[symbol] = padded
         else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
@@ -467,11 +504,15 @@ def finetune_ppo_lstm_endpoint(
 
     # Get prior sharpe for comparison
     prior_metadata = storage.read_metadata(prior_version)
-    prior_sharpe = prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+    prior_sharpe = (
+        prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+    )
 
     # Decide on promotion (must beat prior)
     promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
-    logger.info(f"[PPO_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}")
+    logger.info(
+        f"[PPO_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
+    )
     logger.info(f"[PPO_LSTM Finetune] Promotion: {'YES' if promoted else 'NO'}")
 
     # Create metadata
@@ -511,13 +552,13 @@ def finetune_ppo_lstm_endpoint(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_ppo_lstm_model_repo()
+    hf_model_repo_ft = get_hf_ppo_lstm_model_repo()
 
-    if storage_backend == "hf" and hf_model_repo:
+    if storage_backend == "hf" and hf_model_repo_ft:
         try:
             from brain_api.storage.huggingface import HuggingFaceModelStorage
 
-            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo_ft)
             hf_info = hf_storage.upload_model(
                 version=version,
                 model=result.model,
@@ -530,7 +571,9 @@ def finetune_ppo_lstm_endpoint(
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
             logger.info(f"[PPO_LSTM Finetune] Model uploaded to HuggingFace: {hf_url}")
         except Exception as e:
-            logger.error(f"[PPO_LSTM Finetune] Failed to upload model to HuggingFace: {e}")
+            logger.error(
+                f"[PPO_LSTM Finetune] Failed to upload model to HuggingFace: {e}"
+            )
 
     return PPOLSTMTrainResponse(
         version=version,
@@ -551,4 +594,3 @@ def finetune_ppo_lstm_endpoint(
         hf_repo=hf_repo,
         hf_url=hf_url,
     )
-

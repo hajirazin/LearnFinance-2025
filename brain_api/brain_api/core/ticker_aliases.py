@@ -87,6 +87,3 @@ def normalize_symbols(symbols: list[str]) -> list[str]:
             normalized.append(current)
 
     return normalized
-
-
-

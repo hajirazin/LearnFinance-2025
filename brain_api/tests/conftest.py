@@ -40,4 +40,3 @@ def isolate_from_env():
     # Restore original values after test
     for var, value in original_values.items():
         os.environ[var] = value
-

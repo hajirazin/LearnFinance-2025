@@ -116,4 +116,3 @@ def compute_reward_from_log_return(
     transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
     net_return = portfolio_log_return - transaction_cost
     return net_return * config.reward_scale
-

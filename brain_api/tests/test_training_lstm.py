@@ -34,7 +34,9 @@ def mock_price_loader(symbols, start_date, end_date):
     import pandas as pd
 
     # Create minimal fake price data for each symbol
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]  # 100 business days
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")[
+        :100
+    ]  # 100 business days
     prices = {}
     for symbol in symbols:
         prices[symbol] = pd.DataFrame(

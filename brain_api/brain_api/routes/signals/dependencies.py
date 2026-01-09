@@ -57,5 +57,3 @@ def get_fundamentals_fetcher(
         base_path=base_path,
         daily_limit=500,  # Soft limit - Alpha Vantage still returns data
     )
-
-

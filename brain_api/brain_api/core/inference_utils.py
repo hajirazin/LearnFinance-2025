@@ -98,5 +98,3 @@ def extract_trading_weeks(df: pd.DataFrame, min_days: int = 3) -> list[pd.DataFr
             weeks.append(week_df.drop(columns=["_year_week"]))
 
     return weeks
-
-

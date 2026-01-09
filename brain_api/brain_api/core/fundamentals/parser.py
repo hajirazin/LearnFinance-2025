@@ -31,13 +31,15 @@ def parse_quarterly_statements(
         currency = report.get("reportedCurrency", "USD")
 
         if fiscal_date:
-            statements.append(QuarterlyStatement(
-                symbol=symbol,
-                statement_type=endpoint,
-                fiscal_date_ending=fiscal_date,
-                reported_currency=currency,
-                raw_data=report,
-            ))
+            statements.append(
+                QuarterlyStatement(
+                    symbol=symbol,
+                    statement_type=endpoint,
+                    fiscal_date_ending=fiscal_date,
+                    reported_currency=currency,
+                    raw_data=report,
+                )
+            )
 
     # Sort by date descending (newest first)
     statements.sort(key=lambda s: s.fiscal_date_ending, reverse=True)
@@ -114,7 +116,11 @@ def compute_ratios(
         total_debt = balance.get_value("shortLongTermDebtTotal")
         shareholder_equity = balance.get_value("totalShareholderEquity")
 
-        if total_current_assets and total_current_liabilities and total_current_liabilities > 0:
+        if (
+            total_current_assets
+            and total_current_liabilities
+            and total_current_liabilities > 0
+        ):
             current_ratio = float(total_current_assets / total_current_liabilities)
 
         if total_debt is not None and shareholder_equity and shareholder_equity > 0:
@@ -124,10 +130,10 @@ def compute_ratios(
         symbol=symbol,
         as_of_date=as_of_date,
         gross_margin=round(gross_margin, 4) if gross_margin is not None else None,
-        operating_margin=round(operating_margin, 4) if operating_margin is not None else None,
+        operating_margin=round(operating_margin, 4)
+        if operating_margin is not None
+        else None,
         net_margin=round(net_margin, 4) if net_margin is not None else None,
         current_ratio=round(current_ratio, 4) if current_ratio is not None else None,
         debt_to_equity=round(debt_to_equity, 4) if debt_to_equity is not None else None,
     )
-
-

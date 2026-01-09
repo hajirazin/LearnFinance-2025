@@ -46,5 +46,3 @@ def sort_predictions_by_return(
     )
 
     return valid_sorted + invalid
-
-

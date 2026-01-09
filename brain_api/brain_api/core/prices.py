@@ -33,7 +33,9 @@ def load_prices_yfinance(
     prices: dict[str, pd.DataFrame] = {}
     failed_symbols: list[str] = []
 
-    print(f"{log_prefix} Downloading prices for {len(symbols)} symbols from yfinance...")
+    print(
+        f"{log_prefix} Downloading prices for {len(symbols)} symbols from yfinance..."
+    )
     print(f"{log_prefix} Date range: {start_date} to {end_date}")
 
     # Try batch download first
@@ -48,7 +50,7 @@ def load_prices_yfinance(
         )
 
         # Check if download returned valid data
-        if data is not None and not data.empty and hasattr(data, 'columns'):
+        if data is not None and not data.empty and hasattr(data, "columns"):
             if len(symbols) == 1:
                 symbol = symbols[0]
                 try:
@@ -121,13 +123,11 @@ def load_prices_yfinance(
     # Summary
     successful = len(prices)
     failed = len(symbols) - successful
-    print(f"{log_prefix} Price download complete: {successful}/{len(symbols)} symbols loaded")
+    print(
+        f"{log_prefix} Price download complete: {successful}/{len(symbols)} symbols loaded"
+    )
     if failed > 0:
         missing = [s for s in symbols if s not in prices]
         print(f"{log_prefix} Missing symbols: {missing}")
 
     return prices
-
-
-
-

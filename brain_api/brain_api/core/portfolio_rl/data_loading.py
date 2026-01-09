@@ -39,7 +39,9 @@ def load_historical_news_sentiment(
     sentiment: dict[str, pd.DataFrame] = {}
 
     if not parquet_path.exists():
-        print(f"[PortfolioRL] Warning: News sentiment parquet not found at {parquet_path}")
+        print(
+            f"[PortfolioRL] Warning: News sentiment parquet not found at {parquet_path}"
+        )
         return sentiment
 
     try:
@@ -48,9 +50,9 @@ def load_historical_news_sentiment(
 
         for symbol in symbols:
             symbol_df = df[
-                (df["symbol"] == symbol) &
-                (df["date"] >= start_date) &
-                (df["date"] <= end_date)
+                (df["symbol"] == symbol)
+                & (df["date"] >= start_date)
+                & (df["date"] <= end_date)
             ][["date", "sentiment_score"]].copy()
 
             if len(symbol_df) > 0:
@@ -120,10 +122,18 @@ def load_historical_fundamentals(
             fiscal_dates = set()
 
             for stmt in income_stmts:
-                if start_date <= date.fromisoformat(stmt.fiscal_date_ending) <= end_date:
+                if (
+                    start_date
+                    <= date.fromisoformat(stmt.fiscal_date_ending)
+                    <= end_date
+                ):
                     fiscal_dates.add(stmt.fiscal_date_ending)
             for stmt in balance_stmts:
-                if start_date <= date.fromisoformat(stmt.fiscal_date_ending) <= end_date:
+                if (
+                    start_date
+                    <= date.fromisoformat(stmt.fiscal_date_ending)
+                    <= end_date
+                ):
                     fiscal_dates.add(stmt.fiscal_date_ending)
 
             for fiscal_date in sorted(fiscal_dates):
@@ -138,14 +148,16 @@ def load_historical_fundamentals(
 
                 ratios = compute_ratios(income_stmt, balance_stmt)
                 if ratios:
-                    rows.append({
-                        "date": pd.to_datetime(fiscal_date),
-                        "gross_margin": ratios.gross_margin,
-                        "operating_margin": ratios.operating_margin,
-                        "net_margin": ratios.net_margin,
-                        "current_ratio": ratios.current_ratio,
-                        "debt_to_equity": ratios.debt_to_equity,
-                    })
+                    rows.append(
+                        {
+                            "date": pd.to_datetime(fiscal_date),
+                            "gross_margin": ratios.gross_margin,
+                            "operating_margin": ratios.operating_margin,
+                            "net_margin": ratios.net_margin,
+                            "current_ratio": ratios.current_ratio,
+                            "debt_to_equity": ratios.debt_to_equity,
+                        }
+                    )
 
             if rows:
                 df = pd.DataFrame(rows).set_index("date").sort_index()
@@ -208,24 +220,38 @@ def align_signals_to_weekly(
             sentiment_df = news_sentiment[symbol]
             # Reindex to weekly and forward-fill
             sentiment_weekly = sentiment_df.reindex(weekly_index, method="ffill")
-            symbol_signals["news_sentiment"] = sentiment_weekly["sentiment_score"].fillna(0.0).values
+            symbol_signals["news_sentiment"] = (
+                sentiment_weekly["sentiment_score"].fillna(0.0).values
+            )
 
         # Align fundamentals (forward-fill quarterly to weekly)
         if symbol in fundamentals:
             fund_df = fundamentals[symbol]
             fund_aligned = fund_df.reindex(weekly_index, method="ffill")
 
-            for col in ["gross_margin", "operating_margin", "net_margin", "current_ratio", "debt_to_equity"]:
+            for col in [
+                "gross_margin",
+                "operating_margin",
+                "net_margin",
+                "current_ratio",
+                "debt_to_equity",
+            ]:
                 if col in fund_aligned.columns:
                     symbol_signals[col] = fund_aligned[col].fillna(0.0).values
 
             # Compute fundamental_age (days since last update / 90)
             fund_dates = fund_df.index.values
             if len(fund_dates) > 0:
-                positions = np.searchsorted(fund_dates, weekly_index.values, side='right')
+                positions = np.searchsorted(
+                    fund_dates, weekly_index.values, side="right"
+                )
                 valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
                 last_updates = fund_dates[valid_positions]
-                days_old = (weekly_index.values - last_updates).astype('timedelta64[D]').astype(float)
+                days_old = (
+                    (weekly_index.values - last_updates)
+                    .astype("timedelta64[D]")
+                    .astype(float)
+                )
                 days_old[positions == 0] = 999.0
                 symbol_signals["fundamental_age"] = days_old / 90.0
 
@@ -265,8 +291,9 @@ def build_rl_training_signals(
     print(f"[PortfolioRL] Loaded fundamentals for {len(fundamentals)} symbols")
 
     # Align to weekly
-    signals = align_signals_to_weekly(prices_dict, news_sentiment, fundamentals, symbols)
+    signals = align_signals_to_weekly(
+        prices_dict, news_sentiment, fundamentals, symbols
+    )
     print(f"[PortfolioRL] Aligned signals for {len(signals)} symbols")
 
     return signals
-

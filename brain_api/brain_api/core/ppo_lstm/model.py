@@ -261,4 +261,3 @@ class PPOActorCritic(nn.Module):
         log_prob, entropy = self.policy.evaluate_actions(state, action)
         value = self.value_net(state)
         return log_prob, entropy, value.squeeze(-1)
-

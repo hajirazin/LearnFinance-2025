@@ -133,4 +133,3 @@ def get_sac_patchtst_as_of_date(request: SACPatchTSTInferenceRequest) -> date:
     if request.as_of_date:
         return date.fromisoformat(request.as_of_date)
     return date.today()
-

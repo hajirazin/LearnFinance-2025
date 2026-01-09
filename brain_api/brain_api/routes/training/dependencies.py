@@ -224,4 +224,3 @@ def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
 def get_sac_patchtst_config() -> SACPatchTSTConfig:
     """Get SAC + PatchTST configuration."""
     return DEFAULT_SAC_PATCHTST_CONFIG
-

@@ -88,4 +88,3 @@ class SACPatchTSTTrainResponse(BaseModel):
     symbols_used: list[str]
     hf_repo: str | None = None
     hf_url: str | None = None
-

@@ -58,11 +58,36 @@ def _create_mock_halal_universe() -> dict:
     """Create mock halal universe response."""
     return {
         "stocks": [
-            {"symbol": "AAPL", "name": "Apple Inc", "max_weight": 10.0, "sources": ["SPUS"]},
-            {"symbol": "MSFT", "name": "Microsoft", "max_weight": 9.0, "sources": ["SPUS"]},
-            {"symbol": "GOOGL", "name": "Alphabet", "max_weight": 8.0, "sources": ["HLAL"]},
-            {"symbol": "AMZN", "name": "Amazon", "max_weight": 7.0, "sources": ["HLAL"]},
-            {"symbol": "NVDA", "name": "NVIDIA", "max_weight": 6.0, "sources": ["SPTE"]},
+            {
+                "symbol": "AAPL",
+                "name": "Apple Inc",
+                "max_weight": 10.0,
+                "sources": ["SPUS"],
+            },
+            {
+                "symbol": "MSFT",
+                "name": "Microsoft",
+                "max_weight": 9.0,
+                "sources": ["SPUS"],
+            },
+            {
+                "symbol": "GOOGL",
+                "name": "Alphabet",
+                "max_weight": 8.0,
+                "sources": ["HLAL"],
+            },
+            {
+                "symbol": "AMZN",
+                "name": "Amazon",
+                "max_weight": 7.0,
+                "sources": ["HLAL"],
+            },
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "max_weight": 6.0,
+                "sources": ["SPTE"],
+            },
         ],
         "etfs_used": ["SPUS", "HLAL", "SPTE"],
         "total_stocks": 5,
@@ -82,8 +107,12 @@ def test_hrp_allocation_returns_expected_structure():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -105,8 +134,12 @@ def test_hrp_weights_sum_to_100():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -127,8 +160,12 @@ def test_hrp_all_symbols_present_or_excluded():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -150,8 +187,12 @@ def test_hrp_all_weights_positive():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -169,8 +210,12 @@ def test_hrp_custom_lookback_days():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp", json={"lookback_days": 126})
 
@@ -189,8 +234,12 @@ def test_hrp_custom_as_of_date():
     test_date = "2025-01-01"
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp", json={"as_of_date": test_date})
 
@@ -211,8 +260,12 @@ def test_hrp_excludes_symbols_with_insufficient_data():
     mock_prices["NVDA"] = mock_prices["NVDA"].tail(30)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -232,8 +285,12 @@ def test_hrp_returns_400_when_no_valid_symbols():
     mock_prices = {}
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -259,8 +316,12 @@ def test_hrp_deterministic_with_same_data():
     mock_prices = _create_mock_prices(mock_symbols, seed=123)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response1 = client.post("/allocation/hrp")
         response2 = client.post("/allocation/hrp")
@@ -281,8 +342,12 @@ def test_hrp_weights_sorted_by_percentage_descending():
     mock_prices = _create_mock_prices(mock_symbols)
 
     with (
-        patch("brain_api.routes.allocation.get_halal_universe", return_value=mock_universe),
-        patch("brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices),
+        patch(
+            "brain_api.routes.allocation.get_halal_universe", return_value=mock_universe
+        ),
+        patch(
+            "brain_api.routes.allocation.load_prices_yfinance", return_value=mock_prices
+        ),
     ):
         response = client.post("/allocation/hrp")
 
@@ -290,5 +355,6 @@ def test_hrp_weights_sorted_by_percentage_descending():
     data = response.json()
 
     weights = list(data["percentage_weights"].values())
-    assert weights == sorted(weights, reverse=True), "Weights should be sorted descending"
-
+    assert weights == sorted(weights, reverse=True), (
+        "Weights should be sorted descending"
+    )

@@ -95,5 +95,3 @@ class FundamentalsResult:
     from_cache: bool
     api_calls_made: int
     api_calls_remaining: int
-
-

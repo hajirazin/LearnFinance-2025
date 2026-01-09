@@ -82,5 +82,3 @@ class YFinanceNewsFetcher:
                 articles.append(article)
 
         return articles
-
-

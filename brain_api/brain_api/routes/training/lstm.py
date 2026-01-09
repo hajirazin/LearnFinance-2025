@@ -37,6 +37,7 @@ from .dependencies import (
     get_symbols,
     get_trainer,
 )
+from .helpers import get_prior_version_info
 from .models import LSTMTrainResponse
 
 router = APIRouter()
@@ -45,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 @router.post("/lstm", response_model=LSTMTrainResponse)
 def train_lstm(
-    skip_snapshot: bool = Query(False, description="Skip saving snapshot (by default saves snapshot for current + all historical years)"),
+    skip_snapshot: bool = Query(
+        False,
+        description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
+    ),
     storage: LocalModelStorage = Depends(get_storage),
     symbols: list[str] = Depends(get_symbols),
     config: LSTMConfig = Depends(get_config),
@@ -85,7 +89,9 @@ def train_lstm(
 
     # Check if this version already exists (idempotent)
     if storage.version_exists(version):
-        logger.info(f"[LSTM] Version {version} already exists (idempotent), returning cached result")
+        logger.info(
+            f"[LSTM] Version {version} already exists (idempotent), returning cached result"
+        )
         # Return existing metadata
         existing_metadata = storage.read_metadata(version)
         if existing_metadata:
@@ -103,7 +109,9 @@ def train_lstm(
     t0 = time.time()
     prices = price_loader(symbols, start_date, end_date)
     t_prices = time.time() - t0
-    logger.info(f"[LSTM] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[LSTM] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
+    )
 
     if len(prices) == 0:
         logger.error("[LSTM] No price data loaded - cannot train model")
@@ -131,17 +139,26 @@ def train_lstm(
     )
     t_train = time.time() - t0
     logger.info(f"[LSTM] Training complete in {t_train:.1f}s")
-    logger.info(f"[LSTM] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}")
+    logger.info(
+        f"[LSTM] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}"
+    )
 
-    # Get prior version info for promotion decision
-    prior_version = storage.read_current_version()
-    prior_val_loss = None
+    # Get prior version info for promotion decision (checks local, then HF if needed)
+    from brain_api.storage.huggingface import HuggingFaceModelStorage
+
+    hf_model_repo = get_hf_lstm_model_repo()
+    prior_info = get_prior_version_info(
+        local_storage=storage,
+        hf_storage_class=HuggingFaceModelStorage,
+        hf_model_repo=hf_model_repo,
+    )
+    prior_version = prior_info.version
+    prior_val_loss = prior_info.val_loss
+
     if prior_version:
-        logger.info(f"[LSTM] Prior version: {prior_version}")
-        prior_metadata = storage.read_metadata(prior_version)
-        if prior_metadata:
-            prior_val_loss = prior_metadata["metrics"].get("val_loss")
-            logger.info(f"[LSTM] Prior val_loss: {prior_val_loss}")
+        logger.info(
+            f"[LSTM] Prior version: {prior_version}, val_loss: {prior_val_loss}"
+        )
     else:
         logger.info("[LSTM] No prior version exists (first model)")
 
@@ -151,7 +168,9 @@ def train_lstm(
         baseline_loss=result.baseline_loss,
         prior_val_loss=prior_val_loss,
     )
-    logger.info(f"[LSTM] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}")
+    logger.info(
+        f"[LSTM] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
+    )
 
     # Create metadata
     metadata = create_metadata(
@@ -187,7 +206,6 @@ def train_lstm(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" and hf_model_repo:
         try:
@@ -212,9 +230,10 @@ def train_lstm(
     # Save snapshots (unless skip_snapshot=True)
     if not skip_snapshot:
         snapshot_storage = SnapshotLocalStorage("lstm")
+        check_hf = storage_backend == "hf"
 
         # Save snapshot for current training window
-        if not snapshot_storage.snapshot_exists(end_date):
+        if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
             snapshot_metadata = create_snapshot_metadata(
                 forecaster_type="lstm",
                 cutoff_date=end_date,
@@ -244,7 +263,9 @@ def train_lstm(
 
         # Also backfill all historical snapshots
         logger.info("[LSTM] Backfilling historical snapshots...")
-        _backfill_lstm_snapshots(symbols, config, start_date, end_date, snapshot_storage, storage_backend)
+        _backfill_lstm_snapshots(
+            symbols, config, start_date, end_date, snapshot_storage, storage_backend
+        )
 
     return LSTMTrainResponse(
         version=version,
@@ -310,26 +331,33 @@ def _backfill_lstm_snapshots(
     start_year = start_date.year
     end_year = end_date.year
     bootstrap_years = 4
+    check_hf = storage_backend == "hf"
 
-    # Check if any snapshots need to be created
+    # Check if any snapshots need to be created (check HF too if in HF mode)
     snapshots_needed = []
     for year in range(start_year + bootstrap_years, end_year):
         cutoff_date = date(year, 12, 31)
-        if not snapshot_storage.snapshot_exists(cutoff_date):
+        if not snapshot_storage.snapshot_exists_anywhere(
+            cutoff_date, check_hf=check_hf
+        ):
             snapshots_needed.append(cutoff_date)
 
     if not snapshots_needed:
         logger.info("[LSTM Backfill] All snapshots already exist, nothing to do")
         return
 
-    logger.info(f"[LSTM Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}")
+    logger.info(
+        f"[LSTM Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
+    )
 
     # Load prices ONCE for full window
     logger.info("[LSTM Backfill] Loading prices for full window (single download)...")
     t0 = time.time()
     prices_full = load_prices_yfinance(symbols, start_date, end_date)
     t_prices = time.time() - t0
-    logger.info(f"[LSTM Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[LSTM Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
+    )
 
     if len(prices_full) == 0:
         logger.warning("[LSTM Backfill] No price data loaded, cannot create snapshots")
@@ -343,15 +371,21 @@ def _backfill_lstm_snapshots(
         # Filter prices to cutoff (no re-download!)
         prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
-            logger.warning(f"[LSTM Backfill] No price data for cutoff {cutoff_date}, skipping")
+            logger.warning(
+                f"[LSTM Backfill] No price data for cutoff {cutoff_date}, skipping"
+            )
             continue
 
         dataset = build_dataset(prices, config)
         if len(dataset.X) == 0:
-            logger.warning(f"[LSTM Backfill] Empty dataset for cutoff {cutoff_date}, skipping")
+            logger.warning(
+                f"[LSTM Backfill] Empty dataset for cutoff {cutoff_date}, skipping"
+            )
             continue
 
-        result = train_model_pytorch(dataset.X, dataset.y, dataset.feature_scaler, config)
+        result = train_model_pytorch(
+            dataset.X, dataset.y, dataset.feature_scaler, config
+        )
 
         metadata = create_snapshot_metadata(
             forecaster_type="lstm",
@@ -371,13 +405,16 @@ def _backfill_lstm_snapshots(
             config=config,
             metadata=metadata,
         )
-        logger.info(f"[LSTM Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s")
+        logger.info(
+            f"[LSTM Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
+        )
 
         # Upload to HuggingFace if in HF mode
         if storage_backend == "hf":
             try:
                 snapshot_storage.upload_snapshot_to_hf(cutoff_date)
-                logger.info(f"[LSTM Backfill] Uploaded snapshot {cutoff_date} to HuggingFace")
+                logger.info(
+                    f"[LSTM Backfill] Uploaded snapshot {cutoff_date} to HuggingFace"
+                )
             except Exception as e:
                 logger.error(f"[LSTM Backfill] Failed to upload snapshot to HF: {e}")
-

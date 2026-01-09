@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 
 
-def compute_ohlcv_log_returns(df: pd.DataFrame, use_returns: bool = True) -> pd.DataFrame:
+def compute_ohlcv_log_returns(
+    df: pd.DataFrame, use_returns: bool = True
+) -> pd.DataFrame:
     """Compute OHLCV log returns from price DataFrame.
 
     Transforms raw OHLCV prices into log returns for improved stationarity
@@ -37,7 +39,13 @@ def compute_ohlcv_log_returns(df: pd.DataFrame, use_returns: bool = True) -> pd.
         features_df = features_df.iloc[1:]
     else:
         features_df = df[["open", "high", "low", "close", "volume"]].copy()
-        features_df.columns = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+        features_df.columns = [
+            "open_ret",
+            "high_ret",
+            "low_ret",
+            "close_ret",
+            "volume_ret",
+        ]
 
     # Replace infinities with 0 and fill NaN
     features_df = features_df.replace([np.inf, -np.inf], 0).fillna(0)
@@ -71,4 +79,3 @@ def compute_weekly_return(
         return (end_price - start_price) / start_price
     except KeyError:
         return None
-

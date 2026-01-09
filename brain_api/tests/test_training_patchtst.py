@@ -38,7 +38,9 @@ def mock_price_loader(symbols, start_date, end_date):
     import pandas as pd
 
     # Create minimal fake price data for each symbol
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]  # 100 business days
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")[
+        :100
+    ]  # 100 business days
     prices = {}
     for symbol in symbols:
         prices[symbol] = pd.DataFrame(
@@ -134,9 +136,13 @@ def client_with_mocks(temp_storage):
     app.dependency_overrides[get_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-    app.dependency_overrides[get_patchtst_fundamentals_loader] = lambda: mock_fundamentals_loader
+    app.dependency_overrides[get_patchtst_fundamentals_loader] = (
+        lambda: mock_fundamentals_loader
+    )
     app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
-    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = (
+        lambda: mock_dataset_builder
+    )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
     # Set fixed window for deterministic tests
@@ -226,7 +232,9 @@ def test_train_patchtst_idempotent_version(client_with_mocks):
     assert version1 == version2, "Version should be identical on rerun with same config"
 
 
-def test_train_patchtst_idempotent_does_not_change_current(client_with_mocks, temp_storage):
+def test_train_patchtst_idempotent_does_not_change_current(
+    client_with_mocks, temp_storage
+):
     """Rerunning training does not change 'current' pointer if already promoted."""
     # First call - should promote
     response1 = client_with_mocks.post("/train/patchtst", json={})
@@ -274,9 +282,13 @@ def test_train_patchtst_not_promoted_when_worse_than_baseline():
         app.dependency_overrides[get_symbols] = mock_symbols
         app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
         app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-        app.dependency_overrides[get_patchtst_fundamentals_loader] = lambda: mock_fundamentals_loader
+        app.dependency_overrides[get_patchtst_fundamentals_loader] = (
+            lambda: mock_fundamentals_loader
+        )
         app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
-        app.dependency_overrides[get_patchtst_dataset_builder] = lambda: mock_dataset_builder
+        app.dependency_overrides[get_patchtst_dataset_builder] = (
+            lambda: mock_dataset_builder
+        )
         app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -322,9 +334,13 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     app.dependency_overrides[get_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-    app.dependency_overrides[get_patchtst_fundamentals_loader] = lambda: mock_fundamentals_loader
+    app.dependency_overrides[get_patchtst_fundamentals_loader] = (
+        lambda: mock_fundamentals_loader
+    )
     app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
-    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = (
+        lambda: mock_dataset_builder
+    )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -341,7 +357,9 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     assert current_before == promoted_version
 
     # Now try with a different window that produces worse results
-    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer_worse_than_baseline
+    app.dependency_overrides[get_patchtst_trainer] = (
+        lambda: mock_trainer_worse_than_baseline
+    )
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-02"
 
     response2 = client.post("/train/patchtst", json={})
@@ -380,7 +398,8 @@ def test_train_patchtst_version_differs_from_lstm():
     symbols = ["AAPL", "MSFT"]
 
     lstm_version = lstm_compute_version(start, end, symbols, LSTM_DEFAULT_CONFIG)
-    patchtst_version = patchtst_compute_version(start, end, symbols, PATCHTST_DEFAULT_CONFIG)
+    patchtst_version = patchtst_compute_version(
+        start, end, symbols, PATCHTST_DEFAULT_CONFIG
+    )
 
     assert lstm_version != patchtst_version, "PatchTST and LSTM versions should differ"
-

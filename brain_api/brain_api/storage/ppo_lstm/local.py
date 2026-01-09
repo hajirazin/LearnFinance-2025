@@ -243,6 +243,7 @@ class PPOLSTMLocalStorage:
 
         # Compute state/action dimensions
         from brain_api.core.portfolio_rl.state import StateSchema
+
         schema = StateSchema(n_stocks=len(symbol_order))
 
         model = PPOActorCritic(
@@ -283,4 +284,3 @@ class PPOLSTMLocalStorage:
             symbol_order=symbol_order,
             version=version,
         )
-

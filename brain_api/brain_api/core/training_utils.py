@@ -49,5 +49,3 @@ def evaluate_for_promotion(
 
     # Must beat prior (if exists)
     return prior_val_loss is None or val_loss < prior_val_loss
-
-

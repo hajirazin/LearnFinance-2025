@@ -45,4 +45,3 @@ def compute_model_version(
     date_prefix = end_date.strftime("%Y-%m-%d")
 
     return f"v{date_prefix}-{hash_digest}"
-

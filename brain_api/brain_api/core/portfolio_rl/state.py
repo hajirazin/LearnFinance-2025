@@ -20,6 +20,7 @@ class PortfolioState:
 
     This is the "current_weights + cash" part of the state.
     """
+
     current_weights: dict[str, float]  # symbol -> weight, includes "CASH"
     cash_value: float  # absolute cash value (for reference)
     portfolio_value: float  # total portfolio value
@@ -65,6 +66,7 @@ class StateSchema:
 
     Total per stock = 7 signals + 1 forecast = 8
     """
+
     n_stocks: int = 15
     n_signals_per_stock: int = 7  # news + 5 fundamentals + fundamental_age
 
@@ -114,10 +116,7 @@ class StateSchema:
 
     def get_portfolio_indices(self) -> tuple[int, int]:
         """Get start/end indices for portfolio weights."""
-        start = (
-            self.n_stocks * self.n_signals_per_stock
-            + self.n_forecast_features
-        )
+        start = self.n_stocks * self.n_signals_per_stock + self.n_forecast_features
         end = start + self.n_portfolio_weights
         return start, end
 
@@ -235,4 +234,3 @@ def state_to_dict(
     result["current_weights"]["CASH"] = float(weights[-1])
 
     return result
-

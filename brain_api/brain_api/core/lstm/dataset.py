@@ -67,7 +67,9 @@ def build_dataset(
 
     for _symbol, df in prices.items():
         # Skip if not enough data
-        if len(df) < config.sequence_length + 5:  # Need at least one week after lookback
+        if (
+            len(df) < config.sequence_length + 5
+        ):  # Need at least one week after lookback
             continue
 
         # Compute features using shared utility
@@ -121,7 +123,9 @@ def build_dataset(
             symbols_used += 1
             total_weeks += symbol_samples
 
-    print(f"[LSTM] Dataset built: {total_weeks} weekly samples from {symbols_used} symbols")
+    print(
+        f"[LSTM] Dataset built: {total_weeks} weekly samples from {symbols_used} symbols"
+    )
 
     if not all_sequences:
         # Return empty arrays if no data

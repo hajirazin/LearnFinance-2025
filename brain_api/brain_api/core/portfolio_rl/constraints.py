@@ -168,4 +168,3 @@ def normalize_portfolio_from_values(
     weights[-1] = cash_value / total_value
 
     return weights
-

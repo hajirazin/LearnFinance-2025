@@ -78,9 +78,13 @@ class FundamentalsFetcher:
             balance_record = self.index.get_fetch_record(symbol, "balance_sheet")
 
             if income_record:
-                income_data = load_raw_response(self.base_path, symbol, "income_statement")
+                income_data = load_raw_response(
+                    self.base_path, symbol, "income_statement"
+                )
             if balance_record:
-                balance_data = load_raw_response(self.base_path, symbol, "balance_sheet")
+                balance_data = load_raw_response(
+                    self.base_path, symbol, "balance_sheet"
+                )
 
         # Fetch missing data from API
         if income_data is None:
@@ -172,11 +176,15 @@ class FundamentalsFetcher:
         balance_stmt = None
 
         if income_data:
-            income_stmts = parse_quarterly_statements(symbol, "income_statement", income_data)
+            income_stmts = parse_quarterly_statements(
+                symbol, "income_statement", income_data
+            )
             income_stmt = get_statement_as_of(income_stmts, as_of_date)
 
         if balance_data:
-            balance_stmts = parse_quarterly_statements(symbol, "balance_sheet", balance_data)
+            balance_stmts = parse_quarterly_statements(
+                symbol, "balance_sheet", balance_data
+            )
             balance_stmt = get_statement_as_of(balance_stmts, as_of_date)
 
         return compute_ratios(income_stmt, balance_stmt)
@@ -205,5 +213,3 @@ class FundamentalsFetcher:
     def close(self) -> None:
         """Close database connections."""
         self.index.close()
-
-

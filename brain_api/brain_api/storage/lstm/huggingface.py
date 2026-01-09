@@ -68,14 +68,14 @@ LSTM model for predicting weekly stock returns.
 ## Model Details
 
 - **Version**: {version}
-- **Training Window**: {metadata.get('data_window', {}).get('start', 'N/A')} to {metadata.get('data_window', {}).get('end', 'N/A')}
-- **Symbols**: {len(metadata.get('symbols', []))} stocks
+- **Training Window**: {metadata.get("data_window", {}).get("start", "N/A")} to {metadata.get("data_window", {}).get("end", "N/A")}
+- **Symbols**: {len(metadata.get("symbols", []))} stocks
 
 ## Metrics
 
-- Train Loss: {metadata.get('metrics', {}).get('train_loss', 'N/A')}
-- Validation Loss: {metadata.get('metrics', {}).get('val_loss', 'N/A')}
-- Baseline Loss: {metadata.get('metrics', {}).get('baseline_loss', 'N/A')}
+- Train Loss: {metadata.get("metrics", {}).get("train_loss", "N/A")}
+- Validation Loss: {metadata.get("metrics", {}).get("val_loss", "N/A")}
+- Baseline Loss: {metadata.get("metrics", {}).get("baseline_loss", "N/A")}
 
 ## Usage
 

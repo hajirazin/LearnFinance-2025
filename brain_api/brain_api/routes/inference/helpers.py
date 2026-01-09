@@ -50,14 +50,18 @@ def _load_model_artifacts_generic(
     if storage_backend == "hf" or hf_model_repo:
         if hf_model_repo:
             try:
-                logger.info(f"[{model_type}] Attempting to load model from HuggingFace: {hf_model_repo}")
+                logger.info(
+                    f"[{model_type}] Attempting to load model from HuggingFace: {hf_model_repo}"
+                )
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo,
                     local_cache=local_storage,
                 )
                 return hf_storage.download_model(use_cache=True)
             except Exception as hf_error:
-                logger.error(f"[{model_type}] Failed to load model from HuggingFace: {hf_error}")
+                logger.error(
+                    f"[{model_type}] Failed to load model from HuggingFace: {hf_error}"
+                )
                 raise HTTPException(
                     status_code=503,
                     detail=(
@@ -84,10 +88,14 @@ def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArt
     """Load PatchTST model artifacts with HuggingFace fallback."""
     from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
 
-    return _load_model_artifacts_generic("PatchTST", storage, PatchTSTHuggingFaceModelStorage)
+    return _load_model_artifacts_generic(
+        "PatchTST", storage, PatchTSTHuggingFaceModelStorage
+    )
 
 
-def _sort_predictions(predictions: list[LSTMSymbolPrediction]) -> list[LSTMSymbolPrediction]:
+def _sort_predictions(
+    predictions: list[LSTMSymbolPrediction],
+) -> list[LSTMSymbolPrediction]:
     """Sort predictions by predicted_weekly_return_pct descending.
 
     Predictions with valid returns are sorted highest to lowest.
@@ -121,4 +129,3 @@ def _sort_patchtst_predictions(
     )
 
     return valid_sorted + invalid
-

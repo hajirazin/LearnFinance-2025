@@ -58,5 +58,3 @@ def create_training_metadata(
         "promoted": promoted,
         "prior_version": prior_version,
     }
-
-

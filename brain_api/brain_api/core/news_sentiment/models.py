@@ -124,5 +124,3 @@ class NewsSentimentResult:
             "per_symbol": [s.to_dict() for s in self.per_symbol],
             "from_cache": self.from_cache,
         }
-
-

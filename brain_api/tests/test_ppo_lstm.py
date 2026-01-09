@@ -203,6 +203,7 @@ def test_train_ppo_lstm_returns_200(client_with_mocks, monkeypatch):
     """POST /train/ppo_lstm returns 200."""
     # Patch the training to use mock price loader
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
@@ -212,6 +213,7 @@ def test_train_ppo_lstm_returns_200(client_with_mocks, monkeypatch):
 def test_train_ppo_lstm_returns_required_fields(client_with_mocks, monkeypatch):
     """POST /train/ppo_lstm returns all required response fields."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
@@ -236,6 +238,7 @@ def test_train_ppo_lstm_returns_required_fields(client_with_mocks, monkeypatch):
 def test_train_ppo_lstm_first_model_auto_promoted(client_with_mocks, monkeypatch):
     """First PPO model is automatically promoted."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response = client_with_mocks.post("/train/ppo_lstm/full", json={})
@@ -250,6 +253,7 @@ def test_train_ppo_lstm_first_model_auto_promoted(client_with_mocks, monkeypatch
 def test_train_ppo_lstm_idempotent(client_with_mocks, monkeypatch):
     """Calling POST /train/ppo_lstm twice returns the same version."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response1 = client_with_mocks.post("/train/ppo_lstm/full", json={})
@@ -277,7 +281,7 @@ def test_infer_ppo_lstm_returns_503_without_model(client_with_mocks):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 503
 
@@ -291,7 +295,7 @@ def test_infer_ppo_lstm_returns_200_with_model(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -305,7 +309,7 @@ def test_infer_ppo_lstm_returns_target_weights(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -327,7 +331,7 @@ def test_infer_ppo_lstm_enforces_cash_buffer(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -347,7 +351,7 @@ def test_infer_ppo_lstm_enforces_max_position(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -355,7 +359,9 @@ def test_infer_ppo_lstm_enforces_max_position(client_for_inference):
 
     for symbol, weight in data["target_weights"].items():
         if symbol != "CASH":
-            assert weight <= 0.20 + 0.001, f"Weight for {symbol} ({weight}) exceeds 20% max"
+            assert weight <= 0.20 + 0.001, (
+                f"Weight for {symbol} ({weight}) exceeds 20% max"
+            )
 
 
 def test_infer_ppo_lstm_weights_sum_to_one(client_for_inference):
@@ -367,7 +373,7 @@ def test_infer_ppo_lstm_weights_sum_to_one(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -387,9 +393,9 @@ def test_infer_ppo_lstm_with_existing_positions(client_for_inference):
                 "positions": [
                     {"symbol": "AAPL", "market_value": 4000.0},
                     {"symbol": "MSFT", "market_value": 4000.0},
-                ]
+                ],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -411,7 +417,7 @@ def test_infer_ppo_lstm_returns_week_boundaries(client_for_inference):
                 "cash": 10000.0,
                 "positions": [],
             }
-        }
+        },
     )
     assert response.status_code == 200
 
@@ -433,9 +439,12 @@ def test_finetune_ppo_lstm_returns_400_without_prior_model(client_with_mocks):
     assert "No prior PPO_LSTM model" in response.json()["detail"]
 
 
-def test_finetune_ppo_lstm_returns_200_with_prior_model(client_for_inference, monkeypatch):
+def test_finetune_ppo_lstm_returns_200_with_prior_model(
+    client_for_inference, monkeypatch
+):
     """POST /train/ppo_lstm/finetune returns 200 when prior model exists."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     # Use the trained_model_storage fixture (which has a prior model)
@@ -446,6 +455,7 @@ def test_finetune_ppo_lstm_returns_200_with_prior_model(client_for_inference, mo
 def test_finetune_ppo_lstm_returns_required_fields(client_for_inference, monkeypatch):
     """POST /train/ppo_lstm/finetune returns all required response fields."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response = client_for_inference.post("/train/ppo_lstm/finetune", json={})
@@ -465,6 +475,7 @@ def test_finetune_ppo_lstm_returns_required_fields(client_for_inference, monkeyp
 def test_finetune_ppo_lstm_idempotent(client_for_inference, monkeypatch):
     """Calling POST /train/ppo_lstm/finetune twice returns the same version."""
     from brain_api.routes.training import ppo_lstm
+
     monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
 
     response1 = client_for_inference.post("/train/ppo_lstm/finetune", json={})
@@ -476,4 +487,3 @@ def test_finetune_ppo_lstm_idempotent(client_for_inference, monkeypatch):
     version2 = response2.json()["version"]
 
     assert version1 == version2
-

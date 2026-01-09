@@ -91,7 +91,9 @@ def _aggregate_daily_sentiment(
     aggregations: dict[tuple[date, str], list[SentimentScore]] = {}
 
     for article_dt, symbol, score in articles_with_scores:
-        article_date = article_dt.date() if isinstance(article_dt, datetime) else article_dt
+        article_date = (
+            article_dt.date() if isinstance(article_dt, datetime) else article_dt
+        )
         key = (article_date, symbol)
         if key not in aggregations:
             aggregations[key] = []
@@ -110,16 +112,20 @@ def _aggregate_daily_sentiment(
         else:
             weighted_score = sum(s.score for s in scores) / len(scores)
 
-        results.append({
-            "date": agg_date,
-            "symbol": symbol,
-            "sentiment_score": round(weighted_score, 4),
-            "article_count": len(scores),
-            "avg_confidence": round(sum(s.confidence for s in scores) / len(scores), 4),
-            "p_pos_avg": round(sum(s.p_pos for s in scores) / len(scores), 4),
-            "p_neg_avg": round(sum(s.p_neg for s in scores) / len(scores), 4),
-            "total_articles": len(scores),
-        })
+        results.append(
+            {
+                "date": agg_date,
+                "symbol": symbol,
+                "sentiment_score": round(weighted_score, 4),
+                "article_count": len(scores),
+                "avg_confidence": round(
+                    sum(s.confidence for s in scores) / len(scores), 4
+                ),
+                "p_pos_avg": round(sum(s.p_pos for s in scores) / len(scores), 4),
+                "p_neg_avg": round(sum(s.p_neg for s in scores) / len(scores), 4),
+                "total_articles": len(scores),
+            }
+        )
 
     return results
 
@@ -181,7 +187,9 @@ def _append_to_parquet(
 
         # Merge: existing + new, deduplicate by (date, symbol)
         combined_df = pd.concat([existing_df, new_df], ignore_index=True)
-        combined_df = combined_df.drop_duplicates(subset=["date", "symbol"], keep="last")
+        combined_df = combined_df.drop_duplicates(
+            subset=["date", "symbol"], keep="last"
+        )
         logger.info(
             f"Merging {len(new_rows)} new rows with {existing_count:,} existing rows"
         )
@@ -441,4 +449,3 @@ def fill_sentiment_gaps(
         progress.error = str(e)
         update_progress()
         return GapFillResult(success=False, progress=progress)
-

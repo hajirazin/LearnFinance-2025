@@ -127,7 +127,9 @@ class SACTrainer:
             self.alpha_optimizer = optim.Adam([self.log_alpha], lr=config.alpha_lr)
         else:
             self.target_entropy = None
-            self.log_alpha = torch.tensor(np.log(config.init_alpha), dtype=torch.float32)
+            self.log_alpha = torch.tensor(
+                np.log(config.init_alpha), dtype=torch.float32
+            )
             self.alpha_optimizer = None
 
         # Replay buffer
@@ -362,4 +364,3 @@ def action_to_weights(
     )
 
     return weights
-

@@ -8,7 +8,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, Query
 
 from brain_api.core.config import (
-    get_hf_lstm_model_repo,
+    get_hf_patchtst_model_repo,
     get_storage_backend,
     resolve_training_window,
 )
@@ -56,6 +56,7 @@ from .dependencies import (
     get_patchtst_trainer,
     get_symbols,
 )
+from .helpers import get_prior_version_info
 from .models import PatchTSTTrainResponse
 
 router = APIRouter()
@@ -64,13 +65,18 @@ logger = logging.getLogger(__name__)
 
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
-    skip_snapshot: bool = Query(False, description="Skip saving snapshot (by default saves snapshot for current + all historical years)"),
+    skip_snapshot: bool = Query(
+        False,
+        description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
+    ),
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
     symbols: list[str] = Depends(get_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     news_loader: PatchTSTNewsLoader = Depends(get_patchtst_news_loader),
-    fundamentals_loader: PatchTSTFundamentalsLoader = Depends(get_patchtst_fundamentals_loader),
+    fundamentals_loader: PatchTSTFundamentalsLoader = Depends(
+        get_patchtst_fundamentals_loader
+    ),
     data_aligner: PatchTSTDataAligner = Depends(get_patchtst_data_aligner),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
     trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
@@ -103,7 +109,9 @@ def train_patchtst(
     logger.info(f"[PatchTST] Starting training for {len(symbols)} symbols")
     logger.info(f"[PatchTST] Data window: {start_date} to {end_date}")
     logger.info(f"[PatchTST] Symbols: {symbols}")
-    logger.info(f"[PatchTST] Config: {config.num_input_channels} channels, {config.epochs} epochs")
+    logger.info(
+        f"[PatchTST] Config: {config.num_input_channels} channels, {config.epochs} epochs"
+    )
 
     # Compute deterministic version
     version = patchtst_compute_version(start_date, end_date, symbols, config)
@@ -111,7 +119,9 @@ def train_patchtst(
 
     # Check if this version already exists (idempotent)
     if storage.version_exists(version):
-        logger.info(f"[PatchTST] Version {version} already exists (idempotent), returning cached result")
+        logger.info(
+            f"[PatchTST] Version {version} already exists (idempotent), returning cached result"
+        )
         existing_metadata = storage.read_metadata(version)
         if existing_metadata:
             return PatchTSTTrainResponse(
@@ -130,7 +140,9 @@ def train_patchtst(
     t0 = time.time()
     prices = price_loader(symbols, start_date, end_date)
     t_prices = time.time() - t0
-    logger.info(f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
+    )
 
     if len(prices) == 0:
         logger.error("[PatchTST] No price data loaded - cannot train model")
@@ -141,21 +153,27 @@ def train_patchtst(
     t0 = time.time()
     news_sentiment = news_loader(symbols, start_date, end_date)
     t_news = time.time() - t0
-    logger.info(f"[PatchTST] Loaded news sentiment for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded news sentiment for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s"
+    )
 
     # Load fundamentals
     logger.info("[PatchTST] Loading historical fundamentals...")
     t0 = time.time()
     fundamentals = fundamentals_loader(symbols, start_date, end_date)
     t_fund = time.time() - t0
-    logger.info(f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s"
+    )
 
     # Align all data into multi-channel features
     logger.info("[PatchTST] Aligning multivariate data...")
     t0 = time.time()
     aligned_features = data_aligner(prices, news_sentiment, fundamentals, config)
     t_align = time.time() - t0
-    logger.info(f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s")
+    logger.info(
+        f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s"
+    )
 
     # Free intermediate data no longer needed (prices still needed for dataset_builder)
     del news_sentiment, fundamentals
@@ -169,7 +187,9 @@ def train_patchtst(
     t0 = time.time()
     dataset = dataset_builder(aligned_features, prices, config)
     t_dataset = time.time() - t0
-    logger.info(f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples")
+    logger.info(
+        f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples"
+    )
 
     # Save symbols list before freeing prices (needed for snapshot)
     available_symbols = list(prices.keys())
@@ -192,17 +212,26 @@ def train_patchtst(
     )
     t_train = time.time() - t0
     logger.info(f"[PatchTST] Training complete in {t_train:.1f}s")
-    logger.info(f"[PatchTST] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}")
+    logger.info(
+        f"[PatchTST] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}"
+    )
 
-    # Get prior version info for promotion decision
-    prior_version = storage.read_current_version()
-    prior_val_loss = None
+    # Get prior version info for promotion decision (checks local, then HF if needed)
+    from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
+
+    hf_model_repo = get_hf_patchtst_model_repo()
+    prior_info = get_prior_version_info(
+        local_storage=storage,
+        hf_storage_class=PatchTSTHuggingFaceModelStorage,
+        hf_model_repo=hf_model_repo,
+    )
+    prior_version = prior_info.version
+    prior_val_loss = prior_info.val_loss
+
     if prior_version:
-        logger.info(f"[PatchTST] Prior version: {prior_version}")
-        prior_metadata = storage.read_metadata(prior_version)
-        if prior_metadata:
-            prior_val_loss = prior_metadata["metrics"].get("val_loss")
-            logger.info(f"[PatchTST] Prior val_loss: {prior_val_loss}")
+        logger.info(
+            f"[PatchTST] Prior version: {prior_version}, val_loss: {prior_val_loss}"
+        )
     else:
         logger.info("[PatchTST] No prior version exists (first model)")
 
@@ -212,7 +241,9 @@ def train_patchtst(
         baseline_loss=result.baseline_loss,
         prior_val_loss=prior_val_loss,
     )
-    logger.info(f"[PatchTST] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}")
+    logger.info(
+        f"[PatchTST] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
+    )
 
     # Create metadata
     metadata = create_patchtst_metadata(
@@ -248,12 +279,9 @@ def train_patchtst(
     hf_repo = None
     hf_url = None
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" and hf_model_repo:
         try:
-            from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
-
             hf_storage = PatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo)
             hf_info = hf_storage.upload_model(
                 version=version,
@@ -273,9 +301,10 @@ def train_patchtst(
     # Save snapshots (unless skip_snapshot=True)
     if not skip_snapshot:
         snapshot_storage = SnapshotLocalStorage("patchtst")
+        check_hf = storage_backend == "hf"
 
         # Save snapshot for current training window
-        if not snapshot_storage.snapshot_exists(end_date):
+        if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
             snapshot_metadata = create_snapshot_metadata(
                 forecaster_type="patchtst",
                 cutoff_date=end_date,
@@ -299,13 +328,17 @@ def train_patchtst(
             if storage_backend == "hf":
                 try:
                     snapshot_storage.upload_snapshot_to_hf(end_date)
-                    logger.info(f"[PatchTST] Uploaded snapshot {end_date} to HuggingFace")
+                    logger.info(
+                        f"[PatchTST] Uploaded snapshot {end_date} to HuggingFace"
+                    )
                 except Exception as e:
                     logger.error(f"[PatchTST] Failed to upload snapshot to HF: {e}")
 
         # Also backfill all historical snapshots
         logger.info("[PatchTST] Backfilling historical snapshots...")
-        _backfill_patchtst_snapshots(symbols, config, start_date, end_date, snapshot_storage, storage_backend)
+        _backfill_patchtst_snapshots(
+            symbols, config, start_date, end_date, snapshot_storage, storage_backend
+        )
 
     return PatchTSTTrainResponse(
         version=version,
@@ -415,42 +448,61 @@ def _backfill_patchtst_snapshots(
     start_year = start_date.year
     end_year = end_date.year
     bootstrap_years = 4
+    check_hf = storage_backend == "hf"
 
-    # Check if any snapshots need to be created
+    # Check if any snapshots need to be created (check HF too if in HF mode)
     snapshots_needed = []
     for year in range(start_year + bootstrap_years, end_year):
         cutoff_date = date(year, 12, 31)
-        if not snapshot_storage.snapshot_exists(cutoff_date):
+        if not snapshot_storage.snapshot_exists_anywhere(
+            cutoff_date, check_hf=check_hf
+        ):
             snapshots_needed.append(cutoff_date)
 
     if not snapshots_needed:
         logger.info("[PatchTST Backfill] All snapshots already exist, nothing to do")
         return
 
-    logger.info(f"[PatchTST Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}")
+    logger.info(
+        f"[PatchTST Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
+    )
 
     # Load ALL data ONCE for full window
-    logger.info("[PatchTST Backfill] Loading prices for full window (single download)...")
+    logger.info(
+        "[PatchTST Backfill] Loading prices for full window (single download)..."
+    )
     t0 = time.time()
     prices_full = patchtst_load_prices(symbols, start_date, end_date)
     t_prices = time.time() - t0
-    logger.info(f"[PatchTST Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[PatchTST Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
+    )
 
     if len(prices_full) == 0:
-        logger.warning("[PatchTST Backfill] No price data loaded, cannot create snapshots")
+        logger.warning(
+            "[PatchTST Backfill] No price data loaded, cannot create snapshots"
+        )
         return
 
-    logger.info("[PatchTST Backfill] Loading news sentiment for full window (single download)...")
+    logger.info(
+        "[PatchTST Backfill] Loading news sentiment for full window (single download)..."
+    )
     t0 = time.time()
     news_full = load_historical_news_sentiment(symbols, start_date, end_date)
     t_news = time.time() - t0
-    logger.info(f"[PatchTST Backfill] Loaded news sentiment for {len(news_full)} symbols in {t_news:.1f}s")
+    logger.info(
+        f"[PatchTST Backfill] Loaded news sentiment for {len(news_full)} symbols in {t_news:.1f}s"
+    )
 
-    logger.info("[PatchTST Backfill] Loading fundamentals for full window (single download)...")
+    logger.info(
+        "[PatchTST Backfill] Loading fundamentals for full window (single download)..."
+    )
     t0 = time.time()
     fundamentals_full = load_historical_fundamentals(symbols, start_date, end_date)
     t_fund = time.time() - t0
-    logger.info(f"[PatchTST Backfill] Loaded fundamentals for {len(fundamentals_full)} symbols in {t_fund:.1f}s")
+    logger.info(
+        f"[PatchTST Backfill] Loaded fundamentals for {len(fundamentals_full)} symbols in {t_fund:.1f}s"
+    )
 
     # Train each snapshot using filtered data
     for cutoff_date in snapshots_needed:
@@ -460,24 +512,34 @@ def _backfill_patchtst_snapshots(
         # Filter all data sources to cutoff (no re-download!)
         prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
-            logger.warning(f"[PatchTST Backfill] No price data for cutoff {cutoff_date}, skipping")
+            logger.warning(
+                f"[PatchTST Backfill] No price data for cutoff {cutoff_date}, skipping"
+            )
             continue
 
         news_sentiment = _filter_signals_by_cutoff(news_full, cutoff_date)
         fundamentals = _filter_signals_by_cutoff(fundamentals_full, cutoff_date)
 
-        aligned_features = align_multivariate_data(prices, news_sentiment, fundamentals, config)
+        aligned_features = align_multivariate_data(
+            prices, news_sentiment, fundamentals, config
+        )
 
         if len(aligned_features) == 0:
-            logger.warning(f"[PatchTST Backfill] No aligned features for cutoff {cutoff_date}, skipping")
+            logger.warning(
+                f"[PatchTST Backfill] No aligned features for cutoff {cutoff_date}, skipping"
+            )
             continue
 
         dataset = patchtst_build_dataset(aligned_features, prices, config)
         if len(dataset.X) == 0:
-            logger.warning(f"[PatchTST Backfill] Empty dataset for cutoff {cutoff_date}, skipping")
+            logger.warning(
+                f"[PatchTST Backfill] Empty dataset for cutoff {cutoff_date}, skipping"
+            )
             continue
 
-        result = patchtst_train_model(dataset.X, dataset.y, dataset.feature_scaler, config)
+        result = patchtst_train_model(
+            dataset.X, dataset.y, dataset.feature_scaler, config
+        )
 
         metadata = create_snapshot_metadata(
             forecaster_type="patchtst",
@@ -497,13 +559,18 @@ def _backfill_patchtst_snapshots(
             config=config,
             metadata=metadata,
         )
-        logger.info(f"[PatchTST Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s")
+        logger.info(
+            f"[PatchTST Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
+        )
 
         # Upload to HuggingFace if in HF mode
         if storage_backend == "hf":
             try:
                 snapshot_storage.upload_snapshot_to_hf(cutoff_date)
-                logger.info(f"[PatchTST Backfill] Uploaded snapshot {cutoff_date} to HuggingFace")
+                logger.info(
+                    f"[PatchTST Backfill] Uploaded snapshot {cutoff_date} to HuggingFace"
+                )
             except Exception as e:
-                logger.error(f"[PatchTST Backfill] Failed to upload snapshot to HF: {e}")
-
+                logger.error(
+                    f"[PatchTST Backfill] Failed to upload snapshot to HF: {e}"
+                )

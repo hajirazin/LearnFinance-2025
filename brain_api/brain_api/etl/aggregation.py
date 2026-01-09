@@ -42,6 +42,3 @@ class DailySentiment:
             "p_neg_avg": self.p_neg_avg,
             "total_articles": self.total_articles,
         }
-
-
-

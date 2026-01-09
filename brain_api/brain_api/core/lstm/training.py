@@ -68,7 +68,9 @@ def train_model_pytorch(
     y_train, y_val = y[:split_idx], y[split_idx:]
 
     print(f"[LSTM] Dataset: {len(X)} samples ({len(X_train)} train, {len(X_val)} val)")
-    print(f"[LSTM] Config: {config.epochs} epochs, batch_size={config.batch_size}, lr={config.learning_rate}")
+    print(
+        f"[LSTM] Config: {config.epochs} epochs, batch_size={config.batch_size}, lr={config.learning_rate}"
+    )
 
     # Convert to tensors and move to device
     X_train_t = torch.FloatTensor(X_train).to(device)
@@ -121,7 +123,9 @@ def train_model_pytorch(
 
         # Log progress at intervals
         if (epoch + 1) % log_interval == 0 or epoch == 0:
-            print(f"[LSTM] Epoch {epoch + 1}/{config.epochs}: train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}")
+            print(
+                f"[LSTM] Epoch {epoch + 1}/{config.epochs}: train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}"
+            )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -147,7 +151,9 @@ def train_model_pytorch(
     # This is the naive "persistence" baseline for returns
     baseline_loss = float(np.mean(y_val**2))
 
-    print(f"[LSTM] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}")
+    print(
+        f"[LSTM] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}"
+    )
     beats_baseline = best_val_loss < baseline_loss
     print(f"[LSTM] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline")
 
@@ -159,5 +165,3 @@ def train_model_pytorch(
         val_loss=best_val_loss,
         baseline_loss=baseline_loss,
     )
-
-

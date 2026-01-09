@@ -39,7 +39,9 @@ def symbol_to_response(
             title=sa.article.title,
             publisher=sa.article.publisher,
             link=sa.article.link,
-            published=sa.article.published.isoformat() if sa.article.published else None,
+            published=sa.article.published.isoformat()
+            if sa.article.published
+            else None,
             finbert_label=sa.sentiment.label,
             finbert_p_pos=sa.sentiment.p_pos,
             finbert_p_neg=sa.sentiment.p_neg,
@@ -69,9 +71,7 @@ def result_to_response(
         attempt=result.attempt,
         as_of_date=result.as_of_date,
         from_cache=result.from_cache,
-        per_symbol=[
-            symbol_to_response(s, return_top_k) for s in result.per_symbol
-        ],
+        per_symbol=[symbol_to_response(s, return_top_k) for s in result.per_symbol],
     )
 
 
@@ -165,21 +165,40 @@ def load_historical_sentiment(
             & (df["symbol"].isin(symbols))
         )
         filtered_df = df[mask][
-            ["date", "symbol", "sentiment_score", "article_count", "p_pos_avg", "p_neg_avg"]
+            [
+                "date",
+                "symbol",
+                "sentiment_score",
+                "article_count",
+                "p_pos_avg",
+                "p_neg_avg",
+            ]
         ].copy()
     else:
         filtered_df = pd.DataFrame(
-            columns=["date", "symbol", "sentiment_score", "article_count", "p_pos_avg", "p_neg_avg"]
+            columns=[
+                "date",
+                "symbol",
+                "sentiment_score",
+                "article_count",
+                "p_pos_avg",
+                "p_neg_avg",
+            ]
         )
 
     # Left join to include all requested combos
     result_df = requested_df.merge(filtered_df, how="left", on=["date", "symbol"])
 
     # Fill missing sentiment_score with neutral (0.0)
-    if "sentiment_score" not in result_df.columns or result_df["sentiment_score"].isna().all():
+    if (
+        "sentiment_score" not in result_df.columns
+        or result_df["sentiment_score"].isna().all()
+    ):
         result_df["sentiment_score"] = 0.0
     else:
-        result_df["sentiment_score"] = result_df["sentiment_score"].fillna(0.0).astype(float)
+        result_df["sentiment_score"] = (
+            result_df["sentiment_score"].fillna(0.0).astype(float)
+        )
 
     # Convert to response objects
     data_points = []
@@ -189,12 +208,16 @@ def load_historical_sentiment(
                 symbol=row["symbol"],
                 date=row["date"],
                 sentiment_score=float(row["sentiment_score"]),
-                article_count=int(row["article_count"]) if pd.notna(row["article_count"]) else None,
-                p_pos_avg=float(row["p_pos_avg"]) if pd.notna(row["p_pos_avg"]) else None,
-                p_neg_avg=float(row["p_neg_avg"]) if pd.notna(row["p_neg_avg"]) else None,
+                article_count=int(row["article_count"])
+                if pd.notna(row["article_count"])
+                else None,
+                p_pos_avg=float(row["p_pos_avg"])
+                if pd.notna(row["p_pos_avg"])
+                else None,
+                p_neg_avg=float(row["p_neg_avg"])
+                if pd.notna(row["p_neg_avg"])
+                else None,
             )
         )
 
     return data_points
-
-

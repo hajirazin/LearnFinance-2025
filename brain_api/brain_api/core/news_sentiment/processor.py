@@ -167,5 +167,3 @@ def process_news_sentiment(
         per_symbol=sentiments,
         from_cache=False,
     )
-
-

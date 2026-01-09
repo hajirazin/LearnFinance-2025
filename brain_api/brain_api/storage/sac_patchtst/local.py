@@ -261,6 +261,7 @@ class SACPatchTSTLocalStorage:
         # Compute state dimension from config
         n_stocks = len(symbol_order)
         from brain_api.core.portfolio_rl.state import StateSchema
+
         schema = StateSchema(n_stocks=n_stocks)
         state_dim = schema.state_dim
         action_dim = n_stocks + 1  # stocks + CASH
@@ -388,4 +389,3 @@ def create_sac_patchtst_metadata(
             "eval_max_drawdown": eval_max_drawdown,
         },
     }
-

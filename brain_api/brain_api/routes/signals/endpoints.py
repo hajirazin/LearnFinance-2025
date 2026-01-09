@@ -147,17 +147,21 @@ def get_fundamentals(
     for symbol in request.symbols:
         try:
             ratios = get_yfinance_ratios(symbol, as_of)
-            results.append(CurrentRatiosResponse(
-                symbol=symbol,
-                ratios=ratios,
-                error=None if ratios else "No data available",
-            ))
+            results.append(
+                CurrentRatiosResponse(
+                    symbol=symbol,
+                    ratios=ratios,
+                    error=None if ratios else "No data available",
+                )
+            )
         except Exception as e:
-            results.append(CurrentRatiosResponse(
-                symbol=symbol,
-                ratios=None,
-                error=str(e),
-            ))
+            results.append(
+                CurrentRatiosResponse(
+                    symbol=symbol,
+                    ratios=None,
+                    error=str(e),
+                )
+            )
 
     return FundamentalsResponse(
         as_of_date=as_of,
@@ -214,34 +218,52 @@ def get_historical_fundamentals(
                 # Get all unique fiscal dates in range
                 fiscal_dates = set()
                 for stmt in income_stmts:
-                    if request.start_date <= stmt.fiscal_date_ending <= request.end_date:
+                    if (
+                        request.start_date
+                        <= stmt.fiscal_date_ending
+                        <= request.end_date
+                    ):
                         fiscal_dates.add(stmt.fiscal_date_ending)
                 for stmt in balance_stmts:
-                    if request.start_date <= stmt.fiscal_date_ending <= request.end_date:
+                    if (
+                        request.start_date
+                        <= stmt.fiscal_date_ending
+                        <= request.end_date
+                    ):
                         fiscal_dates.add(stmt.fiscal_date_ending)
 
                 # Compute ratios for each fiscal date
                 for fiscal_date in sorted(fiscal_dates):
                     income_stmt = next(
-                        (s for s in income_stmts if s.fiscal_date_ending == fiscal_date),
+                        (
+                            s
+                            for s in income_stmts
+                            if s.fiscal_date_ending == fiscal_date
+                        ),
                         None,
                     )
                     balance_stmt = next(
-                        (s for s in balance_stmts if s.fiscal_date_ending == fiscal_date),
+                        (
+                            s
+                            for s in balance_stmts
+                            if s.fiscal_date_ending == fiscal_date
+                        ),
                         None,
                     )
 
                     ratios = compute_ratios(income_stmt, balance_stmt)
                     if ratios:
-                        all_ratios.append(RatiosResponse(
-                            symbol=ratios.symbol,
-                            as_of_date=ratios.as_of_date,
-                            gross_margin=ratios.gross_margin,
-                            operating_margin=ratios.operating_margin,
-                            net_margin=ratios.net_margin,
-                            current_ratio=ratios.current_ratio,
-                            debt_to_equity=ratios.debt_to_equity,
-                        ))
+                        all_ratios.append(
+                            RatiosResponse(
+                                symbol=ratios.symbol,
+                                as_of_date=ratios.as_of_date,
+                                gross_margin=ratios.gross_margin,
+                                operating_margin=ratios.operating_margin,
+                                net_margin=ratios.net_margin,
+                                current_ratio=ratios.current_ratio,
+                                debt_to_equity=ratios.debt_to_equity,
+                            )
+                        )
 
             except Exception:
                 continue
@@ -257,5 +279,3 @@ def get_historical_fundamentals(
         )
     finally:
         fetcher.close()
-
-

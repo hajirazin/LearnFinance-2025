@@ -85,8 +85,10 @@ def mock_price_loader(symbols, start_date, end_date):
         df = pd.DataFrame(
             {
                 "open": prices_array * (1 + np.random.randn(len(date_range)) * 0.005),
-                "high": prices_array * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
-                "low": prices_array * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
+                "high": prices_array
+                * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
+                "low": prices_array
+                * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
                 "close": prices_array,
                 "volume": np.random.randint(1000000, 10000000, len(date_range)),
             },
@@ -453,9 +455,12 @@ def test_inference_lstm_insufficient_history_at_end(temp_storage):
 
                 df = pd.DataFrame(
                     {
-                        "open": prices_array * (1 + np.random.randn(len(date_range)) * 0.005),
-                        "high": prices_array * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
-                        "low": prices_array * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
+                        "open": prices_array
+                        * (1 + np.random.randn(len(date_range)) * 0.005),
+                        "high": prices_array
+                        * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
+                        "low": prices_array
+                        * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
                         "close": prices_array,
                         "volume": np.random.randint(1000000, 10000000, len(date_range)),
                     },
@@ -496,4 +501,3 @@ def test_inference_lstm_insufficient_history_at_end(temp_storage):
         assert predictions[1]["has_enough_history"] is True
     finally:
         app.dependency_overrides.clear()
-

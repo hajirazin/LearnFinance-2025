@@ -114,7 +114,9 @@ class TestSnapshotLocalStorage:
             mock_model.state_dict.return_value = {}
             mock_config = MagicMock()
             mock_config.to_dict.return_value = {}
-            storage.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, {})
+            storage.write_snapshot(
+                cutoff, mock_model, StandardScaler(), mock_config, {}
+            )
 
         # Year 2020 should use 2019-12-31 snapshot
         assert storage.get_snapshot_for_year(2020) == date(2019, 12, 31)
@@ -162,7 +164,9 @@ class TestSnapshotLocalStorage:
         mock_config.to_dict.return_value = {}
         metadata = {"forecaster_type": "lstm", "test": "value"}
 
-        storage.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, metadata)
+        storage.write_snapshot(
+            cutoff, mock_model, StandardScaler(), mock_config, metadata
+        )
 
         read_meta = storage.read_metadata(cutoff)
         assert read_meta["forecaster_type"] == "lstm"
@@ -268,7 +272,9 @@ class TestWalkForwardForecasts:
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
 
         forecasts = build_forecast_features(
-            weekly_prices, weekly_dates, ["AAPL"],
+            weekly_prices,
+            weekly_dates,
+            ["AAPL"],
             forecaster_type="lstm",
             use_model_snapshots=False,
         )
@@ -285,12 +291,16 @@ class TestWalkForwardForecasts:
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
 
         # Use model snapshots but they don't exist
-        with patch('brain_api.core.portfolio_rl.walkforward.generate_walkforward_forecasts_with_model') as mock:
+        with patch(
+            "brain_api.core.portfolio_rl.walkforward.generate_walkforward_forecasts_with_model"
+        ) as mock:
             mock.return_value = generate_walkforward_forecasts_simple(
                 weekly_prices, weekly_dates, ["AAPL"]
             )
             forecasts = build_forecast_features(
-                weekly_prices, weekly_dates, ["AAPL"],
+                weekly_prices,
+                weekly_dates,
+                ["AAPL"],
                 forecaster_type="lstm",
                 use_model_snapshots=True,
             )
@@ -299,9 +309,7 @@ class TestWalkForwardForecasts:
 
     def test_generate_forecasts_empty_prices(self):
         """Test forecast generation with empty prices."""
-        forecasts = generate_walkforward_forecasts_simple(
-            {}, pd.DatetimeIndex([]), []
-        )
+        forecasts = generate_walkforward_forecasts_simple({}, pd.DatetimeIndex([]), [])
         assert forecasts == {}
 
 
@@ -313,14 +321,18 @@ class TestSnapshotIntegration:
         from brain_api.routes.training import _snapshots_available
 
         # No snapshots exist initially
-        with patch('brain_api.routes.training.dependencies.SnapshotLocalStorage') as mock_storage:
+        with patch(
+            "brain_api.routes.training.dependencies.SnapshotLocalStorage"
+        ) as mock_storage:
             mock_instance = MagicMock()
             mock_instance.list_snapshots.return_value = []
             mock_storage.return_value = mock_instance
             assert _snapshots_available("lstm") is False
 
         # After adding snapshots
-        with patch('brain_api.routes.training.dependencies.SnapshotLocalStorage') as mock_storage:
+        with patch(
+            "brain_api.routes.training.dependencies.SnapshotLocalStorage"
+        ) as mock_storage:
             mock_instance = MagicMock()
             mock_instance.list_snapshots.return_value = [date(2019, 12, 31)]
             mock_storage.return_value = mock_instance
@@ -332,6 +344,7 @@ class TestSnapshotIntegration:
             _backfill_lstm_snapshots,
             _backfill_patchtst_snapshots,
         )
+
         # Just verify they can be imported
         assert callable(_backfill_lstm_snapshots)
         assert callable(_backfill_patchtst_snapshots)
@@ -411,4 +424,3 @@ class TestSnapshotInferenceHelpers:
         # Should fall back to momentum since context_length=20 > len(prices)
         predictions = _run_patchtst_snapshot_inference(artifacts, prices, year_indices)
         assert len(predictions) == 3
-

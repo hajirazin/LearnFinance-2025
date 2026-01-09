@@ -284,7 +284,9 @@ def run_pipeline(
                     )
                     progress_pct = (total_articles / ESTIMATED_TOTAL_ARTICLES) * 100
 
-                    console.print(f"\n  [dim]─── Batch {batches_processed} Stats ───[/]")
+                    console.print(
+                        f"\n  [dim]─── Batch {batches_processed} Stats ───[/]"
+                    )
                     console.print(
                         f"  Scanned: [cyan]{format_number(total_articles)}[/]"
                         f" articles ({progress_pct:.2f}% of dataset)"
@@ -299,7 +301,7 @@ def run_pipeline(
                     )
                     console.print(
                         f"  Matched halal: [green]{articles_after_filter:,}[/]"
-                        f" ({100*articles_after_filter/articles_with_symbols:.1f}%)"
+                        f" ({100 * articles_after_filter / articles_with_symbols:.1f}%)"
                     )
                     console.print(
                         f"  Cache: [green]{total_cache_hits:,}[/] hits"
@@ -343,10 +345,14 @@ def run_pipeline(
 
     # Aggregate via SQL and write results
     console.print("\n[bold blue]Aggregating sentiments (SQL)...[/]")
-    console.print(f"  Article-symbol pairs in DB: [cyan]{cache.article_symbols_count:,}[/]")
+    console.print(
+        f"  Article-symbol pairs in DB: [cyan]{cache.article_symbols_count:,}[/]"
+    )
     console.print(f"  Sentiment threshold: [cyan]{config.sentiment_threshold}[/]")
     daily_sentiments = cache.aggregate_daily_sentiment(config.sentiment_threshold)
-    console.print(f"  Generated [green]{len(daily_sentiments)}[/] daily sentiment records")
+    console.print(
+        f"  Generated [green]{len(daily_sentiments)}[/] daily sentiment records"
+    )
 
     # Write output file(s)
     console.print("\n[bold blue]Writing output...[/]")
@@ -483,6 +489,3 @@ def run_pipeline(
     )
 
     return stats
-
-
-

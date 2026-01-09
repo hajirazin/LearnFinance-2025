@@ -54,5 +54,3 @@ class LSTMConfig:
 
 
 DEFAULT_CONFIG = LSTMConfig()
-
-

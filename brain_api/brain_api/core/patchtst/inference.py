@@ -26,7 +26,9 @@ class InferenceFeatures:
     data_end_date: date | None
     has_news_data: bool
     has_fundamentals_data: bool
-    starting_price: float | None  # Starting price (last close before target week) for weekly return calculation
+    starting_price: (
+        float | None
+    )  # Starting price (last close before target week) for weekly return calculation
 
 
 @dataclass
@@ -103,16 +105,16 @@ def build_inference_features(
     df = prices_df[prices_df.index < cutoff_ts].copy()
 
     if len(df) < config.context_length + 1:
-            return InferenceFeatures(
-                symbol=symbol,
-                features=None,
-                has_enough_history=False,
-                history_days_used=len(df),
-                data_end_date=df.index[-1].date() if len(df) > 0 else None,
-                has_news_data=has_news_data,
-                has_fundamentals_data=has_fundamentals_data,
-                starting_price=None,
-            )
+        return InferenceFeatures(
+            symbol=symbol,
+            features=None,
+            has_enough_history=False,
+            history_days_used=len(df),
+            data_end_date=df.index[-1].date() if len(df) > 0 else None,
+            has_news_data=has_news_data,
+            has_fundamentals_data=has_fundamentals_data,
+            starting_price=None,
+        )
 
     # Compute price features using shared utility
     features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
@@ -123,7 +125,9 @@ def build_inference_features(
             features=None,
             has_enough_history=False,
             history_days_used=len(features_df),
-            data_end_date=features_df.index[-1].date() if len(features_df) > 0 else None,
+            data_end_date=features_df.index[-1].date()
+            if len(features_df) > 0
+            else None,
             has_news_data=has_news_data,
             has_fundamentals_data=has_fundamentals_data,
             starting_price=None,
@@ -137,18 +141,29 @@ def build_inference_features(
         features_df["news_sentiment"] = 0.0  # Neutral if no news data
 
     # Add fundamentals (forward-fill quarterly data)
-    fundamental_cols = ["gross_margin", "operating_margin", "net_margin",
-                       "current_ratio", "debt_to_equity"]
+    fundamental_cols = [
+        "gross_margin",
+        "operating_margin",
+        "net_margin",
+        "current_ratio",
+        "debt_to_equity",
+    ]
     if fundamentals_df is not None and len(fundamentals_df) > 0:
         fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
 
         # Vectorized calculation of days since last fundamental update
         fund_dates = fundamentals_df.index.values
         if len(fund_dates) > 0:
-            positions = np.searchsorted(fund_dates, features_df.index.values, side='right')
+            positions = np.searchsorted(
+                fund_dates, features_df.index.values, side="right"
+            )
             valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
             last_updates = fund_dates[valid_positions]
-            days_old = (features_df.index.values - last_updates).astype('timedelta64[D]').astype(float)
+            days_old = (
+                (features_df.index.values - last_updates)
+                .astype("timedelta64[D]")
+                .astype(float)
+            )
             days_old[positions == 0] = 999.0
         else:
             days_old = np.full(len(features_df), 999.0)
@@ -171,7 +186,7 @@ def build_inference_features(
     features_df = features_df[config.feature_names]
 
     # Take last context_length rows
-    sequence = features_df.iloc[-config.context_length:].values
+    sequence = features_df.iloc[-config.context_length :].values
     data_end_date = features_df.index[-1].date()
 
     # Get starting price: last close price before cutoff_date (for weekly return calculation)
@@ -233,7 +248,9 @@ def run_inference(
                 direction="FLAT",
                 has_enough_history=False,
                 history_days_used=feat.history_days_used,
-                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                data_end_date=feat.data_end_date.isoformat()
+                if feat.data_end_date
+                else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
                 has_news_data=feat.has_news_data,
@@ -248,7 +265,9 @@ def run_inference(
     try:
         close_ret_idx = config.feature_names.index("close_ret")
     except ValueError as e:
-        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}") from e
+        raise ValueError(
+            f"close_ret not found in feature_names: {config.feature_names}"
+        ) from e
 
     # Prepare initial input sequences for all symbols
     # Shape: (n_samples, context_length, num_channels)
@@ -278,13 +297,17 @@ def run_inference(
     daily_returns = np.zeros((5, n_samples), dtype=np.float32)
 
     # Pre-compute OHLCV channel mask for vectorized operations
-    ohlcv_indices = np.array([open_ret_idx, high_ret_idx, low_ret_idx, close_ret_idx, volume_ret_idx])
+    ohlcv_indices = np.array(
+        [open_ret_idx, high_ret_idx, low_ret_idx, close_ret_idx, volume_ret_idx]
+    )
     non_ohlcv_mask = np.ones(config.num_input_channels, dtype=bool)
     non_ohlcv_mask[ohlcv_indices] = False
 
     # Pre-allocate working arrays (reused each iteration to reduce memory allocation)
     X_current = X_batch  # No copy needed - we'll modify in place
-    new_day_features = np.zeros((n_samples, config.num_input_channels), dtype=np.float32)
+    new_day_features = np.zeros(
+        (n_samples, config.num_input_channels), dtype=np.float32
+    )
 
     with torch.no_grad():
         for day in range(5):
@@ -311,7 +334,9 @@ def run_inference(
                 # Note: predicted returns are already in unscaled space, need to scale them
                 pred_returns = daily_returns[day].reshape(-1, 1)
                 # Scale the predicted returns using scaler's mean/std for close_ret
-                scaled_pred = (pred_returns - feature_scaler.mean_[close_ret_idx]) / feature_scaler.scale_[close_ret_idx]
+                scaled_pred = (
+                    pred_returns - feature_scaler.mean_[close_ret_idx]
+                ) / feature_scaler.scale_[close_ret_idx]
 
                 # Fill new_day_features vectorized
                 new_day_features[:, open_ret_idx] = scaled_pred.ravel()
@@ -319,7 +344,10 @@ def run_inference(
                 new_day_features[:, low_ret_idx] = scaled_pred.ravel()
                 new_day_features[:, close_ret_idx] = scaled_pred.ravel()
                 # Scale volume_ret (0.0 in unscaled space)
-                new_day_features[:, volume_ret_idx] = -feature_scaler.mean_[volume_ret_idx] / feature_scaler.scale_[volume_ret_idx]
+                new_day_features[:, volume_ret_idx] = (
+                    -feature_scaler.mean_[volume_ret_idx]
+                    / feature_scaler.scale_[volume_ret_idx]
+                )
 
                 # Copy non-OHLCV channels from last day (already scaled)
                 new_day_features[:, non_ohlcv_mask] = last_day_scaled[:, non_ohlcv_mask]
@@ -355,7 +383,9 @@ def run_inference(
                 direction=direction,
                 has_enough_history=True,
                 history_days_used=feat.history_days_used,
-                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                data_end_date=feat.data_end_date.isoformat()
+                if feat.data_end_date
+                else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
                 has_news_data=feat.has_news_data,

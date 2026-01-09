@@ -105,8 +105,10 @@ def build_training_data(
         price_series = prices.get(symbol)
         if price_series is not None and len(price_series) > 1:
             # Weekly returns
-            returns = (price_series[1:] - price_series[:-1]) / np.maximum(price_series[:-1], 1e-10)
-            symbol_returns[:len(returns), stock_idx] = returns[:n_weeks]
+            returns = (price_series[1:] - price_series[:-1]) / np.maximum(
+                price_series[:-1], 1e-10
+            )
+            symbol_returns[: len(returns), stock_idx] = returns[:n_weeks]
 
     # Build signals array
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
@@ -116,14 +118,16 @@ def build_training_data(
             signal_values = symbol_signals.get(signal_name)
             if signal_values is not None:
                 # Assume signals are weekly-aligned
-                signals_array[:len(signal_values), stock_idx, signal_idx] = signal_values[:n_weeks]
+                signals_array[: len(signal_values), stock_idx, signal_idx] = (
+                    signal_values[:n_weeks]
+                )
 
     # Build forecast features array
     forecast_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         lstm_preds = lstm_predictions.get(symbol)
         if lstm_preds is not None:
-            forecast_array[:len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
+            forecast_array[: len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
 
     return TrainingData(
         symbol_returns=symbol_returns,
@@ -188,7 +192,9 @@ def train_sac_lstm(
     eval_weeks = config.validation_years * weeks_per_year
     train_weeks = max(training_data.n_weeks - eval_weeks, weeks_per_year * 2)
 
-    print(f"[SAC_LSTM] Training on {train_weeks} weeks, evaluating on {training_data.n_weeks - train_weeks} weeks")
+    print(
+        f"[SAC_LSTM] Training on {train_weeks} weeks, evaluating on {training_data.n_weeks - train_weeks} weeks"
+    )
 
     # Create training environment
     train_env = create_env_from_training_data(
@@ -237,7 +243,9 @@ def train_sac_lstm(
         config,
     )
 
-    print(f"[SAC_LSTM] Eval sharpe: {eval_sharpe:.4f}, CAGR: {eval_cagr*100:.2f}%, Max DD: {eval_max_drawdown*100:.2f}%")
+    print(
+        f"[SAC_LSTM] Eval sharpe: {eval_sharpe:.4f}, CAGR: {eval_cagr * 100:.2f}%, Max DD: {eval_max_drawdown * 100:.2f}%"
+    )
 
     return SACLSTMTrainingResult(
         actor=sac_result.actor,
@@ -297,12 +305,12 @@ def finetune_sac_lstm(
 
     # Update learning rates for fine-tuning
     for param_group in trainer.actor_optimizer.param_groups:
-        param_group['lr'] = finetune_config.actor_lr
+        param_group["lr"] = finetune_config.actor_lr
     for param_group in trainer.critic_optimizer.param_groups:
-        param_group['lr'] = finetune_config.critic_lr
+        param_group["lr"] = finetune_config.critic_lr
     if trainer.alpha_optimizer is not None:
         for param_group in trainer.alpha_optimizer.param_groups:
-            param_group['lr'] = finetune_config.alpha_lr
+            param_group["lr"] = finetune_config.alpha_lr
 
     # Fine-tune
     trainer.train(total_timesteps=finetune_config.total_timesteps)
@@ -380,6 +388,7 @@ def evaluate_policy(
 @dataclass
 class StepResult:
     """Result from environment step."""
+
     next_state: np.ndarray
     reward: float
     done: bool
@@ -429,4 +438,3 @@ class NormalizedEnv:
     def get_episode_metrics(self) -> dict[str, float]:
         """Get episode metrics from underlying env."""
         return self.env.get_episode_metrics()
-

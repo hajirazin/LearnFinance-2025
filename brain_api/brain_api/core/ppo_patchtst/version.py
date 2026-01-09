@@ -44,4 +44,3 @@ def compute_version(
     hash_digest = hashlib.sha256(hash_str).hexdigest()[:12]
 
     return f"v{end_date.isoformat()}-{hash_digest}"
-

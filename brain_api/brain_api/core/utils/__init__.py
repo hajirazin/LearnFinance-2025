@@ -10,5 +10,3 @@ __all__ = [
     "get_halal_symbols",
     "parse_as_of_date",
 ]
-
-

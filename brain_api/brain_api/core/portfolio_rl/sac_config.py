@@ -113,4 +113,3 @@ class SACFinetuneConfig:
 
 # Default configuration
 DEFAULT_SAC_CONFIG = SACConfig()
-

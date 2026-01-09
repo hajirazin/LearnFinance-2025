@@ -91,5 +91,3 @@ def aggregate_symbol_sentiment(
         insufficient_news=len(scored_articles) < min_articles,
         scored_articles=scored_articles,
     )
-
-

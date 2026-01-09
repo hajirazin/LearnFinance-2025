@@ -275,7 +275,8 @@ class FinBERTScorer:
                     texts_to_score.append((i, text, h))
         else:
             texts_to_score = [
-                (i, text, h) for i, (text, h) in enumerate(zip(texts, hashes, strict=False))
+                (i, text, h)
+                for i, (text, h) in enumerate(zip(texts, hashes, strict=False))
             ]
 
         cache_hits = len(texts) - len(texts_to_score)
@@ -302,7 +303,9 @@ class FinBERTScorer:
             # Process results and save to cache
             new_cache_entries: list[tuple[str, SentimentScore]] = []
 
-            for (orig_idx, _, text_hash), scores in zip(texts_to_score, batch_results, strict=False):
+            for (orig_idx, _, text_hash), scores in zip(
+                texts_to_score, batch_results, strict=False
+            ):
                 p_pos = 0.0
                 p_neg = 0.0
                 p_neu = 0.0
@@ -346,5 +349,3 @@ class FinBERTScorer:
 
         # All results should be filled now
         return [r for r in results if r is not None], cache_hits, new_scores
-
-

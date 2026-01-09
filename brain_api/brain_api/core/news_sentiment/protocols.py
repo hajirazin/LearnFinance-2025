@@ -25,5 +25,3 @@ class SentimentScorer(Protocol):
     def score_batch(self, texts: list[str]) -> list["SentimentScore"]:
         """Score sentiment for a batch of texts."""
         ...
-
-

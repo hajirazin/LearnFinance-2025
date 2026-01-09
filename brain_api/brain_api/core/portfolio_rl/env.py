@@ -29,6 +29,7 @@ from brain_api.core.portfolio_rl.state import (
 @dataclass
 class EnvStep:
     """Result of one environment step."""
+
     next_state: np.ndarray
     reward: float
     done: bool
@@ -123,7 +124,9 @@ class PortfolioEnv:
         for stock_idx, symbol in enumerate(self.symbol_order):
             signals_dict[symbol] = {}
             for signal_idx, signal_name in enumerate(signal_names):
-                signals_dict[symbol][signal_name] = float(week_signals[stock_idx, signal_idx])
+                signals_dict[symbol][signal_name] = float(
+                    week_signals[stock_idx, signal_idx]
+                )
 
         # Get forecast features for this week
         week_forecasts = self.forecast_features[week_idx]  # (n_stocks,)
@@ -192,7 +195,7 @@ class PortfolioEnv:
         # Get weekly returns for stocks (CASH return = 0)
         stock_returns = self.symbol_returns[self.current_week_idx]  # (n_stocks,)
         asset_returns = np.zeros(self.action_dim)
-        asset_returns[:self.n_stocks] = stock_returns
+        asset_returns[: self.n_stocks] = stock_returns
         # CASH return is 0 (could add risk-free rate if desired)
 
         # Compute portfolio return using target weights
@@ -308,8 +311,13 @@ def create_env_from_data(
 
     # Build signals array
     signal_names = [
-        "news_sentiment", "gross_margin", "operating_margin",
-        "net_margin", "current_ratio", "debt_to_equity", "fundamental_age"
+        "news_sentiment",
+        "gross_margin",
+        "operating_margin",
+        "net_margin",
+        "current_ratio",
+        "debt_to_equity",
+        "fundamental_age",
     ]
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
     for stock_idx, symbol in enumerate(symbol_order):
@@ -331,4 +339,3 @@ def create_env_from_data(
         symbol_order=symbol_order,
         config=config,
     )
-

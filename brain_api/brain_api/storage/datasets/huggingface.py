@@ -109,8 +109,8 @@ Daily aggregated news sentiment scores for stocks in the halal universe.
 
 ## Dataset Details
 
-- **Date Range**: {df['date'].min()} to {df['date'].max()}
-- **Symbols**: {df['symbol'].nunique()} unique stocks
+- **Date Range**: {df["date"].min()} to {df["date"].max()}
+- **Symbols**: {df["symbol"].nunique()} unique stocks
 - **Records**: {len(df):,} rows
 
 ## Schema
@@ -209,4 +209,3 @@ df = dataset["train"].to_pandas()
             "This method currently returns None."
         )
         return None
-

@@ -68,7 +68,9 @@ def train_sac_patchtst(
     eval_weeks = config.validation_years * weeks_per_year
     train_weeks = max(training_data.n_weeks - eval_weeks, weeks_per_year * 2)
 
-    print(f"[SAC_PatchTST] Training on {train_weeks} weeks, evaluating on {training_data.n_weeks - train_weeks} weeks")
+    print(
+        f"[SAC_PatchTST] Training on {train_weeks} weeks, evaluating on {training_data.n_weeks - train_weeks} weeks"
+    )
 
     # Create training environment
     train_env = create_env_from_training_data(
@@ -117,7 +119,9 @@ def train_sac_patchtst(
         config,
     )
 
-    print(f"[SAC_PatchTST] Eval sharpe: {eval_sharpe:.4f}, CAGR: {eval_cagr*100:.2f}%, Max DD: {eval_max_drawdown*100:.2f}%")
+    print(
+        f"[SAC_PatchTST] Eval sharpe: {eval_sharpe:.4f}, CAGR: {eval_cagr * 100:.2f}%, Max DD: {eval_max_drawdown * 100:.2f}%"
+    )
 
     return SACPatchTSTTrainingResult(
         actor=sac_result.actor,
@@ -177,12 +181,12 @@ def finetune_sac_patchtst(
 
     # Update learning rates for fine-tuning
     for param_group in trainer.actor_optimizer.param_groups:
-        param_group['lr'] = finetune_config.actor_lr
+        param_group["lr"] = finetune_config.actor_lr
     for param_group in trainer.critic_optimizer.param_groups:
-        param_group['lr'] = finetune_config.critic_lr
+        param_group["lr"] = finetune_config.critic_lr
     if trainer.alpha_optimizer is not None:
         for param_group in trainer.alpha_optimizer.param_groups:
-            param_group['lr'] = finetune_config.alpha_lr
+            param_group["lr"] = finetune_config.alpha_lr
 
     # Fine-tune
     trainer.train(total_timesteps=finetune_config.total_timesteps)
@@ -213,4 +217,3 @@ def finetune_sac_patchtst(
         eval_cagr=eval_cagr,
         eval_max_drawdown=eval_max_drawdown,
     )
-

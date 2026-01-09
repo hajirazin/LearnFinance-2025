@@ -45,7 +45,9 @@ def infer_ppo_lstm(
 
     # Compute target week boundaries
     week_boundaries = compute_week_boundaries(as_of)
-    logger.info(f"[PPO_LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+    logger.info(
+        f"[PPO_LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
+    )
 
     # Load model artifacts
     logger.info("[PPO_LSTM] Loading model artifacts...")
@@ -62,8 +64,7 @@ def infer_ppo_lstm(
     # Convert portfolio snapshot to values dict
     cash_value = request.portfolio.cash
     position_values = {
-        pos.symbol: pos.market_value
-        for pos in request.portfolio.positions
+        pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
 
     # Build placeholder signals (simplified - would fetch real data in production)
@@ -101,22 +102,28 @@ def infer_ppo_lstm(
     # Build weight changes list
     weight_changes = []
     for symbol in artifacts.symbol_order:
-        weight_changes.append(WeightChange(
-            symbol=symbol,
-            current_weight=result.current_weights.get(symbol, 0.0),
-            target_weight=result.target_weights.get(symbol, 0.0),
-            change=result.weight_changes.get(symbol, 0.0),
-        ))
+        weight_changes.append(
+            WeightChange(
+                symbol=symbol,
+                current_weight=result.current_weights.get(symbol, 0.0),
+                target_weight=result.target_weights.get(symbol, 0.0),
+                change=result.weight_changes.get(symbol, 0.0),
+            )
+        )
     # Add CASH
-    weight_changes.append(WeightChange(
-        symbol="CASH",
-        current_weight=result.current_weights.get("CASH", 0.0),
-        target_weight=result.target_weights.get("CASH", 0.0),
-        change=result.weight_changes.get("CASH", 0.0),
-    ))
+    weight_changes.append(
+        WeightChange(
+            symbol="CASH",
+            current_weight=result.current_weights.get("CASH", 0.0),
+            target_weight=result.target_weights.get("CASH", 0.0),
+            change=result.weight_changes.get("CASH", 0.0),
+        )
+    )
 
     t_total = time.time() - t_start
-    logger.info(f"[PPO_LSTM] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}")
+    logger.info(
+        f"[PPO_LSTM] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}"
+    )
 
     return PPOLSTMInferenceResponse(
         target_weights=result.target_weights,
@@ -126,4 +133,3 @@ def infer_ppo_lstm(
         model_version=result.model_version,
         weight_changes=weight_changes,
     )
-

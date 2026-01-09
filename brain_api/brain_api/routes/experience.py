@@ -289,6 +289,7 @@ def label_experience(
             week_start = date.fromisoformat(record.week_start)
             # Fetch a bit more data to ensure we capture the week
             from datetime import timedelta
+
             data_start = week_start - timedelta(days=7)
             data_end = week_end + timedelta(days=7)
 
@@ -363,4 +364,3 @@ def list_experience(
         all_records = storage.list_all()
         return [r for r in all_records if r.reward is not None]
     return storage.list_all()
-

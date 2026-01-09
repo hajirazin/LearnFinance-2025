@@ -63,7 +63,7 @@ class PortfolioScaler:
             Self for chaining.
         """
         # Extract only the features to scale
-        features_to_scale = states[:, :self.n_features_to_scale]
+        features_to_scale = states[:, : self.n_features_to_scale]
         self.scaler.fit(features_to_scale)
         self.is_fitted = True
         return self
@@ -88,9 +88,9 @@ class PortfolioScaler:
         result = states.copy()
 
         # Scale only the signal/forecast features
-        features_to_scale = states[:, :self.n_features_to_scale]
+        features_to_scale = states[:, : self.n_features_to_scale]
         scaled_features = self.scaler.transform(features_to_scale)
-        result[:, :self.n_features_to_scale] = scaled_features
+        result[:, : self.n_features_to_scale] = scaled_features
 
         # Portfolio weights remain unchanged
 
@@ -129,9 +129,9 @@ class PortfolioScaler:
 
         result = states.copy()
 
-        scaled_features = states[:, :self.n_features_to_scale]
+        scaled_features = states[:, : self.n_features_to_scale]
         original_features = self.scaler.inverse_transform(scaled_features)
-        result[:, :self.n_features_to_scale] = original_features
+        result[:, : self.n_features_to_scale] = original_features
 
         if single_state:
             result = result.flatten()
@@ -146,12 +146,15 @@ class PortfolioScaler:
         """
         path = Path(path)
         with open(path, "wb") as f:
-            pickle.dump({
-                "scaler": self.scaler,
-                "n_features_to_scale": self.n_features_to_scale,
-                "n_portfolio_weights": self.n_portfolio_weights,
-                "is_fitted": self.is_fitted,
-            }, f)
+            pickle.dump(
+                {
+                    "scaler": self.scaler,
+                    "n_features_to_scale": self.n_features_to_scale,
+                    "n_portfolio_weights": self.n_portfolio_weights,
+                    "is_fitted": self.is_fitted,
+                },
+                f,
+            )
 
     @classmethod
     def load(cls, path: Path | str) -> PortfolioScaler:
@@ -173,4 +176,3 @@ class PortfolioScaler:
             n_portfolio_weights=data["n_portfolio_weights"],
             is_fitted=data["is_fitted"],
         )
-

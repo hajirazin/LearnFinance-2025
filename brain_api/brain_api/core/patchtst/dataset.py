@@ -77,7 +77,9 @@ def build_dataset(
     try:
         close_ret_idx = config.feature_names.index("close_ret")
     except ValueError as e:
-        raise ValueError(f"close_ret not found in feature_names: {config.feature_names}") from e
+        raise ValueError(
+            f"close_ret not found in feature_names: {config.feature_names}"
+        ) from e
 
     for _symbol, features_df in aligned_features.items():
         if len(features_df) < config.context_length + 1:
@@ -88,7 +90,9 @@ def build_dataset(
         # Create samples: for each day t, predict day t+1's return
         # We need at least context_length days of history, and at least 1 day ahead
         # Use sample_stride to reduce dataset size (5=weekly-like sampling, 1=daily)
-        for t in range(config.context_length, len(features_df) - 1, config.sample_stride):
+        for t in range(
+            config.context_length, len(features_df) - 1, config.sample_stride
+        ):
             # Extract input sequence: days [t-context_length, t)
             seq_start_idx = t - config.context_length
             seq_end_idx = t
@@ -113,10 +117,14 @@ def build_dataset(
             symbols_used += 1
             total_samples += symbol_samples
 
-    print(f"[PatchTST] Dataset built: {total_samples} samples from {symbols_used} symbols (stride={config.sample_stride})")
+    print(
+        f"[PatchTST] Dataset built: {total_samples} samples from {symbols_used} symbols (stride={config.sample_stride})"
+    )
 
     if not all_sequences:
-        empty_X = np.array([]).reshape(0, config.context_length, config.num_input_channels)
+        empty_X = np.array([]).reshape(
+            0, config.context_length, config.num_input_channels
+        )
         empty_y = np.array([]).reshape(0, config.prediction_length)
         return DatasetResult(
             X=empty_X,
@@ -128,11 +136,16 @@ def build_dataset(
     y = np.array(all_targets)
 
     # CRITICAL VERIFICATION: Dataset shape and channel count
-    assert X.shape[2] == config.num_input_channels, \
+    assert X.shape[2] == config.num_input_channels, (
         f"CRITICAL: Expected {config.num_input_channels} channels in X, got {X.shape[2]}"
+    )
     print("[PatchTST] VERIFY DATASET:")
-    print(f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})")
-    print(f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})")
+    print(
+        f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})"
+    )
+    print(
+        f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})"
+    )
     print(f"  Expected channels: {config.feature_names}")
     print(f"  Target: next-day close_ret (channel {close_ret_idx})")
 
@@ -159,8 +172,12 @@ def build_dataset(
 
     # Log data statistics after scaling
     print("[PatchTST] Data statistics after scaling:")
-    print(f"  X: mean={X.mean():.6f}, std={X.std():.6f}, min={X.min():.6f}, max={X.max():.6f}")
-    print(f"  y: mean={y.mean():.6f}, std={y.std():.6f}, min={y.min():.6f}, max={y.max():.6f}")
+    print(
+        f"  X: mean={X.mean():.6f}, std={X.std():.6f}, min={X.min():.6f}, max={X.max():.6f}"
+    )
+    print(
+        f"  y: mean={y.mean():.6f}, std={y.std():.6f}, min={y.min():.6f}, max={y.max():.6f}"
+    )
 
     return DatasetResult(
         X=X,

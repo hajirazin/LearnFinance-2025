@@ -180,6 +180,7 @@ class PPOPatchTSTLocalStorage:
         weights_path = self._version_path(version) / "weights.pt"
 
         from brain_api.core.portfolio_rl.state import StateSchema
+
         schema = StateSchema(n_stocks=len(symbol_order))
 
         model = PPOActorCritic(
@@ -213,4 +214,3 @@ class PPOPatchTSTLocalStorage:
             symbol_order=symbol_order,
             version=version,
         )
-

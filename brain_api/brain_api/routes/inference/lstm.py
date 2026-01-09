@@ -66,7 +66,9 @@ def infer_lstm(
 
     # Compute holiday-aware week boundaries
     week_boundaries = week_boundary_computer(as_of)
-    logger.info(f"[LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+    logger.info(
+        f"[LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
+    )
 
     # Load current model artifacts (try local first, then HuggingFace)
     logger.info("[LSTM] Loading model artifacts...")
@@ -87,11 +89,15 @@ def infer_lstm(
     data_end = week_boundaries.target_week_start - timedelta(days=1)
 
     # Fetch price data for all symbols
-    logger.info(f"[LSTM] Fetching prices for {len(request.symbols)} symbols ({data_start} to {data_end})...")
+    logger.info(
+        f"[LSTM] Fetching prices for {len(request.symbols)} symbols ({data_start} to {data_end})..."
+    )
     t0 = time.time()
     prices = price_loader(request.symbols, data_start, data_end)
     t_prices = time.time() - t0
-    logger.info(f"[LSTM] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[LSTM] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s"
+    )
 
     # Build features for each symbol
     logger.info("[LSTM] Building feature sequences...")
@@ -126,7 +132,9 @@ def infer_lstm(
             else:
                 symbols_missing_data.append(symbol)
     t_features = time.time() - t0
-    logger.info(f"[LSTM] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready")
+    logger.info(
+        f"[LSTM] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready"
+    )
     if symbols_missing_data:
         logger.warning(f"[LSTM] Symbols with insufficient data: {symbols_missing_data}")
 
@@ -146,13 +154,19 @@ def infer_lstm(
     predictions = _sort_predictions(predictions)
 
     # Summary
-    valid_predictions = [p for p in predictions if p.predicted_weekly_return_pct is not None]
+    valid_predictions = [
+        p for p in predictions if p.predicted_weekly_return_pct is not None
+    ]
     t_total = time.time() - t_start
-    logger.info(f"[LSTM] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s")
+    logger.info(
+        f"[LSTM] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s"
+    )
     if valid_predictions:
         top = valid_predictions[0]
         bottom = valid_predictions[-1]
-        logger.info(f"[LSTM] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)")
+        logger.info(
+            f"[LSTM] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)"
+        )
 
     return LSTMInferenceResponse(
         predictions=predictions,
@@ -161,4 +175,3 @@ def infer_lstm(
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
     )
-

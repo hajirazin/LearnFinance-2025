@@ -41,5 +41,3 @@ class LSTMModel(nn.Module):
         # Take the last time step's output
         last_out = lstm_out[:, -1, :]
         return self.fc(last_out)
-
-

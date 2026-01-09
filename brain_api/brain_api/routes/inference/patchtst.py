@@ -70,14 +70,18 @@ def infer_patchtst(
 
     # Compute holiday-aware week boundaries
     week_boundaries = patchtst_compute_week_boundaries(as_of)
-    logger.info(f"[PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}")
+    logger.info(
+        f"[PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
+    )
 
     # Load current model artifacts
     logger.info("[PatchTST] Loading model artifacts...")
     t0 = time.time()
     artifacts = _load_patchtst_model_artifacts(storage)
     t_model = time.time() - t0
-    logger.info(f"[PatchTST] Model loaded in {t_model:.2f}s: version={artifacts.version}")
+    logger.info(
+        f"[PatchTST] Model loaded in {t_model:.2f}s: version={artifacts.version}"
+    )
 
     # Calculate data fetch window
     config = artifacts.config
@@ -91,7 +95,9 @@ def infer_patchtst(
     t0 = time.time()
     prices = patchtst_load_prices(request.symbols, data_start, data_end)
     t_prices = time.time() - t0
-    logger.info(f"[PatchTST] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s"
+    )
 
     # Fetch news sentiment
     logger.info("[PatchTST] Loading news sentiment...")
@@ -100,16 +106,18 @@ def infer_patchtst(
         request.symbols, data_start, data_end
     )
     t_news = time.time() - t0
-    logger.info(f"[PatchTST] Loaded news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s"
+    )
 
     # Fetch fundamentals (from cache)
     logger.info("[PatchTST] Loading fundamentals...")
     t0 = time.time()
-    fundamentals = load_historical_fundamentals(
-        request.symbols, data_start, data_end
-    )
+    fundamentals = load_historical_fundamentals(request.symbols, data_start, data_end)
     t_fund = time.time() - t0
-    logger.info(f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s")
+    logger.info(
+        f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s"
+    )
 
     # Build features for each symbol
     logger.info("[PatchTST] Building feature sequences...")
@@ -150,9 +158,13 @@ def infer_patchtst(
             else:
                 symbols_missing_data.append(symbol)
     t_features = time.time() - t0
-    logger.info(f"[PatchTST] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready")
+    logger.info(
+        f"[PatchTST] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready"
+    )
     if symbols_missing_data:
-        logger.warning(f"[PatchTST] Symbols with insufficient data: {symbols_missing_data}")
+        logger.warning(
+            f"[PatchTST] Symbols with insufficient data: {symbols_missing_data}"
+        )
 
     # Run inference
     logger.info("[PatchTST] Running model inference...")
@@ -178,14 +190,20 @@ def infer_patchtst(
         signals_used.append("fundamentals")
 
     # Summary
-    valid_predictions = [p for p in predictions if p.predicted_weekly_return_pct is not None]
+    valid_predictions = [
+        p for p in predictions if p.predicted_weekly_return_pct is not None
+    ]
     t_total = time.time() - t_start
-    logger.info(f"[PatchTST] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s")
+    logger.info(
+        f"[PatchTST] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s"
+    )
     logger.info(f"[PatchTST] Signals used: {signals_used}")
     if valid_predictions:
         top = valid_predictions[0]
         bottom = valid_predictions[-1]
-        logger.info(f"[PatchTST] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)")
+        logger.info(
+            f"[PatchTST] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)"
+        )
 
     return PatchTSTInferenceResponse(
         predictions=predictions,
@@ -195,4 +213,3 @@ def infer_patchtst(
         target_week_end=week_boundaries.target_week_end.isoformat(),
         signals_used=signals_used,
     )
-

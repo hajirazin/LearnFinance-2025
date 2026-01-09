@@ -90,4 +90,3 @@ def classify_direction(weekly_return: float, threshold: float = 0.001) -> str:
     elif weekly_return < -threshold:
         return "DOWN"
     return "FLAT"
-

@@ -177,9 +177,7 @@ def log_inference_summary(
     return_attr: str = "predicted_weekly_return_pct",
 ) -> None:
     """Log summary of inference results."""
-    valid_predictions = [
-        p for p in predictions if getattr(p, return_attr) is not None
-    ]
+    valid_predictions = [p for p in predictions if getattr(p, return_attr) is not None]
     logger.info(
         f"[{model_name}] Request complete: {len(valid_predictions)}/{total_symbols} "
         f"predictions in {total_time:.2f}s"
@@ -194,4 +192,3 @@ def log_inference_summary(
             f"[{model_name}] Top: {top.symbol} ({top_return:+.2f}%), "
             f"Bottom: {bottom.symbol} ({bottom_return:+.2f}%)"
         )
-

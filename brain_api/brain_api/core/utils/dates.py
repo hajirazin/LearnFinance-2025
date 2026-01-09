@@ -15,5 +15,3 @@ def parse_as_of_date(as_of_str: str | None) -> date:
     if as_of_str:
         return date.fromisoformat(as_of_str)
     return date.today()
-
-

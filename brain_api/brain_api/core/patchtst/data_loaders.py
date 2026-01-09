@@ -29,7 +29,12 @@ def load_historical_news_sentiment(
     """
     if parquet_path is None:
         # Default path: project_root/data/output/daily_sentiment.parquet
-        parquet_path = Path(__file__).parent.parent.parent.parent / "data" / "output" / "daily_sentiment.parquet"
+        parquet_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "data"
+            / "output"
+            / "daily_sentiment.parquet"
+        )
 
     sentiment: dict[str, pd.DataFrame] = {}
 
@@ -44,9 +49,9 @@ def load_historical_news_sentiment(
 
         for symbol in symbols:
             symbol_df = df[
-                (df["symbol"] == symbol) &
-                (df["date"] >= start_date) &
-                (df["date"] <= end_date)
+                (df["symbol"] == symbol)
+                & (df["date"] >= start_date)
+                & (df["date"] <= end_date)
             ][["date", "sentiment_score"]].copy()
 
             if len(symbol_df) > 0:
@@ -126,10 +131,18 @@ def load_historical_fundamentals(
             fiscal_dates = set()
 
             for stmt in income_stmts:
-                if start_date <= date.fromisoformat(stmt.fiscal_date_ending) <= end_date:
+                if (
+                    start_date
+                    <= date.fromisoformat(stmt.fiscal_date_ending)
+                    <= end_date
+                ):
                     fiscal_dates.add(stmt.fiscal_date_ending)
             for stmt in balance_stmts:
-                if start_date <= date.fromisoformat(stmt.fiscal_date_ending) <= end_date:
+                if (
+                    start_date
+                    <= date.fromisoformat(stmt.fiscal_date_ending)
+                    <= end_date
+                ):
                     fiscal_dates.add(stmt.fiscal_date_ending)
 
             for fiscal_date in sorted(fiscal_dates):
@@ -144,14 +157,16 @@ def load_historical_fundamentals(
 
                 ratios = compute_ratios(income_stmt, balance_stmt)
                 if ratios:
-                    rows.append({
-                        "date": pd.to_datetime(fiscal_date),
-                        "gross_margin": ratios.gross_margin,
-                        "operating_margin": ratios.operating_margin,
-                        "net_margin": ratios.net_margin,
-                        "current_ratio": ratios.current_ratio,
-                        "debt_to_equity": ratios.debt_to_equity,
-                    })
+                    rows.append(
+                        {
+                            "date": pd.to_datetime(fiscal_date),
+                            "gross_margin": ratios.gross_margin,
+                            "operating_margin": ratios.operating_margin,
+                            "net_margin": ratios.net_margin,
+                            "current_ratio": ratios.current_ratio,
+                            "debt_to_equity": ratios.debt_to_equity,
+                        }
+                    )
 
             if rows:
                 df = pd.DataFrame(rows).set_index("date").sort_index()
@@ -193,20 +208,29 @@ def align_multivariate_data(
             continue
 
         # Start with OHLCV features using shared utility
-        features_df = compute_ohlcv_log_returns(price_df, use_returns=config.use_returns)
+        features_df = compute_ohlcv_log_returns(
+            price_df, use_returns=config.use_returns
+        )
 
         # Add news sentiment (forward-fill missing days)
         if symbol in news_sentiment:
             sentiment_df = news_sentiment[symbol]
             # Reindex to match price dates and forward-fill
             sentiment_aligned = sentiment_df.reindex(features_df.index, method="ffill")
-            features_df["news_sentiment"] = sentiment_aligned["sentiment_score"].fillna(0.0)
+            features_df["news_sentiment"] = sentiment_aligned["sentiment_score"].fillna(
+                0.0
+            )
         else:
             features_df["news_sentiment"] = 0.0  # Neutral if no news data
 
         # Add fundamentals (forward-fill quarterly data)
-        fundamental_cols = ["gross_margin", "operating_margin", "net_margin",
-                          "current_ratio", "debt_to_equity"]
+        fundamental_cols = [
+            "gross_margin",
+            "operating_margin",
+            "net_margin",
+            "current_ratio",
+            "debt_to_equity",
+        ]
         if symbol in fundamentals:
             fund_df = fundamentals[symbol]
             # Reindex to match price dates and forward-fill
@@ -218,13 +242,19 @@ def align_multivariate_data(
             if len(fund_dates) > 0:
                 # searchsorted returns position where date would be inserted
                 # side='right' means we get the index after the last <= date
-                positions = np.searchsorted(fund_dates, features_df.index.values, side='right')
+                positions = np.searchsorted(
+                    fund_dates, features_df.index.values, side="right"
+                )
                 # Clip to valid indices (position - 1 gives us the last date <= current)
                 valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
                 # Get the last update dates
                 last_updates = fund_dates[valid_positions]
                 # Calculate days old (vectorized)
-                days_old = (features_df.index.values - last_updates).astype('timedelta64[D]').astype(float)
+                days_old = (
+                    (features_df.index.values - last_updates)
+                    .astype("timedelta64[D]")
+                    .astype(float)
+                )
                 # Handle cases where position is 0 and date is before first fundamental
                 days_old[positions == 0] = 999.0
             else:
@@ -248,8 +278,9 @@ def align_multivariate_data(
         features_df = features_df[config.feature_names]
 
         # CRITICAL VERIFICATION: Channel count
-        assert len(features_df.columns) == config.num_input_channels, \
+        assert len(features_df.columns) == config.num_input_channels, (
             f"CRITICAL: Expected {config.num_input_channels} channels, got {len(features_df.columns)}"
+        )
 
         # Quick data quality check (no heavy stats computation)
         nan_count = features_df.isna().sum().sum()
@@ -265,7 +296,8 @@ def align_multivariate_data(
             aligned[symbol] = features_df
 
     # Summary log at the end (not per-symbol)
-    print(f"[PatchTST] Aligned {len(aligned)} symbols with {config.num_input_channels} channels each")
+    print(
+        f"[PatchTST] Aligned {len(aligned)} symbols with {config.num_input_channels} channels each"
+    )
 
     return aligned
-

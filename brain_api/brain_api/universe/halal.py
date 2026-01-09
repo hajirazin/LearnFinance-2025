@@ -122,7 +122,9 @@ def get_halal_universe() -> dict:
 
     # Sort by max_weight descending
     stocks = sorted(all_holdings.values(), key=lambda x: x["max_weight"], reverse=True)
-    logger.info(f"Final US universe: {len(stocks)} stocks: {[s['symbol'] for s in stocks]}")
+    logger.info(
+        f"Final US universe: {len(stocks)} stocks: {[s['symbol'] for s in stocks]}"
+    )
 
     return {
         "stocks": stocks,

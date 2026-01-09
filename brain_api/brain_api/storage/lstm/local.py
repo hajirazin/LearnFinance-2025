@@ -26,9 +26,7 @@ class LSTMArtifacts:
     version: str
 
 
-class LSTMLocalStorage(
-    BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifacts]
-):
+class LSTMLocalStorage(BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifacts]):
     """Local filesystem storage for LSTM model artifacts.
 
     Artifacts are stored under:

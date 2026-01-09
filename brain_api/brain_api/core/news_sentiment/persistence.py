@@ -153,5 +153,3 @@ def load_cached_symbol(
     with open(path) as f:
         data = json.load(f)
         return SymbolSentiment.from_dict(data)
-
-

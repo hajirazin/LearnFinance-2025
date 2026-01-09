@@ -81,8 +81,7 @@ def find_gaps(
         reverse chronological order (most recent first)
     """
     logger.info(
-        f"Finding gaps for {len(symbols)} symbols "
-        f"from {start_date} to {end_date}"
+        f"Finding gaps for {len(symbols)} symbols from {start_date} to {end_date}"
     )
 
     # Generate all expected (date, symbol) pairs
@@ -168,4 +167,3 @@ def get_gap_statistics(
         "date_range_end": end_date.isoformat(),
         "api_earliest_date": api_earliest_date.isoformat(),
     }
-

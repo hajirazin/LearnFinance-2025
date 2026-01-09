@@ -30,11 +30,13 @@ class SACLSTMConfig(SACConfig):
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         base_dict = super().to_dict()
-        base_dict.update({
-            "lstm_version": self.lstm_version,
-            "training_years": self.training_years,
-            "n_eval_folds": self.n_eval_folds,
-        })
+        base_dict.update(
+            {
+                "lstm_version": self.lstm_version,
+                "training_years": self.training_years,
+                "n_eval_folds": self.n_eval_folds,
+            }
+        )
         return base_dict
 
     @classmethod
@@ -48,4 +50,3 @@ class SACLSTMConfig(SACConfig):
 
 # Default configuration
 DEFAULT_SAC_LSTM_CONFIG = SACLSTMConfig()
-

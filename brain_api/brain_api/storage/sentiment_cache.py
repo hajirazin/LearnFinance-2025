@@ -166,9 +166,7 @@ class SentimentCache:
         conn.commit()
         self._stats.total_entries += 1
 
-    def get_batch(
-        self, article_hashes: list[str]
-    ) -> dict[str, SentimentScore | None]:
+    def get_batch(self, article_hashes: list[str]) -> dict[str, SentimentScore | None]:
         """Batch lookup of cached sentiment scores.
 
         Args:
@@ -216,9 +214,7 @@ class SentimentCache:
 
         return results
 
-    def put_batch(
-        self, hash_score_pairs: list[tuple[str, SentimentScore]]
-    ) -> None:
+    def put_batch(self, hash_score_pairs: list[tuple[str, SentimentScore]]) -> None:
         """Batch insert sentiment scores into cache.
 
         Args:
@@ -369,5 +365,3 @@ class SentimentCache:
         console.print(f"  Cached scores: [green]{self._stats.total_entries:,}[/]")
         console.print(f"  Article-symbol pairs: [green]{symbol_count:,}[/]")
         console.print()
-
-

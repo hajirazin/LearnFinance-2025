@@ -150,7 +150,9 @@ def _recursive_bisection(
         right_weight = (1.0 / right_var) / total_inv_var
 
         # Update weights
-        current_weight = weights[sorted_symbols[start]]  # All in cluster have same weight at this point
+        current_weight = weights[
+            sorted_symbols[start]
+        ]  # All in cluster have same weight at this point
         weights[left_symbols] = current_weight * left_weight
         weights[right_symbols] = current_weight * right_weight
 
@@ -326,5 +328,3 @@ def compute_hrp_allocation(
         lookback_days=lookback_days,
         as_of_date=as_of_date.isoformat(),
     )
-
-

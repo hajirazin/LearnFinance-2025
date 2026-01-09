@@ -202,6 +202,3 @@ def read_parquet_stats(path: Path) -> dict:
         "symbol_count": df["symbol"].nunique() if len(df) > 0 else 0,
         "file_size_mb": round(path.stat().st_size / (1024 * 1024), 2),
     }
-
-
-

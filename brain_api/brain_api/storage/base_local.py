@@ -273,5 +273,3 @@ class BaseLocalModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT]):
             model=model,
             version=version,
         )
-
-

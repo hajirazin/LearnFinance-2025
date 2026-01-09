@@ -32,7 +32,9 @@ def compute_momentum_proxy(
     momentum = np.zeros(len(prices))
     for i in range(lookback_weeks, len(prices)):
         if prices[i - lookback_weeks] > 0:
-            momentum[i] = (prices[i] - prices[i - lookback_weeks]) / prices[i - lookback_weeks]
+            momentum[i] = (prices[i] - prices[i - lookback_weeks]) / prices[
+                i - lookback_weeks
+            ]
 
     return momentum
 
@@ -107,7 +109,9 @@ def generate_walkforward_forecasts_simple(
                 lookback = 4  # 4-week momentum
                 if i >= lookback:
                     if prices[i - lookback] > 0:
-                        symbol_forecasts[i] = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                        symbol_forecasts[i] = (
+                            prices[i] - prices[i - lookback]
+                        ) / prices[i - lookback]
 
         forecasts[symbol] = symbol_forecasts
 
@@ -149,8 +153,11 @@ def generate_walkforward_forecasts_with_model(
     # Check if any snapshots exist locally (we'll try HF later if needed)
     if snapshot_dir is None:
         from brain_api.core.portfolio_rl.data_loading import get_default_data_path
+
         # Snapshots are stored alongside main model: models/{type}/snapshots/
-        snapshot_dir = get_default_data_path() / "models" / forecaster_type / "snapshots"
+        snapshot_dir = (
+            get_default_data_path() / "models" / forecaster_type / "snapshots"
+        )
 
     forecasts: dict[str, np.ndarray] = {}
 
@@ -192,18 +199,24 @@ def generate_walkforward_forecasts_with_model(
                     if i < n_weeks - 1:
                         lookback = 4
                         if i >= lookback and prices[i - lookback] > 0:
-                            symbol_forecasts[i] = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                            symbol_forecasts[i] = (
+                                prices[i] - prices[i - lookback]
+                            ) / prices[i - lookback]
             else:
                 # Try to load snapshot for this cutoff
                 cutoff_date = date(year - 1, 12, 31)
 
                 # Try to ensure snapshot is available (downloads from HF if needed)
-                snapshot_available = snapshot_storage.ensure_snapshot_available(cutoff_date)
+                snapshot_available = snapshot_storage.ensure_snapshot_available(
+                    cutoff_date
+                )
 
                 if snapshot_available:
                     try:
                         # Load and run inference
-                        snapshot_path = snapshot_dir / f"snapshot_{cutoff_date.isoformat()}"
+                        snapshot_path = (
+                            snapshot_dir / f"snapshot_{cutoff_date.isoformat()}"
+                        )
                         preds = _run_snapshot_inference(
                             snapshot_path,
                             forecaster_type,
@@ -215,20 +228,26 @@ def generate_walkforward_forecasts_with_model(
                             if idx < n_weeks - 1:
                                 symbol_forecasts[idx] = pred
                     except Exception as e:
-                        print(f"[WalkForward] Error running snapshot for {symbol} year {year}: {e}")
+                        print(
+                            f"[WalkForward] Error running snapshot for {symbol} year {year}: {e}"
+                        )
                         # Fallback to momentum
                         for i in year_indices:
                             if i < n_weeks - 1:
                                 lookback = 4
                                 if i >= lookback and prices[i - lookback] > 0:
-                                    symbol_forecasts[i] = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                                    symbol_forecasts[i] = (
+                                        prices[i] - prices[i - lookback]
+                                    ) / prices[i - lookback]
                 else:
                     # No snapshot available (locally or HF), use momentum
                     for i in year_indices:
                         if i < n_weeks - 1:
                             lookback = 4
                             if i >= lookback and prices[i - lookback] > 0:
-                                symbol_forecasts[i] = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                                symbol_forecasts[i] = (
+                                    prices[i] - prices[i - lookback]
+                                ) / prices[i - lookback]
 
         forecasts[symbol] = symbol_forecasts
 
@@ -270,14 +289,10 @@ def _run_snapshot_inference(
 
     if forecaster_type == "lstm":
         # Run LSTM inference
-        predictions = _run_lstm_snapshot_inference(
-            artifacts, prices, year_indices
-        )
+        predictions = _run_lstm_snapshot_inference(artifacts, prices, year_indices)
     else:
         # Run PatchTST inference
-        predictions = _run_patchtst_snapshot_inference(
-            artifacts, prices, year_indices
-        )
+        predictions = _run_patchtst_snapshot_inference(artifacts, prices, year_indices)
 
     return predictions
 
@@ -321,7 +336,7 @@ def _run_lstm_snapshot_inference(
                 continue
 
             # Build input sequence from price history
-            price_seq = prices[i - seq_len:i]
+            price_seq = prices[i - seq_len : i]
 
             # Convert to returns (log returns for LSTM)
             returns = np.diff(np.log(price_seq + 1e-8))  # seq_len - 1 returns
@@ -390,7 +405,7 @@ def _run_patchtst_snapshot_inference(
                 continue
 
             # Build input sequence from price history
-            price_seq = prices[i - context_length:i]
+            price_seq = prices[i - context_length : i]
 
             # Convert to returns for PatchTST
             # PatchTST expects multiple channels, but for simplicity
@@ -490,4 +505,3 @@ def build_forecast_features(
 
     print(f"[PortfolioRL] Generated forecasts for {len(forecasts)} symbols")
     return forecasts
-

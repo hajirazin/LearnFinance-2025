@@ -20,10 +20,14 @@ class InferenceFeatures:
     """Features prepared for inference for a single symbol."""
 
     symbol: str
-    features: np.ndarray | None  # Shape: (seq_len, n_features) or None if insufficient data
+    features: (
+        np.ndarray | None
+    )  # Shape: (seq_len, n_features) or None if insufficient data
     has_enough_history: bool
     history_days_used: int
-    data_end_date: date | None  # Last date of data used (should be before target_week_start)
+    data_end_date: (
+        date | None
+    )  # Last date of data used (should be before target_week_start)
 
 
 @dataclass
@@ -103,7 +107,9 @@ def build_inference_features(
             features=None,
             has_enough_history=False,
             history_days_used=len(features_df),
-            data_end_date=features_df.index[-1].date() if len(features_df) > 0 else None,
+            data_end_date=features_df.index[-1].date()
+            if len(features_df) > 0
+            else None,
         )
 
     # Take the last sequence_length rows
@@ -151,7 +157,9 @@ def run_inference(
                 direction="FLAT",
                 has_enough_history=False,
                 history_days_used=feat.history_days_used,
-                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                data_end_date=feat.data_end_date.isoformat()
+                if feat.data_end_date
+                else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
             )
@@ -190,12 +198,12 @@ def run_inference(
                 direction=direction,
                 has_enough_history=True,
                 history_days_used=feat.history_days_used,
-                data_end_date=feat.data_end_date.isoformat() if feat.data_end_date else None,
+                data_end_date=feat.data_end_date.isoformat()
+                if feat.data_end_date
+                else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
             )
         )
 
     return predictions
-
-

@@ -44,10 +44,10 @@ class EvaluationMetrics:
         """Pretty print metrics."""
         return (
             f"Sharpe: {self.sharpe_ratio:.3f} | "
-            f"CAGR: {self.cagr*100:.2f}% | "
-            f"MaxDD: {self.max_drawdown*100:.2f}% | "
-            f"HitRate: {self.hit_rate*100:.1f}% | "
-            f"AvgTurnover: {self.avg_turnover*100:.1f}%"
+            f"CAGR: {self.cagr * 100:.2f}% | "
+            f"MaxDD: {self.max_drawdown * 100:.2f}% | "
+            f"HitRate: {self.hit_rate * 100:.1f}% | "
+            f"AvgTurnover: {self.avg_turnover * 100:.1f}%"
         )
 
 
@@ -280,7 +280,9 @@ def compute_hrp_baseline_metrics(
 
     if len(cov_returns) < 2:
         # Not enough data, fall back to equal weight
-        return compute_baseline_metrics(symbol_returns, "equal_weight", periods_per_year)
+        return compute_baseline_metrics(
+            symbol_returns, "equal_weight", periods_per_year
+        )
 
     # Compute covariance
     cov = np.cov(cov_returns.T)
@@ -343,9 +345,11 @@ def evaluate_ppo_for_promotion(
         "equal_weight_sharpe": eq_weight_metrics.sharpe_ratio,
         "hrp_sharpe": hrp_metrics.sharpe_ratio,
         "prior_sharpe": prior_sharpe,
-        "beats_equal_weight": policy_metrics.sharpe_ratio > eq_weight_metrics.sharpe_ratio,
+        "beats_equal_weight": policy_metrics.sharpe_ratio
+        > eq_weight_metrics.sharpe_ratio,
         "beats_hrp": policy_metrics.sharpe_ratio > hrp_metrics.sharpe_ratio,
-        "beats_prior": prior_sharpe is None or policy_metrics.sharpe_ratio > prior_sharpe,
+        "beats_prior": prior_sharpe is None
+        or policy_metrics.sharpe_ratio > prior_sharpe,
     }
 
     # Must beat all baselines
@@ -358,4 +362,3 @@ def evaluate_ppo_for_promotion(
     comparison["reason"] = "passed_all_gates" if should_promote else "failed_gates"
 
     return should_promote, comparison
-

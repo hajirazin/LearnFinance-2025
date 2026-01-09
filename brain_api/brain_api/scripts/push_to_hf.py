@@ -137,8 +137,10 @@ def push_news_sentiment(parquet_path: str) -> int:
     try:
         df = pd.read_parquet(parquet_path)
         print(f"  Rows: {len(df):,}")
-        print(f"  Symbols: {df['symbol'].nunique() if 'symbol' in df.columns else 'N/A'}")
-        if 'date' in df.columns:
+        print(
+            f"  Symbols: {df['symbol'].nunique() if 'symbol' in df.columns else 'N/A'}"
+        )
+        if "date" in df.columns:
             print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
     except Exception as e:
         print(f"Error reading parquet file: {e}")
@@ -266,4 +268,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

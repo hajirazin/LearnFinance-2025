@@ -11,4 +11,3 @@ __all__ = [
     "SACLSTMLocalStorage",
     "create_sac_lstm_metadata",
 ]
-

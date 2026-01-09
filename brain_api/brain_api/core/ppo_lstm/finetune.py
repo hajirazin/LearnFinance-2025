@@ -150,9 +150,9 @@ def finetune_ppo_lstm(
         hidden_sizes=prior_config.hidden_sizes,
         activation=prior_config.activation,
     )
-    model_cpu.load_state_dict({
-        k: v.cpu() for k, v in trainer.model.state_dict().items()
-    })
+    model_cpu.load_state_dict(
+        {k: v.cpu() for k, v in trainer.model.state_dict().items()}
+    )
 
     # Evaluate on validation data
     val_env = PortfolioEnv(
@@ -166,13 +166,25 @@ def finetune_ppo_lstm(
     eval_metrics = evaluate_policy(model_cpu, val_env, scaler, trainer.device)
 
     # Compute final metrics
-    final_policy_loss = history["policy_loss"][-1] if history["policy_loss"] else float("inf")
-    final_value_loss = history["value_loss"][-1] if history["value_loss"] else float("inf")
-    avg_episode_return = np.mean(history["episode_return"]) if history["episode_return"] else 0.0
-    avg_episode_sharpe = np.mean(history["episode_sharpe"]) if history["episode_sharpe"] else 0.0
+    final_policy_loss = (
+        history["policy_loss"][-1] if history["policy_loss"] else float("inf")
+    )
+    final_value_loss = (
+        history["value_loss"][-1] if history["value_loss"] else float("inf")
+    )
+    avg_episode_return = (
+        np.mean(history["episode_return"]) if history["episode_return"] else 0.0
+    )
+    avg_episode_sharpe = (
+        np.mean(history["episode_sharpe"]) if history["episode_sharpe"] else 0.0
+    )
 
-    print(f"[PPO Finetune] Final metrics: policy_loss={final_policy_loss:.4f}, value_loss={final_value_loss:.4f}")
-    print(f"[PPO Finetune] Eval: sharpe={eval_metrics['sharpe']:.4f}, cagr={eval_metrics['cagr']*100:.2f}%, max_dd={eval_metrics['max_drawdown']*100:.2f}%")
+    print(
+        f"[PPO Finetune] Final metrics: policy_loss={final_policy_loss:.4f}, value_loss={final_value_loss:.4f}"
+    )
+    print(
+        f"[PPO Finetune] Eval: sharpe={eval_metrics['sharpe']:.4f}, cagr={eval_metrics['cagr'] * 100:.2f}%, max_dd={eval_metrics['max_drawdown'] * 100:.2f}%"
+    )
 
     return PPOTrainingResult(
         model=model_cpu,
@@ -187,4 +199,3 @@ def finetune_ppo_lstm(
         eval_cagr=eval_metrics["cagr"],
         eval_max_drawdown=eval_metrics["max_drawdown"],
     )
-

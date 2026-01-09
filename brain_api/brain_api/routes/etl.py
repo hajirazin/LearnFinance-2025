@@ -502,4 +502,3 @@ def get_sentiment_gaps_job_status(job_id: str) -> ETLJobStatusResponse:
         result=job.result,
         config=job.config,
     )
-

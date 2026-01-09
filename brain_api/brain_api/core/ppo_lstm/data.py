@@ -66,8 +66,10 @@ def build_training_data(
         price_series = prices.get(symbol)
         if price_series is not None and len(price_series) > 1:
             # Weekly returns
-            returns = (price_series[1:] - price_series[:-1]) / np.maximum(price_series[:-1], 1e-10)
-            symbol_returns[:len(returns), stock_idx] = returns[:n_weeks]
+            returns = (price_series[1:] - price_series[:-1]) / np.maximum(
+                price_series[:-1], 1e-10
+            )
+            symbol_returns[: len(returns), stock_idx] = returns[:n_weeks]
 
     # Build signals array
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
@@ -77,14 +79,16 @@ def build_training_data(
             signal_values = symbol_signals.get(signal_name)
             if signal_values is not None:
                 # Assume signals are weekly-aligned
-                signals_array[:len(signal_values), stock_idx, signal_idx] = signal_values[:n_weeks]
+                signals_array[: len(signal_values), stock_idx, signal_idx] = (
+                    signal_values[:n_weeks]
+                )
 
     # Build forecast features array
     forecast_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         lstm_preds = lstm_predictions.get(symbol)
         if lstm_preds is not None:
-            forecast_array[:len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
+            forecast_array[: len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
 
     return TrainingData(
         symbol_returns=symbol_returns,
@@ -94,4 +98,3 @@ def build_training_data(
         n_weeks=n_weeks,
         n_stocks=n_stocks,
     )
-

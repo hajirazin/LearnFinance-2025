@@ -210,4 +210,3 @@ class SACPatchTSTInferenceResponse(BaseModel):
     target_week_end: str  # YYYY-MM-DD
     model_version: str
     weight_changes: list[WeightChange]
-

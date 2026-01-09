@@ -112,6 +112,3 @@ class UniverseFilter:
     def etfs_used(self) -> list[str]:
         """List of ETF tickers used for halal universe."""
         return list(HALAL_ETFS)
-
-
-

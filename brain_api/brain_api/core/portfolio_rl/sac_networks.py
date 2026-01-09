@@ -261,13 +261,12 @@ def soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
         source: Source network.
         tau: Interpolation coefficient (0 < tau <= 1).
     """
-    for target_param, source_param in zip(target.parameters(), source.parameters(), strict=False):
-        target_param.data.copy_(
-            tau * source_param.data + (1 - tau) * target_param.data
-        )
+    for target_param, source_param in zip(
+        target.parameters(), source.parameters(), strict=False
+    ):
+        target_param.data.copy_(tau * source_param.data + (1 - tau) * target_param.data)
 
 
 def hard_update(target: nn.Module, source: nn.Module) -> None:
     """Hard update: copy all parameters from source to target."""
     target.load_state_dict(source.state_dict())
-

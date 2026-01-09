@@ -590,7 +590,9 @@ def client_with_parquet(temp_parquet_path):
 @pytest.fixture
 def client_with_missing_parquet():
     """Create test client with non-existent parquet path."""
-    app.dependency_overrides[get_sentiment_parquet_path] = lambda: Path("/nonexistent/file.parquet")
+    app.dependency_overrides[get_sentiment_parquet_path] = lambda: Path(
+        "/nonexistent/file.parquet"
+    )
 
     client = TestClient(app)
     yield client
@@ -839,7 +841,9 @@ def test_historical_sentiment_returns_all_requested_combos(client_with_parquet):
         assert p["article_count"] is None
 
 
-def test_historical_sentiment_missing_parquet_returns_neutral(client_with_missing_parquet):
+def test_historical_sentiment_missing_parquet_returns_neutral(
+    client_with_missing_parquet,
+):
     """When parquet file doesn't exist, all data is neutral."""
     response = client_with_missing_parquet.post(
         "/signals/news/historical",
@@ -882,6 +886,3 @@ def test_historical_sentiment_multiple_symbols(client_with_parquet):
 
     symbols_in_response = {p["symbol"] for p in data["data"]}
     assert symbols_in_response == {"AAPL", "MSFT"}
-
-
-

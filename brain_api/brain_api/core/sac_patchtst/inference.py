@@ -8,4 +8,3 @@ logic is identical - only the forecast feature source differs.
 from brain_api.core.sac_lstm.inference import SACInferenceResult, run_sac_inference
 
 __all__ = ["SACInferenceResult", "run_sac_inference"]
-

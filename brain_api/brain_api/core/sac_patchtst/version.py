@@ -52,4 +52,3 @@ def compute_version(
     version = f"v{data_window_end.isoformat()}_{short_hash}"
 
     return version
-

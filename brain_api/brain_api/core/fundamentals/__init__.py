@@ -71,5 +71,3 @@ __all__ = [
     "parse_quarterly_statements",
     "save_raw_response",
 ]
-
-

@@ -221,5 +221,3 @@ class HistoricalFundamentalsResponse(BaseModel):
     end_date: str
     api_status: ApiStatusResponse
     data: list[RatiosResponse]
-
-

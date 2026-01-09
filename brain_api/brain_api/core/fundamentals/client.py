@@ -108,5 +108,3 @@ class RealAlphaVantageClient:
     def fetch_balance_sheet(self, symbol: str) -> dict[str, Any] | None:
         """Fetch balance sheet data for a symbol."""
         return self._fetch_endpoint("BALANCE_SHEET", symbol)
-
-

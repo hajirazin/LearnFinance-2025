@@ -132,7 +132,9 @@ def run_ppo_inference(
     for i, symbol in enumerate(symbol_order):
         target_weights[symbol] = float(target_weights_array[i])
         current_weights[symbol] = float(current_weights_array[i])
-        weight_changes[symbol] = float(target_weights_array[i] - current_weights_array[i])
+        weight_changes[symbol] = float(
+            target_weights_array[i] - current_weights_array[i]
+        )
 
     # CASH is last
     target_weights["CASH"] = float(target_weights_array[-1])
@@ -195,15 +197,16 @@ def compute_orders_from_weights(
         if qty == 0:
             continue
 
-        orders.append({
-            "symbol": symbol,
-            "side": "buy" if delta > 0 else "sell",
-            "qty": qty,
-            "notional": abs(delta),
-        })
+        orders.append(
+            {
+                "symbol": symbol,
+                "side": "buy" if delta > 0 else "sell",
+                "qty": qty,
+                "notional": abs(delta),
+            }
+        )
 
     # Sort: sells first (to free up cash), then buys
     orders.sort(key=lambda o: (0 if o["side"] == "sell" else 1, -o["notional"]))
 
     return orders
-

@@ -126,7 +126,9 @@ class AlpacaNewsClient:
 
         params = {
             "symbols": ",".join(symbols),
-            "start": start.isoformat() + "Z" if start.tzinfo is None else start.isoformat(),
+            "start": start.isoformat() + "Z"
+            if start.tzinfo is None
+            else start.isoformat(),
             "end": end.isoformat() + "Z" if end.tzinfo is None else end.isoformat(),
             "limit": limit,
             "sort": "desc",  # Most recent first
@@ -141,7 +143,9 @@ class AlpacaNewsClient:
             )
             response.raise_for_status()
             data = response.json()
-            logger.info(f"Alpaca API call #{self._call_count}: returned {len(data.get('news', []))} articles")
+            logger.info(
+                f"Alpaca API call #{self._call_count}: returned {len(data.get('news', []))} articles"
+            )
         except requests.RequestException as e:
             logger.error(f"Alpaca API call #{self._call_count} FAILED: {e}")
             return []
@@ -234,7 +238,9 @@ class AlpacaNewsClient:
 
             params = {
                 "symbols": ",".join(symbols),
-                "start": start.isoformat() + "Z" if start.tzinfo is None else start.isoformat(),
+                "start": start.isoformat() + "Z"
+                if start.tzinfo is None
+                else start.isoformat(),
                 "end": end.isoformat() + "Z" if end.tzinfo is None else end.isoformat(),
                 "limit": limit_per_call,
                 "sort": "desc",
@@ -251,7 +257,9 @@ class AlpacaNewsClient:
                 )
                 response.raise_for_status()
                 data = response.json()
-                logger.info(f"Alpaca API batch call #{self._call_count}: returned {len(data.get('news', []))} articles")
+                logger.info(
+                    f"Alpaca API batch call #{self._call_count}: returned {len(data.get('news', []))} articles"
+                )
             except requests.RequestException as e:
                 logger.error(f"Alpaca API batch call #{self._call_count} FAILED: {e}")
                 break
@@ -297,4 +305,3 @@ class AlpacaNewsClient:
     def reset_call_count(self) -> None:
         """Reset the API call counter."""
         self._call_count = 0
-
