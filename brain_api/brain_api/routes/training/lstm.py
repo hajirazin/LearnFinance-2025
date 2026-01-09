@@ -212,17 +212,28 @@ def train_lstm(
             from brain_api.storage.huggingface import HuggingFaceModelStorage
 
             hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+
+            # Check if HF main branch has a version (might be empty even if local has one)
+            hf_has_main = hf_storage.get_current_version() is not None
+
+            # Promote to main if: passed promotion check OR HF main is empty (first upload)
+            should_make_current = promoted or not hf_has_main
+            logger.info(
+                f"[LSTM] HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
+                f"make_current={should_make_current}"
+            )
+
             hf_info = hf_storage.upload_model(
                 version=version,
                 model=result.model,
                 feature_scaler=result.feature_scaler,
                 config=config,
                 metadata=metadata,
-                make_current=(promoted or prior_version is None),
+                make_current=should_make_current,
             )
             hf_repo = hf_info.repo_id
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
-            logger.info(f"Model uploaded to HuggingFace: {hf_url}")
+            logger.info(f"[LSTM] Model uploaded to HuggingFace: {hf_url}")
         except Exception as e:
             logger.error(f"Failed to upload model to HuggingFace: {e}")
             # Don't fail the training request if HF upload fails

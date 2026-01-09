@@ -283,13 +283,24 @@ def train_patchtst(
     if storage_backend == "hf" and hf_model_repo:
         try:
             hf_storage = PatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo)
+
+            # Check if HF main branch has a version (might be empty even if local has one)
+            hf_has_main = hf_storage.get_current_version() is not None
+
+            # Promote to main if: passed promotion check OR HF main is empty (first upload)
+            should_make_current = promoted or not hf_has_main
+            logger.info(
+                f"[PatchTST] HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
+                f"make_current={should_make_current}"
+            )
+
             hf_info = hf_storage.upload_model(
                 version=version,
                 model=result.model,
                 feature_scaler=result.feature_scaler,
                 config=config,
                 metadata=metadata,
-                make_current=(promoted or prior_version is None),
+                make_current=should_make_current,
             )
             hf_repo = hf_info.repo_id
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"

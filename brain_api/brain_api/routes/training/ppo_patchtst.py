@@ -286,13 +286,24 @@ def train_ppo_patchtst_endpoint(
     if storage_backend == "hf" and hf_model_repo:
         try:
             hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+
+            # Check if HF main branch has a version (might be empty even if local has one)
+            hf_has_main = hf_storage.get_current_version() is not None
+
+            # Promote to main if: passed promotion check OR HF main is empty (first upload)
+            should_make_current = promoted or not hf_has_main
+            logger.info(
+                f"[PPO_PatchTST] HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
+                f"make_current={should_make_current}"
+            )
+
             hf_info = hf_storage.upload_model(
                 version=version,
                 model=result.model,
                 feature_scaler=result.scaler,
                 config=config,
                 metadata=metadata,
-                make_current=promoted,
+                make_current=should_make_current,
             )
             hf_repo = hf_info.repo_id
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
@@ -558,13 +569,24 @@ def finetune_ppo_patchtst_endpoint(
             from brain_api.storage.huggingface import HuggingFaceModelStorage
 
             hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo_ft)
+
+            # Check if HF main branch has a version (might be empty even if local has one)
+            hf_has_main = hf_storage.get_current_version() is not None
+
+            # Promote to main if: passed promotion check OR HF main is empty (first upload)
+            should_make_current = promoted or not hf_has_main
+            logger.info(
+                f"[PPO_PatchTST Finetune] HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
+                f"make_current={should_make_current}"
+            )
+
             hf_info = hf_storage.upload_model(
                 version=version,
                 model=result.model,
                 feature_scaler=result.scaler,
                 config=prior_config,
                 metadata=metadata,
-                make_current=promoted,
+                make_current=should_make_current,
             )
             hf_repo = hf_info.repo_id
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
