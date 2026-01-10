@@ -140,6 +140,9 @@ class PatchTSTForecaster(BaseForecaster):
     ) -> dict[str, float]:
         """Build PatchTST forecast features.
 
+        Loads all 12 channels (OHLCV + news + fundamentals) for proper
+        multi-channel PatchTST inference.
+
         Args:
             symbols: List of stock ticker symbols
             as_of_date: Reference date for inference
@@ -153,6 +156,10 @@ class PatchTSTForecaster(BaseForecaster):
             build_inference_features,
             load_prices_yfinance,
             run_inference,
+        )
+        from brain_api.core.patchtst.data_loaders import (
+            load_historical_fundamentals,
+            load_historical_news_sentiment,
         )
         from brain_api.storage.local import PatchTSTModelStorage
 
@@ -178,7 +185,25 @@ class PatchTSTForecaster(BaseForecaster):
             data_end = week_boundaries.target_week_start - timedelta(days=1)
             prices = load_prices_yfinance(symbols, data_start, data_end)
 
-            # Build features
+            # Load news sentiment for all symbols
+            logger.debug("[PatchTSTForecaster] Loading news sentiment...")
+            news_data = load_historical_news_sentiment(
+                symbols, data_start.date(), data_end.date()
+            )
+            logger.debug(
+                f"[PatchTSTForecaster] Loaded news for {len(news_data)} symbols"
+            )
+
+            # Load fundamentals for all symbols
+            logger.debug("[PatchTSTForecaster] Loading fundamentals...")
+            fundamentals_data = load_historical_fundamentals(
+                symbols, data_start.date(), data_end.date()
+            )
+            logger.debug(
+                f"[PatchTSTForecaster] Loaded fundamentals for {len(fundamentals_data)} symbols"
+            )
+
+            # Build features with all 12 channels
             features_list = []
             for symbol in symbols:
                 prices_df = prices.get(symbol)
@@ -190,12 +215,17 @@ class PatchTSTForecaster(BaseForecaster):
                             has_enough_history=False,
                             history_days_used=0,
                             data_end_date=None,
+                            has_news_data=False,
+                            has_fundamentals_data=False,
+                            starting_price=None,
                         )
                     )
                 else:
                     features = build_inference_features(
                         symbol=symbol,
                         prices_df=prices_df,
+                        news_df=news_data.get(symbol),
+                        fundamentals_df=fundamentals_data.get(symbol),
                         config=config,
                         cutoff_date=week_boundaries.target_week_start,
                     )

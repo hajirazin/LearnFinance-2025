@@ -18,6 +18,7 @@ from brain_api.core.finbert import FinBERTScorer, compute_text_hash
 from brain_api.core.sentiment_cache import SentimentCache
 from brain_api.etl.config import ETLConfig, get_hf_news_sentiment_repo
 from brain_api.etl.dataset import batch_articles, stream_articles
+from brain_api.etl.gap_fill import append_to_parquet
 from brain_api.etl.parquet_writer import ParquetWriter, read_parquet_stats
 from brain_api.etl.symbol_filter import UniverseFilter
 
@@ -354,16 +355,30 @@ def run_pipeline(
         f"  Generated [green]{len(daily_sentiments)}[/] daily sentiment records"
     )
 
-    # Write output file(s)
-    console.print("\n[bold blue]Writing output...[/]")
-    writer.write(daily_sentiments)
-    output_paths = writer.finalize(
-        parquet_filename=config.output_parquet,
-        csv_filename=config.output_csv,
-    )
+    # Write output file(s) - INCREMENTAL: merge with existing instead of overwriting
+    console.print("\n[bold blue]Writing output (incremental)...[/]")
+    parquet_path = config.output_dir / config.output_parquet
+    output_paths: dict[str, Any] = {}
 
-    for fmt, path in output_paths.items():
-        console.print(f"  {fmt.upper()}: [green]{path}[/]")
+    # Convert daily sentiments to row dicts for append_to_parquet
+    new_rows = [s.to_dict() for s in daily_sentiments]
+
+    # Use incremental append (merge + deduplicate) instead of overwrite
+    rows_written = append_to_parquet(new_rows, parquet_path)
+    output_paths["parquet"] = parquet_path
+    console.print(f"  PARQUET: [green]{parquet_path}[/] ({rows_written} new/updated)")
+
+    # Optionally write CSV (still overwrites since it's for debugging)
+    if config.output_csv:
+        csv_path = config.output_dir / config.output_csv
+        writer.write(daily_sentiments)
+        csv_output = writer.finalize(
+            parquet_filename=None,  # Skip parquet, already written
+            csv_filename=config.output_csv,
+        )
+        if "csv" in csv_output:
+            output_paths["csv"] = csv_output["csv"]
+            console.print(f"  CSV: [green]{csv_output['csv']}[/]")
 
     # Upload to HuggingFace if configured and not local_only
     hf_upload_url = None

@@ -380,6 +380,7 @@ class TestSnapshotInferenceHelpers:
         # Create mock artifacts
         mock_config = MagicMock()
         mock_config.sequence_length = 20
+        mock_config.use_returns = True
 
         mock_model = MagicMock()
         mock_scaler = StandardScaler()
@@ -394,8 +395,17 @@ class TestSnapshotInferenceHelpers:
         prices = np.linspace(100, 110, 10)  # Only 10 weeks
         year_indices = [5, 6, 7]  # Indices to predict
 
-        # Should fall back to momentum since seq_len=20 > len(prices)
-        predictions = _run_lstm_snapshot_inference(artifacts, prices, year_indices)
+        # Create weekly dates for the test
+        weekly_dates = pd.date_range(start="2019-01-01", periods=10, freq="W-FRI")
+
+        # Should fall back to momentum since no daily OHLCV available
+        predictions = _run_lstm_snapshot_inference(
+            artifacts,
+            prices,
+            year_indices,
+            weekly_dates=weekly_dates,
+            symbol="TEST",
+        )
         assert len(predictions) == 3
 
     def test_patchtst_inference_fallback_short_history(self):

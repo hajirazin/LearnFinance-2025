@@ -55,6 +55,7 @@ class GapFillResult:
     progress: GapFillProgress
     statistics: dict[str, Any] = field(default_factory=dict)
     parquet_updated: bool = False
+    hf_url: str | None = None
 
 
 def _group_gaps_by_date(
@@ -156,11 +157,14 @@ def _create_zero_article_rows(
     ]
 
 
-def _append_to_parquet(
+def append_to_parquet(
     new_rows: list[dict],
     parquet_path: Path,
 ) -> int:
-    """Append new rows to the parquet file.
+    """Append new rows to the parquet file with merge and deduplication.
+
+    This function is used by both the main ETL pipeline and gap fill to
+    ensure parquet writes are incremental rather than overwriting.
 
     Args:
         new_rows: List of row dicts to append
@@ -213,6 +217,7 @@ def fill_sentiment_gaps(
     end_date: date,
     parquet_path: Path,
     progress_callback: Callable[[GapFillProgress], None] | None = None,
+    local_only: bool = False,
 ) -> GapFillResult:
     """Fill missing sentiment data in the parquet file.
 
@@ -221,9 +226,10 @@ def fill_sentiment_gaps(
         end_date: Latest date to check for gaps
         parquet_path: Path to daily_sentiment.parquet
         progress_callback: Optional callback for progress updates
+        local_only: If True, skip HuggingFace upload
 
     Returns:
-        GapFillResult with statistics and success status
+        GapFillResult with statistics, success status, and optional HF URL
     """
     progress = GapFillProgress()
 
@@ -375,7 +381,7 @@ def fill_sentiment_gaps(
                 all_checkpoint_rows = checkpoint_rows + checkpoint_zero_rows
 
                 if all_checkpoint_rows:
-                    rows_added = _append_to_parquet(all_checkpoint_rows, parquet_path)
+                    rows_added = append_to_parquet(all_checkpoint_rows, parquet_path)
                     progress.rows_added += rows_added
                     logger.info(
                         f"Checkpoint saved {rows_added} rows "
@@ -410,7 +416,7 @@ def fill_sentiment_gaps(
                 f"Writing {len(new_rows)} rows with articles + "
                 f"{len(zero_rows)} zero-article rows"
             )
-            rows_added = _append_to_parquet(all_new_rows, parquet_path)
+            rows_added = append_to_parquet(all_new_rows, parquet_path)
             progress.rows_added += rows_added
         else:
             logger.info("No remaining data to write (all saved in checkpoints)")
@@ -436,11 +442,17 @@ def fill_sentiment_gaps(
             symbols, start_date, end_date, parquet_path, ALPACA_EARLIEST_DATE
         )
 
+        # Upload to HuggingFace if configured and not local_only
+        hf_url = None
+        if not local_only and rows_added > 0:
+            hf_url = _upload_to_huggingface(parquet_path)
+
         return GapFillResult(
             success=True,
             progress=progress,
             statistics=statistics,
             parquet_updated=rows_added > 0,
+            hf_url=hf_url,
         )
 
     except Exception as e:
@@ -449,3 +461,49 @@ def fill_sentiment_gaps(
         progress.error = str(e)
         update_progress()
         return GapFillResult(success=False, progress=progress)
+
+
+def _upload_to_huggingface(parquet_path: Path) -> str | None:
+    """Upload parquet file to HuggingFace.
+
+    Args:
+        parquet_path: Path to the parquet file
+
+    Returns:
+        URL of the uploaded file, or None if upload failed or not configured
+    """
+    from brain_api.etl.config import get_hf_news_sentiment_repo
+
+    hf_repo = get_hf_news_sentiment_repo()
+    if not hf_repo:
+        logger.info("HuggingFace upload skipped (HF_NEWS_SENTIMENT_REPO not set)")
+        return None
+
+    try:
+        from huggingface_hub import HfApi
+
+        logger.info(f"Uploading to HuggingFace: {hf_repo}")
+        api = HfApi()
+
+        # Create repo if it doesn't exist
+        try:
+            api.repo_info(repo_id=hf_repo, repo_type="dataset")
+        except Exception:
+            logger.info(f"Creating HuggingFace repository: {hf_repo}")
+            api.create_repo(repo_id=hf_repo, repo_type="dataset", exist_ok=True)
+
+        # Upload parquet file
+        api.upload_file(
+            path_or_fileobj=str(parquet_path),
+            path_in_repo="daily_sentiment.parquet",
+            repo_id=hf_repo,
+            repo_type="dataset",
+        )
+
+        hf_url = f"https://huggingface.co/datasets/{hf_repo}"
+        logger.info(f"Uploaded to {hf_url}")
+        return hf_url
+
+    except Exception as e:
+        logger.error(f"HuggingFace upload failed: {e}")
+        return None

@@ -294,8 +294,14 @@ def _run_snapshot_inference(
     predictions = []
 
     if forecaster_type == "lstm":
-        # Run LSTM inference (single channel only)
-        predictions = _run_lstm_snapshot_inference(artifacts, prices, year_indices)
+        # Run LSTM inference (with multi-channel OHLCV support)
+        predictions = _run_lstm_snapshot_inference(
+            artifacts,
+            prices,
+            year_indices,
+            weekly_dates=weekly_dates,
+            symbol=symbol,
+        )
     else:
         # Run PatchTST inference (multi-channel when available)
         predictions = _run_patchtst_snapshot_inference(
@@ -313,13 +319,20 @@ def _run_lstm_snapshot_inference(
     artifacts: "LSTMSnapshotArtifacts",
     prices: np.ndarray,
     year_indices: list[int],
+    weekly_dates: pd.DatetimeIndex | None = None,
+    symbol: str | None = None,
 ) -> list[float]:
-    """Run LSTM snapshot inference for a symbol.
+    """Run LSTM snapshot inference for a symbol with multi-channel OHLCV support.
+
+    Enhanced to load daily OHLCV data for proper 5-feature LSTM inference
+    when available. Falls back to momentum if daily data unavailable.
 
     Args:
         artifacts: Loaded LSTM snapshot artifacts
-        prices: Weekly price array for the symbol
+        prices: Weekly price array for the symbol (fallback only)
         year_indices: Indices to predict
+        weekly_dates: DatetimeIndex of weekly dates (for loading daily data)
+        symbol: Stock symbol (for loading daily OHLCV)
 
     Returns:
         List of predictions
@@ -332,67 +345,155 @@ def _run_lstm_snapshot_inference(
     config = artifacts.config
     seq_len = config.sequence_length
 
-    # Check if scaler expects more features than we can provide
-    # We only have close prices, so we can only build 1 feature (close returns)
-    # If the model was trained with OHLCV (5 features), we must fall back to momentum
-    if scaler is not None and hasattr(scaler, "n_features_in_"):
-        expected_features = scaler.n_features_in_
-        if expected_features > 1:
-            # Model expects OHLCV features but we only have close prices
-            # Fall back to momentum for all predictions
-            for i in year_indices:
-                lookback = 4
-                if i >= lookback and prices[i - lookback] > 0:
-                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-                else:
-                    pred = 0.0
-                predictions.append(pred)
-            return predictions
+    # Momentum fallback helper
+    def momentum_fallback(idx: int) -> float:
+        lookback = 4
+        if idx >= lookback and prices[idx - lookback] > 0:
+            return (prices[idx] - prices[idx - lookback]) / prices[idx - lookback]
+        return 0.0
+
+    # Determine if we can use multi-channel features
+    use_multichannel = weekly_dates is not None and symbol is not None
+
+    # Load daily OHLCV if multi-channel is enabled
+    daily_ohlcv: pd.DataFrame | None = None
+
+    if use_multichannel and len(year_indices) > 0:
+        try:
+            # Get date range for this year (with buffer for context)
+            min_idx = min(year_indices)
+            max_idx = max(year_indices)
+            buffer_days = seq_len * 2 + 30
+
+            start_date = weekly_dates[max(0, min_idx - 10)].date() - timedelta(
+                days=buffer_days
+            )
+            end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
+
+            # Load daily OHLCV
+            daily_ohlcv = _load_daily_ohlcv(symbol, start_date, end_date)
+
+            if daily_ohlcv is not None:
+                logger.debug(
+                    f"[WalkForward] Loaded {len(daily_ohlcv)} days of OHLCV for {symbol}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[WalkForward] Failed to load daily OHLCV for {symbol}: {e}"
+            )
+            use_multichannel = False
+
+    # If we couldn't load daily data, fall back to momentum for all predictions
+    if not use_multichannel or daily_ohlcv is None:
+        logger.debug(
+            f"[WalkForward] Using momentum fallback for LSTM {symbol} "
+            f"(multichannel={use_multichannel}, has_ohlcv={daily_ohlcv is not None})"
+        )
+        for i in year_indices:
+            predictions.append(momentum_fallback(i))
+        return predictions
 
     model.eval()
 
     with torch.no_grad():
         for i in year_indices:
-            # Need at least seq_len of history
-            if i < seq_len:
-                # Not enough history, use momentum fallback
-                lookback = 4
-                if i >= lookback and prices[i - lookback] > 0:
-                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-                else:
-                    pred = 0.0
-                predictions.append(pred)
-                continue
-
-            # Build input sequence from price history
-            price_seq = prices[i - seq_len : i]
-
-            # Convert to returns (log returns for LSTM)
-            returns = np.diff(np.log(price_seq + 1e-8))  # seq_len - 1 returns
-
-            if len(returns) != seq_len - 1:
-                predictions.append(0.0)
-                continue
-
-            # LSTM expects (batch, seq, features)
-            # For single-feature LSTM, add feature dimension
-            features = returns.reshape(-1, 1)
-
-            # Apply scaler if available
-            if scaler is not None:
-                features = scaler.transform(features)
-
-            # Convert to tensor: (1, seq_len-1, 1)
-            x = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
-
-            # Run inference
-            output = model(x)
-
-            # Get prediction (expected return)
-            pred = output.squeeze().item()
+            pred = _predict_single_week_lstm(
+                model=model,
+                scaler=scaler,
+                config=config,
+                weekly_idx=i,
+                weekly_prices=prices,
+                weekly_dates=weekly_dates,
+                daily_ohlcv=daily_ohlcv,
+            )
             predictions.append(pred)
 
     return predictions
+
+
+def _predict_single_week_lstm(
+    model,
+    scaler,
+    config,
+    weekly_idx: int,
+    weekly_prices: np.ndarray,
+    weekly_dates: pd.DatetimeIndex,
+    daily_ohlcv: pd.DataFrame,
+) -> float:
+    """Generate LSTM prediction for a single week using 5-feature OHLCV.
+
+    Uses daily OHLCV data to build proper 5-feature sequences matching
+    how the LSTM was trained.
+    """
+    import torch
+
+    from brain_api.core.features import compute_ohlcv_log_returns
+
+    seq_len = config.sequence_length
+
+    # Momentum fallback helper
+    def momentum_fallback() -> float:
+        lookback = 4
+        if weekly_idx >= lookback and weekly_prices[weekly_idx - lookback] > 0:
+            return (
+                weekly_prices[weekly_idx] - weekly_prices[weekly_idx - lookback]
+            ) / weekly_prices[weekly_idx - lookback]
+        return 0.0
+
+    try:
+        # Get cutoff date (Friday of this week - predict for next week)
+        week_date = weekly_dates[weekly_idx]
+        cutoff = week_date.date()
+
+        # Filter daily data up to cutoff
+        if daily_ohlcv.index.tz is not None:
+            cutoff_ts = pd.Timestamp(cutoff).tz_localize(daily_ohlcv.index.tz)
+        else:
+            cutoff_ts = pd.Timestamp(cutoff)
+
+        ohlcv_subset = daily_ohlcv[daily_ohlcv.index < cutoff_ts].copy()
+
+        if len(ohlcv_subset) < seq_len + 1:  # +1 for returns computation
+            return momentum_fallback()
+
+        # Compute OHLCV log returns (5 features)
+        features_df = compute_ohlcv_log_returns(
+            ohlcv_subset, use_returns=config.use_returns
+        )
+
+        if len(features_df) < seq_len:
+            return momentum_fallback()
+
+        # Take last seq_len rows
+        features_df = features_df.iloc[-seq_len:]
+
+        # Build feature array: (seq_len, 5)
+        features = features_df.values
+
+        # Verify we have 5 features
+        if features.shape[1] != 5:
+            logger.warning(
+                f"[WalkForward] Expected 5 OHLCV features, got {features.shape[1]}"
+            )
+            return momentum_fallback()
+
+        # Apply scaler
+        if scaler is not None:
+            features = scaler.transform(features)
+
+        # Shape: (1, seq_len, 5)
+        x = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+
+        # Run inference
+        output = model(x)
+
+        # Get prediction (expected weekly return)
+        pred = output.squeeze().item()
+        return pred
+
+    except Exception as e:
+        logger.debug(f"[WalkForward] LSTM inference failed: {e}")
+        return momentum_fallback()
 
 
 def _run_patchtst_snapshot_inference(

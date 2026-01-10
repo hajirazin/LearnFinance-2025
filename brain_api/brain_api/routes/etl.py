@@ -311,6 +311,10 @@ class SentimentGapsRequest(BaseModel):
         description="Latest date to check (YYYY-MM-DD, defaults to today)",
         examples=["2026-01-07"],
     )
+    local_only: bool = Field(
+        False,
+        description="Skip HuggingFace upload (local files only)",
+    )
 
 
 def _update_gap_fill_progress(job_id: str, progress: GapFillProgress) -> None:
@@ -346,6 +350,7 @@ def _run_gap_fill_job(
     start_date: date,
     end_date: date,
     parquet_path: Path,
+    local_only: bool = False,
 ) -> None:
     """Run the gap fill pipeline in a background task."""
     job = _jobs.get(job_id)
@@ -360,6 +365,7 @@ def _run_gap_fill_job(
             end_date=end_date,
             parquet_path=parquet_path,
             progress_callback=lambda p: _update_gap_fill_progress(job_id, p),
+            local_only=local_only,
         )
 
         job.status = "completed" if result.success else "failed"
@@ -368,6 +374,7 @@ def _run_gap_fill_job(
             "success": result.success,
             "parquet_updated": result.parquet_updated,
             "statistics": result.statistics,
+            "hf_url": result.hf_url,
             "progress": {
                 "total_gaps": result.progress.total_gaps,
                 "gaps_fillable": result.progress.gaps_fillable,
@@ -455,6 +462,7 @@ def start_sentiment_gaps_fill(
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "parquet_path": str(parquet_path),
+            "local_only": request.local_only,
         },
     )
     _jobs[job_id] = job
@@ -466,6 +474,7 @@ def start_sentiment_gaps_fill(
         start_date,
         end_date,
         parquet_path,
+        request.local_only,
     )
 
     return ETLJobResponse(
