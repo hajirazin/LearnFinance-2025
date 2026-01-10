@@ -97,54 +97,38 @@ def mock_price_loader(symbols, start_date, end_date):
     return prices
 
 
-def mock_news_loader(symbols, start_date, end_date, parquet_path=None):
-    """Return mock news sentiment data for testing."""
-    sentiment = {}
+class MockSignalBuilder:
+    """Mock RealTimeSignalBuilder for testing."""
 
-    date_range = pd.bdate_range(start=start_date, end=end_date)
+    def build_news_dataframes(self, symbols, start_date, end_date):
+        """Return mock news sentiment DataFrames for testing."""
+        sentiment = {}
+        for symbol in symbols:
+            np.random.seed(hash(symbol + "news") % 2**32)
+            df = pd.DataFrame(
+                {"sentiment_score": [np.random.uniform(-0.5, 0.5)]},
+                index=pd.DatetimeIndex([pd.Timestamp(end_date)]),
+            )
+            sentiment[symbol] = df
+        return sentiment
 
-    for symbol in symbols:
-        if len(date_range) < 10:
-            continue
-
-        np.random.seed(hash(symbol + "news") % 2**32)
-        scores = np.random.uniform(-0.5, 0.5, len(date_range))
-
-        df = pd.DataFrame(
-            {"sentiment_score": scores},
-            index=date_range,
-        )
-        sentiment[symbol] = df
-
-    return sentiment
-
-
-def mock_fundamentals_loader(symbols, start_date, end_date, cache_path=None):
-    """Return mock fundamentals data for testing."""
-    fundamentals = {}
-
-    # Quarterly dates (fewer data points)
-    quarters = pd.date_range(start=start_date, end=end_date, freq="QE")
-
-    for symbol in symbols:
-        if len(quarters) < 1:
-            continue
-
-        np.random.seed(hash(symbol + "fund") % 2**32)
-
-        df = pd.DataFrame(
-            {
-                "gross_margin": np.random.uniform(0.2, 0.6, len(quarters)),
-                "operating_margin": np.random.uniform(0.1, 0.4, len(quarters)),
-                "net_margin": np.random.uniform(0.05, 0.3, len(quarters)),
-                "current_ratio": np.random.uniform(1.0, 3.0, len(quarters)),
-                "debt_to_equity": np.random.uniform(0.1, 2.0, len(quarters)),
-            },
-            index=quarters,
-        )
-        fundamentals[symbol] = df
-
-    return fundamentals
+    def build_fundamentals_dataframes(self, symbols, start_date, end_date):
+        """Return mock fundamentals DataFrames for testing."""
+        fundamentals = {}
+        for symbol in symbols:
+            np.random.seed(hash(symbol + "fund") % 2**32)
+            df = pd.DataFrame(
+                {
+                    "gross_margin": [np.random.uniform(0.2, 0.6)],
+                    "operating_margin": [np.random.uniform(0.1, 0.4)],
+                    "net_margin": [np.random.uniform(0.05, 0.3)],
+                    "current_ratio": [np.random.uniform(1.0, 3.0)],
+                    "debt_to_equity": [np.random.uniform(0.1, 2.0)],
+                },
+                index=pd.DatetimeIndex([pd.Timestamp(end_date)]),
+            )
+            fundamentals[symbol] = df
+        return fundamentals
 
 
 @pytest.fixture
@@ -166,12 +150,8 @@ def client_with_mocks(temp_storage, monkeypatch):
     from brain_api.routes.inference import patchtst as inference_module
 
     monkeypatch.setattr(inference_module, "patchtst_load_prices", mock_price_loader)
-    monkeypatch.setattr(
-        inference_module, "load_historical_news_sentiment", mock_news_loader
-    )
-    monkeypatch.setattr(
-        inference_module, "load_historical_fundamentals", mock_fundamentals_loader
-    )
+    # Mock the RealTimeSignalBuilder class to return mock data
+    monkeypatch.setattr(inference_module, "RealTimeSignalBuilder", MockSignalBuilder)
 
     client = TestClient(app)
     yield client

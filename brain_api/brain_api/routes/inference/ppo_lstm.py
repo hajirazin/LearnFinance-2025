@@ -67,21 +67,17 @@ def infer_ppo_lstm(
         pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
 
-    # Build placeholder signals (simplified - would fetch real data in production)
-    signals = {}
-    for symbol in artifacts.symbol_order:
-        signals[symbol] = {
-            "news_sentiment": 0.0,
-            "gross_margin": 0.0,
-            "operating_margin": 0.0,
-            "net_margin": 0.0,
-            "current_ratio": 0.0,
-            "debt_to_equity": 0.0,
-            "fundamental_age": 0.0,
-        }
+    # Build real-time signals (news sentiment + fundamentals)
+    logger.info("[PPO_LSTM] Fetching real-time signals...")
+    from .helpers import build_current_forecasts, build_current_signals
 
-    # Build placeholder forecast features
-    forecast_features = dict.fromkeys(artifacts.symbol_order, 0.0)
+    signals = build_current_signals(artifacts.symbol_order, as_of)
+
+    # Build LSTM forecast features
+    logger.info("[PPO_LSTM] Generating LSTM forecasts...")
+    forecast_features = build_current_forecasts(
+        artifacts.symbol_order, forecaster_type="lstm", as_of_date=as_of
+    )
 
     # Run inference
     logger.info("[PPO_LSTM] Running inference...")

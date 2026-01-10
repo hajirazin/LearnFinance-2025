@@ -101,7 +101,7 @@ class PatchTSTConfig:
 
     def to_hf_config(self) -> "HFPatchTSTConfig":
         """Convert to HuggingFace PatchTSTConfig.
-        
+
         IMPORTANT: This must match _create_patchtst_model() in training.py exactly
         to ensure model architecture consistency between training and inference.
         """

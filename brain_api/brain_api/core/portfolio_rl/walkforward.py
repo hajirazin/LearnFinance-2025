@@ -4,12 +4,15 @@ Generates forecast features without look-ahead bias by using
 forecaster models trained only on prior data.
 """
 
-from datetime import date
+import logging
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def compute_momentum_proxy(
@@ -223,6 +226,7 @@ def generate_walkforward_forecasts_with_model(
                             symbol,
                             prices,
                             year_indices,
+                            weekly_dates=weekly_dates,
                         )
                         for idx, pred in zip(year_indices, preds, strict=False):
                             if idx < n_weeks - 1:
@@ -260,6 +264,7 @@ def _run_snapshot_inference(
     symbol: str,
     prices: np.ndarray,
     year_indices: list[int],
+    weekly_dates: pd.DatetimeIndex | None = None,
 ) -> list[float]:
     """Run inference using a snapshot model.
 
@@ -272,6 +277,7 @@ def _run_snapshot_inference(
         symbol: Stock symbol
         prices: Weekly prices array
         year_indices: Indices for the target year
+        weekly_dates: DatetimeIndex of weekly dates (for multi-channel PatchTST)
 
     Returns:
         List of predictions for each week in year_indices
@@ -288,11 +294,17 @@ def _run_snapshot_inference(
     predictions = []
 
     if forecaster_type == "lstm":
-        # Run LSTM inference
+        # Run LSTM inference (single channel only)
         predictions = _run_lstm_snapshot_inference(artifacts, prices, year_indices)
     else:
-        # Run PatchTST inference
-        predictions = _run_patchtst_snapshot_inference(artifacts, prices, year_indices)
+        # Run PatchTST inference (multi-channel when available)
+        predictions = _run_patchtst_snapshot_inference(
+            artifacts,
+            prices,
+            year_indices,
+            weekly_dates=weekly_dates,
+            symbol=symbol,
+        )
 
     return predictions
 
@@ -387,13 +399,20 @@ def _run_patchtst_snapshot_inference(
     artifacts: "PatchTSTSnapshotArtifacts",
     prices: np.ndarray,
     year_indices: list[int],
+    weekly_dates: pd.DatetimeIndex | None = None,
+    symbol: str | None = None,
 ) -> list[float]:
-    """Run PatchTST snapshot inference for a symbol.
+    """Run PatchTST snapshot inference for a symbol with multi-channel support.
+
+    Enhanced to load daily OHLCV, news sentiment, and fundamentals for
+    proper multi-channel PatchTST inference when available.
 
     Args:
         artifacts: Loaded PatchTST snapshot artifacts
-        prices: Weekly price array for the symbol
+        prices: Weekly price array for the symbol (fallback only)
         year_indices: Indices to predict
+        weekly_dates: DatetimeIndex of weekly dates (for loading daily data)
+        symbol: Stock symbol (for loading historical signals)
 
     Returns:
         List of predictions
@@ -406,84 +425,319 @@ def _run_patchtst_snapshot_inference(
     config = artifacts.config
     context_length = config.context_length
 
+    # Determine if we can use multi-channel features
+    use_multichannel = (
+        weekly_dates is not None
+        and symbol is not None
+        and config.num_input_channels > 1
+    )
+
+    # Load daily data if multi-channel is enabled
+    daily_ohlcv: pd.DataFrame | None = None
+    daily_news: pd.DataFrame | None = None
+    daily_fundamentals: pd.DataFrame | None = None
+
+    if use_multichannel and len(year_indices) > 0:
+        try:
+            # Get date range for this year (with buffer for context)
+            min_idx = min(year_indices)
+            max_idx = max(year_indices)
+            buffer_days = context_length * 2 + 30
+
+            start_date = weekly_dates[max(0, min_idx - 10)].date() - timedelta(
+                days=buffer_days
+            )
+            end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
+
+            # Load daily OHLCV
+            daily_ohlcv = _load_daily_ohlcv(symbol, start_date, end_date)
+
+            # Load news sentiment
+            daily_news = _load_historical_news_for_walkforward(
+                symbol, start_date, end_date
+            )
+
+            # Load fundamentals
+            daily_fundamentals = _load_historical_fundamentals_for_walkforward(
+                symbol, start_date, end_date
+            )
+
+            if daily_ohlcv is not None:
+                logger.debug(
+                    f"[WalkForward] Loaded {len(daily_ohlcv)} days of OHLCV for {symbol}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[WalkForward] Failed to load multi-channel data for {symbol}: {e}"
+            )
+            use_multichannel = False
+
     model.eval()
 
     with torch.no_grad():
         for i in year_indices:
-            # Need at least context_length of history
-            if i < context_length:
-                # Not enough history, use momentum fallback
-                lookback = 4
-                if i >= lookback and prices[i - lookback] > 0:
-                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-                else:
-                    pred = 0.0
-                predictions.append(pred)
-                continue
-
-            # Build input sequence from price history
-            price_seq = prices[i - context_length : i]
-
-            # Convert to returns for PatchTST
-            # PatchTST expects multiple channels, but for simplicity
-            # we use close returns as the main signal
-            returns = np.diff(price_seq) / (price_seq[:-1] + 1e-8)
-
-            if len(returns) != context_length - 1:
-                predictions.append(0.0)
-                continue
-
-            # For single-channel input, shape: (batch, num_channels, seq_len)
-            # PatchTST expects shape (batch, seq_len, num_channels) then permutes
-            features = returns.reshape(1, -1, 1)  # (1, seq_len-1, 1)
-
-            # Apply scaler if available
-            if scaler is not None:
-                # Scaler expects (n_samples, n_features)
-                flat_features = features.reshape(-1, features.shape[-1])
-                flat_features = scaler.transform(flat_features)
-                features = flat_features.reshape(features.shape)
-
-            # Convert to tensor and permute for PatchTST
-            # PatchTST expects (batch, num_channels, context_length)
-            x = torch.tensor(features, dtype=torch.float32).permute(0, 2, 1)
-
-            try:
-                # Run inference
-                output = model(past_values=x)
-
-                # Get prediction (last value of prediction horizon)
-                if hasattr(output, "prediction_outputs"):
-                    scaled_pred = output.prediction_outputs[:, 0, 0].item()
-                elif hasattr(output, "last_hidden_state"):
-                    scaled_pred = output.last_hidden_state[:, -1, 0].item()
-                else:
-                    # Fallback to momentum
-                    lookback = 4
-                    if i >= lookback and prices[i - lookback] > 0:
-                        pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-                    else:
-                        pred = 0.0
-                    predictions.append(pred)
-                    continue
-
-                # CRITICAL: Inverse transform prediction from scaled space
-                # Model outputs are in StandardScaler space, need to convert back
-                if scaler is not None:
-                    pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
-                else:
-                    pred = scaled_pred
-            except Exception:
-                # Fallback to momentum on error
-                lookback = 4
-                if i >= lookback and prices[i - lookback] > 0:
-                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
-                else:
-                    pred = 0.0
-
+            pred = _predict_single_week_patchtst(
+                model=model,
+                scaler=scaler,
+                config=config,
+                weekly_idx=i,
+                weekly_prices=prices,
+                weekly_dates=weekly_dates,
+                daily_ohlcv=daily_ohlcv,
+                daily_news=daily_news,
+                daily_fundamentals=daily_fundamentals,
+                use_multichannel=use_multichannel,
+            )
             predictions.append(pred)
 
     return predictions
+
+
+def _predict_single_week_patchtst(
+    model,
+    scaler,
+    config,
+    weekly_idx: int,
+    weekly_prices: np.ndarray,
+    weekly_dates: pd.DatetimeIndex | None,
+    daily_ohlcv: pd.DataFrame | None,
+    daily_news: pd.DataFrame | None,
+    daily_fundamentals: pd.DataFrame | None,
+    use_multichannel: bool,
+) -> float:
+    """Generate PatchTST prediction for a single week.
+
+    Uses multi-channel features if available, falls back to simple close returns.
+    """
+    import torch
+
+    from brain_api.core.features import compute_ohlcv_log_returns
+
+    context_length = config.context_length
+
+    # Momentum fallback helper
+    def momentum_fallback() -> float:
+        lookback = 4
+        if weekly_idx >= lookback and weekly_prices[weekly_idx - lookback] > 0:
+            return (
+                weekly_prices[weekly_idx] - weekly_prices[weekly_idx - lookback]
+            ) / weekly_prices[weekly_idx - lookback]
+        return 0.0
+
+    # Try multi-channel approach
+    if use_multichannel and daily_ohlcv is not None and weekly_dates is not None:
+        try:
+            # Get cutoff date (Friday of this week - predict for next week)
+            week_date = weekly_dates[weekly_idx]
+            cutoff = week_date.date()
+
+            # Filter data up to cutoff
+            if daily_ohlcv.index.tz is not None:
+                cutoff_ts = pd.Timestamp(cutoff).tz_localize(daily_ohlcv.index.tz)
+            else:
+                cutoff_ts = pd.Timestamp(cutoff)
+
+            ohlcv_subset = daily_ohlcv[daily_ohlcv.index < cutoff_ts].copy()
+
+            if len(ohlcv_subset) < context_length:
+                return momentum_fallback()
+
+            # Compute OHLCV log returns (5 channels)
+            features_df = compute_ohlcv_log_returns(
+                ohlcv_subset, use_returns=config.use_returns
+            )
+            if features_df.index.tz is not None:
+                features_df.index = features_df.index.tz_localize(None)
+
+            if len(features_df) < context_length:
+                return momentum_fallback()
+
+            # Take last context_length rows
+            features_df = features_df.iloc[-context_length:]
+
+            # Add news sentiment channel if available
+            if daily_news is not None and len(daily_news) > 0:
+                news_aligned = daily_news.reindex(
+                    features_df.index, method="ffill"
+                ).fillna(0.0)
+                features_df["news_sentiment"] = news_aligned["sentiment_score"]
+            elif config.num_input_channels > 5:
+                features_df["news_sentiment"] = 0.0
+
+            # Add fundamentals channels if available
+            fund_cols = [
+                "gross_margin",
+                "operating_margin",
+                "net_margin",
+                "current_ratio",
+                "debt_to_equity",
+            ]
+            if daily_fundamentals is not None and len(daily_fundamentals) > 0:
+                fund_aligned = daily_fundamentals.reindex(
+                    features_df.index, method="ffill"
+                ).fillna(0.0)
+                for col in fund_cols:
+                    if col in fund_aligned.columns:
+                        features_df[col] = fund_aligned[col]
+                    elif config.num_input_channels > 6:
+                        features_df[col] = 0.0
+            elif config.num_input_channels > 6:
+                for col in fund_cols:
+                    features_df[col] = 0.0
+
+            # Build feature array
+            features = features_df.values  # (context_length, n_channels)
+
+            # Match expected channels
+            if features.shape[1] != config.num_input_channels:
+                # Pad or truncate to match model
+                if features.shape[1] < config.num_input_channels:
+                    padding = np.zeros(
+                        (
+                            features.shape[0],
+                            config.num_input_channels - features.shape[1],
+                        )
+                    )
+                    features = np.hstack([features, padding])
+                else:
+                    features = features[:, : config.num_input_channels]
+
+            # Apply scaler
+            if scaler is not None:
+                features = scaler.transform(features)
+
+            # Shape: (1, context_length, n_channels) -> permute to (1, n_channels, context_length)
+            x = (
+                torch.tensor(features, dtype=torch.float32)
+                .unsqueeze(0)
+                .permute(0, 2, 1)
+            )
+
+            # Run inference
+            output = model(past_values=x)
+
+            # Get prediction
+            if hasattr(output, "prediction_outputs"):
+                scaled_pred = output.prediction_outputs[:, 0, 0].item()
+            elif hasattr(output, "last_hidden_state"):
+                scaled_pred = output.last_hidden_state[:, -1, 0].item()
+            else:
+                return momentum_fallback()
+
+            # Inverse transform (close return is index 0)
+            if scaler is not None:
+                pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
+            else:
+                pred = scaled_pred
+
+            return pred
+
+        except Exception as e:
+            logger.debug(f"[WalkForward] Multi-channel inference failed: {e}")
+            return momentum_fallback()
+
+    # Fallback: single-channel from weekly prices
+    if weekly_idx < context_length:
+        return momentum_fallback()
+
+    price_seq = weekly_prices[weekly_idx - context_length : weekly_idx]
+    returns = np.diff(price_seq) / (price_seq[:-1] + 1e-8)
+
+    if len(returns) != context_length - 1:
+        return 0.0
+
+    features = returns.reshape(1, -1, 1)
+
+    if scaler is not None:
+        flat_features = features.reshape(-1, features.shape[-1])
+        flat_features = scaler.transform(flat_features)
+        features = flat_features.reshape(features.shape)
+
+    import torch
+
+    x = torch.tensor(features, dtype=torch.float32).permute(0, 2, 1)
+
+    try:
+        output = model(past_values=x)
+        if hasattr(output, "prediction_outputs"):
+            scaled_pred = output.prediction_outputs[:, 0, 0].item()
+        elif hasattr(output, "last_hidden_state"):
+            scaled_pred = output.last_hidden_state[:, -1, 0].item()
+        else:
+            return momentum_fallback()
+
+        if scaler is not None:
+            pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
+        else:
+            pred = scaled_pred
+        return pred
+    except Exception:
+        return momentum_fallback()
+
+
+def _load_daily_ohlcv(
+    symbol: str, start_date: date, end_date: date
+) -> pd.DataFrame | None:
+    """Load daily OHLCV data for a symbol."""
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(
+            start=start_date.isoformat(),
+            end=(end_date + timedelta(days=1)).isoformat(),
+            interval="1d",
+        )
+        if df.empty:
+            return None
+
+        # Normalize column names
+        df.columns = df.columns.str.lower()
+        return df[["open", "high", "low", "close", "volume"]]
+    except Exception as e:
+        logger.debug(f"[WalkForward] Failed to load OHLCV for {symbol}: {e}")
+        return None
+
+
+def _load_historical_news_for_walkforward(
+    symbol: str, start_date: date, end_date: date
+) -> pd.DataFrame | None:
+    """Load historical news sentiment for walk-forward inference."""
+    try:
+        from brain_api.core.portfolio_rl.data_loading import (
+            get_default_data_path,
+            load_historical_news_sentiment,
+        )
+
+        news = load_historical_news_sentiment(
+            [symbol],
+            start_date,
+            end_date,
+            parquet_path=get_default_data_path() / "output" / "daily_sentiment.parquet",
+        )
+        return news.get(symbol)
+    except Exception as e:
+        logger.debug(f"[WalkForward] Failed to load news for {symbol}: {e}")
+        return None
+
+
+def _load_historical_fundamentals_for_walkforward(
+    symbol: str, start_date: date, end_date: date
+) -> pd.DataFrame | None:
+    """Load historical fundamentals for walk-forward inference."""
+    try:
+        from brain_api.core.portfolio_rl.data_loading import (
+            get_default_data_path,
+            load_historical_fundamentals,
+        )
+
+        fund = load_historical_fundamentals(
+            [symbol], start_date, end_date, cache_path=get_default_data_path()
+        )
+        return fund.get(symbol)
+    except Exception as e:
+        logger.debug(f"[WalkForward] Failed to load fundamentals for {symbol}: {e}")
+        return None
 
 
 # Type hints for snapshot artifacts

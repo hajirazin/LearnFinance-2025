@@ -16,15 +16,12 @@ from brain_api.core.patchtst import (
     compute_week_boundaries as patchtst_compute_week_boundaries,
 )
 from brain_api.core.patchtst import (
-    load_historical_fundamentals,
-    load_historical_news_sentiment,
-)
-from brain_api.core.patchtst import (
     load_prices_yfinance as patchtst_load_prices,
 )
 from brain_api.core.patchtst import (
     run_inference as patchtst_run_inference,
 )
+from brain_api.core.realtime_signals import RealTimeSignalBuilder
 from brain_api.storage.local import PatchTSTModelStorage
 
 from .dependencies import get_patchtst_as_of_date, get_patchtst_storage
@@ -99,24 +96,27 @@ def infer_patchtst(
         f"[PatchTST] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s"
     )
 
-    # Fetch news sentiment
-    logger.info("[PatchTST] Loading news sentiment...")
+    # Fetch news sentiment (real-time from yfinance + FinBERT)
+    logger.info("[PatchTST] Fetching real-time news sentiment...")
     t0 = time.time()
-    news_sentiment = load_historical_news_sentiment(
+    signal_builder = RealTimeSignalBuilder()
+    news_sentiment = signal_builder.build_news_dataframes(
         request.symbols, data_start, data_end
     )
     t_news = time.time() - t0
     logger.info(
-        f"[PatchTST] Loaded news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s"
+        f"[PatchTST] Fetched news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s"
     )
 
-    # Fetch fundamentals (from cache)
-    logger.info("[PatchTST] Loading fundamentals...")
+    # Fetch fundamentals (real-time from yfinance)
+    logger.info("[PatchTST] Fetching real-time fundamentals...")
     t0 = time.time()
-    fundamentals = load_historical_fundamentals(request.symbols, data_start, data_end)
+    fundamentals = signal_builder.build_fundamentals_dataframes(
+        request.symbols, data_start, data_end
+    )
     t_fund = time.time() - t0
     logger.info(
-        f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s"
+        f"[PatchTST] Fetched fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s"
     )
 
     # Build features for each symbol

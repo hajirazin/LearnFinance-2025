@@ -83,21 +83,17 @@ def infer_sac_patchtst(
             current_weights[i] = position_values[symbol] / total_value
     current_weights[-1] = cash_value / total_value if total_value > 0 else 1.0
 
-    # Build placeholder signals
-    signals = {}
-    for symbol in artifacts.symbol_order:
-        signals[symbol] = {
-            "news_sentiment": 0.0,
-            "gross_margin": 0.0,
-            "operating_margin": 0.0,
-            "net_margin": 0.0,
-            "current_ratio": 0.0,
-            "debt_to_equity": 0.0,
-            "fundamental_age": 0.0,
-        }
+    # Build real-time signals (news sentiment + fundamentals)
+    logger.info("[SAC_PatchTST] Fetching real-time signals...")
+    from .helpers import build_current_forecasts, build_current_signals
 
-    # Build placeholder forecast features
-    forecast_features = dict.fromkeys(artifacts.symbol_order, 0.0)
+    signals = build_current_signals(artifacts.symbol_order, as_of)
+
+    # Build PatchTST forecast features
+    logger.info("[SAC_PatchTST] Generating PatchTST forecasts...")
+    forecast_features = build_current_forecasts(
+        artifacts.symbol_order, forecaster_type="patchtst", as_of_date=as_of
+    )
 
     # Run inference
     logger.info("[SAC_PatchTST] Running inference...")
