@@ -43,6 +43,9 @@ def compute_version(
         f"alpha_{config.init_alpha}_"
         f"target_entropy_{config.target_entropy}_"
         f"max_grad_norm_{config.max_grad_norm}_"
+        f"q_value_clip_{config.q_value_clip}_"
+        f"normalize_rewards_{config.normalize_rewards}_"
+        f"tanh_squash_v2_"  # Added tanh squashing to actions
         f"seed_{config.seed}"
     )
 

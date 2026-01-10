@@ -151,6 +151,11 @@ class SACTrainer:
         self.episode_returns: list[float] = []
         self.episode_sharpes: list[float] = []
 
+        # Reward normalization (running mean/std)
+        self.reward_mean = 0.0
+        self.reward_var = 1.0
+        self.reward_count = 0
+
     @property
     def alpha(self) -> float:
         """Current entropy coefficient."""
@@ -184,9 +189,25 @@ class SACTrainer:
         # Convert to tensors and move to device
         states = torch.FloatTensor(batch.states).to(self.device)
         actions = torch.FloatTensor(batch.actions).to(self.device)
-        rewards = torch.FloatTensor(batch.rewards).unsqueeze(-1).to(self.device)
+        raw_rewards = batch.rewards
         next_states = torch.FloatTensor(batch.next_states).to(self.device)
         dones = torch.FloatTensor(batch.dones).unsqueeze(-1).to(self.device)
+
+        # Reward normalization (Welford's online algorithm)
+        if self.config.normalize_rewards:
+            for r in raw_rewards:
+                self.reward_count += 1
+                delta = r - self.reward_mean
+                self.reward_mean += delta / self.reward_count
+                delta2 = r - self.reward_mean
+                self.reward_var += delta * delta2
+            std = np.sqrt(self.reward_var / max(1, self.reward_count - 1)) + 1e-8
+            normalized_rewards = (raw_rewards - self.reward_mean) / std
+            rewards = (
+                torch.FloatTensor(normalized_rewards).unsqueeze(-1).to(self.device)
+            )
+        else:
+            rewards = torch.FloatTensor(raw_rewards).unsqueeze(-1).to(self.device)
 
         alpha = self.log_alpha.exp().detach()
 
@@ -202,6 +223,13 @@ class SACTrainer:
             # Soft target: Q - alpha * log_pi
             target_q = rewards + self.config.gamma * (1 - dones) * (
                 min_q_target - alpha * next_log_probs.unsqueeze(-1)
+            )
+
+            # Clip Q-targets to prevent divergence (key fix for stability!)
+            target_q = torch.clamp(
+                target_q,
+                -self.config.q_value_clip,
+                self.config.q_value_clip,
             )
 
         # Current Q-values
@@ -355,6 +383,7 @@ class SACTrainer:
 
         print("[SAC] Training complete")
         print(f"[SAC] Total episodes: {episode_count}")
+
         return history
 
     def get_result(self) -> SACTrainingResult:

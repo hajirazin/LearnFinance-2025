@@ -24,12 +24,12 @@ class SACConfig:
     gamma: float = 0.99  # Discount factor
 
     # === Entropy tuning ===
-    # NOTE: Default target_entropy = -dim(action) is too negative for portfolio allocation!
-    # This causes policy collapse (near-deterministic outputs).
-    # We use -0.5 * action_dim instead for better exploration/exploitation balance.
+    # With tanh squashing to [-10, 10], entropy scale changes.
+    # Using -dim(action) as target encourages some stochasticity.
+    # For 16 dims, -16 pushes toward moderate exploration.
     auto_entropy_tuning: bool = True
-    target_entropy: float | None = -8.0  # -0.5 * 16 actions; None would use -dim(action)=-16
-    init_alpha: float = 0.5  # Higher initial entropy for better exploration
+    target_entropy: float | None = -16.0  # Standard: -dim(action) for squashed actions
+    init_alpha: float = 0.2  # Moderate initial entropy coefficient
 
     # === Training ===
     buffer_size: int = 10_000  # More than enough for weekly data
@@ -40,7 +40,9 @@ class SACConfig:
 
     # === Regularization (for limited data) ===
     weight_decay: float = 1e-4  # L2 regularization
-    max_grad_norm: float = 0.5  # Gradient clipping (same as PPO)
+    max_grad_norm: float = 1.0  # Gradient clipping
+    q_value_clip: float = 100.0  # Clip Q-targets to prevent divergence
+    normalize_rewards: bool = True  # Use running reward normalization
 
     # === Environment (same as PPO for comparability) ===
     cost_bps: int = 10  # Transaction cost in basis points
@@ -86,6 +88,8 @@ class SACConfig:
             "total_timesteps": self.total_timesteps,
             "weight_decay": self.weight_decay,
             "max_grad_norm": self.max_grad_norm,
+            "q_value_clip": self.q_value_clip,
+            "normalize_rewards": self.normalize_rewards,
             "cost_bps": self.cost_bps,
             "cash_buffer": self.cash_buffer,
             "max_position_weight": self.max_position_weight,
