@@ -454,9 +454,9 @@ def _run_patchtst_snapshot_inference(
 
                 # Get prediction (last value of prediction horizon)
                 if hasattr(output, "prediction_outputs"):
-                    pred = output.prediction_outputs[:, 0, 0].item()
+                    scaled_pred = output.prediction_outputs[:, 0, 0].item()
                 elif hasattr(output, "last_hidden_state"):
-                    pred = output.last_hidden_state[:, -1, 0].item()
+                    scaled_pred = output.last_hidden_state[:, -1, 0].item()
                 else:
                     # Fallback to momentum
                     lookback = 4
@@ -464,6 +464,15 @@ def _run_patchtst_snapshot_inference(
                         pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
                     else:
                         pred = 0.0
+                    predictions.append(pred)
+                    continue
+
+                # CRITICAL: Inverse transform prediction from scaled space
+                # Model outputs are in StandardScaler space, need to convert back
+                if scaler is not None:
+                    pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
+                else:
+                    pred = scaled_pred
             except Exception:
                 # Fallback to momentum on error
                 lookback = 4
