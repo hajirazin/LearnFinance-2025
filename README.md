@@ -183,6 +183,44 @@ sequenceDiagram
   N8N->>Email: Send_summary(run_id,attempt,orders,why)
 ```
 
+### 2-Phase execution architecture
+
+The n8n workflow executes in two phases to ensure forecasters complete before RL allocators run:
+
+```mermaid
+flowchart TD
+    Trigger[Trigger] --> GetUniverse[GET Halal Universe]
+    GetUniverse --> PickSymbols[Pick Top 20 Symbols]
+    
+    subgraph Phase1[Phase 1 - Signals and Forecasts]
+        PickSymbols --> Fundamentals[POST Fundamentals]
+        PickSymbols --> NewsSentiment[POST News Sentiment]
+        PickSymbols --> LSTMForecast[POST LSTM Forecast]
+        PickSymbols --> PatchTSTForecast[POST PatchTST Forecast]
+    end
+    
+    subgraph Phase2[Phase 2 - Allocators]
+        LSTMForecast --> SAC_LSTM[POST SAC+LSTM]
+        LSTMForecast --> PPO_LSTM[POST PPO+LSTM]
+        PatchTSTForecast --> SAC_PatchTST[POST SAC+PatchTST]
+        PatchTSTForecast --> PPO_PatchTST[POST PPO+PatchTST]
+        Fundamentals --> HRP[POST HRP]
+    end
+    
+    SAC_LSTM --> MergeAll[Merge All Results]
+    SAC_PatchTST --> MergeAll
+    PPO_LSTM --> MergeAll
+    PPO_PatchTST --> MergeAll
+    HRP --> MergeAll
+    
+    MergeAll --> OpenAI[OpenAI Summary]
+    OpenAI --> Email[Gmail Send]
+```
+
+**Phase 1** runs 4 nodes in parallel: fundamentals, news sentiment, LSTM forecast, PatchTST forecast.
+
+**Phase 2** runs 5 nodes in parallel after Phase 1 completes: SAC+LSTM, SAC+PatchTST, PPO+LSTM, PPO+PatchTST, HRP. The RL allocators use a mock portfolio (cash=10000, no positions) for paper trading simulation.
+
 ### Environment variables (optional)
 
 ```bash
