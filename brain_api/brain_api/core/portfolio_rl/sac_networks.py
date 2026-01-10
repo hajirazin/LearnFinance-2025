@@ -144,7 +144,9 @@ class GaussianActor(nn.Module):
             Action array.
         """
         with torch.no_grad():
-            state_tensor = torch.FloatTensor(state)
+            # Get device from model parameters
+            device = next(self.parameters()).device
+            state_tensor = torch.FloatTensor(state).to(device)
             if state_tensor.dim() == 1:
                 state_tensor = state_tensor.unsqueeze(0)
 

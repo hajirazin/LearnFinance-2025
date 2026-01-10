@@ -320,6 +320,23 @@ def _run_lstm_snapshot_inference(
     config = artifacts.config
     seq_len = config.sequence_length
 
+    # Check if scaler expects more features than we can provide
+    # We only have close prices, so we can only build 1 feature (close returns)
+    # If the model was trained with OHLCV (5 features), we must fall back to momentum
+    if scaler is not None and hasattr(scaler, "n_features_in_"):
+        expected_features = scaler.n_features_in_
+        if expected_features > 1:
+            # Model expects OHLCV features but we only have close prices
+            # Fall back to momentum for all predictions
+            for i in year_indices:
+                lookback = 4
+                if i >= lookback and prices[i - lookback] > 0:
+                    pred = (prices[i] - prices[i - lookback]) / prices[i - lookback]
+                else:
+                    pred = 0.0
+                predictions.append(pred)
+            return predictions
+
     model.eval()
 
     with torch.no_grad():

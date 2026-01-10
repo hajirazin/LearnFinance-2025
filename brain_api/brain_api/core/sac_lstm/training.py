@@ -205,7 +205,7 @@ def train_sac_lstm(
     )
 
     # Create and fit scaler on training data
-    scaler = PortfolioScaler()
+    scaler = PortfolioScaler.create(n_stocks=training_data.n_stocks)
     # Collect sample states for fitting
     sample_states = []
     state = train_env.reset()

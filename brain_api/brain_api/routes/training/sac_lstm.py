@@ -65,9 +65,20 @@ def train_sac_lstm_endpoint(
                 symbols_used=existing_metadata["symbols"],
             )
 
+    # Load price data
     prices_dict = load_prices_yfinance(symbols, start_date, end_date)
-    available_symbols = [s for s in symbols if s in prices_dict]
 
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available for training")
+
+    # Filter symbols to those with price data
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(
+            f"Need at least 5 symbols with data, got {len(available_symbols)}"
+        )
+
+    # Resample prices to weekly (Friday close)
     weekly_prices = {}
     for symbol in available_symbols:
         df = prices_dict[symbol]
@@ -75,43 +86,72 @@ def train_sac_lstm_endpoint(
             weekly = df["close"].resample("W-FRI").last().dropna()
             weekly_prices[symbol] = weekly.values
 
+    # Determine minimum length across all symbols
     min_weeks = min(
         len(weekly_prices[s]) for s in available_symbols if s in weekly_prices
     )
+
+    # Get weekly date index for walk-forward forecasts
     first_symbol = available_symbols[0]
     weekly_df = prices_dict[first_symbol]["close"].resample("W-FRI").last().dropna()
     weekly_dates = weekly_df.index[-min_weeks:]
 
+    # Align all price series
     for symbol in available_symbols:
         if symbol in weekly_prices:
             weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
+    # Load historical signals (news sentiment, fundamentals)
     signals = build_rl_training_signals(
         prices_dict, available_symbols, start_date, end_date
     )
-    for symbol in available_symbols:
-        if symbol not in signals:
-            signals[symbol] = {
-                k: np.zeros(min_weeks - 1)
-                for k in [
-                    "news_sentiment",
-                    "gross_margin",
-                    "operating_margin",
-                    "net_margin",
-                    "current_ratio",
-                    "debt_to_equity",
-                ]
-            }
-            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
+    # Align signals to the common week count
+    for symbol in available_symbols:
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1 :]
+                else:
+                    # Pad with zeros if not enough data
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr) :] = (
+                        signal_arr[: min_weeks - 1] if len(signal_arr) > 0 else 0
+                    )
+                    signals[symbol][signal_name] = padded
+        else:
+            # No signals for this symbol, use zeros
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features (use snapshots if available)
     use_snapshots = snapshots_available("lstm")
     lstm_predictions = build_forecast_features(
         weekly_prices, weekly_dates, available_symbols, "lstm", use_snapshots
     )
+
+    # Align forecast features to common week count
     for symbol in available_symbols:
-        if symbol not in lstm_predictions:
+        if symbol in lstm_predictions:
+            pred_arr = lstm_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr) :] = pred_arr
+                lstm_predictions[symbol] = padded
+        else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
+    # Build training data
     training_data = sac_build_training_data(
         weekly_prices, signals, lstm_predictions, available_symbols
     )
@@ -267,9 +307,20 @@ def finetune_sac_lstm_endpoint(
                 symbols_used=existing_metadata["symbols"],
             )
 
+    # Load price data
     prices_dict = load_prices_yfinance(symbols, start_date, end_date)
-    available_symbols = [s for s in symbols if s in prices_dict]
 
+    if len(prices_dict) == 0:
+        raise ValueError("No price data available for fine-tuning")
+
+    # Filter symbols to those with price data
+    available_symbols = [s for s in symbols if s in prices_dict]
+    if len(available_symbols) < 5:
+        raise ValueError(
+            f"Need at least 5 symbols with data, got {len(available_symbols)}"
+        )
+
+    # Resample prices to weekly (Friday close)
     weekly_prices = {}
     for symbol in available_symbols:
         df = prices_dict[symbol]
@@ -277,43 +328,70 @@ def finetune_sac_lstm_endpoint(
             weekly = df["close"].resample("W-FRI").last().dropna()
             weekly_prices[symbol] = weekly.values
 
+    # Determine minimum length across all symbols
     min_weeks = min(
         len(weekly_prices[s]) for s in available_symbols if s in weekly_prices
     )
+
+    # Get weekly date index for walk-forward forecasts
     weekly_df = (
         prices_dict[available_symbols[0]]["close"].resample("W-FRI").last().dropna()
     )
     weekly_dates = weekly_df.index[-min_weeks:]
 
+    # Align all price series
     for symbol in available_symbols:
         weekly_prices[symbol] = weekly_prices[symbol][-min_weeks:]
 
+    # Load historical signals (news sentiment, fundamentals)
     signals = build_rl_training_signals(
         prices_dict, available_symbols, start_date, end_date
     )
-    for symbol in available_symbols:
-        if symbol not in signals:
-            signals[symbol] = {
-                k: np.zeros(min_weeks - 1)
-                for k in [
-                    "news_sentiment",
-                    "gross_margin",
-                    "operating_margin",
-                    "net_margin",
-                    "current_ratio",
-                    "debt_to_equity",
-                ]
-            }
-            signals[symbol]["fundamental_age"] = np.ones(min_weeks - 1)
 
+    # Align signals to the common week count
+    for symbol in available_symbols:
+        if symbol in signals:
+            for signal_name in signals[symbol]:
+                signal_arr = signals[symbol][signal_name]
+                if len(signal_arr) >= min_weeks:
+                    signals[symbol][signal_name] = signal_arr[-min_weeks + 1 :]
+                else:
+                    padded = np.zeros(min_weeks - 1)
+                    padded[-len(signal_arr) :] = (
+                        signal_arr[: min_weeks - 1] if len(signal_arr) > 0 else 0
+                    )
+                    signals[symbol][signal_name] = padded
+        else:
+            signals[symbol] = {
+                "news_sentiment": np.zeros(min_weeks - 1),
+                "gross_margin": np.zeros(min_weeks - 1),
+                "operating_margin": np.zeros(min_weeks - 1),
+                "net_margin": np.zeros(min_weeks - 1),
+                "current_ratio": np.zeros(min_weeks - 1),
+                "debt_to_equity": np.zeros(min_weeks - 1),
+                "fundamental_age": np.ones(min_weeks - 1),
+            }
+
+    # Generate walk-forward forecast features (use snapshots if available)
     use_snapshots = snapshots_available("lstm")
     lstm_predictions = build_forecast_features(
         weekly_prices, weekly_dates, available_symbols, "lstm", use_snapshots
     )
+
+    # Align forecast features to common week count
     for symbol in available_symbols:
-        if symbol not in lstm_predictions:
+        if symbol in lstm_predictions:
+            pred_arr = lstm_predictions[symbol]
+            if len(pred_arr) >= min_weeks - 1:
+                lstm_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
+            else:
+                padded = np.zeros(min_weeks - 1)
+                padded[-len(pred_arr) :] = pred_arr
+                lstm_predictions[symbol] = padded
+        else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
+    # Build training data
     training_data = sac_build_training_data(
         weekly_prices, signals, lstm_predictions, available_symbols
     )

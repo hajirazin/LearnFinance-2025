@@ -21,6 +21,7 @@ from brain_api.core.portfolio_rl.sac_networks import (
     hard_update,
     soft_update,
 )
+from brain_api.core.training_utils import get_device
 
 if TYPE_CHECKING:
     from brain_api.core.portfolio_rl.env import PortfolioEnv
@@ -54,15 +55,18 @@ class SACTrainer:
         self,
         env: PortfolioEnv,
         config: SACConfig,
+        device: torch.device | None = None,
     ):
         """Initialize SAC trainer.
 
         Args:
             env: Portfolio environment.
             config: SAC configuration.
+            device: PyTorch device (auto-detected if None).
         """
         self.env = env
         self.config = config
+        self.device = device or get_device()
 
         # Dimensions
         self.state_dim = env.state_dim
@@ -72,27 +76,27 @@ class SACTrainer:
         torch.manual_seed(config.seed)
         np.random.seed(config.seed)
 
-        # Initialize networks
+        # Initialize networks and move to device
         self.actor = GaussianActor(
             state_dim=self.state_dim,
             action_dim=self.action_dim,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
-        )
+        ).to(self.device)
 
         self.critic = TwinCritic(
             state_dim=self.state_dim,
             action_dim=self.action_dim,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
-        )
+        ).to(self.device)
 
         self.critic_target = TwinCritic(
             state_dim=self.state_dim,
             action_dim=self.action_dim,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
-        )
+        ).to(self.device)
 
         # Initialize target with same weights
         hard_update(self.critic_target, self.critic)
@@ -110,7 +114,7 @@ class SACTrainer:
             weight_decay=config.weight_decay,
         )
 
-        # Entropy coefficient (alpha)
+        # Entropy coefficient (alpha) - on device
         if config.auto_entropy_tuning:
             # Target entropy: -dim(action) is common default
             self.target_entropy = (
@@ -123,12 +127,13 @@ class SACTrainer:
                 np.log(config.init_alpha),
                 dtype=torch.float32,
                 requires_grad=True,
+                device=self.device,
             )
             self.alpha_optimizer = optim.Adam([self.log_alpha], lr=config.alpha_lr)
         else:
             self.target_entropy = None
             self.log_alpha = torch.tensor(
-                np.log(config.init_alpha), dtype=torch.float32
+                np.log(config.init_alpha), dtype=torch.float32, device=self.device
             )
             self.alpha_optimizer = None
 
@@ -175,12 +180,12 @@ class SACTrainer:
         Returns:
             Tuple of (critic_loss, actor_loss, alpha_loss).
         """
-        # Convert to tensors
-        states = torch.FloatTensor(batch.states)
-        actions = torch.FloatTensor(batch.actions)
-        rewards = torch.FloatTensor(batch.rewards).unsqueeze(-1)
-        next_states = torch.FloatTensor(batch.next_states)
-        dones = torch.FloatTensor(batch.dones).unsqueeze(-1)
+        # Convert to tensors and move to device
+        states = torch.FloatTensor(batch.states).to(self.device)
+        actions = torch.FloatTensor(batch.actions).to(self.device)
+        rewards = torch.FloatTensor(batch.rewards).unsqueeze(-1).to(self.device)
+        next_states = torch.FloatTensor(batch.next_states).to(self.device)
+        dones = torch.FloatTensor(batch.dones).unsqueeze(-1).to(self.device)
 
         alpha = self.log_alpha.exp().detach()
 
@@ -269,10 +274,16 @@ class SACTrainer:
             "episode_return": [],
         }
 
+        print(f"[SAC] Starting training for {total_timesteps} timesteps")
+        print(f"[SAC] Device: {self.device}")
+        print(f"[SAC] Warmup steps: {self.config.warmup_steps}")
+
         state = self.env.reset()
         episode_return = 0.0
+        episode_count = 0
+        log_interval = max(1, total_timesteps // 10)
 
-        for _step in range(total_timesteps):
+        for step in range(total_timesteps):
             self.total_steps += 1
 
             # Select action
@@ -305,6 +316,7 @@ class SACTrainer:
 
             if done:
                 # Episode finished
+                episode_count += 1
                 episode_metrics = self.env.get_episode_metrics()
                 self.episode_returns.append(episode_metrics["episode_return"])
                 self.episode_sharpes.append(episode_metrics["episode_sharpe"])
@@ -316,6 +328,30 @@ class SACTrainer:
             else:
                 state = next_state
 
+            # Log progress
+            if (step + 1) % log_interval == 0:
+                avg_critic = (
+                    np.mean(history["critic_loss"][-100:])
+                    if history["critic_loss"]
+                    else 0
+                )
+                avg_actor = (
+                    np.mean(history["actor_loss"][-100:])
+                    if history["actor_loss"]
+                    else 0
+                )
+                avg_return = (
+                    np.mean(self.episode_returns[-5:]) if self.episode_returns else 0
+                )
+                print(
+                    f"[SAC] Step {step + 1}/{total_timesteps}: "
+                    f"critic_loss={avg_critic:.4f}, actor_loss={avg_actor:.4f}, "
+                    f"alpha={self.alpha:.4f}, ep_return={avg_return:.4f}, "
+                    f"episodes={episode_count}"
+                )
+
+        print("[SAC] Training complete")
+        print(f"[SAC] Total episodes: {episode_count}")
         return history
 
     def get_result(self) -> SACTrainingResult:
