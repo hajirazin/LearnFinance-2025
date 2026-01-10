@@ -199,6 +199,9 @@ def align_signals_to_weekly(
 
         # Resample to weekly (Friday close)
         weekly_index = price_df["close"].resample("W-FRI").last().dropna().index
+        # Normalize to timezone-naive for consistent comparisons
+        if weekly_index.tz is not None:
+            weekly_index = weekly_index.tz_localize(None)
         n_weeks = len(weekly_index)
 
         if n_weeks < 2:
@@ -218,6 +221,10 @@ def align_signals_to_weekly(
         # Align news sentiment (forward-fill daily to weekly)
         if symbol in news_sentiment:
             sentiment_df = news_sentiment[symbol]
+            # Normalize timezone to match weekly_index
+            if sentiment_df.index.tz is not None:
+                sentiment_df = sentiment_df.copy()
+                sentiment_df.index = sentiment_df.index.tz_localize(None)
             # Reindex to weekly and forward-fill
             sentiment_weekly = sentiment_df.reindex(weekly_index, method="ffill")
             symbol_signals["news_sentiment"] = (
@@ -227,6 +234,10 @@ def align_signals_to_weekly(
         # Align fundamentals (forward-fill quarterly to weekly)
         if symbol in fundamentals:
             fund_df = fundamentals[symbol]
+            # Normalize timezone to match weekly_index
+            if fund_df.index.tz is not None:
+                fund_df = fund_df.copy()
+                fund_df.index = fund_df.index.tz_localize(None)
             fund_aligned = fund_df.reindex(weekly_index, method="ffill")
 
             for col in [

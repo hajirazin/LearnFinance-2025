@@ -100,24 +100,29 @@ class PatchTSTConfig:
         }
 
     def to_hf_config(self) -> "HFPatchTSTConfig":
-        """Convert to HuggingFace PatchTSTConfig."""
+        """Convert to HuggingFace PatchTSTConfig.
+        
+        IMPORTANT: This must match _create_patchtst_model() in training.py exactly
+        to ensure model architecture consistency between training and inference.
+        """
         from transformers import PatchTSTConfig as HFPatchTSTConfig
 
         return HFPatchTSTConfig(
             num_input_channels=self.num_input_channels,
             context_length=self.context_length,
-            prediction_length=self.prediction_length,
             patch_length=self.patch_length,
-            patch_stride=self.stride,
+            stride=self.stride,  # Use "stride" to match training code
             d_model=self.d_model,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             ffn_dim=self.ffn_dim,
             dropout=self.dropout,
-            # Use distribution output for regression
-            loss="mse",
-            # Scaling for better training
-            scaling="std",
+            prediction_length=self.prediction_length,
+            # Additional settings to match training
+            attention_dropout=self.dropout,
+            positional_dropout=self.dropout,
+            use_cls_token=False,  # Use pooling instead
+            pooling_type="mean",
         )
 
 

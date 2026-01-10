@@ -41,6 +41,8 @@ def compute_version(
         f"tau_{config.tau}_"
         f"gamma_{config.gamma}_"
         f"alpha_{config.init_alpha}_"
+        f"target_entropy_{config.target_entropy}_"
+        f"max_grad_norm_{config.max_grad_norm}_"
         f"seed_{config.seed}"
     )
 

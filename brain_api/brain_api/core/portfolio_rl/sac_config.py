@@ -24,9 +24,12 @@ class SACConfig:
     gamma: float = 0.99  # Discount factor
 
     # === Entropy tuning ===
+    # NOTE: Default target_entropy = -dim(action) is too negative for portfolio allocation!
+    # This causes policy collapse (near-deterministic outputs).
+    # We use -0.5 * action_dim instead for better exploration/exploitation balance.
     auto_entropy_tuning: bool = True
-    target_entropy: float | None = None  # If None, use -dim(action)
-    init_alpha: float = 0.2  # Initial entropy coefficient
+    target_entropy: float | None = -8.0  # -0.5 * 16 actions; None would use -dim(action)=-16
+    init_alpha: float = 0.5  # Higher initial entropy for better exploration
 
     # === Training ===
     buffer_size: int = 10_000  # More than enough for weekly data
@@ -37,6 +40,7 @@ class SACConfig:
 
     # === Regularization (for limited data) ===
     weight_decay: float = 1e-4  # L2 regularization
+    max_grad_norm: float = 0.5  # Gradient clipping (same as PPO)
 
     # === Environment (same as PPO for comparability) ===
     cost_bps: int = 10  # Transaction cost in basis points
@@ -81,6 +85,7 @@ class SACConfig:
             "warmup_steps": self.warmup_steps,
             "total_timesteps": self.total_timesteps,
             "weight_decay": self.weight_decay,
+            "max_grad_norm": self.max_grad_norm,
             "cost_bps": self.cost_bps,
             "cash_buffer": self.cash_buffer,
             "max_position_weight": self.max_position_weight,

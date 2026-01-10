@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
@@ -211,6 +212,7 @@ class SACTrainer:
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.config.max_grad_norm)
         self.critic_optimizer.step()
 
         # === Update Actor ===
@@ -227,6 +229,7 @@ class SACTrainer:
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.config.max_grad_norm)
         self.actor_optimizer.step()
 
         # Unfreeze critic

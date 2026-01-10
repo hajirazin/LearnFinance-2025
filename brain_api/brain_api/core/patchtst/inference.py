@@ -101,7 +101,10 @@ def build_inference_features(
         )
 
     # Filter to data before cutoff
+    # Handle timezone-aware index by localizing cutoff_ts to match
     cutoff_ts = pd.Timestamp(cutoff_date)
+    if prices_df.index.tz is not None:
+        cutoff_ts = cutoff_ts.tz_localize(prices_df.index.tz)
     df = prices_df[prices_df.index < cutoff_ts].copy()
 
     if len(df) < config.context_length + 1:
@@ -118,6 +121,10 @@ def build_inference_features(
 
     # Compute price features using shared utility
     features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
+
+    # Normalize index to timezone-naive for consistent comparisons with news/fundamentals data
+    if features_df.index.tz is not None:
+        features_df.index = features_df.index.tz_localize(None)
 
     if len(features_df) < config.context_length:
         return InferenceFeatures(
@@ -316,8 +323,16 @@ def run_inference(
 
             # Predict next-day return
             outputs = model(past_values=X_tensor).prediction_outputs
-            # Extract close_ret channel for next-day return prediction
-            daily_returns[day] = outputs[:, 0, close_ret_idx].cpu().numpy()
+            # Extract close_ret channel for next-day return prediction (in scaled space)
+            scaled_preds = outputs[:, 0, close_ret_idx].cpu().numpy()
+
+            # CRITICAL: Inverse transform predictions from scaled space back to return space
+            # Model outputs are in StandardScaler space, need to convert back:
+            # unscaled = scaled * std + mean
+            daily_returns[day] = (
+                scaled_preds * feature_scaler.scale_[close_ret_idx]
+                + feature_scaler.mean_[close_ret_idx]
+            )
 
             # Explicit cleanup of GPU tensor
             del X_tensor, outputs
