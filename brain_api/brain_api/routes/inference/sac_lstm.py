@@ -6,7 +6,7 @@ import time
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
-from brain_api.core.lstm import compute_week_boundaries
+from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.sac_lstm import run_sac_inference
 from brain_api.storage.local import SACLSTMLocalStorage
 
@@ -40,12 +40,12 @@ def infer_sac_lstm(
     t_start = time.time()
     logger.info("[SAC_LSTM] Starting inference")
 
-    # Get as-of date
-    as_of = get_sac_lstm_as_of_date(request)
-    logger.info(f"[SAC_LSTM] As-of date: {as_of}")
+    # Get cutoff date (always a Friday)
+    cutoff_date = get_sac_lstm_as_of_date(request)
+    logger.info(f"[SAC_LSTM] Cutoff date: {cutoff_date}")
 
-    # Compute target week boundaries
-    week_boundaries = compute_week_boundaries(as_of)
+    # Compute target week boundaries for the week AFTER cutoff
+    week_boundaries = compute_week_from_cutoff(cutoff_date)
     logger.info(
         f"[SAC_LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
@@ -83,12 +83,12 @@ def infer_sac_lstm(
     logger.info("[SAC_LSTM] Fetching real-time signals...")
     from .helpers import build_current_forecasts, build_current_signals
 
-    signals = build_current_signals(artifacts.symbol_order, as_of)
+    signals = build_current_signals(artifacts.symbol_order, cutoff_date)
 
     # Build LSTM forecast features
     logger.info("[SAC_LSTM] Generating LSTM forecasts...")
     forecast_features = build_current_forecasts(
-        artifacts.symbol_order, forecaster_type="lstm", as_of_date=as_of
+        artifacts.symbol_order, forecaster_type="lstm", as_of_date=cutoff_date
     )
 
     # Run inference

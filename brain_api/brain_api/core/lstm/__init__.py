@@ -9,6 +9,7 @@ This aligns with the RL agent's weekly decision horizon.
 from brain_api.core.inference_utils import (
     WeekBoundaries,
     compute_week_boundaries,
+    compute_week_from_cutoff,
     extract_trading_weeks,
 )
 from brain_api.core.lstm.config import DEFAULT_CONFIG, LSTMConfig
@@ -55,6 +56,7 @@ __all__ = [
     # Version
     "compute_version",
     "compute_week_boundaries",
+    "compute_week_from_cutoff",
     "evaluate_for_promotion",
     "extract_trading_weeks",
     "get_device",

@@ -3,6 +3,7 @@
 from datetime import date
 from pathlib import Path
 
+from brain_api.core.config import resolve_cutoff_date
 from brain_api.core.lstm import compute_week_boundaries, load_prices_yfinance
 from brain_api.storage.local import (
     LocalModelStorage,
@@ -38,10 +39,9 @@ def get_storage() -> LocalModelStorage:
 
 
 def get_as_of_date(request: LSTMInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)
 
 
 def get_price_loader() -> PriceLoader:
@@ -65,10 +65,9 @@ def get_patchtst_storage() -> PatchTSTModelStorage:
 
 
 def get_patchtst_as_of_date(request: PatchTSTInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)
 
 
 def get_sentiment_parquet_path() -> Path:
@@ -88,10 +87,9 @@ def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
 
 
 def get_ppo_lstm_as_of_date(request: PPOLSTMInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)
 
 
 def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
@@ -100,10 +98,9 @@ def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
 
 
 def get_ppo_patchtst_as_of_date(request: PPOPatchTSTInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)
 
 
 # ============================================================================
@@ -117,10 +114,9 @@ def get_sac_lstm_storage() -> SACLSTMLocalStorage:
 
 
 def get_sac_lstm_as_of_date(request: SACLSTMInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)
 
 
 def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
@@ -129,7 +125,6 @@ def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
 
 
 def get_sac_patchtst_as_of_date(request: SACPatchTSTInferenceRequest) -> date:
-    """Get the as-of date from request or default to today."""
-    if request.as_of_date:
-        return date.fromisoformat(request.as_of_date)
-    return date.today()
+    """Get cutoff date (always Friday) from request or computed from today."""
+    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
+    return resolve_cutoff_date(reference)

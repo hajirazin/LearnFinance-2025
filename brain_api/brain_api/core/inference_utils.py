@@ -72,6 +72,59 @@ def compute_week_boundaries(as_of_date: date) -> WeekBoundaries:
     )
 
 
+def compute_week_from_cutoff(cutoff_friday: date) -> WeekBoundaries:
+    """Compute target week boundaries from a Friday cutoff date.
+
+    Given a Friday cutoff date, returns the NEXT week (Mon-Fri after the cutoff).
+    Uses NYSE calendar for holiday awareness.
+
+    Args:
+        cutoff_friday: Must be a Friday. Data is available up to this date.
+
+    Returns:
+        WeekBoundaries for the week AFTER cutoff_friday.
+
+    Raises:
+        ValueError: If cutoff_friday is not a Friday.
+
+    Example:
+        cutoff_friday = Jan 9, 2026 (Friday)
+        Returns: target_week_start = Jan 12 (Mon), target_week_end = Jan 16 (Fri)
+    """
+    if cutoff_friday.weekday() != 4:
+        raise ValueError(
+            f"cutoff_friday must be a Friday, got {cutoff_friday} "
+            f"({cutoff_friday.strftime('%A')})"
+        )
+
+    # Next week's Monday is 3 days after Friday
+    calendar_monday = cutoff_friday + timedelta(days=3)
+    calendar_friday = cutoff_friday + timedelta(days=7)
+
+    # Get NYSE calendar for holiday-aware boundaries
+    nyse = xcals.get_calendar("XNYS")
+    monday_ts = pd.Timestamp(calendar_monday)
+    friday_ts = pd.Timestamp(calendar_friday)
+
+    schedule = nyse.sessions_in_range(monday_ts, friday_ts)
+
+    if len(schedule) == 0:
+        # Entire week is holiday - fall back to calendar dates
+        return WeekBoundaries(
+            target_week_start=calendar_monday,
+            target_week_end=calendar_friday,
+            calendar_monday=calendar_monday,
+            calendar_friday=calendar_friday,
+        )
+
+    return WeekBoundaries(
+        target_week_start=schedule[0].date(),
+        target_week_end=schedule[-1].date(),
+        calendar_monday=calendar_monday,
+        calendar_friday=calendar_friday,
+    )
+
+
 def extract_trading_weeks(df: pd.DataFrame, min_days: int = 3) -> list[pd.DataFrame]:
     """Extract trading weeks from a price DataFrame.
 

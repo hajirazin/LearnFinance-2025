@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 
+from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.lstm import (
     InferenceFeatures,
     build_inference_features,
@@ -15,11 +16,9 @@ from brain_api.storage.local import LocalModelStorage
 
 from .dependencies import (
     PriceLoader,
-    WeekBoundaryComputer,
     get_as_of_date,
     get_price_loader,
     get_storage,
-    get_week_boundary_computer,
 )
 from .helpers import _load_model_artifacts, _sort_predictions
 from .models import LSTMInferenceRequest, LSTMInferenceResponse
@@ -33,7 +32,6 @@ def infer_lstm(
     request: LSTMInferenceRequest,
     storage: LocalModelStorage = Depends(get_storage),
     price_loader: PriceLoader = Depends(get_price_loader),
-    week_boundary_computer: WeekBoundaryComputer = Depends(get_week_boundary_computer),
 ) -> LSTMInferenceResponse:
     """Predict weekly returns for the given symbols.
 
@@ -60,12 +58,12 @@ def infer_lstm(
     logger.info(f"[LSTM] Starting inference for {len(request.symbols)} symbols")
     logger.info(f"[LSTM] Symbols: {request.symbols}")
 
-    # Get as-of date
-    as_of = get_as_of_date(request)
-    logger.info(f"[LSTM] As-of date: {as_of}")
+    # Get cutoff date (always a Friday)
+    cutoff_date = get_as_of_date(request)
+    logger.info(f"[LSTM] Cutoff date: {cutoff_date}")
 
-    # Compute holiday-aware week boundaries
-    week_boundaries = week_boundary_computer(as_of)
+    # Compute holiday-aware week boundaries for the week AFTER cutoff
+    week_boundaries = compute_week_from_cutoff(cutoff_date)
     logger.info(
         f"[LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
@@ -171,7 +169,7 @@ def infer_lstm(
     return LSTMInferenceResponse(
         predictions=predictions,
         model_version=artifacts.version,
-        as_of_date=as_of.isoformat(),
+        as_of_date=cutoff_date.isoformat(),
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
     )

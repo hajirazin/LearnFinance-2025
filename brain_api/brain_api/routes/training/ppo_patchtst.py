@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import date, timedelta
+from datetime import timedelta
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from brain_api.core.config import (
     get_hf_ppo_patchtst_model_repo,
     get_storage_backend,
+    resolve_cutoff_date,
     resolve_training_window,
 )
 from brain_api.core.lstm import load_prices_yfinance
@@ -368,10 +369,10 @@ def finetune_ppo_patchtst_endpoint(
 
     # Use 26-week lookback for fine-tuning
     finetune_config = PPOFinetuneConfig()
-    end_date = date.today()
+    end_date = resolve_cutoff_date()  # Always a Friday
     start_date = end_date - timedelta(
         weeks=finetune_config.lookback_weeks + 4
-    )  # Extra buffer
+    )  # Extra buffer for weekends/holidays
 
     logger.info(f"[PPO_PatchTST Finetune] Data window: {start_date} to {end_date}")
     logger.info(f"[PPO_PatchTST Finetune] Symbols: {symbols}")

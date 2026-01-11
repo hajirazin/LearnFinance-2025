@@ -13,7 +13,6 @@ from brain_api.main import app
 from brain_api.routes.inference import (
     get_price_loader,
     get_storage,
-    get_week_boundary_computer,
 )
 from brain_api.storage.local import LocalModelStorage
 
@@ -104,45 +103,6 @@ def mock_price_loader_no_data(symbols, start_date, end_date):
     return {}
 
 
-def mock_week_boundary_computer_normal(as_of_date):
-    """Return normal week boundaries (Mon-Fri both trading days)."""
-    from datetime import timedelta
-
-    from brain_api.core.lstm import WeekBoundaries
-
-    # Find Monday of the week
-    days_since_monday = as_of_date.weekday()
-    monday = as_of_date - timedelta(days=days_since_monday)
-    friday = monday + timedelta(days=4)
-
-    return WeekBoundaries(
-        target_week_start=monday,
-        target_week_end=friday,
-        calendar_monday=monday,
-        calendar_friday=friday,
-    )
-
-
-def mock_week_boundary_computer_friday_holiday(as_of_date):
-    """Return week boundaries where Friday is a holiday (ends Thursday)."""
-    from datetime import timedelta
-
-    from brain_api.core.lstm import WeekBoundaries
-
-    # Find Monday of the week
-    days_since_monday = as_of_date.weekday()
-    monday = as_of_date - timedelta(days=days_since_monday)
-    friday = monday + timedelta(days=4)
-    thursday = monday + timedelta(days=3)
-
-    return WeekBoundaries(
-        target_week_start=monday,
-        target_week_end=thursday,  # Friday is holiday, ends Thursday
-        calendar_monday=monday,
-        calendar_friday=friday,
-    )
-
-
 @pytest.fixture
 def temp_storage():
     """Create a temporary storage directory for tests."""
@@ -159,9 +119,6 @@ def client_with_mocks(temp_storage):
     # Override dependencies
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_week_boundary_computer] = (
-        lambda: mock_week_boundary_computer_normal
-    )
 
     client = TestClient(app)
     yield client
@@ -246,67 +203,91 @@ def test_inference_lstm_returns_numeric_prediction(client_with_mocks):
 
 
 # ============================================================================
-# Scenario 2: Holiday-aware week boundaries
+# Scenario 2: Cutoff date always Friday + holiday-aware week boundaries
 # ============================================================================
 
 
-def test_inference_lstm_friday_holiday_returns_thursday(temp_storage):
-    """When Friday is a market holiday, target_week_end should be Thursday."""
-    # Override to use Friday holiday mock
+def test_inference_lstm_cutoff_always_friday(temp_storage):
+    """Response as_of_date should always be a Friday, regardless of input."""
+    from datetime import date as dt_date
+
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_week_boundary_computer] = (
-        lambda: mock_week_boundary_computer_friday_holiday
-    )
 
     client = TestClient(app)
 
     try:
-        # Use a Monday date
+        test_cases = [
+            ("2026-01-12", "2026-01-09"),  # Monday -> Friday
+            ("2026-01-09", "2026-01-02"),  # Friday -> prev Friday
+            ("2026-01-10", "2026-01-09"),  # Saturday -> Friday
+            ("2026-01-11", "2026-01-09"),  # Sunday -> Friday
+            ("2026-01-14", "2026-01-09"),  # Wednesday -> Friday
+        ]
+        for input_date, expected_cutoff in test_cases:
+            response = client.post(
+                "/inference/lstm",
+                json={"symbols": ["AAPL"], "as_of_date": input_date},
+            )
+            assert response.status_code == 200, f"Failed for input {input_date}"
+
+            data = response.json()
+            assert data["as_of_date"] == expected_cutoff, (
+                f"Input {input_date}: expected {expected_cutoff}, got {data['as_of_date']}"
+            )
+            # Verify it's actually a Friday
+            result_date = dt_date.fromisoformat(data["as_of_date"])
+            assert result_date.weekday() == 4, f"Expected Friday for input {input_date}"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_inference_lstm_target_week_is_after_cutoff(temp_storage):
+    """Target week should be the Mon-Fri AFTER the cutoff Friday."""
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+
+    client = TestClient(app)
+
+    try:
+        # Saturday Jan 10 -> cutoff = Jan 9 (Fri) -> target week = Jan 12-16
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["AAPL"], "as_of_date": "2025-04-14"},  # A Monday
+            json={"symbols": ["AAPL"], "as_of_date": "2026-01-10"},
         )
         assert response.status_code == 200
 
         data = response.json()
-
-        # Check that target_week_end is Thursday (not Friday)
-        # 2025-04-14 is Monday, Thursday would be 2025-04-17
-        assert data["target_week_end"] == "2025-04-17"
-
-        # Also check prediction has same info
-        pred = data["predictions"][0]
-        assert pred["target_week_end"] == "2025-04-17"
+        assert data["as_of_date"] == "2026-01-09"  # Friday cutoff
+        assert data["target_week_start"] == "2026-01-12"  # Next Monday
+        assert data["target_week_end"] == "2026-01-16"  # Next Friday
     finally:
         app.dependency_overrides.clear()
 
 
 def test_inference_lstm_real_good_friday_holiday(temp_storage):
     """Test with actual exchange calendar for Good Friday 2025 (April 18)."""
-    # Use real week boundary computer, only mock storage and price loader
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
-    # Don't override week_boundary_computer - use real one
 
     client = TestClient(app)
 
     try:
-        # Good Friday 2025 is April 18 - market is closed
-        # Week of April 14-18, 2025: Mon-Thu should be trading days
+        # Saturday Apr 12, 2025 -> cutoff = Apr 11 (Fri) -> target week = Apr 14-18
+        # But Good Friday (Apr 18) is closed, so target_week_end should be Apr 17 (Thu)
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["AAPL"], "as_of_date": "2025-04-14"},
+            json={"symbols": ["AAPL"], "as_of_date": "2025-04-12"},
         )
         assert response.status_code == 200
 
         data = response.json()
-
-        # target_week_end should be Thursday April 17 (Good Friday is closed)
-        assert data["target_week_end"] == "2025-04-17"
-        assert data["target_week_start"] == "2025-04-14"
+        assert data["as_of_date"] == "2025-04-11"  # Friday cutoff
+        assert data["target_week_start"] == "2025-04-14"  # Monday
+        assert data["target_week_end"] == "2025-04-17"  # Thursday (Good Friday closed)
     finally:
         app.dependency_overrides.clear()
 
@@ -325,9 +306,6 @@ def test_inference_lstm_no_model_returns_503():
         app.dependency_overrides.clear()
         app.dependency_overrides[get_storage] = lambda: empty_storage
         app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
-        app.dependency_overrides[get_week_boundary_computer] = (
-            lambda: mock_week_boundary_computer_normal
-        )
 
         client = TestClient(app)
 
@@ -352,9 +330,6 @@ def test_inference_lstm_missing_symbol_data(temp_storage):
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
-    app.dependency_overrides[get_week_boundary_computer] = (
-        lambda: mock_week_boundary_computer_normal
-    )
 
     client = TestClient(app)
 
@@ -399,7 +374,8 @@ def test_inference_lstm_no_symbols_returns_422(client_with_mocks):
 
 
 def test_inference_lstm_custom_as_of_date(client_with_mocks):
-    """POST /inference/lstm respects custom as_of_date."""
+    """POST /inference/lstm anchors custom as_of_date to Friday."""
+    # 2025-01-06 is Monday -> cutoff should be 2025-01-03 (Friday)
     response = client_with_mocks.post(
         "/inference/lstm",
         json={"symbols": ["AAPL"], "as_of_date": "2025-01-06"},
@@ -407,7 +383,8 @@ def test_inference_lstm_custom_as_of_date(client_with_mocks):
     assert response.status_code == 200
 
     data = response.json()
-    assert data["as_of_date"] == "2025-01-06"
+    # Monday Jan 6, 2025 -> Friday Jan 3, 2025
+    assert data["as_of_date"] == "2025-01-03"
 
 
 # ============================================================================
@@ -473,9 +450,6 @@ def test_inference_lstm_insufficient_history_at_end(temp_storage):
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_partial
-    app.dependency_overrides[get_week_boundary_computer] = (
-        lambda: mock_week_boundary_computer_normal
-    )
 
     client = TestClient(app)
 

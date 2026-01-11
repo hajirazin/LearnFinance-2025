@@ -5,7 +5,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from brain_api.core.lstm import compute_week_boundaries
+from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.ppo_patchtst import run_ppo_patchtst_inference
 from brain_api.storage.local import PPOPatchTSTLocalStorage
 
@@ -43,12 +43,12 @@ def infer_ppo_patchtst(
     t_start = time.time()
     logger.info("[PPO_PatchTST] Starting inference")
 
-    # Get as-of date
-    as_of = get_ppo_patchtst_as_of_date(request)
-    logger.info(f"[PPO_PatchTST] As-of date: {as_of}")
+    # Get cutoff date (always a Friday)
+    cutoff_date = get_ppo_patchtst_as_of_date(request)
+    logger.info(f"[PPO_PatchTST] Cutoff date: {cutoff_date}")
 
-    # Compute target week boundaries
-    week_boundaries = compute_week_boundaries(as_of)
+    # Compute target week boundaries for the week AFTER cutoff
+    week_boundaries = compute_week_from_cutoff(cutoff_date)
     logger.info(
         f"[PPO_PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
@@ -75,12 +75,12 @@ def infer_ppo_patchtst(
     logger.info("[PPO_PatchTST] Fetching real-time signals...")
     from .helpers import build_current_forecasts, build_current_signals
 
-    signals = build_current_signals(artifacts.symbol_order, as_of)
+    signals = build_current_signals(artifacts.symbol_order, cutoff_date)
 
     # Build PatchTST forecast features
     logger.info("[PPO_PatchTST] Generating PatchTST forecasts...")
     forecast_features = build_current_forecasts(
-        artifacts.symbol_order, forecaster_type="patchtst", as_of_date=as_of
+        artifacts.symbol_order, forecaster_type="patchtst", as_of_date=cutoff_date
     )
 
     # Run inference

@@ -1,7 +1,7 @@
 """SAC + LSTM training endpoints."""
 
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from brain_api.core.config import (
     get_hf_sac_lstm_model_repo,
     get_storage_backend,
+    resolve_cutoff_date,
     resolve_training_window,
 )
 from brain_api.core.lstm import load_prices_yfinance
@@ -287,8 +288,10 @@ def finetune_sac_lstm_endpoint(
     prior_config = prior_artifacts.config
 
     finetune_config = SACFinetuneConfig()
-    end_date = date.today()
-    start_date = end_date - timedelta(weeks=finetune_config.lookback_weeks + 4)
+    end_date = resolve_cutoff_date()  # Always a Friday
+    start_date = end_date - timedelta(
+        weeks=finetune_config.lookback_weeks + 4
+    )  # Extra buffer for weekends/holidays
 
     version = (
         f"{sac_lstm_compute_version(start_date, end_date, symbols, prior_config)}-ft"

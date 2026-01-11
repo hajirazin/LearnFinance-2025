@@ -137,7 +137,7 @@ def test_train_lstm_no_body_returns_200(client_with_mocks):
 
 
 def test_train_lstm_returns_resolved_window(client_with_mocks):
-    """POST /train/lstm returns data_window_start and data_window_end from config."""
+    """POST /train/lstm returns Friday-anchored data_window_end from config."""
     response = client_with_mocks.post("/train/lstm", json={})
     assert response.status_code == 200
 
@@ -145,9 +145,10 @@ def test_train_lstm_returns_resolved_window(client_with_mocks):
     assert "data_window_start" in data
     assert "data_window_end" in data
 
-    # Verify window is consistent with env config (10 years before 2025-01-01)
-    assert data["data_window_end"] == "2025-01-01"
-    assert data["data_window_start"] == "2015-01-01"
+    # Verify window is Friday-anchored.
+    # Env config sets end_date to 2025-01-01 (Wednesday), which anchors to 2024-12-27 (Friday)
+    assert data["data_window_end"] == "2024-12-27"
+    assert data["data_window_start"] == "2014-01-01"  # 10 years before 2024
 
 
 def test_train_lstm_returns_required_fields(client_with_mocks):
@@ -238,7 +239,9 @@ def test_train_lstm_not_promoted_when_worse_than_baseline():
         app.dependency_overrides[get_trainer] = lambda: mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
+            "2025-06-15"  # Sunday -> June 13 (Fri)
+        )
 
         client = TestClient(app)
 
@@ -250,10 +253,11 @@ def test_train_lstm_not_promoted_when_worse_than_baseline():
             assert fresh_storage.read_current_version() == first_version
 
             # Now train a worse model with different date
+            # June 23, 2025 is Monday -> anchors to June 20 (Fri), different from June 13
             app.dependency_overrides[get_trainer] = (
                 lambda: mock_trainer_worse_than_baseline
             )
-            os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-16"
+            os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 
             response2 = client.post("/train/lstm", json={})
             assert response2.status_code == 200
@@ -297,9 +301,11 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
     assert current_before == promoted_version
 
     # Now try with a different window that produces worse results
+    # Use a date that anchors to a DIFFERENT Friday (Jan 10, 2025 = Friday -> Dec 27, 2024)
+    # but Jan 13, 2025 = Monday -> Jan 10, 2025 (Friday) which is different from Dec 27
     app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
-        "2025-01-02"  # Different window -> different version
+        "2025-01-13"  # Monday -> anchors to Jan 10 (Friday), different from Dec 27
     )
 
     response2 = client.post("/train/lstm", json={})

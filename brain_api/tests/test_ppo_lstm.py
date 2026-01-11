@@ -487,3 +487,21 @@ def test_finetune_ppo_lstm_idempotent(client_for_inference, monkeypatch):
     version2 = response2.json()["version"]
 
     assert version1 == version2
+
+
+def test_finetune_ppo_lstm_end_date_is_always_friday(client_for_inference, monkeypatch):
+    """Finetune endpoint always uses Friday-anchored end_date."""
+    from datetime import date as dt_date
+
+    from brain_api.routes.training import ppo_lstm
+
+    monkeypatch.setattr(ppo_lstm, "load_prices_yfinance", mock_price_loader)
+
+    response = client_for_inference.post("/train/ppo_lstm/finetune", json={})
+    assert response.status_code == 200
+
+    data = response.json()
+    end_date = dt_date.fromisoformat(data["data_window_end"])
+
+    # End date should always be a Friday
+    assert end_date.weekday() == 4, f"Expected Friday, got {end_date.strftime('%A')}"

@@ -275,6 +275,28 @@ class TestSACLSTMInference:
 # ============================================================================
 
 
+def mock_price_loader(symbols, start_date, end_date):
+    """Return mock price data for testing."""
+    import pandas as pd
+
+    # Create fake weekly price data
+    dates = pd.date_range(start=start_date, end=end_date, freq="W-FRI")[:100]
+    prices = {}
+    for i, symbol in enumerate(symbols):
+        base = 100 + i * 10
+        prices[symbol] = pd.DataFrame(
+            {
+                "open": [base] * len(dates),
+                "high": [base * 1.01] * len(dates),
+                "low": [base * 0.99] * len(dates),
+                "close": [base * 1.005] * len(dates),
+                "volume": [1000000] * len(dates),
+            },
+            index=dates,
+        )
+    return prices
+
+
 class TestSACLSTMFinetune:
     """Tests for /train/sac_lstm/finetune endpoint."""
 
@@ -297,6 +319,37 @@ class TestSACLSTMFinetune:
         app.dependency_overrides.clear()
         os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
         os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+    def test_finetune_end_date_is_always_friday(
+        self, trained_model_storage, monkeypatch
+    ):
+        """Finetune endpoint always uses Friday-anchored end_date."""
+        from datetime import date as dt_date
+
+        from brain_api.routes.training import sac_lstm
+
+        monkeypatch.setattr(sac_lstm, "load_prices_yfinance", mock_price_loader)
+
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_sac_lstm_storage] = lambda: trained_model_storage
+        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_sac_lstm_config] = mock_config
+
+        client = TestClient(app)
+
+        try:
+            response = client.post("/train/sac_lstm/finetune")
+            assert response.status_code == 200
+
+            data = response.json()
+            end_date = dt_date.fromisoformat(data["data_window_end"])
+
+            # End date should always be a Friday
+            assert end_date.weekday() == 4, (
+                f"Expected Friday, got {end_date.strftime('%A')}"
+            )
+        finally:
+            app.dependency_overrides.clear()
 
 
 # ============================================================================

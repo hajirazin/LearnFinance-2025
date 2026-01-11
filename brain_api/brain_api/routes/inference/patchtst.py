@@ -6,14 +6,12 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 
+from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.patchtst import (
     InferenceFeatures as PatchTSTInferenceFeatures,
 )
 from brain_api.core.patchtst import (
     build_inference_features as patchtst_build_inference_features,
-)
-from brain_api.core.patchtst import (
-    compute_week_boundaries as patchtst_compute_week_boundaries,
 )
 from brain_api.core.patchtst import (
     load_prices_yfinance as patchtst_load_prices,
@@ -61,12 +59,12 @@ def infer_patchtst(
     logger.info(f"[PatchTST] Starting inference for {len(request.symbols)} symbols")
     logger.info(f"[PatchTST] Symbols: {request.symbols}")
 
-    # Get as-of date
-    as_of = get_patchtst_as_of_date(request)
-    logger.info(f"[PatchTST] As-of date: {as_of}")
+    # Get cutoff date (always a Friday)
+    cutoff_date = get_patchtst_as_of_date(request)
+    logger.info(f"[PatchTST] Cutoff date: {cutoff_date}")
 
-    # Compute holiday-aware week boundaries
-    week_boundaries = patchtst_compute_week_boundaries(as_of)
+    # Compute holiday-aware week boundaries for the week AFTER cutoff
+    week_boundaries = compute_week_from_cutoff(cutoff_date)
     logger.info(
         f"[PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
@@ -208,7 +206,7 @@ def infer_patchtst(
     return PatchTSTInferenceResponse(
         predictions=predictions,
         model_version=artifacts.version,
-        as_of_date=as_of.isoformat(),
+        as_of_date=cutoff_date.isoformat(),
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
         signals_used=signals_used,

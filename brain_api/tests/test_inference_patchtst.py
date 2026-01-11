@@ -304,7 +304,8 @@ def test_inference_patchtst_no_symbols_returns_422(client_with_mocks):
 
 
 def test_inference_patchtst_custom_as_of_date(client_with_mocks):
-    """POST /inference/patchtst respects custom as_of_date."""
+    """POST /inference/patchtst anchors custom as_of_date to Friday."""
+    # 2025-01-06 is Monday -> cutoff should be 2025-01-03 (Friday)
     response = client_with_mocks.post(
         "/inference/patchtst",
         json={"symbols": ["AAPL"], "as_of_date": "2025-01-06"},
@@ -312,7 +313,35 @@ def test_inference_patchtst_custom_as_of_date(client_with_mocks):
     assert response.status_code == 200
 
     data = response.json()
-    assert data["as_of_date"] == "2025-01-06"
+    # Monday Jan 6, 2025 -> Friday Jan 3, 2025
+    assert data["as_of_date"] == "2025-01-03"
+
+
+def test_inference_patchtst_cutoff_always_friday(client_with_mocks):
+    """Response as_of_date should always be a Friday, regardless of input."""
+    from datetime import date as dt_date
+
+    test_cases = [
+        ("2026-01-12", "2026-01-09"),  # Monday -> Friday
+        ("2026-01-09", "2026-01-02"),  # Friday -> prev Friday
+        ("2026-01-10", "2026-01-09"),  # Saturday -> Friday
+        ("2026-01-11", "2026-01-09"),  # Sunday -> Friday
+        ("2026-01-14", "2026-01-09"),  # Wednesday -> Friday
+    ]
+    for input_date, expected_cutoff in test_cases:
+        response = client_with_mocks.post(
+            "/inference/patchtst",
+            json={"symbols": ["AAPL"], "as_of_date": input_date},
+        )
+        assert response.status_code == 200, f"Failed for input {input_date}"
+
+        data = response.json()
+        assert data["as_of_date"] == expected_cutoff, (
+            f"Input {input_date}: expected {expected_cutoff}, got {data['as_of_date']}"
+        )
+        # Verify it's actually a Friday
+        result_date = dt_date.fromisoformat(data["as_of_date"])
+        assert result_date.weekday() == 4, f"Expected Friday for input {input_date}"
 
 
 # ============================================================================

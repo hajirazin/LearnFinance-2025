@@ -1,11 +1,12 @@
 """Configuration for LSTM training and storage backends."""
 
 import os
-from datetime import date
+from datetime import date, timedelta
 
 # Environment variable names
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
+ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
 ENV_HF_TOKEN = "HF_TOKEN"
@@ -82,6 +83,36 @@ def get_storage_backend() -> str:
     return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
 
 
+def resolve_cutoff_date(reference_date: date | None = None) -> date:
+    """Resolve cutoff date to the Friday BEFORE the reference date.
+
+    The cutoff is ALWAYS the previous Friday, even if reference_date is Friday.
+    This ensures we have complete week data before making predictions.
+
+    Args:
+        reference_date: Base date. If None, reads from CUTOFF_DATE env var or uses today.
+
+    Returns:
+        The most recent Friday strictly before reference_date.
+
+    Examples:
+        - Monday Jan 12 -> Friday Jan 9
+        - Friday Jan 9 -> Friday Jan 2 (previous Friday, not same day)
+        - Saturday Jan 10 -> Friday Jan 9
+        - Sunday Jan 11 -> Friday Jan 9
+    """
+    if reference_date is None:
+        env_date = os.environ.get(ENV_CUTOFF_DATE, "")
+        reference_date = date.fromisoformat(env_date) if env_date else date.today()
+
+    # weekday(): Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
+    days_since_friday = (reference_date.weekday() - 4) % 7
+    if days_since_friday == 0:
+        # reference_date is Friday, go back to previous Friday
+        return reference_date - timedelta(days=7)
+    return reference_date - timedelta(days=days_since_friday)
+
+
 def resolve_training_window() -> tuple[date, date]:
     """Resolve the training data window from API config/environment.
 
@@ -90,16 +121,17 @@ def resolve_training_window() -> tuple[date, date]:
     - LSTM_TRAIN_WINDOW_END_DATE: optional override for end date (YYYY-MM-DD)
 
     Returns:
-        Tuple of (start_date, end_date) as date objects.
+        Tuple of (start_date, end_date) where end_date is always a Friday.
         Start date is anchored to January 1st of (end_year - lookback_years).
     """
     # Get lookback years from env or use default
     lookback_str = os.environ.get(ENV_LSTM_LOOKBACK_YEARS, "")
     lookback_years = int(lookback_str) if lookback_str else DEFAULT_LOOKBACK_YEARS
 
-    # Get end date from env or use today
+    # Get reference date from env or use today, then anchor to Friday
     end_date_str = os.environ.get(ENV_LSTM_WINDOW_END_DATE, "")
-    end_date = date.fromisoformat(end_date_str) if end_date_str else date.today()
+    reference_date = date.fromisoformat(end_date_str) if end_date_str else None
+    end_date = resolve_cutoff_date(reference_date)
 
     # Compute start date (anchored to January 1st of year)
     start_date = date(end_date.year - lookback_years, 1, 1)
