@@ -20,12 +20,14 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - calling brain_api endpoints
   - calling OpenAI/LLM for summary
   - sending comparison email via Gmail
+  - submitting orders to Alpaca (3 paper accounts: PPO_LSTM, SAC_PatchTST, HRP)
   - status tracking + notifications
 - **Python brain** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
   - price forecasting (LSTM pure-price, PatchTST multi-signal)
   - portfolio allocation (HRP math baseline, PPO variants, SAC variants)
+  - order generation (convert weights to limit orders with idempotent IDs)
   - explanation generation
   - persistence of run artifacts
 
@@ -86,6 +88,12 @@ brain_api/
 | `POST /inference/sac_lstm` | SAC allocation using LSTM forecasts |
 | `POST /inference/sac_patchtst` | SAC allocation using PatchTST forecasts |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
+
+**Orders** (called by Monday run via n8n after allocations):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /orders/generate` | Convert allocation weights to limit orders |
 
 **Signals** (called by Monday run via n8n):
 

@@ -145,7 +145,29 @@ API available at http://localhost:8000 (docs at `/docs`)
    - Fill in Client ID and Client Secret
    - Click **Sign in with Google** and authorize
 
-### 4. Test with hello world email
+### 4. Configure Alpaca Paper Trading (for order execution)
+
+The system submits orders to 3 separate Alpaca paper trading accounts:
+
+| Account | Algorithm | Description |
+|---------|-----------|-------------|
+| PPO_LSTM | PPO + LSTM | On-policy RL with pure price forecasts |
+| SAC_PatchTST | SAC + PatchTST | Off-policy RL with multi-signal forecasts |
+| HRP | HRP | Risk parity baseline |
+
+**Setup steps:**
+
+1. Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/)
+2. For each account, get the API Key and Secret from the dashboard
+3. In n8n: **Settings → Credentials → Add Credential → Header Auth**
+   - Create 3 credentials named: `Alpaca PPO_LSTM`, `Alpaca SAC_PatchTST`, `Alpaca HRP`
+   - For each, add two headers:
+     - `APCA-API-KEY-ID`: your API key
+     - `APCA-API-SECRET-KEY`: your API secret
+
+**Note:** The other 2 algorithms (PPO+PatchTST, SAC+LSTM) run with mock portfolios for comparison but don't execute real paper trades.
+
+### 5. Test with hello world email
 
 1. In n8n, import `n8n/workflows/hello-world-email.json`
 2. Configure Gmail credentials and recipient address
@@ -316,6 +338,12 @@ We store three kinds of data:
 | `POST /inference/sac_lstm` | SAC allocation using LSTM forecasts |
 | `POST /inference/sac_patchtst` | SAC allocation using PatchTST forecasts |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
+
+### Order generation endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /orders/generate` | Convert allocation weights to limit orders |
 
 ### Signal endpoints
 
