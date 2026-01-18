@@ -184,6 +184,30 @@
     },
     {
       "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-sac-hrp-portfolios",
+      "name": "Merge SAC + HRP Portfolios",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1060, -200]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-phase2-gate",
+      "name": "Merge Phase 2 Gate",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2180, 200]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "http://host.docker.internal:8000/signals/fundamentals",
         "sendBody": true,
@@ -635,6 +659,8 @@
     "GET Halal Universe": { "main": [[{ "node": "Pick Top 20 Symbols", "type": "main", "index": 0 }]] },
     "Pick Top 20 Symbols": { "main": [[{ "node": "Merge Portfolios", "type": "main", "index": 0 }]] },
     "Build PPO_LSTM Portfolio": { "main": [[{ "node": "Merge Portfolios", "type": "main", "index": 1 }]] },
+    "Build SAC_PatchTST Portfolio": { "main": [[{ "node": "Merge SAC + HRP Portfolios", "type": "main", "index": 0 }]] },
+    "Build HRP Portfolio": { "main": [[{ "node": "Merge SAC + HRP Portfolios", "type": "main", "index": 1 }]] },
     "Merge Portfolios": { "main": [[{ "node": "POST Fundamentals", "type": "main", "index": 0 }, { "node": "POST News Sentiment", "type": "main", "index": 0 }, { "node": "POST LSTM Forecast", "type": "main", "index": 0 }, { "node": "POST PatchTST Forecast", "type": "main", "index": 0 }]] },
     "POST Fundamentals": { "main": [[{ "node": "Merge Fundamentals + News", "type": "main", "index": 0 }]] },
     "POST News Sentiment": { "main": [[{ "node": "Merge Fundamentals + News", "type": "main", "index": 1 }]] },
@@ -642,7 +668,9 @@
     "POST LSTM Forecast": { "main": [[{ "node": "Merge + LSTM", "type": "main", "index": 1 }]] },
     "Merge + LSTM": { "main": [[{ "node": "Merge + PatchTST", "type": "main", "index": 0 }]] },
     "POST PatchTST Forecast": { "main": [[{ "node": "Merge + PatchTST", "type": "main", "index": 1 }]] },
-    "Merge + PatchTST": { "main": [[{ "node": "Prepare Phase 2", "type": "main", "index": 0 }]] },
+    "Merge + PatchTST": { "main": [[{ "node": "Merge Phase 2 Gate", "type": "main", "index": 0 }]] },
+    "Merge SAC + HRP Portfolios": { "main": [[{ "node": "Merge Phase 2 Gate", "type": "main", "index": 1 }]] },
+    "Merge Phase 2 Gate": { "main": [[{ "node": "Prepare Phase 2", "type": "main", "index": 0 }]] },
     "Prepare Phase 2": { "main": [[{ "node": "POST SAC+LSTM", "type": "main", "index": 0 }, { "node": "POST SAC+PatchTST", "type": "main", "index": 0 }, { "node": "POST PPO+LSTM", "type": "main", "index": 0 }, { "node": "POST PPO+PatchTST", "type": "main", "index": 0 }, { "node": "POST HRP Allocation", "type": "main", "index": 0 }]] },
     "POST SAC+LSTM": { "main": [[{ "node": "Merge SAC", "type": "main", "index": 0 }]] },
     "POST SAC+PatchTST": { "main": [[{ "node": "Prep Orders SAC_PatchTST", "type": "main", "index": 0 }]] },
