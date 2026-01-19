@@ -181,7 +181,20 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build portfolio from Alpaca account (input) + positions (via node reference)\nconst account = $input.first().json;\nlet positions = [];\ntry { positions = $('Fetch PPO_LSTM Positions').all().map(i => i.json); } catch(e) { positions = []; }\nreturn {\n  json: {\n    portfolio_ppo_lstm: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
+        "jsCode": "// Normalize positions - always output 1 item even if empty\nconst positions = $input.all().map(i => i.json);\nreturn [{ json: { positions: positions } }];"
+      },
+      "id": "norm-positions-ppo-lstm",
+      "name": "Normalize PPO_LSTM Positions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        2944
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch PPO_LSTM Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_ppo_lstm: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
       },
       "id": "0bf23acc-1693-4480-add6-ce3f975f051a",
       "name": "Build PPO_LSTM Portfolio",
@@ -194,7 +207,20 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build portfolio from Alpaca account (input) + positions (via node reference)\nconst account = $input.first().json;\nlet positions = [];\ntry { positions = $('Fetch SAC_PatchTST Positions').all().map(i => i.json); } catch(e) { positions = []; }\nreturn {\n  json: {\n    portfolio_sac_patchtst: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
+        "jsCode": "// Normalize positions - always output 1 item even if empty\nconst positions = $input.all().map(i => i.json);\nreturn [{ json: { positions: positions } }];"
+      },
+      "id": "norm-positions-sac-patchtst",
+      "name": "Normalize SAC_PatchTST Positions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        2752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch SAC_PatchTST Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_sac_patchtst: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
       },
       "id": "8ac70d8e-1ee9-4625-8661-2fb8ce39cd37",
       "name": "Build SAC_PatchTST Portfolio",
@@ -207,7 +233,20 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build portfolio from Alpaca account (input) + positions (via node reference)\nconst account = $input.first().json;\nlet positions = [];\ntry { positions = $('Fetch HRP Positions').all().map(i => i.json); } catch(e) { positions = []; }\nreturn {\n  json: {\n    portfolio_hrp: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
+        "jsCode": "// Normalize positions - always output 1 item even if empty\nconst positions = $input.all().map(i => i.json);\nreturn [{ json: { positions: positions } }];"
+      },
+      "id": "norm-positions-hrp",
+      "name": "Normalize HRP Positions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        2544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch HRP Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_hrp: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
       },
       "id": "790c0a52-6e6a-4892-9045-7d19d9d81fac",
       "name": "Build HRP Portfolio",
@@ -1002,7 +1041,24 @@
             "node": "Fetch PPO_LSTM Positions",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Fetch PPO_LSTM Positions": {
+      "main": [
+        [
+          {
+            "node": "Normalize PPO_LSTM Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize PPO_LSTM Positions": {
+      "main": [
+        [
           {
             "node": "Build PPO_LSTM Portfolio",
             "type": "main",
@@ -1018,7 +1074,24 @@
             "node": "Fetch SAC_PatchTST Positions",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Fetch SAC_PatchTST Positions": {
+      "main": [
+        [
+          {
+            "node": "Normalize SAC_PatchTST Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize SAC_PatchTST Positions": {
+      "main": [
+        [
           {
             "node": "Build SAC_PatchTST Portfolio",
             "type": "main",
@@ -1034,7 +1107,24 @@
             "node": "Fetch HRP Positions",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Fetch HRP Positions": {
+      "main": [
+        [
+          {
+            "node": "Normalize HRP Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize HRP Positions": {
+      "main": [
+        [
           {
             "node": "Build HRP Portfolio",
             "type": "main",
