@@ -37,6 +37,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -61,6 +62,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/positions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -85,6 +87,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -109,6 +112,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/positions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -133,6 +137,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -157,6 +162,7 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/positions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -275,7 +281,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const N = 20;\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\nconst now = new Date();\nconst istOffset = 5.5 * 60 * 60 * 1000;\nconst istDate = new Date(now.getTime() + istOffset);\nconst asOfDate = istDate.toISOString().split('T')[0];\nconst runId = `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\nreturn { json: { symbols, as_of_date: asOfDate, run_id: runId, stock_count: symbols.length, mock_portfolio: mockPortfolio } };"
+        "jsCode": "const N = 20;\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\nconst asOfDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());\nconst runId = `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\nreturn { json: { symbols, as_of_date: asOfDate, run_id: runId, stock_count: symbols.length, mock_portfolio: mockPortfolio } };"
       },
       "id": "0647c841-eca0-42fb-8eb1-9ab746f79a81",
       "name": "Pick Top 20 Symbols",
@@ -943,7 +949,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Order execution summary\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">📈 Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO_LSTM</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC_PatchTST</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_failed || 0}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} → ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} → ${targetWeekEnd})`, emailBody, orderResults } };"
+        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Order execution summary\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">\ud83d\udcc8 Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO_LSTM</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC_PatchTST</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_failed || 0}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} \u2192 ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} \u2192 ${targetWeekEnd})`, emailBody, orderResults } };"
       },
       "id": "5e243f9a-dcc1-4469-ad20-b15fc17d0c41",
       "name": "Format Email Body",
@@ -1645,7 +1651,8 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "timezone": "Asia/Kolkata"
   },
   "versionId": "1c25bfa0-7c9a-4df4-b50a-3f9becd4b04f",
   "meta": {

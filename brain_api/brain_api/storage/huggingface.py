@@ -16,6 +16,11 @@ from brain_api.storage.patchtst.huggingface import (
     PatchTSTHuggingFaceModelStorage,
 )
 
+# SAC + PatchTST HuggingFace storage
+from brain_api.storage.sac_patchtst.huggingface import (
+    SACPatchTSTHuggingFaceModelStorage,
+)
+
 __all__ = [
     "HFModelInfo",
     # Datasets
@@ -24,4 +29,6 @@ __all__ = [
     "HuggingFaceModelStorage",
     # PatchTST
     "PatchTSTHuggingFaceModelStorage",
+    # SAC + PatchTST
+    "SACPatchTSTHuggingFaceModelStorage",
 ]

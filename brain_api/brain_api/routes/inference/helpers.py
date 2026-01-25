@@ -5,7 +5,12 @@ from datetime import date
 
 from fastapi import HTTPException
 
-from brain_api.core.config import get_hf_lstm_model_repo, get_storage_backend
+from brain_api.core.config import (
+    get_hf_lstm_model_repo,
+    get_hf_patchtst_model_repo,
+    get_hf_sac_patchtst_model_repo,
+    get_storage_backend,
+)
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
 from brain_api.core.patchtst import SymbolPrediction as PatchTSTSymbolPrediction
 from brain_api.core.realtime_signals import (
@@ -18,6 +23,8 @@ from brain_api.storage.local import (
     LSTMArtifacts,
     PatchTSTArtifacts,
     PatchTSTModelStorage,
+    SACPatchTSTArtifacts,
+    SACPatchTSTLocalStorage,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,17 +115,19 @@ def build_current_forecasts(
 
 def _load_model_artifacts_generic(
     model_type: str,
-    local_storage: LocalModelStorage | PatchTSTModelStorage,
+    local_storage: LocalModelStorage | PatchTSTModelStorage | SACPatchTSTLocalStorage,
     hf_storage_class: type,
-) -> LSTMArtifacts | PatchTSTArtifacts:
+    hf_model_repo: str | None,
+) -> LSTMArtifacts | PatchTSTArtifacts | SACPatchTSTArtifacts:
     """Load model artifacts with HuggingFace fallback.
 
     Generic helper that handles local → HuggingFace fallback for any model type.
 
     Args:
-        model_type: Model type identifier (e.g., "LSTM", "PatchTST")
+        model_type: Model type identifier (e.g., "LSTM", "PatchTST", "SAC_PatchTST")
         local_storage: Local storage instance for caching
         hf_storage_class: HuggingFace storage class to use for fallback
+        hf_model_repo: HuggingFace repository ID for this model type
 
     Returns:
         Model artifacts ready for inference
@@ -134,7 +143,6 @@ def _load_model_artifacts_generic(
 
     # Try HuggingFace if configured
     storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_lstm_model_repo()
 
     if storage_backend == "hf" or hf_model_repo:
         if hf_model_repo:
@@ -170,7 +178,9 @@ def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
     """Load LSTM model artifacts with HuggingFace fallback."""
     from brain_api.storage.huggingface import HuggingFaceModelStorage
 
-    return _load_model_artifacts_generic("LSTM", storage, HuggingFaceModelStorage)
+    return _load_model_artifacts_generic(
+        "LSTM", storage, HuggingFaceModelStorage, get_hf_lstm_model_repo()
+    )
 
 
 def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArtifacts:
@@ -178,7 +188,24 @@ def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArt
     from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
 
     return _load_model_artifacts_generic(
-        "PatchTST", storage, PatchTSTHuggingFaceModelStorage
+        "PatchTST",
+        storage,
+        PatchTSTHuggingFaceModelStorage,
+        get_hf_patchtst_model_repo(),
+    )
+
+
+def _load_sac_patchtst_model_artifacts(
+    storage: SACPatchTSTLocalStorage,
+) -> SACPatchTSTArtifacts:
+    """Load SAC + PatchTST model artifacts with HuggingFace fallback."""
+    from brain_api.storage.huggingface import SACPatchTSTHuggingFaceModelStorage
+
+    return _load_model_artifacts_generic(
+        "SAC_PatchTST",
+        storage,
+        SACPatchTSTHuggingFaceModelStorage,
+        get_hf_sac_patchtst_model_repo(),
     )
 
 

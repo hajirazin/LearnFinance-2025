@@ -160,12 +160,12 @@ def train_sac_patchtst_endpoint(
     result = train_sac_patchtst(training_data, config)
 
     # Get prior version info (checks local, then HF if needed)
-    from brain_api.storage.huggingface import HuggingFaceModelStorage
+    from brain_api.storage.huggingface import SACPatchTSTHuggingFaceModelStorage
 
     hf_model_repo = get_hf_sac_patchtst_model_repo()
     prior_info = get_prior_version_info(
         local_storage=storage,
-        hf_storage_class=HuggingFaceModelStorage,
+        hf_storage_class=SACPatchTSTHuggingFaceModelStorage,
         hf_model_repo=hf_model_repo,
     )
     prior_version = prior_info.version
@@ -224,7 +224,7 @@ def train_sac_patchtst_endpoint(
 
     if storage_backend == "hf" and hf_model_repo:
         try:
-            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+            hf_storage = SACPatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo)
 
             # Check if HF main branch has a version (might be empty even if local has one)
             hf_has_main = hf_storage.get_current_version() is not None
@@ -238,9 +238,13 @@ def train_sac_patchtst_endpoint(
 
             hf_info = hf_storage.upload_model(
                 version=version,
-                model=result.actor,
-                feature_scaler=result.scaler,
+                actor=result.actor,
+                critic=result.critic,
+                critic_target=result.critic_target,
+                log_alpha=result.log_alpha,
+                scaler=result.scaler,
                 config=config,
+                symbol_order=available_symbols,
                 metadata=metadata,
                 make_current=should_make_current,
             )
@@ -451,9 +455,9 @@ def finetune_sac_patchtst_endpoint(
 
     if storage_backend == "hf" and hf_model_repo_ft:
         try:
-            from brain_api.storage.huggingface import HuggingFaceModelStorage
+            from brain_api.storage.huggingface import SACPatchTSTHuggingFaceModelStorage
 
-            hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo_ft)
+            hf_storage = SACPatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo_ft)
 
             # Check if HF main branch has a version (might be empty even if local has one)
             hf_has_main = hf_storage.get_current_version() is not None
@@ -467,9 +471,13 @@ def finetune_sac_patchtst_endpoint(
 
             hf_info = hf_storage.upload_model(
                 version=version,
-                model=result.actor,
-                feature_scaler=result.scaler,
+                actor=result.actor,
+                critic=result.critic,
+                critic_target=result.critic_target,
+                log_alpha=result.log_alpha,
+                scaler=result.scaler,
                 config=prior_config,
+                symbol_order=available_symbols,
                 metadata=metadata,
                 make_current=should_make_current,
             )

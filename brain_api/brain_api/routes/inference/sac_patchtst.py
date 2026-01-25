@@ -4,7 +4,7 @@ import logging
 import time
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.sac_patchtst import run_sac_inference as run_sac_patchtst_inference
@@ -54,15 +54,11 @@ def infer_sac_patchtst(
         f"[SAC_PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
 
-    # Load model artifacts
+    # Load model artifacts (try local first, then HuggingFace)
     logger.info("[SAC_PatchTST] Loading model artifacts...")
-    try:
-        artifacts = storage.load_current_artifacts()
-    except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=str(e),
-        ) from e
+    from .helpers import _load_sac_patchtst_model_artifacts
+
+    artifacts = _load_sac_patchtst_model_artifacts(storage)
 
     logger.info(f"[SAC_PatchTST] Model loaded: version={artifacts.version}")
 
