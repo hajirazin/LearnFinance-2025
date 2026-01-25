@@ -3,7 +3,7 @@
 Tests focus on:
 - Endpoint contract (status codes, response structure)
 - Constraint enforcement (cash buffer, max position weight)
-- Promotion gate behavior (CAGR-first)
+- Promotion gate behavior (Sharpe-first)
 """
 
 import os

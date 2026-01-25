@@ -168,22 +168,28 @@ def train_sac_lstm_endpoint(
         hf_model_repo=hf_model_repo,
     )
     prior_version = prior_info.version
-    prior_cagr = (
-        prior_info.metadata.get("metrics", {}).get("eval_cagr")
+    prior_sharpe = (
+        prior_info.metadata.get("metrics", {}).get("eval_sharpe")
         if prior_info.metadata
         else None
     )
 
     if prior_version:
         logger.info(
-            f"[SAC_LSTM] Prior version: {prior_version}, eval_cagr: {prior_cagr}"
+            f"[SAC_LSTM] Prior version: {prior_version}, eval_sharpe: {prior_sharpe}"
         )
     else:
         logger.info("[SAC_LSTM] No prior version exists (first model)")
 
     promoted = (
-        prior_version is None or prior_cagr is None or result.eval_cagr > prior_cagr
+        prior_version is None
+        or prior_sharpe is None
+        or result.eval_sharpe > prior_sharpe
     )
+    logger.info(
+        f"[SAC_LSTM] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
+    logger.info(f"[SAC_LSTM] Promotion: {'YES' if promoted else 'NO'}")
 
     metadata = create_sac_lstm_metadata(
         version=version,
@@ -410,8 +416,19 @@ def finetune_sac_lstm_endpoint(
     )
 
     prior_metadata = storage.read_metadata(prior_version)
-    prior_cagr = prior_metadata["metrics"].get("eval_cagr") if prior_metadata else None
-    promoted = prior_cagr is None or result.eval_cagr > prior_cagr
+    prior_sharpe = (
+        prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+    )
+
+    promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+
+    logger.info(
+        f"[SAC_LSTM Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
+    logger.info(
+        f"[SAC_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
+    )
+    logger.info(f"[SAC_LSTM Finetune] Promotion: {'YES' if promoted else 'NO'}")
 
     metadata = create_sac_lstm_metadata(
         version=version,

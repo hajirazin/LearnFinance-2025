@@ -169,22 +169,28 @@ def train_sac_patchtst_endpoint(
         hf_model_repo=hf_model_repo,
     )
     prior_version = prior_info.version
-    prior_cagr = (
-        prior_info.metadata.get("metrics", {}).get("eval_cagr")
+    prior_sharpe = (
+        prior_info.metadata.get("metrics", {}).get("eval_sharpe")
         if prior_info.metadata
         else None
     )
 
     if prior_version:
         logger.info(
-            f"[SAC_PatchTST] Prior version: {prior_version}, eval_cagr: {prior_cagr}"
+            f"[SAC_PatchTST] Prior version: {prior_version}, eval_sharpe: {prior_sharpe}"
         )
     else:
         logger.info("[SAC_PatchTST] No prior version exists (first model)")
 
     promoted = (
-        prior_version is None or prior_cagr is None or result.eval_cagr > prior_cagr
+        prior_version is None
+        or prior_sharpe is None
+        or result.eval_sharpe > prior_sharpe
     )
+    logger.info(
+        f"[SAC_PatchTST] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
+    logger.info(f"[SAC_PatchTST] Promotion: {'YES' if promoted else 'NO'}")
 
     metadata = create_sac_patchtst_metadata(
         version=version,
@@ -413,8 +419,19 @@ def finetune_sac_patchtst_endpoint(
     )
 
     prior_metadata = storage.read_metadata(prior_version)
-    prior_cagr = prior_metadata["metrics"].get("eval_cagr") if prior_metadata else None
-    promoted = prior_cagr is None or result.eval_cagr > prior_cagr
+    prior_sharpe = (
+        prior_metadata["metrics"].get("eval_sharpe") if prior_metadata else None
+    )
+
+    promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+
+    logger.info(
+        f"[SAC_PatchTST Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
+    logger.info(
+        f"[SAC_PatchTST Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
+    )
+    logger.info(f"[SAC_PatchTST Finetune] Promotion: {'YES' if promoted else 'NO'}")
 
     metadata = create_sac_patchtst_metadata(
         version=version,

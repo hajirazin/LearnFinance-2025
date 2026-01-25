@@ -243,6 +243,9 @@ def train_ppo_patchtst_endpoint(
         logger.info("[PPO_PatchTST] First model - auto-promoting")
     else:
         promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+        logger.info(
+            f"[PPO_PatchTST] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+        )
         logger.info(f"[PPO_PatchTST] Promotion: {'YES' if promoted else 'NO'}")
 
     # Create metadata
@@ -521,6 +524,10 @@ def finetune_ppo_patchtst_endpoint(
 
     # Decide on promotion (must beat prior)
     promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+
+    logger.info(
+        f"[PPO_PatchTST Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
     logger.info(
         f"[PPO_PatchTST Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
     )

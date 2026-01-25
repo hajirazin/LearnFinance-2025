@@ -261,18 +261,17 @@ def test_train_patchtst_idempotent_does_not_change_current(
 # ============================================================================
 
 
-def test_train_patchtst_promoted_true_when_beats_baseline(client_with_mocks):
-    """Model is promoted when it beats the baseline."""
+def test_train_patchtst_first_model_always_promoted(client_with_mocks):
+    """First model is always promoted (no prior model to compare against)."""
     response = client_with_mocks.post("/train/patchtst", json={})
     assert response.status_code == 200
 
     data = response.json()
-    # Mock trainer returns val_loss=0.02 < baseline_loss=0.05
     assert data["promoted"] is True
 
 
-def test_train_patchtst_not_promoted_when_worse_than_baseline():
-    """Model is NOT promoted when worse than baseline (after first model exists)."""
+def test_train_patchtst_not_promoted_when_worse_than_prior():
+    """Model is NOT promoted when worse than prior model."""
     with tempfile.TemporaryDirectory() as tmpdir:
         fresh_storage = PatchTSTModelStorage(base_path=tmpdir)
 
@@ -306,8 +305,9 @@ def test_train_patchtst_not_promoted_when_worse_than_baseline():
             first_version = response1.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
-            # Now train a worse model with different date
+            # Now train a worse model with different date (to generate new version)
             # June 23, 2025 is Monday -> anchors to June 20 (Fri), different from June 13
+            # mock_trainer_worse_than_baseline returns val_loss=0.10, which is > 0.02 (prior)
             app.dependency_overrides[get_patchtst_trainer] = (
                 lambda: mock_trainer_worse_than_baseline
             )
@@ -317,7 +317,7 @@ def test_train_patchtst_not_promoted_when_worse_than_baseline():
             assert response2.status_code == 200
 
             data = response2.json()
-            # Mock trainer returns val_loss=0.10 > baseline_loss=0.05
+            # Mock trainer returns val_loss=0.10 > prior=0.02
             assert data["promoted"] is False
 
             # Current should still point to the first version
@@ -371,7 +371,7 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     assert response2.status_code == 200
     data2 = response2.json()
 
-    # Should not be promoted (worse than baseline)
+    # Should not be promoted (worse than prior)
     assert data2["promoted"] is False
 
     # Current should still point to the first version

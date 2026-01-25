@@ -243,6 +243,9 @@ def train_ppo_lstm_endpoint(
         logger.info("[PPO_LSTM] First model - auto-promoting")
     else:
         promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+        logger.info(
+            f"[PPO_LSTM] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+        )
         logger.info(f"[PPO_LSTM] Promotion: {'YES' if promoted else 'NO'}")
 
     # Create metadata
@@ -522,6 +525,10 @@ def finetune_ppo_lstm_endpoint(
 
     # Decide on promotion (must beat prior)
     promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
+
+    logger.info(
+        f"[PPO_LSTM Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+    )
     logger.info(
         f"[PPO_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
     )

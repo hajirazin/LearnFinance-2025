@@ -26,26 +26,19 @@ def get_device() -> torch.device:
 
 def evaluate_for_promotion(
     val_loss: float,
-    baseline_loss: float,
     prior_val_loss: float | None,
 ) -> bool:
     """Decide whether to promote the new model to current.
 
     Promotion requires:
-    1. Beat the baseline (persistence model)
-    2. Beat the prior model (if one exists)
+    1. Beat the prior model (if one exists)
 
     Args:
         val_loss: Validation loss of new model
-        baseline_loss: Loss of persistence baseline
         prior_val_loss: Validation loss of prior model (None if first model)
 
     Returns:
         True if model should be promoted
     """
-    # Must beat baseline
-    if val_loss >= baseline_loss:
-        return False
-
     # Must beat prior (if exists)
     return prior_val_loss is None or val_loss < prior_val_loss

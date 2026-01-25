@@ -165,7 +165,6 @@ def train_lstm(
     # Decide on promotion
     promoted = evaluate_for_promotion(
         val_loss=result.val_loss,
-        baseline_loss=result.baseline_loss,
         prior_val_loss=prior_val_loss,
     )
     logger.info(
