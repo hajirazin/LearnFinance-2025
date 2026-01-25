@@ -420,10 +420,11 @@ def _predict_single_week_lstm(
     weekly_dates: pd.DatetimeIndex,
     daily_ohlcv: pd.DataFrame,
 ) -> float:
-    """Generate LSTM prediction for a single week using 5-feature OHLCV.
+    """Generate LSTM weekly prediction using 5-day iterative forecasting.
 
-    Uses daily OHLCV data to build proper 5-feature sequences matching
-    how the LSTM was trained.
+    Predicts 5 daily returns (Mon-Fri) iteratively and compounds them to get
+    a weekly return. Uses daily OHLCV data to build proper 5-feature sequences
+    matching how the LSTM was trained.
     """
     import torch
 
@@ -478,21 +479,75 @@ def _predict_single_week_lstm(
             return momentum_fallback()
 
         # Apply scaler
-        if scaler is not None:
-            features = scaler.transform(features)
+        features_scaled = scaler.transform(features) if scaler is not None else features
 
-        # Shape: (1, seq_len, 5)
-        x = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+        # OHLCV channel indices: open_ret=0, high_ret=1, low_ret=2, close_ret=3, volume_ret=4
+        close_ret_idx = 3
 
-        # Run inference
-        output = model(x)
+        # Predict 5 daily returns iteratively (Mon-Fri)
+        daily_returns = []
+        X_current = features_scaled.copy()
 
-        # Get prediction (expected weekly return)
-        pred = output.squeeze().item()
-        return pred
+        for day in range(5):
+            # Shape: (1, seq_len, 5)
+            x = torch.tensor(X_current, dtype=torch.float32).unsqueeze(0)
+
+            # Run inference
+            output = model(x)
+
+            # Get prediction (scaled)
+            scaled_pred = output.squeeze().item()
+
+            # Inverse transform prediction from scaled space back to return space
+            # LSTM predicts close_ret, which is at index 3
+            if scaler is not None:
+                daily_return = (
+                    scaled_pred * scaler.scale_[close_ret_idx]
+                    + scaler.mean_[close_ret_idx]
+                )
+            else:
+                daily_return = scaled_pred
+
+            daily_returns.append(daily_return)
+
+            # Update input sequence for next iteration (except for last day)
+            if day < 4:
+                # Get last day's features for reference
+                last_day_scaled = X_current[-1, :].copy()
+
+                # Create new day features
+                new_day = last_day_scaled.copy()
+
+                # Scale predicted return back to scaled space
+                if scaler is not None:
+                    scaled_return = (
+                        daily_return - scaler.mean_[close_ret_idx]
+                    ) / scaler.scale_[close_ret_idx]
+                else:
+                    scaled_return = daily_return
+
+                # Set OHLCV returns to predicted value (in scaled space)
+                # open, high, low, close all use the predicted return
+                new_day[0] = scaled_return  # open_ret
+                new_day[1] = scaled_return  # high_ret
+                new_day[2] = scaled_return  # low_ret
+                new_day[3] = scaled_return  # close_ret
+                # Volume return stays at 0 (scaled)
+                if scaler is not None:
+                    new_day[4] = -scaler.mean_[4] / scaler.scale_[4]
+                else:
+                    new_day[4] = 0.0
+
+                # Shift sequence left and add new day
+                X_current[:-1, :] = X_current[1:, :]
+                X_current[-1, :] = new_day
+
+        # Compound 5 daily returns to get weekly return
+        weekly_return = float(np.prod(1 + np.array(daily_returns)) - 1)
+        return weekly_return
 
     except Exception as e:
-        logger.debug(f"[WalkForward] LSTM inference failed: {e}")
+        logger.debug(f"[WalkForward] LSTM 5-day inference failed: {e}")
         return momentum_fallback()
 
 
@@ -606,7 +661,10 @@ def _predict_single_week_patchtst(
     daily_fundamentals: pd.DataFrame | None,
     use_multichannel: bool,
 ) -> float:
-    """Generate PatchTST prediction for a single week.
+    """Generate PatchTST weekly prediction using 5-day iterative forecasting.
+
+    Predicts 5 daily returns (Mon-Fri) iteratively and compounds them to get
+    a weekly return. This matches the inference endpoint logic in patchtst/inference.py.
 
     Uses multi-channel features if available, falls back to simple close returns.
     """
@@ -625,7 +683,7 @@ def _predict_single_week_patchtst(
             ) / weekly_prices[weekly_idx - lookback]
         return 0.0
 
-    # Try multi-channel approach
+    # Try multi-channel approach with 5-day iterative prediction
     if use_multichannel and daily_ohlcv is not None and weekly_dates is not None:
         try:
             # Get cutoff date (Friday of this week - predict for next week)
@@ -686,6 +744,10 @@ def _predict_single_week_patchtst(
                 for col in fund_cols:
                     features_df[col] = 0.0
 
+            # Add fundamental_age if needed (matches config.feature_names)
+            if config.num_input_channels > 11:
+                features_df["fundamental_age"] = 1.0  # Default max age
+
             # Build feature array
             features = features_df.values  # (context_length, n_channels)
 
@@ -705,39 +767,102 @@ def _predict_single_week_patchtst(
 
             # Apply scaler
             if scaler is not None:
-                features = scaler.transform(features)
-
-            # Shape: (1, context_length, n_channels) -> permute to (1, n_channels, context_length)
-            x = (
-                torch.tensor(features, dtype=torch.float32)
-                .unsqueeze(0)
-                .permute(0, 2, 1)
-            )
-
-            # Run inference
-            output = model(past_values=x)
-
-            # Get prediction
-            if hasattr(output, "prediction_outputs"):
-                scaled_pred = output.prediction_outputs[:, 0, 0].item()
-            elif hasattr(output, "last_hidden_state"):
-                scaled_pred = output.last_hidden_state[:, -1, 0].item()
+                features_scaled = scaler.transform(features)
             else:
-                return momentum_fallback()
+                features_scaled = features
 
-            # Inverse transform (close return is index 0)
-            if scaler is not None:
-                pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
-            else:
-                pred = scaled_pred
+            # Find close_ret channel index for extracting predictions
+            try:
+                close_ret_idx = config.feature_names.index("close_ret")
+            except (ValueError, AttributeError):
+                close_ret_idx = 3  # Default position in OHLCV
 
-            return pred
+            # Find OHLCV channel indices for updating sequence
+            try:
+                open_ret_idx = config.feature_names.index("open_ret")
+                high_ret_idx = config.feature_names.index("high_ret")
+                low_ret_idx = config.feature_names.index("low_ret")
+                volume_ret_idx = config.feature_names.index("volume_ret")
+            except (ValueError, AttributeError):
+                open_ret_idx, high_ret_idx, low_ret_idx, volume_ret_idx = 0, 1, 2, 4
+
+            # Predict 5 daily returns iteratively (Mon-Fri)
+            daily_returns = []
+            X_current = features_scaled.copy()
+
+            for day in range(5):
+                # Shape: (1, context_length, n_channels) -> permute to (1, n_channels, context_length)
+                x = (
+                    torch.tensor(X_current, dtype=torch.float32)
+                    .unsqueeze(0)
+                    .permute(0, 2, 1)
+                )
+
+                # Run inference
+                output = model(past_values=x)
+
+                # Get prediction (scaled)
+                if hasattr(output, "prediction_outputs"):
+                    scaled_pred = output.prediction_outputs[:, 0, close_ret_idx].item()
+                elif hasattr(output, "last_hidden_state"):
+                    scaled_pred = output.last_hidden_state[:, -1, close_ret_idx].item()
+                else:
+                    return momentum_fallback()
+
+                # Inverse transform prediction from scaled space back to return space
+                if scaler is not None:
+                    daily_return = (
+                        scaled_pred * scaler.scale_[close_ret_idx]
+                        + scaler.mean_[close_ret_idx]
+                    )
+                else:
+                    daily_return = scaled_pred
+
+                daily_returns.append(daily_return)
+
+                # Update input sequence for next iteration (except for last day)
+                if day < 4:
+                    # Get last day's features for non-OHLCV channels (forward-fill)
+                    last_day_scaled = X_current[-1, :].copy()
+
+                    # Create new day features
+                    new_day = last_day_scaled.copy()
+
+                    # Scale predicted return back to scaled space for OHLCV channels
+                    if scaler is not None:
+                        scaled_return = (
+                            daily_return - scaler.mean_[close_ret_idx]
+                        ) / scaler.scale_[close_ret_idx]
+                    else:
+                        scaled_return = daily_return
+
+                    # Set OHLCV returns to predicted value (in scaled space)
+                    new_day[open_ret_idx] = scaled_return
+                    new_day[high_ret_idx] = scaled_return
+                    new_day[low_ret_idx] = scaled_return
+                    new_day[close_ret_idx] = scaled_return
+                    # Volume return stays at 0 (scaled)
+                    if scaler is not None:
+                        new_day[volume_ret_idx] = (
+                            -scaler.mean_[volume_ret_idx]
+                            / scaler.scale_[volume_ret_idx]
+                        )
+                    else:
+                        new_day[volume_ret_idx] = 0.0
+
+                    # Shift sequence left and add new day
+                    X_current[:-1, :] = X_current[1:, :]
+                    X_current[-1, :] = new_day
+
+            # Compound 5 daily returns to get weekly return
+            weekly_return = float(np.prod(1 + np.array(daily_returns)) - 1)
+            return weekly_return
 
         except Exception as e:
-            logger.debug(f"[WalkForward] Multi-channel inference failed: {e}")
+            logger.debug(f"[WalkForward] Multi-channel 5-day inference failed: {e}")
             return momentum_fallback()
 
-    # Fallback: single-channel from weekly prices
+    # Fallback: single-channel from weekly prices with 5-day prediction
     if weekly_idx < context_length:
         return momentum_fallback()
 
@@ -747,33 +872,56 @@ def _predict_single_week_patchtst(
     if len(returns) != context_length - 1:
         return 0.0
 
-    features = returns.reshape(1, -1, 1)
+    features = returns.copy()
 
     if scaler is not None:
-        flat_features = features.reshape(-1, features.shape[-1])
+        flat_features = features.reshape(-1, 1)
         flat_features = scaler.transform(flat_features)
-        features = flat_features.reshape(features.shape)
+        features = flat_features.flatten()
 
     import torch
 
-    x = torch.tensor(features, dtype=torch.float32).permute(0, 2, 1)
+    # Predict 5 daily returns iteratively
+    daily_returns = []
+    X_current = features.copy()
 
-    try:
-        output = model(past_values=x)
-        if hasattr(output, "prediction_outputs"):
-            scaled_pred = output.prediction_outputs[:, 0, 0].item()
-        elif hasattr(output, "last_hidden_state"):
-            scaled_pred = output.last_hidden_state[:, -1, 0].item()
-        else:
+    for day in range(5):
+        x = torch.tensor(X_current.reshape(1, -1, 1), dtype=torch.float32).permute(
+            0, 2, 1
+        )
+
+        try:
+            output = model(past_values=x)
+            if hasattr(output, "prediction_outputs"):
+                scaled_pred = output.prediction_outputs[:, 0, 0].item()
+            elif hasattr(output, "last_hidden_state"):
+                scaled_pred = output.last_hidden_state[:, -1, 0].item()
+            else:
+                return momentum_fallback()
+
+            # Inverse transform
+            if scaler is not None:
+                daily_return = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
+            else:
+                daily_return = scaled_pred
+
+            daily_returns.append(daily_return)
+
+            # Update sequence for next iteration
+            if day < 4:
+                if scaler is not None:
+                    scaled_return = (daily_return - scaler.mean_[0]) / scaler.scale_[0]
+                else:
+                    scaled_return = daily_return
+                X_current[:-1] = X_current[1:]
+                X_current[-1] = scaled_return
+
+        except Exception:
             return momentum_fallback()
 
-        if scaler is not None:
-            pred = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
-        else:
-            pred = scaled_pred
-        return pred
-    except Exception:
-        return momentum_fallback()
+    # Compound 5 daily returns to get weekly return
+    weekly_return = float(np.prod(1 + np.array(daily_returns)) - 1)
+    return weekly_return
 
 
 def _load_daily_ohlcv(
