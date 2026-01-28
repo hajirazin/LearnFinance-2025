@@ -15,6 +15,7 @@ from fastapi import APIRouter
 from .dependencies import (
     get_config,
     get_dataset_builder,
+    get_lstm_training_symbols,
     get_patchtst_config,
     get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
@@ -91,6 +92,7 @@ __all__ = [
     # Dependencies
     "get_config",
     "get_dataset_builder",
+    "get_lstm_training_symbols",
     "get_patchtst_config",
     "get_patchtst_data_aligner",
     "get_patchtst_dataset_builder",

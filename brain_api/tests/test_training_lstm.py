@@ -12,9 +12,9 @@ from brain_api.core.lstm import DatasetResult, LSTMModel, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
     get_dataset_builder,
+    get_lstm_training_symbols,
     get_price_loader,
     get_storage,
-    get_symbols,
     get_trainer,
 )
 from brain_api.storage.local import LocalModelStorage
@@ -101,7 +101,7 @@ def client_with_mocks(temp_storage):
     """Create test client with mocked dependencies."""
     # Override dependencies
     app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_lstm_training_symbols] = mock_symbols
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
     app.dependency_overrides[get_trainer] = lambda: mock_trainer
@@ -232,7 +232,7 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
 
         # First, create a good model that gets promoted (first model always promoted)
         app.dependency_overrides[get_storage] = lambda: fresh_storage
-        app.dependency_overrides[get_symbols] = mock_symbols
+        app.dependency_overrides[get_lstm_training_symbols] = mock_symbols
         app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
         app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
         app.dependency_overrides[get_trainer] = lambda: mock_trainer
@@ -282,7 +282,7 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
 
     # First, create a good model that gets promoted
     app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_lstm_training_symbols] = mock_symbols
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
     app.dependency_overrides[get_trainer] = lambda: mock_trainer

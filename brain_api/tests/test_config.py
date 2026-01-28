@@ -4,7 +4,14 @@ import os
 from datetime import date
 from unittest.mock import patch
 
-from brain_api.core.config import resolve_cutoff_date, resolve_training_window
+import pytest
+
+from brain_api.core.config import (
+    UniverseType,
+    get_lstm_train_universe,
+    resolve_cutoff_date,
+    resolve_training_window,
+)
 
 
 class TestResolveCutoffDate:
@@ -136,3 +143,68 @@ class TestResolveTrainingWindow:
         assert end_date == date(2024, 3, 15)  # Friday before March 20
         # Start should be Jan 1 of 2024-5 = 2019
         assert start_date == date(2019, 1, 1)
+
+
+class TestUniverseType:
+    """Tests for UniverseType enum."""
+
+    def test_universe_type_values(self) -> None:
+        """UniverseType enum has expected values."""
+        assert UniverseType.HALAL.value == "halal"
+        assert UniverseType.SP500.value == "sp500"
+
+    def test_universe_type_is_string_compatible(self) -> None:
+        """UniverseType can be compared with strings."""
+        assert UniverseType.HALAL == "halal"
+        assert UniverseType.SP500 == "sp500"
+
+    def test_universe_type_from_string(self) -> None:
+        """UniverseType can be created from string."""
+        assert UniverseType("halal") == UniverseType.HALAL
+        assert UniverseType("sp500") == UniverseType.SP500
+
+    def test_universe_type_invalid_raises(self) -> None:
+        """Invalid UniverseType value raises ValueError."""
+        with pytest.raises(ValueError):
+            UniverseType("invalid")
+
+
+class TestGetLstmTrainUniverse:
+    """Tests for get_lstm_train_universe function."""
+
+    def test_default_returns_sp500(self) -> None:
+        """Default should be SP500 when no env var set."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = get_lstm_train_universe()
+        assert result == UniverseType.SP500
+
+    def test_halal_from_env(self) -> None:
+        """LSTM_TRAIN_UNIVERSE=halal returns HALAL."""
+        with patch.dict(os.environ, {"LSTM_TRAIN_UNIVERSE": "halal"}, clear=True):
+            result = get_lstm_train_universe()
+        assert result == UniverseType.HALAL
+
+    def test_sp500_from_env(self) -> None:
+        """LSTM_TRAIN_UNIVERSE=sp500 returns SP500."""
+        with patch.dict(os.environ, {"LSTM_TRAIN_UNIVERSE": "sp500"}, clear=True):
+            result = get_lstm_train_universe()
+        assert result == UniverseType.SP500
+
+    def test_case_insensitive(self) -> None:
+        """Environment variable is case-insensitive."""
+        with patch.dict(os.environ, {"LSTM_TRAIN_UNIVERSE": "HALAL"}, clear=True):
+            result = get_lstm_train_universe()
+        assert result == UniverseType.HALAL
+
+        with patch.dict(os.environ, {"LSTM_TRAIN_UNIVERSE": "SP500"}, clear=True):
+            result = get_lstm_train_universe()
+        assert result == UniverseType.SP500
+
+    def test_invalid_value_raises_error(self) -> None:
+        """Invalid LSTM_TRAIN_UNIVERSE value raises ValueError."""
+        with patch.dict(os.environ, {"LSTM_TRAIN_UNIVERSE": "invalid"}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                get_lstm_train_universe()
+            assert "invalid" in str(exc_info.value).lower()
+            assert "halal" in str(exc_info.value).lower()
+            assert "sp500" in str(exc_info.value).lower()

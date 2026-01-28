@@ -2,10 +2,12 @@
 
 import os
 from datetime import date, timedelta
+from enum import Enum
 
 # Environment variable names
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
+ENV_LSTM_TRAIN_UNIVERSE = "LSTM_TRAIN_UNIVERSE"
 ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
@@ -31,6 +33,23 @@ ENV_ALPACA_API_SECRET = "ALPACA_API_SECRET"
 # Defaults
 DEFAULT_LOOKBACK_YEARS = 15
 DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
+
+
+class UniverseType(str, Enum):
+    """Stock universe types for training models.
+
+    Each universe represents a different set of stocks to train on.
+    Using str as base class allows direct string comparison and serialization.
+    """
+
+    HALAL = "halal"  # Halal ETF universe (~45 stocks from SPUS/HLAL/SPTE)
+    SP500 = "sp500"  # S&P 500 (~500 stocks from datahub.io)
+    # Future universes:
+    # INDIAN_HALAL = "indian_halal"
+    # NIFTY500 = "nifty500"
+
+
+DEFAULT_LSTM_TRAIN_UNIVERSE = UniverseType.SP500
 
 
 def get_hf_token() -> str | None:
@@ -81,6 +100,31 @@ def get_hf_twitter_sentiment_repo() -> str | None:
 def get_storage_backend() -> str:
     """Get the storage backend to use ('local' or 'hf')."""
     return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
+
+
+def get_lstm_train_universe() -> UniverseType:
+    """Get LSTM training universe from environment.
+
+    Controls which stock universe LSTM is trained on. Different universes
+    produce different model versions (symbols are included in version hash).
+
+    Returns:
+        UniverseType enum value.
+
+    Raises:
+        ValueError: If LSTM_TRAIN_UNIVERSE env var has an invalid value.
+    """
+    env_value = os.environ.get(ENV_LSTM_TRAIN_UNIVERSE, "")
+    if not env_value:
+        return DEFAULT_LSTM_TRAIN_UNIVERSE
+
+    try:
+        return UniverseType(env_value.lower())
+    except ValueError as err:
+        valid_options = [e.value for e in UniverseType]
+        raise ValueError(
+            f"Invalid LSTM_TRAIN_UNIVERSE='{env_value}'. Valid options: {valid_options}"
+        ) from err
 
 
 def resolve_cutoff_date(reference_date: date | None = None) -> date:

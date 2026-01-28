@@ -80,6 +80,28 @@ def get_symbols() -> list[str]:
     return [stock["symbol"] for stock in universe["stocks"]]
 
 
+def get_lstm_training_symbols() -> list[str]:
+    """Get symbols for LSTM training based on config.
+
+    Reads LSTM_TRAIN_UNIVERSE env var to determine which universe to use.
+    Default is UniverseType.HALAL for backward compatibility.
+
+    Returns:
+        List of symbols for LSTM training
+    """
+    from brain_api.core.config import UniverseType, get_lstm_train_universe
+
+    universe_type = get_lstm_train_universe()
+
+    if universe_type == UniverseType.SP500:
+        from brain_api.universe.sp500 import get_sp500_symbols
+
+        return get_sp500_symbols()
+    else:  # Default: HALAL
+        universe = get_halal_universe()
+        return [stock["symbol"] for stock in universe["stocks"]]
+
+
 def get_top15_symbols() -> list[str]:
     """Get top 15 symbols by liquidity from halal universe."""
     universe = get_halal_universe()

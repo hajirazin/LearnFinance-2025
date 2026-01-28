@@ -78,3 +78,77 @@ def test_get_halal_stocks_sorted_by_weight():
 
     weights = [stock["max_weight"] for stock in data["stocks"]]
     assert weights == sorted(weights, reverse=True), "Stocks not sorted by weight"
+
+
+# ============================================================================
+# S&P 500 Universe Tests
+# ============================================================================
+
+
+def test_get_sp500_universe_returns_expected_structure():
+    """Test that get_sp500_universe returns the expected structure."""
+    from brain_api.universe.sp500 import get_sp500_universe
+
+    data = get_sp500_universe()
+
+    # Check required fields exist
+    assert "stocks" in data
+    assert "source" in data
+    assert "total_stocks" in data
+    assert "fetched_at" in data
+
+    # Check source is datahub.io
+    assert data["source"] == "datahub.io"
+
+
+def test_get_sp500_universe_returns_stocks():
+    """Test that get_sp500_universe returns stocks."""
+    from brain_api.universe.sp500 import get_sp500_universe
+
+    data = get_sp500_universe()
+
+    # Should have ~500 stocks
+    assert data["total_stocks"] > 400
+    assert len(data["stocks"]) > 400
+    assert len(data["stocks"]) == data["total_stocks"]
+
+
+def test_get_sp500_universe_stock_structure():
+    """Test that each S&P 500 stock has required fields."""
+    from brain_api.universe.sp500 import get_sp500_universe
+
+    data = get_sp500_universe()
+
+    for stock in data["stocks"][:10]:  # Check first 10 stocks
+        assert "symbol" in stock
+        assert "name" in stock
+        assert "sector" in stock
+
+        # Validate types
+        assert isinstance(stock["symbol"], str)
+        assert isinstance(stock["name"], str)
+        assert isinstance(stock["sector"], str)
+        assert len(stock["symbol"]) > 0
+
+
+def test_get_sp500_symbols_returns_list():
+    """Test that get_sp500_symbols returns a list of symbols."""
+    from brain_api.universe.sp500 import get_sp500_symbols
+
+    symbols = get_sp500_symbols()
+
+    assert isinstance(symbols, list)
+    assert len(symbols) > 400
+    assert all(isinstance(s, str) for s in symbols)
+
+
+def test_get_sp500_universe_contains_known_stocks():
+    """Test that S&P 500 contains well-known stocks."""
+    from brain_api.universe.sp500 import get_sp500_symbols
+
+    symbols = get_sp500_symbols()
+
+    # These are long-standing S&P 500 members
+    known_stocks = ["AAPL", "MSFT", "AMZN", "GOOGL", "JPM"]
+    for stock in known_stocks:
+        assert stock in symbols, f"Expected {stock} in S&P 500"
