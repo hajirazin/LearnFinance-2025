@@ -1,10 +1,12 @@
 """LSTM training endpoint."""
 
+import gc
 import logging
 import time
 from datetime import date
 
 import pandas as pd
+import torch
 from fastapi import APIRouter, Depends, Query
 
 from brain_api.core.config import (
@@ -429,3 +431,11 @@ def _backfill_lstm_snapshots(
                 )
             except Exception as e:
                 logger.error(f"[LSTM Backfill] Failed to upload snapshot to HF: {e}")
+
+        # Memory cleanup after each snapshot to prevent accumulation
+        del dataset, result, prices, metadata
+        gc.collect()
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        elif torch.cuda.is_available():
+            torch.cuda.empty_cache()
