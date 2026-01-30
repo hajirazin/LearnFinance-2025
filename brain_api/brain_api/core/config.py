@@ -43,7 +43,7 @@ class UniverseType(str, Enum):
     # NIFTY500 = "nifty500"
 
 
-DEFAULT_LSTM_TRAIN_UNIVERSE = UniverseType.SP500
+DEFAULT_LSTM_TRAIN_UNIVERSE = UniverseType.HALAL
 
 
 def get_hf_token() -> str | None:

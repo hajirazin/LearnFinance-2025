@@ -182,6 +182,10 @@ def train_sac_endpoint(
     )
     result = train_sac(training_data, config)
 
+    logger.info(
+        f"[SAC] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr * 100:.2f}%"
+    )
+
     # Get prior version info (checks local, then HF if needed)
     from brain_api.storage.sac import SACHuggingFaceModelStorage
 
@@ -211,7 +215,7 @@ def train_sac_endpoint(
         or result.eval_sharpe > prior_sharpe
     )
     logger.info(
-        f"[SAC] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+        f"[SAC] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr * 100:.2f}%"
     )
     logger.info(f"[SAC] Promotion: {'YES' if promoted else 'NO'}")
 
@@ -471,7 +475,7 @@ def finetune_sac_endpoint(
     promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
 
     logger.info(
-        f"[SAC Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+        f"[SAC Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr * 100:.2f}%"
     )
     logger.info(
         f"[SAC Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"

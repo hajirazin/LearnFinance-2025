@@ -172,11 +172,11 @@ class TestUniverseType:
 class TestGetLstmTrainUniverse:
     """Tests for get_lstm_train_universe function."""
 
-    def test_default_returns_sp500(self) -> None:
-        """Default should be SP500 when no env var set."""
+    def test_default_returns_halal(self) -> None:
+        """Default should be HALAL when no env var set."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_lstm_train_universe()
-        assert result == UniverseType.SP500
+        assert result == UniverseType.HALAL
 
     def test_halal_from_env(self) -> None:
         """LSTM_TRAIN_UNIVERSE=halal returns HALAL."""
