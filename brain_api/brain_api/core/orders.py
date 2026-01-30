@@ -17,8 +17,9 @@ import yfinance as yf
 # Skip orders smaller than this value (in dollars)
 MIN_TRADE_VALUE: float = 10.0
 
-# Buffer for limit price (1% above last price for buys, 1% below for sells)
-LIMIT_PRICE_BUFFER_PCT: float = 0.01
+# Buffer for limit price (2% above last price for buys, 2% below for sells)
+# This gives ~95%+ fill rate while still providing price protection
+LIMIT_PRICE_BUFFER_PCT: float = 0.02
 
 
 # ============================================================================

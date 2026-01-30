@@ -39,7 +39,8 @@ class PortfolioScaler:
             New PortfolioScaler instance.
         """
         n_signals_per_stock = 7  # news + 5 fundamentals + fundamental_age
-        n_forecast_features = n_stocks
+        n_forecasts_per_stock = 2  # LSTM + PatchTST (dual forecasts)
+        n_forecast_features = n_stocks * n_forecasts_per_stock
         n_features_to_scale = n_stocks * n_signals_per_stock + n_forecast_features
         n_portfolio_weights = n_stocks + 1  # +1 for CASH
 

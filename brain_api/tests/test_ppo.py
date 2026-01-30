@@ -505,3 +505,50 @@ def test_finetune_ppo_end_date_is_always_friday(client_for_inference, monkeypatc
 
     # End date should always be a Friday
     assert end_date.weekday() == 4, f"Expected Friday, got {end_date.strftime('%A')}"
+
+
+# ============================================================================
+# State dimension and edge case tests
+# ============================================================================
+
+
+def test_infer_ppo_with_symbols_not_in_model(client_for_inference):
+    """Test inference with portfolio containing symbols not in model."""
+    response = client_for_inference.post(
+        "/inference/ppo",
+        json={
+            "portfolio": {
+                "cash": 5000.0,
+                "positions": [
+                    {"symbol": "AAPL", "market_value": 2500.0},  # In model
+                    {"symbol": "UNKNOWN_SYM", "market_value": 2500.0},  # NOT in model
+                ],
+            },
+        },
+    )
+
+    # Should still return 200, ignoring unknown symbols
+    assert response.status_code == 200
+    data = response.json()
+    assert "target_weights" in data
+
+
+def test_infer_ppo_with_small_cash(client_for_inference):
+    """Test inference with very small cash position."""
+    response = client_for_inference.post(
+        "/inference/ppo",
+        json={
+            "portfolio": {
+                "cash": 10.0,  # Very small
+                "positions": [
+                    {"symbol": "AAPL", "market_value": 9990.0},
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Cash buffer should still be enforced
+    assert data["target_weights"].get("CASH", 0) >= 0.02

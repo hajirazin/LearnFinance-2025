@@ -282,7 +282,8 @@ def mock_price_loader(symbols, start_date, end_date):
     import pandas as pd
 
     # Create fake weekly price data
-    dates = pd.date_range(start=start_date, end=end_date, freq="W-FRI")[:100]
+    # Need at least 156 weeks (104 train + 52 eval) for SAC training
+    dates = pd.date_range(start=start_date, end=end_date, freq="W-FRI")[:200]
     prices = {}
     for i, symbol in enumerate(symbols):
         base = 100 + i * 10
@@ -352,6 +353,228 @@ class TestSACLSTMFinetune:
             )
         finally:
             app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Full training endpoint tests
+# ============================================================================
+
+
+class TestSACFullTraining:
+    """Tests for /train/sac/full endpoint."""
+
+    def test_full_training_returns_200(self, temp_storage, monkeypatch):
+        """Test that full training endpoint returns 200."""
+        from brain_api.routes.training import sac
+
+        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_sac_storage] = lambda: temp_storage
+        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_sac_config] = mock_config
+
+        client = TestClient(app)
+
+        try:
+            response = client.post("/train/sac/full")
+            assert response.status_code == 200
+
+            data = response.json()
+            # Check required fields
+            assert "version" in data
+            assert "data_window_start" in data
+            assert "data_window_end" in data
+            assert "promoted" in data
+            assert "symbols_used" in data
+            # First training should auto-promote
+            assert data["promoted"] is True
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_is_idempotent(self, temp_storage, monkeypatch):
+        """Test that running full training twice with same data produces same version."""
+        from brain_api.routes.training import sac
+
+        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_sac_storage] = lambda: temp_storage
+        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_sac_config] = mock_config
+
+        client = TestClient(app)
+
+        try:
+            # First training
+            response1 = client.post("/train/sac/full")
+            assert response1.status_code == 200
+            version1 = response1.json()["version"]
+
+            # Second training with same config should be idempotent
+            response2 = client.post("/train/sac/full")
+            assert response2.status_code == 200
+            version2 = response2.json()["version"]
+
+            # Versions should match (idempotent)
+            assert version1 == version2
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ============================================================================
+# Experience endpoint tests
+# ============================================================================
+
+
+class TestExperienceStore:
+    """Tests for /experience/store endpoint."""
+
+    def test_store_experience_returns_200(self):
+        """Test that storing experience returns 200."""
+        client = TestClient(app)
+
+        response = client.post(
+            "/experience/store",
+            json={
+                "run_id": "paper:2025-01-27",
+                "week_start": "2025-01-27",
+                "week_end": "2025-01-31",
+                "model_type": "ppo",
+                "model_version": "v2025-01-01_test123",
+                "state": {
+                    "current_weights": {"AAPL": 0.10, "MSFT": 0.08, "CASH": 0.82},
+                    "signals": {"AAPL": {"news_sentiment": 0.5}},
+                },
+                "action": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.78},
+                "turnover": 0.04,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "record_id" in data
+        assert data["stored"] is True
+
+    def test_store_experience_any_model_type_accepted(self):
+        """Test that any model_type string is accepted (no strict enum validation)."""
+        client = TestClient(app)
+
+        response = client.post(
+            "/experience/store",
+            json={
+                "run_id": "paper:2025-01-27",
+                "week_start": "2025-01-27",
+                "week_end": "2025-01-31",
+                "model_type": "custom_type",  # Any string is accepted
+                "model_version": "v2025-01-01_test123",
+                "state": {},
+                "action": {"CASH": 1.0},
+                "turnover": 0.0,
+            },
+        )
+
+        # API accepts any model_type string (no strict enum validation)
+        assert response.status_code == 200
+
+
+class TestExperienceLabel:
+    """Tests for /experience/label endpoint."""
+
+    def test_label_experience_returns_200(self):
+        """Test that labeling experience returns 200."""
+        client = TestClient(app)
+
+        # First store some experience
+        client.post(
+            "/experience/store",
+            json={
+                "run_id": "paper:2025-01-20",
+                "week_start": "2025-01-20",
+                "week_end": "2025-01-24",
+                "model_type": "sac",
+                "model_version": "v2025-01-01_test123",
+                "state": {"current_weights": {"CASH": 1.0}},
+                "action": {"CASH": 1.0},
+                "turnover": 0.0,
+            },
+        )
+
+        # Then try to label it
+        response = client.post(
+            "/experience/label",
+            json={"run_id": "paper:2025-01-20"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "records_labeled" in data
+        assert "records_skipped" in data
+
+
+class TestExperienceList:
+    """Tests for /experience/list endpoint."""
+
+    def test_list_experience_returns_200(self):
+        """Test that listing experience returns 200."""
+        client = TestClient(app)
+
+        response = client.get("/experience/list")
+
+        assert response.status_code == 200
+        data = response.json()
+        # API returns list directly, not wrapped in "experiences" key
+        assert isinstance(data, list)
+
+
+# ============================================================================
+# State dimension and dual forecast validation tests
+# ============================================================================
+
+
+class TestStateDimensionValidation:
+    """Tests for state dimension handling in inference."""
+
+    def test_inference_with_all_cash_portfolio(self, inference_client):
+        """Test inference with all-cash portfolio (no positions)."""
+        response = inference_client.post(
+            "/inference/sac",
+            json={
+                "portfolio": {
+                    "cash": 10000.0,
+                    "positions": [],  # All cash, no positions
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        weights = data["target_weights"]
+
+        # Should still return valid weights
+        total = sum(weights.values())
+        assert abs(total - 1.0) < 0.01
+
+    def test_inference_with_symbols_not_in_model(self, inference_client):
+        """Test inference with portfolio containing symbols not in model."""
+        response = inference_client.post(
+            "/inference/sac",
+            json={
+                "portfolio": {
+                    "cash": 5000.0,
+                    "positions": [
+                        {"symbol": "AAPL", "market_value": 2500.0},  # In model
+                        {
+                            "symbol": "UNKNOWN_SYM",
+                            "market_value": 2500.0,
+                        },  # NOT in model
+                    ],
+                },
+            },
+        )
+
+        # Should still return 200, ignoring unknown symbols
+        assert response.status_code == 200
 
 
 # ============================================================================

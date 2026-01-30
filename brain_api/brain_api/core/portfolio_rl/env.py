@@ -19,7 +19,10 @@ from brain_api.core.portfolio_rl.constraints import (
     compute_turnover,
     enforce_constraints,
 )
-from brain_api.core.portfolio_rl.rewards import compute_reward
+from brain_api.core.portfolio_rl.rewards import (
+    compute_portfolio_log_return,
+    compute_reward_from_log_return,
+)
 from brain_api.core.portfolio_rl.state import (
     StateSchema,
     build_state_vector,
@@ -210,12 +213,19 @@ class PortfolioEnv:
         asset_returns[: self.n_stocks] = stock_returns
         # CASH return is 0 (could add risk-free rate if desired)
 
-        # Compute portfolio return using target weights
+        # Compute portfolio LOG return using target weights
+        # Log returns are additive across time, which is better for RL
         # (assumes rebalance happens at week start)
+        portfolio_log_return = compute_portfolio_log_return(
+            target_weights, asset_returns
+        )
+        # For tracking, also compute simple return
         portfolio_return = float(np.dot(target_weights, asset_returns))
 
-        # Compute reward
-        reward = compute_reward(portfolio_return, turnover, self.config)
+        # Compute reward using log return
+        reward = compute_reward_from_log_return(
+            portfolio_log_return, turnover, self.config
+        )
 
         # Track for episode statistics
         self.episode_returns.append(portfolio_return)

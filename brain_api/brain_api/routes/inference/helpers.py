@@ -121,7 +121,7 @@ def _load_model_artifacts_generic(
     Generic helper that handles local → HuggingFace fallback for any model type.
 
     Args:
-        model_type: Model type identifier (e.g., "LSTM", "PatchTST", "SAC_PatchTST")
+        model_type: Model type identifier (e.g., "LSTM", "PatchTST", "PPO", "SAC")
         local_storage: Local storage instance for caching
         hf_storage_class: HuggingFace storage class to use for fallback
         hf_model_repo: HuggingFace repository ID for this model type

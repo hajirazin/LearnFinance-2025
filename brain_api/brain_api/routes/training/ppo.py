@@ -376,7 +376,6 @@ def finetune_ppo_endpoint(
     Returns:
         Training result including version, metrics, and promotion status.
     """
-    time.time()
     logger.info("[PPO Finetune] Starting fine-tuning")
 
     # Load prior model (required for fine-tuning)

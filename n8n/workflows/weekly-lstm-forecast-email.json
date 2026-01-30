@@ -281,7 +281,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const N = 20;\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\nconst asOfDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());\nconst runId = `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\nreturn { json: { symbols, as_of_date: asOfDate, run_id: runId, stock_count: symbols.length, mock_portfolio: mockPortfolio } };"
+        "jsCode": "const N = 20;\nconst stocks = $input.first().json.stocks || [];\nconst symbols = stocks.slice(0, N).map(s => s.symbol);\nconst asOfDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());\nconst runId = `paper:${asOfDate}`;\nreturn { json: { symbols, as_of_date: asOfDate, run_id: runId, stock_count: symbols.length } };"
       },
       "id": "0647c841-eca0-42fb-8eb1-9ab746f79a81",
       "name": "Pick Top 20 Symbols",
@@ -464,7 +464,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\n\n// Get real portfolios from earlier nodes\nlet portfolio_ppo = mockPortfolio;\nlet portfolio_sac = mockPortfolio;\nlet portfolio_hrp = mockPortfolio;\n\ntry { portfolio_ppo = $('Build PPO Portfolio').first().json.portfolio_ppo || mockPortfolio; } catch(e) {}\ntry { portfolio_sac = $('Build SAC Portfolio').first().json.portfolio_sac || mockPortfolio; } catch(e) {}\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp || mockPortfolio; } catch(e) {}\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    mock_portfolio: mockPortfolio,\n    portfolio_ppo,\n    portfolio_sac,\n    portfolio_hrp\n  }\n};"
+        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\n\n// Get real portfolios from earlier nodes - fail if not available\nlet portfolio_ppo, portfolio_sac, portfolio_hrp;\nlet errors = [];\n\ntry { portfolio_ppo = $('Build PPO Portfolio').first().json.portfolio_ppo; if (!portfolio_ppo) throw new Error('Empty'); } catch(e) { errors.push('PPO portfolio fetch failed'); }\ntry { portfolio_sac = $('Build SAC Portfolio').first().json.portfolio_sac; if (!portfolio_sac) throw new Error('Empty'); } catch(e) { errors.push('SAC portfolio fetch failed'); }\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp; if (!portfolio_hrp) throw new Error('Empty'); } catch(e) { errors.push('HRP portfolio fetch failed'); }\n\nif (errors.length > 0) { throw new Error('Portfolio fetch errors: ' + errors.join(', ') + '. Check Alpaca API credentials and connectivity.'); }\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    portfolio_ppo,\n    portfolio_sac,\n    portfolio_hrp\n  }\n};"
       },
       "id": "451562bf-e0c8-4d68-8217-bba9fe2d9ba9",
       "name": "Prepare Phase 2",
@@ -573,6 +573,48 @@
         6016,
         3648
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/experience/store",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const portfolio = $json.portfolio || {}; const positions = portfolio.positions || []; const cash = portfolio.cash || 0; const totalValue = cash + positions.reduce((s, p) => s + (p.market_value || 0), 0); const currentWeights = Object.fromEntries(positions.map(p => [p.symbol, p.market_value / totalValue])); currentWeights.CASH = cash / totalValue; let signals = {}; try { const news = $('POST News Sentiment').first().json?.sentiments || []; const fund = $('POST Fundamentals').first().json?.fundamentals || []; news.forEach(n => { signals[n.symbol] = signals[n.symbol] || {}; signals[n.symbol].news_sentiment = n.sentiment_score || 0; }); fund.forEach(f => { signals[f.symbol] = signals[f.symbol] || {}; signals[f.symbol].gross_margin = f.gross_margin || 0; signals[f.symbol].operating_margin = f.operating_margin || 0; signals[f.symbol].net_margin = f.net_margin || 0; signals[f.symbol].current_ratio = f.current_ratio || 0; signals[f.symbol].debt_to_equity = f.debt_to_equity || 0; }); } catch(e) {} let lstmForecasts = {}; let patchtstForecasts = {}; try { const lstm = $('POST LSTM Forecast').first().json?.predictions || []; lstm.forEach(p => { lstmForecasts[p.symbol] = p.predicted_return || 0; }); } catch(e) {} try { const patchtst = $('POST PatchTST Forecast').first().json?.predictions || []; patchtst.forEach(p => { patchtstForecasts[p.symbol] = p.predicted_return || 0; }); } catch(e) {} return JSON.stringify({ run_id: $json.run_id, week_start: $json.allocation_result?.target_week_start || $json.as_of_date, week_end: $json.allocation_result?.target_week_end || $json.as_of_date, model_type: 'ppo', model_version: $json.allocation_result?.model_version || 'unknown', state: { signals, lstm_forecasts: lstmForecasts, patchtst_forecasts: patchtstForecasts, current_weights: currentWeights }, intended_action: $json.target_weights || {}, intended_turnover: $json.allocation_result?.turnover || 0 }); })() }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-experience-ppo",
+      "name": "Store Experience PPO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6256,
+        3408
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/experience/store",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const portfolio = $json.portfolio || {}; const positions = portfolio.positions || []; const cash = portfolio.cash || 0; const totalValue = cash + positions.reduce((s, p) => s + (p.market_value || 0), 0); const currentWeights = Object.fromEntries(positions.map(p => [p.symbol, p.market_value / totalValue])); currentWeights.CASH = cash / totalValue; let signals = {}; try { const news = $('POST News Sentiment').first().json?.sentiments || []; const fund = $('POST Fundamentals').first().json?.fundamentals || []; news.forEach(n => { signals[n.symbol] = signals[n.symbol] || {}; signals[n.symbol].news_sentiment = n.sentiment_score || 0; }); fund.forEach(f => { signals[f.symbol] = signals[f.symbol] || {}; signals[f.symbol].gross_margin = f.gross_margin || 0; signals[f.symbol].operating_margin = f.operating_margin || 0; signals[f.symbol].net_margin = f.net_margin || 0; signals[f.symbol].current_ratio = f.current_ratio || 0; signals[f.symbol].debt_to_equity = f.debt_to_equity || 0; }); } catch(e) {} let lstmForecasts = {}; let patchtstForecasts = {}; try { const lstm = $('POST LSTM Forecast').first().json?.predictions || []; lstm.forEach(p => { lstmForecasts[p.symbol] = p.predicted_return || 0; }); } catch(e) {} try { const patchtst = $('POST PatchTST Forecast').first().json?.predictions || []; patchtst.forEach(p => { patchtstForecasts[p.symbol] = p.predicted_return || 0; }); } catch(e) {} return JSON.stringify({ run_id: $json.run_id, week_start: $json.allocation_result?.target_week_start || $json.as_of_date, week_end: $json.allocation_result?.target_week_end || $json.as_of_date, model_type: 'sac', model_version: $json.allocation_result?.model_version || 'unknown', state: { signals, lstm_forecasts: lstmForecasts, patchtst_forecasts: patchtstForecasts, current_weights: currentWeights }, intended_action: $json.target_weights || {}, intended_turnover: $json.allocation_result?.turnover || 0 }); })() }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-experience-sac",
+      "name": "Store Experience SAC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6256,
+        2896
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -944,6 +986,168 @@
           "name": "Gmail account"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/orders?status=all&after={{ $('POST LSTM Forecast').first().json.target_week_start }}&limit=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-ppo-order-history",
+      "name": "Fetch PPO Order History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7216,
+        3248
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "YVMuh5FJ60TmYEVe",
+          "name": "PPO"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/orders?status=all&after={{ $('POST LSTM Forecast').first().json.target_week_start }}&limit=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-sac-order-history",
+      "name": "Fetch SAC Order History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7216,
+        3056
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "LHsT9blDwa8KyKdR",
+          "name": "SAC"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/orders?status=all&after={{ $('POST LSTM Forecast').first().json.target_week_start }}&limit=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-hrp-order-history",
+      "name": "Fetch HRP Order History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7216,
+        3648
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "Po4KepbDzUFZNYiG",
+          "name": "HRP"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare intended orders vs actual execution from Alpaca\nconst intendedOrders = $('Generate Orders PPO').first().json.orders || [];\nconst executedOrders = $input.first().json || [];\n\nconst executionReport = intendedOrders.map(intended => {\n  const executed = executedOrders.find(o => o.client_order_id === intended.client_order_id);\n  return {\n    symbol: intended.symbol,\n    side: intended.side,\n    intended_qty: intended.qty,\n    filled_qty: executed?.filled_qty ? parseFloat(executed.filled_qty) : 0,\n    filled_avg_price: executed?.filled_avg_price ? parseFloat(executed.filled_avg_price) : null,\n    status: executed?.status || 'not_found',\n    client_order_id: intended.client_order_id\n  };\n});\n\nconst runId = $('Prep Orders PPO').first().json.run_id;\nreturn { json: { run_id: runId, model_type: 'ppo', execution_report: executionReport } };"
+      },
+      "id": "compare-ppo-orders",
+      "name": "Compare PPO Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7456,
+        3248
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare intended orders vs actual execution from Alpaca\nconst intendedOrders = $('Generate Orders SAC').first().json.orders || [];\nconst executedOrders = $input.first().json || [];\n\nconst executionReport = intendedOrders.map(intended => {\n  const executed = executedOrders.find(o => o.client_order_id === intended.client_order_id);\n  return {\n    symbol: intended.symbol,\n    side: intended.side,\n    intended_qty: intended.qty,\n    filled_qty: executed?.filled_qty ? parseFloat(executed.filled_qty) : 0,\n    filled_avg_price: executed?.filled_avg_price ? parseFloat(executed.filled_avg_price) : null,\n    status: executed?.status || 'not_found',\n    client_order_id: intended.client_order_id\n  };\n});\n\nconst runId = $('Prep Orders SAC').first().json.run_id;\nreturn { json: { run_id: runId, model_type: 'sac', execution_report: executionReport } };"
+      },
+      "id": "compare-sac-orders",
+      "name": "Compare SAC Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7456,
+        3056
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare intended orders vs actual execution from Alpaca\nconst intendedOrders = $('Generate Orders HRP').first().json.orders || [];\nconst executedOrders = $input.first().json || [];\n\nconst executionReport = intendedOrders.map(intended => {\n  const executed = executedOrders.find(o => o.client_order_id === intended.client_order_id);\n  return {\n    symbol: intended.symbol,\n    side: intended.side,\n    intended_qty: intended.qty,\n    filled_qty: executed?.filled_qty ? parseFloat(executed.filled_qty) : 0,\n    filled_avg_price: executed?.filled_avg_price ? parseFloat(executed.filled_avg_price) : null,\n    status: executed?.status || 'not_found',\n    client_order_id: intended.client_order_id\n  };\n});\n\nconst runId = $('Prep Orders HRP').first().json.run_id;\nreturn { json: { run_id: runId, model_type: 'hrp', execution_report: executionReport } };"
+      },
+      "id": "compare-hrp-orders",
+      "name": "Compare HRP Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7456,
+        3648
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/experience/update-execution",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-ppo-execution",
+      "name": "Store PPO Execution Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7696,
+        3248
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/experience/update-execution",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "store-sac-execution",
+      "name": "Store SAC Execution Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7696,
+        3056
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -1340,6 +1544,11 @@
             "node": "Generate Orders PPO",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Store Experience PPO",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1349,6 +1558,11 @@
         [
           {
             "node": "Generate Orders SAC",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Experience SAC",
             "type": "main",
             "index": 0
           }
@@ -1472,6 +1686,11 @@
             "node": "Merge SAC",
             "type": "main",
             "index": 1
+          },
+          {
+            "node": "Fetch SAC Order History",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1494,6 +1713,11 @@
             "node": "Merge + PPO",
             "type": "main",
             "index": 1
+          },
+          {
+            "node": "Fetch PPO Order History",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1527,6 +1751,11 @@
             "node": "Merge + HRP",
             "type": "main",
             "index": 1
+          },
+          {
+            "node": "Fetch HRP Order History",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1569,6 +1798,61 @@
         [
           {
             "node": "Gmail Send Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PPO Order History": {
+      "main": [
+        [
+          {
+            "node": "Compare PPO Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch SAC Order History": {
+      "main": [
+        [
+          {
+            "node": "Compare SAC Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch HRP Order History": {
+      "main": [
+        [
+          {
+            "node": "Compare HRP Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare PPO Orders": {
+      "main": [
+        [
+          {
+            "node": "Store PPO Execution Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare SAC Orders": {
+      "main": [
+        [
+          {
+            "node": "Store SAC Execution Report",
             "type": "main",
             "index": 0
           }

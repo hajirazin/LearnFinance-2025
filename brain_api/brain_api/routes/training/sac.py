@@ -471,12 +471,12 @@ def finetune_sac_endpoint(
     promoted = prior_sharpe is None or result.eval_sharpe > prior_sharpe
 
     logger.info(
-        f"[SAC_LSTM Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
+        f"[SAC Finetune] Metrics: sharpe={result.eval_sharpe:.4f}, cagr={result.eval_cagr:.4f}"
     )
     logger.info(
-        f"[SAC_LSTM Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
+        f"[SAC Finetune] Prior sharpe: {prior_sharpe}, New sharpe: {result.eval_sharpe}"
     )
-    logger.info(f"[SAC_LSTM Finetune] Promotion: {'YES' if promoted else 'NO'}")
+    logger.info(f"[SAC Finetune] Promotion: {'YES' if promoted else 'NO'}")
 
     metadata = create_sac_metadata(
         version=version,

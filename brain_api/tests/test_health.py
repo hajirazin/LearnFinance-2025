@@ -32,7 +32,13 @@ def test_liveness():
 
 
 def test_readiness():
-    """GET /health/ready returns ready status."""
+    """GET /health/ready returns ready status with checks."""
     response = client.get("/health/ready")
     assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
+    data = response.json()
+    assert data["status"] == "ready"
+    # Readiness check now includes detailed checks
+    assert "checks" in data
+    assert "data_dir_exists" in data["checks"]
+    assert "data_dir_writable" in data["checks"]
+    assert "models_dir_exists" in data["checks"]
