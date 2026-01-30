@@ -33,7 +33,7 @@ class ExperienceRecord(BaseModel):
     run_id: str  # e.g., "paper:2026-01-12"
     week_start: str  # ISO date
     week_end: str  # ISO date
-    model_type: str  # "ppo_lstm" or "ppo_patchtst"
+    model_type: str  # "ppo" or "sac"
     model_version: str
 
     # State at decision time

@@ -46,7 +46,7 @@
         }
       },
       "id": "d3834e14-9ba2-4c9e-9816-4ec6d47a350f",
-      "name": "Fetch PPO_LSTM Account",
+      "name": "Fetch PPO Account",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -56,7 +56,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "YVMuh5FJ60TmYEVe",
-          "name": "PPO_LSTM"
+          "name": "PPO"
         }
       }
     },
@@ -71,7 +71,7 @@
         }
       },
       "id": "46726888-2024-4f33-a3ec-f154aade36f7",
-      "name": "Fetch PPO_LSTM Positions",
+      "name": "Fetch PPO Positions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -81,7 +81,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "YVMuh5FJ60TmYEVe",
-          "name": "PPO_LSTM"
+          "name": "PPO"
         }
       }
     },
@@ -96,7 +96,7 @@
         }
       },
       "id": "32a8bb52-13df-4078-b0a1-bc83bd08d29e",
-      "name": "Fetch SAC_PatchTST Account",
+      "name": "Fetch SAC Account",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -106,7 +106,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "LHsT9blDwa8KyKdR",
-          "name": "SAC_PatchTST"
+          "name": "SAC"
         }
       }
     },
@@ -121,7 +121,7 @@
         }
       },
       "id": "2a4f7122-50a5-4995-b538-8e4829d2b401",
-      "name": "Fetch SAC_PatchTST Positions",
+      "name": "Fetch SAC Positions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -131,7 +131,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "LHsT9blDwa8KyKdR",
-          "name": "SAC_PatchTST"
+          "name": "SAC"
         }
       }
     },
@@ -190,7 +190,7 @@
         "jsCode": "// Normalize positions - always output 1 item even if empty\nconst positions = $input.all().map(i => i.json);\nreturn [{ json: { positions: positions } }];"
       },
       "id": "norm-positions-ppo-lstm",
-      "name": "Normalize PPO_LSTM Positions",
+      "name": "Normalize PPO Positions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -200,10 +200,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch PPO_LSTM Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_ppo_lstm: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
+        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch PPO Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_ppo: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
       },
       "id": "0bf23acc-1693-4480-add6-ce3f975f051a",
-      "name": "Build PPO_LSTM Portfolio",
+      "name": "Build PPO Portfolio",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -216,7 +216,7 @@
         "jsCode": "// Normalize positions - always output 1 item even if empty\nconst positions = $input.all().map(i => i.json);\nreturn [{ json: { positions: positions } }];"
       },
       "id": "norm-positions-sac-patchtst",
-      "name": "Normalize SAC_PatchTST Positions",
+      "name": "Normalize SAC Positions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -226,10 +226,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch SAC_PatchTST Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_sac_patchtst: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
+        "jsCode": "// Build portfolio from account + normalized positions\nconst account = $('Fetch SAC Account').first().json;\nconst posData = $input.first().json;\nconst positions = posData.positions || [];\nreturn {\n  json: {\n    portfolio_sac: {\n      cash: parseFloat(account.cash || '0'),\n      positions: positions.map(p => ({\n        symbol: p.symbol,\n        qty: parseFloat(p.qty || '0'),\n        market_value: parseFloat(p.market_value || '0')\n      }))\n    }\n  }\n};"
       },
       "id": "8ac70d8e-1ee9-4625-8661-2fb8ce39cd37",
-      "name": "Build SAC_PatchTST Portfolio",
+      "name": "Build SAC Portfolio",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -464,7 +464,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\n\n// Get real portfolios from earlier nodes\nlet portfolio_ppo_lstm = mockPortfolio;\nlet portfolio_sac_patchtst = mockPortfolio;\nlet portfolio_hrp = mockPortfolio;\n\ntry { portfolio_ppo_lstm = $('Build PPO_LSTM Portfolio').first().json.portfolio_ppo_lstm || mockPortfolio; } catch(e) {}\ntry { portfolio_sac_patchtst = $('Build SAC_PatchTST Portfolio').first().json.portfolio_sac_patchtst || mockPortfolio; } catch(e) {}\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp || mockPortfolio; } catch(e) {}\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    mock_portfolio: mockPortfolio,\n    portfolio_ppo_lstm,\n    portfolio_sac_patchtst,\n    portfolio_hrp\n  }\n};"
+        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\nconst mockPortfolio = { cash: 10000, positions: [] };\n\n// Get real portfolios from earlier nodes\nlet portfolio_ppo = mockPortfolio;\nlet portfolio_sac = mockPortfolio;\nlet portfolio_hrp = mockPortfolio;\n\ntry { portfolio_ppo = $('Build PPO Portfolio').first().json.portfolio_ppo || mockPortfolio; } catch(e) {}\ntry { portfolio_sac = $('Build SAC Portfolio').first().json.portfolio_sac || mockPortfolio; } catch(e) {}\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp || mockPortfolio; } catch(e) {}\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    mock_portfolio: mockPortfolio,\n    portfolio_ppo,\n    portfolio_sac,\n    portfolio_hrp\n  }\n};"
       },
       "id": "451562bf-e0c8-4d68-8217-bba9fe2d9ba9",
       "name": "Prepare Phase 2",
@@ -478,36 +478,16 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/sac_lstm",
+        "url": "http://host.docker.internal:8000/inference/sac",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.mock_portfolio, as_of_date: $json.as_of_date }) }}",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "23ba4fc5-4212-43ed-ab4c-84c38b23f991",
-      "name": "POST SAC+LSTM",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        5776,
-        2848
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/sac_patchtst",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_sac_patchtst, as_of_date: $json.as_of_date }) }}",
+        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_sac, as_of_date: $json.as_of_date }) }}",
         "options": {
           "timeout": 120000
         }
       },
       "id": "7e4b825d-9116-424f-9472-fb289ccbd726",
-      "name": "POST SAC+PatchTST",
+      "name": "POST SAC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -518,41 +498,21 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/ppo_lstm",
+        "url": "http://host.docker.internal:8000/inference/ppo",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_ppo_lstm, as_of_date: $json.as_of_date }) }}",
+        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_ppo, as_of_date: $json.as_of_date }) }}",
         "options": {
           "timeout": 120000
         }
       },
       "id": "01af5976-13df-47f0-9208-9a3b5bdef3ba",
-      "name": "POST PPO+LSTM",
+      "name": "POST PPO",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         5776,
         3248
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/ppo_patchtst",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.mock_portfolio, as_of_date: $json.as_of_date }) }}",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "833d0ceb-6244-41db-a475-c6d22fec5987",
-      "name": "POST PPO+PatchTST",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        5776,
-        3456
       ]
     },
     {
@@ -577,10 +537,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Generate orders for PPO+LSTM\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_ppo_lstm,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'ppo_lstm',\n    allocation_result: allocation\n  }\n};"
+        "jsCode": "// Generate orders for PPO\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_ppo,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'ppo',\n    allocation_result: allocation\n  }\n};"
       },
       "id": "79e1f144-d7fe-4b11-9e2b-c0b18a161ee1",
-      "name": "Prep Orders PPO_LSTM",
+      "name": "Prep Orders PPO",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -590,10 +550,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Generate orders for SAC+PatchTST\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_sac_patchtst,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'sac_patchtst',\n    allocation_result: allocation\n  }\n};"
+        "jsCode": "// Generate orders for SAC\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_sac,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'sac',\n    allocation_result: allocation\n  }\n};"
       },
       "id": "1f8ef350-72e7-4195-baf7-eb9683441111",
-      "name": "Prep Orders SAC_PatchTST",
+      "name": "Prep Orders SAC",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -626,7 +586,7 @@
         }
       },
       "id": "c6a46375-7638-49b1-aa9c-92adca545bf1",
-      "name": "Generate Orders PPO_LSTM",
+      "name": "Generate Orders PPO",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -646,7 +606,7 @@
         }
       },
       "id": "df30e59b-9292-4e9a-a876-3863a825e939",
-      "name": "Generate Orders SAC_PatchTST",
+      "name": "Generate Orders SAC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -676,10 +636,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract orders and submit each to Alpaca\nconst orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'ppo_lstm' } }));"
+        "jsCode": "// Extract orders and submit each to Alpaca\nconst orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'ppo' } }));"
       },
       "id": "358b3769-fa73-4c81-a701-df25fb5b717d",
-      "name": "Split Orders PPO_LSTM",
+      "name": "Split Orders PPO",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -689,10 +649,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'sac_patchtst' } }));"
+        "jsCode": "const orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'sac' } }));"
       },
       "id": "872042d1-2a2b-4b10-8963-fd35300be278",
-      "name": "Split Orders SAC_PatchTST",
+      "name": "Split Orders SAC",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -727,7 +687,7 @@
         }
       },
       "id": "7f3e22db-7c7c-4954-8a6d-4f21ad7eb1d2",
-      "name": "Submit Order PPO_LSTM",
+      "name": "Submit Order PPO",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -737,7 +697,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "YVMuh5FJ60TmYEVe",
-          "name": "PPO_LSTM"
+          "name": "PPO"
         }
       },
       "onError": "continueRegularOutput"
@@ -756,7 +716,7 @@
         }
       },
       "id": "ef3b54e4-27f0-4cdd-aadf-54a3e76dea68",
-      "name": "Submit Order SAC_PatchTST",
+      "name": "Submit Order SAC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -766,7 +726,7 @@
       "credentials": {
         "httpCustomAuth": {
           "id": "LHsT9blDwa8KyKdR",
-          "name": "SAC_PatchTST"
+          "name": "SAC"
         }
       },
       "onError": "continueRegularOutput"
@@ -802,10 +762,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Collect order results for PPO_LSTM\nconst results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'ppo_lstm', orders_submitted: successful, orders_failed: failed, results } };"
+        "jsCode": "// Collect order results for PPO\nconst results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'ppo', orders_submitted: successful, orders_failed: failed, results } };"
       },
       "id": "f20fc8c0-baf9-4558-9a4d-3a2dbea82b2a",
-      "name": "Collect Results PPO_LSTM",
+      "name": "Collect Results PPO",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -815,10 +775,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'sac_patchtst', orders_submitted: successful, orders_failed: failed, results } };"
+        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'sac', orders_submitted: successful, orders_failed: failed, results } };"
       },
       "id": "c8fa7361-890b-4861-a612-230d5e9399b2",
-      "name": "Collect Results SAC_PatchTST",
+      "name": "Collect Results SAC",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -901,7 +861,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Collect all order execution results\nlet orderResults = { ppo_lstm: { orders_submitted: 0, orders_failed: 0 }, sac_patchtst: { orders_submitted: 0, orders_failed: 0 }, hrp: { orders_submitted: 0, orders_failed: 0 } };\ntry { const r = $('Collect Results PPO_LSTM').first().json; orderResults.ppo_lstm = r; } catch(e) {}\ntry { const r = $('Collect Results SAC_PatchTST').first().json; orderResults.sac_patchtst = r; } catch(e) {}\ntry { const r = $('Collect Results HRP').first().json; orderResults.hrp = r; } catch(e) {}\n\nconst phase2Merged = $input.first().json;\nconst phase1Data = $('Prepare Phase 2').first().json;\n\nlet lstmPredictions = [];\nlet lstmModelVersion = 'unknown';\nlet targetWeekStart = 'N/A';\nlet targetWeekEnd = 'N/A';\ntry { const d = $('POST LSTM Forecast').first().json; lstmPredictions = d.predictions || []; lstmModelVersion = d.model_version || 'unknown'; targetWeekStart = d.target_week_start || 'N/A'; targetWeekEnd = d.target_week_end || 'N/A'; } catch (e) {}\n\nlet patchtstPredictions = [];\nlet patchtstModelVersion = 'unknown';\nlet patchtstSignalsUsed = [];\ntry { const d = $('POST PatchTST Forecast').first().json; patchtstPredictions = d.predictions || []; patchtstModelVersion = d.model_version || 'unknown'; patchtstSignalsUsed = d.signals_used || []; } catch (e) {}\n\nlet newsSentiments = [];\ntry { newsSentiments = $('POST News Sentiment').first().json.per_symbol || []; } catch (e) {}\n\nlet fundamentalsPerSymbol = [];\ntry { fundamentalsPerSymbol = $('POST Fundamentals').first().json.per_symbol || []; } catch (e) {}\n\nconst hrpWeights = phase2Merged.percentage_weights || {};\nconst hrpSymbolsUsed = phase2Merged.symbols_used || 0;\nconst hrpSymbolsExcluded = phase2Merged.symbols_excluded || [];\nconst asOfDate = phase2Merged.as_of_date || phase1Data.as_of_date || 'N/A';\n\nlet sacLstmWeights = {}, sacLstmTurnover = 0, sacLstmVersion = 'unknown';\nlet sacPatchtstWeights = {}, sacPatchtstTurnover = 0, sacPatchtstVersion = 'unknown';\nlet ppoLstmWeights = {}, ppoLstmTurnover = 0, ppoLstmVersion = 'unknown';\nlet ppoPatchtstWeights = {}, ppoPatchtstTurnover = 0, ppoPatchtstVersion = 'unknown';\n\ntry { const d = $('POST SAC+LSTM').first().json; sacLstmWeights = d.target_weights || {}; sacLstmTurnover = d.turnover || 0; sacLstmVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST SAC+PatchTST').first().json; sacPatchtstWeights = d.target_weights || {}; sacPatchtstTurnover = d.turnover || 0; sacPatchtstVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST PPO+LSTM').first().json; ppoLstmWeights = d.target_weights || {}; ppoLstmTurnover = d.turnover || 0; ppoLstmVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST PPO+PatchTST').first().json; ppoPatchtstWeights = d.target_weights || {}; ppoPatchtstTurnover = d.turnover || 0; ppoPatchtstVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST HRP Allocation').first().json; if (Object.keys(hrpWeights).length === 0) Object.assign(hrpWeights, d.percentage_weights || {}); } catch (e) {}\n\nconst newsMap = {};\nfor (const ns of newsSentiments) { if (ns.sentiment_score !== undefined) newsMap[ns.symbol] = ns; }\nconst fundamentalsMap = {};\nfor (const f of fundamentalsPerSymbol) { if (f.ratios) fundamentalsMap[f.symbol] = f.ratios; }\n\nconst formatWeight = (w) => w !== undefined ? (w * 100).toFixed(1) + '%' : 'N/A';\nconst formatHrpWeight = (w) => w !== undefined ? w.toFixed(1) + '%' : 'N/A';\nconst getTop5 = (weights) => Object.entries(weights).filter(([k, v]) => k !== 'CASH').sort((a, b) => b[1] - a[1]).slice(0, 5).map(([sym, wt]) => `${sym}: ${typeof wt === 'number' && wt < 1 ? formatWeight(wt) : formatHrpWeight(wt)}`).join(', ');\n\nconst prompt = `You are a financial analyst. Provide a brief JSON analysis with these 10 fields:\n\nTOP ALLOCATIONS:\nHRP: ${getTop5(hrpWeights) || 'N/A'}\nSAC+LSTM: ${getTop5(sacLstmWeights) || 'N/A'}\nSAC+PatchTST: ${getTop5(sacPatchtstWeights) || 'N/A'}\nPPO+LSTM: ${getTop5(ppoLstmWeights) || 'N/A'}\nPPO+PatchTST: ${getTop5(ppoPatchtstWeights) || 'N/A'}\n\nRespond with JSON only:\n{\"para_1_overall_summary\":\"<3 lines>\",\"para_2_sac_lstm\":\"<3 lines>\",\"para_3_sac_patchtst\":\"<3 lines>\",\"para_4_ppo_lstm\":\"<3 lines>\",\"para_5_ppo_patchtst\":\"<3 lines>\",\"para_6_hrp_summary\":\"<3 lines>\",\"para_7_patchtst_forecast\":\"<3 lines>\",\"para_8_lstm_forecast\":\"<3 lines>\",\"para_9_news_sentiment\":\"<3 lines>\",\"para_10_fundamentals\":\"<3 lines>\"}`;\n\nreturn {\n  json: {\n    lstm: { predictions: lstmPredictions, model_version: lstmModelVersion, target_week_start: targetWeekStart, target_week_end: targetWeekEnd },\n    patchtst: { predictions: patchtstPredictions, model_version: patchtstModelVersion, signals_used: patchtstSignalsUsed },\n    news: { per_symbol: newsSentiments },\n    fundamentals: { per_symbol: fundamentalsPerSymbol },\n    hrp: { percentage_weights: hrpWeights, symbols_used: hrpSymbolsUsed, symbols_excluded: hrpSymbolsExcluded, as_of_date: asOfDate },\n    sac_lstm: { target_weights: sacLstmWeights, turnover: sacLstmTurnover, model_version: sacLstmVersion },\n    sac_patchtst: { target_weights: sacPatchtstWeights, turnover: sacPatchtstTurnover, model_version: sacPatchtstVersion },\n    ppo_lstm: { target_weights: ppoLstmWeights, turnover: ppoLstmTurnover, model_version: ppoLstmVersion },\n    ppo_patchtst: { target_weights: ppoPatchtstWeights, turnover: ppoPatchtstTurnover, model_version: ppoPatchtstVersion },\n    order_results: orderResults,\n    openai_prompt: prompt\n  }\n};"
+        "jsCode": "// Collect all order execution results\nlet orderResults = { ppo: { orders_submitted: 0, orders_failed: 0 }, sac: { orders_submitted: 0, orders_failed: 0 }, hrp: { orders_submitted: 0, orders_failed: 0 } };\ntry { const r = $('Collect Results PPO').first().json; orderResults.ppo = r; } catch(e) {}\ntry { const r = $('Collect Results SAC').first().json; orderResults.sac = r; } catch(e) {}\ntry { const r = $('Collect Results HRP').first().json; orderResults.hrp = r; } catch(e) {}\n\nconst phase2Merged = $input.first().json;\nconst phase1Data = $('Prepare Phase 2').first().json;\n\nlet lstmPredictions = [];\nlet lstmModelVersion = 'unknown';\nlet targetWeekStart = 'N/A';\nlet targetWeekEnd = 'N/A';\ntry { const d = $('POST LSTM Forecast').first().json; lstmPredictions = d.predictions || []; lstmModelVersion = d.model_version || 'unknown'; targetWeekStart = d.target_week_start || 'N/A'; targetWeekEnd = d.target_week_end || 'N/A'; } catch (e) {}\n\nlet patchtstPredictions = [];\nlet patchtstModelVersion = 'unknown';\nlet patchtstSignalsUsed = [];\ntry { const d = $('POST PatchTST Forecast').first().json; patchtstPredictions = d.predictions || []; patchtstModelVersion = d.model_version || 'unknown'; patchtstSignalsUsed = d.signals_used || []; } catch (e) {}\n\nlet newsSentiments = [];\ntry { newsSentiments = $('POST News Sentiment').first().json.per_symbol || []; } catch (e) {}\n\nlet fundamentalsPerSymbol = [];\ntry { fundamentalsPerSymbol = $('POST Fundamentals').first().json.per_symbol || []; } catch (e) {}\n\nconst hrpWeights = phase2Merged.percentage_weights || {};\nconst hrpSymbolsUsed = phase2Merged.symbols_used || 0;\nconst hrpSymbolsExcluded = phase2Merged.symbols_excluded || [];\nconst asOfDate = phase2Merged.as_of_date || phase1Data.as_of_date || 'N/A';\n\nlet sacWeights = {}, sacTurnover = 0, sacVersion = 'unknown';\nlet ppoWeights = {}, ppoTurnover = 0, ppoVersion = 'unknown';\n\ntry { const d = $('POST SAC').first().json; sacWeights = d.target_weights || {}; sacTurnover = d.turnover || 0; sacVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST PPO').first().json; ppoWeights = d.target_weights || {}; ppoTurnover = d.turnover || 0; ppoVersion = d.model_version || 'unknown'; } catch (e) {}\ntry { const d = $('POST HRP Allocation').first().json; if (Object.keys(hrpWeights).length === 0) Object.assign(hrpWeights, d.percentage_weights || {}); } catch (e) {}\n\nconst newsMap = {};\nfor (const ns of newsSentiments) { if (ns.sentiment_score !== undefined) newsMap[ns.symbol] = ns; }\nconst fundamentalsMap = {};\nfor (const f of fundamentalsPerSymbol) { if (f.ratios) fundamentalsMap[f.symbol] = f.ratios; }\n\nconst formatWeight = (w) => w !== undefined ? (w * 100).toFixed(1) + '%' : 'N/A';\nconst formatHrpWeight = (w) => w !== undefined ? w.toFixed(1) + '%' : 'N/A';\nconst getTop5 = (weights) => Object.entries(weights).filter(([k, v]) => k !== 'CASH').sort((a, b) => b[1] - a[1]).slice(0, 5).map(([sym, wt]) => `${sym}: ${typeof wt === 'number' && wt < 1 ? formatWeight(wt) : formatHrpWeight(wt)}`).join(', ');\n\nconst prompt = `You are a financial analyst. Provide a brief JSON analysis with these 8 fields:\n\nTOP ALLOCATIONS:\nHRP: ${getTop5(hrpWeights) || 'N/A'}\nSAC: ${getTop5(sacWeights) || 'N/A'}\nPPO: ${getTop5(ppoWeights) || 'N/A'}\n\nRespond with JSON only:\n{\"para_1_overall_summary\":\"<3 lines>\",\"para_2_sac\":\"<3 lines>\",\"para_3_ppo\":\"<3 lines>\",\"para_4_hrp_summary\":\"<3 lines>\",\"para_5_patchtst_forecast\":\"<3 lines>\",\"para_6_lstm_forecast\":\"<3 lines>\",\"para_7_news_sentiment\":\"<3 lines>\",\"para_8_fundamentals\":\"<3 lines>\"}`;\n\nreturn {\n  json: {\n    lstm: { predictions: lstmPredictions, model_version: lstmModelVersion, target_week_start: targetWeekStart, target_week_end: targetWeekEnd },\n    patchtst: { predictions: patchtstPredictions, model_version: patchtstModelVersion, signals_used: patchtstSignalsUsed },\n    news: { per_symbol: newsSentiments },\n    fundamentals: { per_symbol: fundamentalsPerSymbol },\n    hrp: { percentage_weights: hrpWeights, symbols_used: hrpSymbolsUsed, symbols_excluded: hrpSymbolsExcluded, as_of_date: asOfDate },\n    sac: { target_weights: sacWeights, turnover: sacTurnover, model_version: sacVersion },\n    ppo: { target_weights: ppoWeights, turnover: ppoTurnover, model_version: ppoVersion },\n    order_results: orderResults,\n    openai_prompt: prompt\n  }\n};"
       },
       "id": "925dbe73-4274-47da-a391-afd87ef95939",
       "name": "Prepare OpenAI Prompt",
@@ -949,7 +909,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Order execution summary\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">\ud83d\udcc8 Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO_LSTM</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo_lstm?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC_PatchTST</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac_patchtst?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_failed || 0}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} \u2192 ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} \u2192 ${targetWeekEnd})`, emailBody, orderResults } };"
+        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Order execution summary\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">\ud83d\udcc8 Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_failed || 0}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} \u2192 ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} \u2192 ${targetWeekEnd})`, emailBody, orderResults } };"
       },
       "id": "5e243f9a-dcc1-4469-ad20-b15fc17d0c41",
       "name": "Format Email Body",
@@ -997,12 +957,12 @@
             "index": 0
           },
           {
-            "node": "Fetch PPO_LSTM Account",
+            "node": "Fetch PPO Account",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Fetch SAC_PatchTST Account",
+            "node": "Fetch SAC Account",
             "type": "main",
             "index": 0
           },
@@ -1023,12 +983,12 @@
             "index": 0
           },
           {
-            "node": "Fetch PPO_LSTM Account",
+            "node": "Fetch PPO Account",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Fetch SAC_PatchTST Account",
+            "node": "Fetch SAC Account",
             "type": "main",
             "index": 0
           },
@@ -1040,66 +1000,66 @@
         ]
       ]
     },
-    "Fetch PPO_LSTM Account": {
+    "Fetch PPO Account": {
       "main": [
         [
           {
-            "node": "Fetch PPO_LSTM Positions",
+            "node": "Fetch PPO Positions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch PPO_LSTM Positions": {
+    "Fetch PPO Positions": {
       "main": [
         [
           {
-            "node": "Normalize PPO_LSTM Positions",
+            "node": "Normalize PPO Positions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize PPO_LSTM Positions": {
+    "Normalize PPO Positions": {
       "main": [
         [
           {
-            "node": "Build PPO_LSTM Portfolio",
+            "node": "Build PPO Portfolio",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch SAC_PatchTST Account": {
+    "Fetch SAC Account": {
       "main": [
         [
           {
-            "node": "Fetch SAC_PatchTST Positions",
+            "node": "Fetch SAC Positions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch SAC_PatchTST Positions": {
+    "Fetch SAC Positions": {
       "main": [
         [
           {
-            "node": "Normalize SAC_PatchTST Positions",
+            "node": "Normalize SAC Positions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize SAC_PatchTST Positions": {
+    "Normalize SAC Positions": {
       "main": [
         [
           {
-            "node": "Build SAC_PatchTST Portfolio",
+            "node": "Build SAC Portfolio",
             "type": "main",
             "index": 0
           }
@@ -1161,7 +1121,7 @@
         ]
       ]
     },
-    "Build PPO_LSTM Portfolio": {
+    "Build PPO Portfolio": {
       "main": [
         [
           {
@@ -1172,7 +1132,7 @@
         ]
       ]
     },
-    "Build SAC_PatchTST Portfolio": {
+    "Build SAC Portfolio": {
       "main": [
         [
           {
@@ -1323,22 +1283,12 @@
       "main": [
         [
           {
-            "node": "POST SAC+LSTM",
+            "node": "POST SAC",
             "type": "main",
             "index": 0
           },
           {
-            "node": "POST SAC+PatchTST",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "POST PPO+LSTM",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "POST PPO+PatchTST",
+            "node": "POST PPO",
             "type": "main",
             "index": 0
           },
@@ -1350,46 +1300,24 @@
         ]
       ]
     },
-    "POST SAC+LSTM": {
+    "POST SAC": {
       "main": [
         [
           {
-            "node": "Merge SAC",
+            "node": "Prep Orders SAC",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "POST SAC+PatchTST": {
+    "POST PPO": {
       "main": [
         [
           {
-            "node": "Prep Orders SAC_PatchTST",
+            "node": "Prep Orders PPO",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "POST PPO+LSTM": {
-      "main": [
-        [
-          {
-            "node": "Prep Orders PPO_LSTM",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "POST PPO+PatchTST": {
-      "main": [
-        [
-          {
-            "node": "Merge + PPO (2)",
-            "type": "main",
-            "index": 1
           }
         ]
       ]
@@ -1405,22 +1333,22 @@
         ]
       ]
     },
-    "Prep Orders PPO_LSTM": {
+    "Prep Orders PPO": {
       "main": [
         [
           {
-            "node": "Generate Orders PPO_LSTM",
+            "node": "Generate Orders PPO",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prep Orders SAC_PatchTST": {
+    "Prep Orders SAC": {
       "main": [
         [
           {
-            "node": "Generate Orders SAC_PatchTST",
+            "node": "Generate Orders SAC",
             "type": "main",
             "index": 0
           }
@@ -1438,22 +1366,22 @@
         ]
       ]
     },
-    "Generate Orders PPO_LSTM": {
+    "Generate Orders PPO": {
       "main": [
         [
           {
-            "node": "Split Orders PPO_LSTM",
+            "node": "Split Orders PPO",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generate Orders SAC_PatchTST": {
+    "Generate Orders SAC": {
       "main": [
         [
           {
-            "node": "Split Orders SAC_PatchTST",
+            "node": "Split Orders SAC",
             "type": "main",
             "index": 0
           }
@@ -1471,22 +1399,22 @@
         ]
       ]
     },
-    "Split Orders PPO_LSTM": {
+    "Split Orders PPO": {
       "main": [
         [
           {
-            "node": "Submit Order PPO_LSTM",
+            "node": "Submit Order PPO",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Split Orders SAC_PatchTST": {
+    "Split Orders SAC": {
       "main": [
         [
           {
-            "node": "Submit Order SAC_PatchTST",
+            "node": "Submit Order SAC",
             "type": "main",
             "index": 0
           }
@@ -1504,22 +1432,22 @@
         ]
       ]
     },
-    "Submit Order PPO_LSTM": {
+    "Submit Order PPO": {
       "main": [
         [
           {
-            "node": "Collect Results PPO_LSTM",
+            "node": "Collect Results PPO",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Submit Order SAC_PatchTST": {
+    "Submit Order SAC": {
       "main": [
         [
           {
-            "node": "Collect Results SAC_PatchTST",
+            "node": "Collect Results SAC",
             "type": "main",
             "index": 0
           }
@@ -1537,7 +1465,7 @@
         ]
       ]
     },
-    "Collect Results SAC_PatchTST": {
+    "Collect Results SAC": {
       "main": [
         [
           {
@@ -1559,7 +1487,7 @@
         ]
       ]
     },
-    "Collect Results PPO_LSTM": {
+    "Collect Results PPO": {
       "main": [
         [
           {

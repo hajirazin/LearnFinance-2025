@@ -1,16 +1,15 @@
-"""PPO configuration for portfolio RL."""
+"""PPO base configuration for portfolio RL."""
 
 from dataclasses import dataclass
 from typing import Any
 
 
 @dataclass
-class PPOConfig:
+class PPOBaseConfig:
     """PPO hyperparameters and environment configuration.
 
-    This config is used by both ppo_lstm and ppo_patchtst variants.
-    The only difference between variants is the forecast feature source,
-    which is injected at runtime.
+    This is the base config with shared settings for all PPO variants.
+    Variant-specific configs (PPOConfig, SACConfig) extend this.
     """
 
     # === Policy network ===
@@ -86,7 +85,7 @@ class PPOConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PPOConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "PPOBaseConfig":
         """Create config from dictionary."""
         # Handle hidden_sizes conversion from list to tuple
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
@@ -96,4 +95,4 @@ class PPOConfig:
 
 
 # Default configuration
-DEFAULT_PPO_CONFIG = PPOConfig()
+DEFAULT_PPO_BASE_CONFIG = PPOBaseConfig()

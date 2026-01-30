@@ -20,7 +20,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - calling brain_api endpoints
   - calling OpenAI/LLM for summary
   - sending comparison email via Gmail
-  - submitting orders to Alpaca (3 paper accounts: PPO_LSTM, SAC_PatchTST, HRP)
+  - submitting orders to Alpaca (3 paper accounts: PPO, SAC, HRP)
   - status tracking + notifications
 - **Python brain** owns:
   - universe build + screening
@@ -41,10 +41,8 @@ brain_api/
 │   ├── inference/           # One file per model
 │   │   ├── lstm.py
 │   │   ├── patchtst.py
-│   │   ├── ppo_lstm.py
-│   │   ├── ppo_patchtst.py
-│   │   ├── sac_lstm.py
-│   │   └── sac_patchtst.py
+│   │   ├── ppo.py
+│   │   └── sac.py
 │   ├── training/            # Same pattern as inference
 │   │   └── ...
 │   ├── signals/
@@ -57,10 +55,8 @@ brain_api/
 ├── core/                    # Pure functions, no FastAPI dependency
 │   ├── lstm/
 │   ├── patchtst/
-│   ├── ppo_lstm/
-│   ├── ppo_patchtst/
-│   ├── sac_lstm/
-│   ├── sac_patchtst/
+│   ├── ppo/                 # PPO allocator (dual forecasts: LSTM + PatchTST)
+│   ├── sac/                 # SAC allocator (dual forecasts: LSTM + PatchTST)
 │   ├── hrp.py
 │   └── ...
 ├── storage/
@@ -83,10 +79,8 @@ brain_api/
 |----------|---------|
 | `POST /inference/lstm` | Price predictions (OHLCV only) |
 | `POST /inference/patchtst` | Price predictions (multi-signal) |
-| `POST /inference/ppo_lstm` | PPO allocation using LSTM forecasts |
-| `POST /inference/ppo_patchtst` | PPO allocation using PatchTST forecasts |
-| `POST /inference/sac_lstm` | SAC allocation using LSTM forecasts |
-| `POST /inference/sac_patchtst` | SAC allocation using PatchTST forecasts |
+| `POST /inference/ppo` | PPO allocation using dual forecasts (LSTM + PatchTST) |
+| `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
 
 **Orders** (called by Monday run via n8n after allocations):
@@ -110,14 +104,10 @@ brain_api/
 |----------|---------|
 | `POST /train/lstm` | Full LSTM retrain |
 | `POST /train/patchtst` | Full PatchTST retrain |
-| `POST /train/ppo_lstm/full` | Full PPO+LSTM retrain |
-| `POST /train/ppo_lstm/finetune` | PPO+LSTM fine-tune on experience buffer |
-| `POST /train/ppo_patchtst/full` | Full PPO+PatchTST retrain |
-| `POST /train/ppo_patchtst/finetune` | PPO+PatchTST fine-tune |
-| `POST /train/sac_lstm/full` | Full SAC+LSTM retrain |
-| `POST /train/sac_lstm/finetune` | SAC+LSTM fine-tune |
-| `POST /train/sac_patchtst/full` | Full SAC+PatchTST retrain |
-| `POST /train/sac_patchtst/finetune` | SAC+PatchTST fine-tune |
+| `POST /train/ppo/full` | Full PPO retrain (dual forecasts) |
+| `POST /train/ppo/finetune` | PPO fine-tune on experience buffer |
+| `POST /train/sac/full` | Full SAC retrain (dual forecasts) |
+| `POST /train/sac/finetune` | SAC fine-tune on experience buffer |
 
 **Other**:
 
@@ -161,10 +151,8 @@ When migrating an endpoint to GCP:
 | Model | Input | Output |
 |-------|-------|--------|
 | HRP | Covariance matrix | Allocation weights |
-| PPO + LSTM | State vector + LSTM forecasts | Allocation weights |
-| PPO + PatchTST | State vector + PatchTST forecasts | Allocation weights |
-| SAC + LSTM | State vector + LSTM forecasts | Allocation weights |
-| SAC + PatchTST | State vector + PatchTST forecasts | Allocation weights |
+| PPO | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
+| SAC | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
 
 ### Signal state vector (for RL and PatchTST)
 

@@ -3,9 +3,10 @@
 This module re-exports from model-specific submodules for backward compatibility.
 """
 
-# LSTM HuggingFace storage
 # Dataset storage
 from brain_api.storage.datasets.huggingface import HuggingFaceDatasetStorage
+
+# LSTM HuggingFace storage
 from brain_api.storage.lstm.huggingface import (
     HFModelInfo,
     HuggingFaceModelStorage,
@@ -16,9 +17,14 @@ from brain_api.storage.patchtst.huggingface import (
     PatchTSTHuggingFaceModelStorage,
 )
 
-# SAC + PatchTST HuggingFace storage
-from brain_api.storage.sac_patchtst.huggingface import (
-    SACPatchTSTHuggingFaceModelStorage,
+# PPO HuggingFace storage (unified with dual forecasts)
+from brain_api.storage.ppo.huggingface import (
+    PPOHuggingFaceModelStorage,
+)
+
+# SAC HuggingFace storage (unified with dual forecasts)
+from brain_api.storage.sac.huggingface import (
+    SACHuggingFaceModelStorage,
 )
 
 __all__ = [
@@ -27,8 +33,10 @@ __all__ = [
     "HuggingFaceDatasetStorage",
     # LSTM
     "HuggingFaceModelStorage",
+    # PPO (unified with dual forecasts)
+    "PPOHuggingFaceModelStorage",
     # PatchTST
     "PatchTSTHuggingFaceModelStorage",
-    # SAC + PatchTST
-    "SACPatchTSTHuggingFaceModelStorage",
+    # SAC (unified with dual forecasts)
+    "SACHuggingFaceModelStorage",
 ]

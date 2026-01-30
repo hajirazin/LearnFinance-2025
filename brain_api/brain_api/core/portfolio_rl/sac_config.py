@@ -1,15 +1,15 @@
-"""SAC configuration for portfolio RL."""
+"""SAC base configuration for portfolio RL."""
 
 from dataclasses import dataclass
 from typing import Any
 
 
 @dataclass
-class SACConfig:
+class SACBaseConfig:
     """SAC hyperparameters optimized for weekly portfolio RL with limited data.
 
-    This config is used by both sac_lstm and sac_patchtst variants.
-    The only difference between variants is the forecast feature source.
+    This is the base config with shared settings for all SAC variants.
+    Variant-specific configs (SACConfig) extend this.
     """
 
     # === Networks (smaller due to limited data ~500 transitions) ===
@@ -101,7 +101,7 @@ class SACConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SACConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "SACBaseConfig":
         """Create config from dictionary."""
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
             data = data.copy()
@@ -121,4 +121,4 @@ class SACFinetuneConfig:
 
 
 # Default configuration
-DEFAULT_SAC_CONFIG = SACConfig()
+DEFAULT_SAC_BASE_CONFIG = SACBaseConfig()

@@ -14,14 +14,8 @@ ENV_CUTOFF_DATE = "CUTOFF_DATE"
 ENV_HF_TOKEN = "HF_TOKEN"
 ENV_HF_LSTM_MODEL_REPO = "HF_LSTM_MODEL_REPO"  # LSTM forecaster
 ENV_HF_PATCHTST_MODEL_REPO = "HF_PATCHTST_MODEL_REPO"  # PatchTST forecaster
-ENV_HF_PPO_LSTM_MODEL_REPO = "HF_PPO_LSTM_MODEL_REPO"  # PPO + LSTM allocator
-ENV_HF_PPO_PATCHTST_MODEL_REPO = (
-    "HF_PPO_PATCHTST_MODEL_REPO"  # PPO + PatchTST allocator
-)
-ENV_HF_SAC_LSTM_MODEL_REPO = "HF_SAC_LSTM_MODEL_REPO"  # SAC + LSTM allocator
-ENV_HF_SAC_PATCHTST_MODEL_REPO = (
-    "HF_SAC_PATCHTST_MODEL_REPO"  # SAC + PatchTST allocator
-)
+ENV_HF_PPO_MODEL_REPO = "HF_PPO_MODEL_REPO"  # PPO allocator (dual forecasts)
+ENV_HF_SAC_MODEL_REPO = "HF_SAC_MODEL_REPO"  # SAC allocator (dual forecasts)
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
@@ -67,24 +61,14 @@ def get_hf_patchtst_model_repo() -> str | None:
     return os.environ.get(ENV_HF_PATCHTST_MODEL_REPO)
 
 
-def get_hf_ppo_lstm_model_repo() -> str | None:
-    """Get HuggingFace PPO + LSTM model repository name."""
-    return os.environ.get(ENV_HF_PPO_LSTM_MODEL_REPO)
+def get_hf_ppo_model_repo() -> str | None:
+    """Get HuggingFace PPO model repository name (unified with dual forecasts)."""
+    return os.environ.get(ENV_HF_PPO_MODEL_REPO)
 
 
-def get_hf_ppo_patchtst_model_repo() -> str | None:
-    """Get HuggingFace PPO + PatchTST model repository name."""
-    return os.environ.get(ENV_HF_PPO_PATCHTST_MODEL_REPO)
-
-
-def get_hf_sac_lstm_model_repo() -> str | None:
-    """Get HuggingFace SAC + LSTM model repository name."""
-    return os.environ.get(ENV_HF_SAC_LSTM_MODEL_REPO)
-
-
-def get_hf_sac_patchtst_model_repo() -> str | None:
-    """Get HuggingFace SAC + PatchTST model repository name."""
-    return os.environ.get(ENV_HF_SAC_PATCHTST_MODEL_REPO)
+def get_hf_sac_model_repo() -> str | None:
+    """Get HuggingFace SAC model repository name (unified with dual forecasts)."""
+    return os.environ.get(ENV_HF_SAC_MODEL_REPO)
 
 
 def get_hf_news_sentiment_repo() -> str | None:

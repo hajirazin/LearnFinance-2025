@@ -36,19 +36,15 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
-from brain_api.core.ppo_lstm import DEFAULT_PPO_LSTM_CONFIG, PPOLSTMConfig
-from brain_api.core.ppo_patchtst import DEFAULT_PPO_PATCHTST_CONFIG, PPOPatchTSTConfig
-from brain_api.core.sac_lstm import DEFAULT_SAC_LSTM_CONFIG, SACLSTMConfig
-from brain_api.core.sac_patchtst import DEFAULT_SAC_PATCHTST_CONFIG, SACPatchTSTConfig
+from brain_api.core.ppo import DEFAULT_PPO_CONFIG, PPOConfig
+from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
     LocalModelStorage,
     PatchTSTModelStorage,
-    PPOLSTMLocalStorage,
-    PPOPatchTSTLocalStorage,
-    SACLSTMLocalStorage,
-    SACPatchTSTLocalStorage,
 )
+from brain_api.storage.ppo import PPOLocalStorage
+from brain_api.storage.sac import SACLocalStorage
 from brain_api.universe import get_halal_universe
 
 # ============================================================================
@@ -199,50 +195,30 @@ def get_patchtst_trainer() -> PatchTSTTrainer:
 
 
 # ============================================================================
-# PPO dependencies
+# PPO dependencies (unified with dual forecasts)
 # ============================================================================
 
 
-def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
-    """Get the PPO + LSTM storage instance."""
-    return PPOLSTMLocalStorage()
+def get_ppo_storage() -> PPOLocalStorage:
+    """Get the PPO storage instance."""
+    return PPOLocalStorage()
 
 
-def get_ppo_lstm_config() -> PPOLSTMConfig:
-    """Get PPO + LSTM configuration."""
-    return DEFAULT_PPO_LSTM_CONFIG
-
-
-def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
-    """Get the PPO + PatchTST storage instance."""
-    return PPOPatchTSTLocalStorage()
-
-
-def get_ppo_patchtst_config() -> PPOPatchTSTConfig:
-    """Get PPO + PatchTST configuration."""
-    return DEFAULT_PPO_PATCHTST_CONFIG
+def get_ppo_config() -> PPOConfig:
+    """Get PPO configuration."""
+    return DEFAULT_PPO_CONFIG
 
 
 # ============================================================================
-# SAC dependencies
+# SAC dependencies (unified with dual forecasts)
 # ============================================================================
 
 
-def get_sac_lstm_storage() -> SACLSTMLocalStorage:
-    """Get the SAC + LSTM storage instance."""
-    return SACLSTMLocalStorage()
+def get_sac_storage() -> SACLocalStorage:
+    """Get the SAC storage instance."""
+    return SACLocalStorage()
 
 
-def get_sac_lstm_config() -> SACLSTMConfig:
-    """Get SAC + LSTM configuration."""
-    return DEFAULT_SAC_LSTM_CONFIG
-
-
-def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
-    """Get the SAC + PatchTST storage instance."""
-    return SACPatchTSTLocalStorage()
-
-
-def get_sac_patchtst_config() -> SACPatchTSTConfig:
-    """Get SAC + PatchTST configuration."""
-    return DEFAULT_SAC_PATCHTST_CONFIG
+def get_sac_config() -> SACConfig:
+    """Get SAC configuration."""
+    return DEFAULT_SAC_CONFIG

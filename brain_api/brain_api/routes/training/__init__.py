@@ -3,10 +3,8 @@
 This module provides training endpoints for various model types:
 - LSTM: Pure price-based weekly return prediction
 - PatchTST: Multi-signal weekly return prediction
-- PPO + LSTM: Portfolio allocator using LSTM forecasts
-- PPO + PatchTST: Portfolio allocator using PatchTST forecasts
-- SAC + LSTM: Portfolio allocator using LSTM forecasts (SAC algorithm)
-- SAC + PatchTST: Portfolio allocator using PatchTST forecasts (SAC algorithm)
+- PPO: Portfolio allocator using dual forecasts (LSTM + PatchTST)
+- SAC: Portfolio allocator using dual forecasts (LSTM + PatchTST)
 """
 
 from fastapi import APIRouter
@@ -24,15 +22,11 @@ from .dependencies import (
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
-    get_ppo_lstm_config,
-    get_ppo_lstm_storage,
-    get_ppo_patchtst_config,
-    get_ppo_patchtst_storage,
+    get_ppo_config,
+    get_ppo_storage,
     get_price_loader,
-    get_sac_lstm_config,
-    get_sac_lstm_storage,
-    get_sac_patchtst_config,
-    get_sac_patchtst_storage,
+    get_sac_config,
+    get_sac_storage,
     get_storage,
     get_symbols,
     get_top15_symbols,
@@ -48,17 +42,13 @@ from .lstm import router as lstm_router
 from .models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
-    PPOLSTMTrainResponse,
-    PPOPatchTSTTrainResponse,
-    SACLSTMTrainResponse,
-    SACPatchTSTTrainResponse,
+    PPOTrainResponse,
+    SACTrainResponse,
 )
 from .patchtst import _backfill_patchtst_snapshots
 from .patchtst import router as patchtst_router
-from .ppo_lstm import router as ppo_lstm_router
-from .ppo_patchtst import router as ppo_patchtst_router
-from .sac_lstm import router as sac_lstm_router
-from .sac_patchtst import router as sac_patchtst_router
+from .ppo import router as ppo_router
+from .sac import router as sac_router
 
 # Backward compat alias for _snapshots_available
 _snapshots_available = snapshots_available
@@ -72,19 +62,15 @@ router = APIRouter()
 # Include all sub-routers
 router.include_router(lstm_router)
 router.include_router(patchtst_router)
-router.include_router(ppo_lstm_router)
-router.include_router(ppo_patchtst_router)
-router.include_router(sac_lstm_router)
-router.include_router(sac_patchtst_router)
+router.include_router(ppo_router)
+router.include_router(sac_router)
 
 __all__ = [
     # Response models
     "LSTMTrainResponse",
-    "PPOLSTMTrainResponse",
-    "PPOPatchTSTTrainResponse",
+    "PPOTrainResponse",
     "PatchTSTTrainResponse",
-    "SACLSTMTrainResponse",
-    "SACPatchTSTTrainResponse",
+    "SACTrainResponse",
     "SnapshotLocalStorage",  # Re-exported for test patching compatibility
     "_backfill_lstm_snapshots",
     "_backfill_patchtst_snapshots",
@@ -101,15 +87,11 @@ __all__ = [
     "get_patchtst_price_loader",
     "get_patchtst_storage",
     "get_patchtst_trainer",
-    "get_ppo_lstm_config",
-    "get_ppo_lstm_storage",
-    "get_ppo_patchtst_config",
-    "get_ppo_patchtst_storage",
+    "get_ppo_config",
+    "get_ppo_storage",
     "get_price_loader",
-    "get_sac_lstm_config",
-    "get_sac_lstm_storage",
-    "get_sac_patchtst_config",
-    "get_sac_patchtst_storage",
+    "get_sac_config",
+    "get_sac_storage",
     "get_storage",
     "get_symbols",
     "get_top15_symbols",

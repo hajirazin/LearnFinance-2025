@@ -4,15 +4,15 @@ This module provides the shared components for PPO/SAC-based portfolio allocatio
 - Weekly portfolio environment (long-only, simplex weights)
 - Transaction cost modeling
 - Constraint enforcement (cash buffer, max position size)
-- State/feature building with injectable forecast feature
+- State/feature building with dual forecast features (LSTM + PatchTST)
 - Evaluation helpers (walk-forward, metrics)
 - Data loading (news sentiment, fundamentals)
 - Walk-forward forecast generation
 
-Used by `ppo_lstm`, `ppo_patchtst`, `sac_lstm`, and `sac_patchtst` variants.
+Used by `ppo` and `sac` unified agents.
 """
 
-from brain_api.core.portfolio_rl.config import DEFAULT_PPO_CONFIG, PPOConfig
+from brain_api.core.portfolio_rl.config import DEFAULT_PPO_BASE_CONFIG, PPOBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     compute_turnover,
@@ -48,15 +48,16 @@ from brain_api.core.portfolio_rl.state import (
     build_state_vector,
 )
 from brain_api.core.portfolio_rl.walkforward import (
+    build_dual_forecast_features,
     build_forecast_features,
     generate_walkforward_forecasts_simple,
 )
 
 __all__ = [
-    "DEFAULT_PPO_CONFIG",
+    "DEFAULT_PPO_BASE_CONFIG",
     "EvaluationMetrics",
     # Config
-    "PPOConfig",
+    "PPOBaseConfig",
     # Environment
     "PortfolioEnv",
     # Scaler
@@ -66,6 +67,7 @@ __all__ = [
     "align_signals_to_weekly",
     "apply_softmax_to_weights",
     # Walk-forward forecasts
+    "build_dual_forecast_features",
     "build_forecast_features",
     "build_rl_training_signals",
     # State

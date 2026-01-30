@@ -97,12 +97,12 @@ class WeightChange(BaseModel):
 
 
 # ============================================================================
-# PPO + LSTM models
+# PPO models (unified with dual forecasts: LSTM + PatchTST)
 # ============================================================================
 
 
-class PPOLSTMInferenceRequest(BaseModel):
-    """Request model for PPO + LSTM inference endpoint."""
+class PPOInferenceRequest(BaseModel):
+    """Request model for PPO inference endpoint (dual forecasts)."""
 
     portfolio: PortfolioSnapshot = Field(
         ...,
@@ -114,8 +114,8 @@ class PPOLSTMInferenceRequest(BaseModel):
     )
 
 
-class PPOLSTMInferenceResponse(BaseModel):
-    """Response model for PPO + LSTM inference endpoint."""
+class PPOInferenceResponse(BaseModel):
+    """Response model for PPO inference endpoint."""
 
     target_weights: dict[str, float]
     turnover: float
@@ -126,12 +126,12 @@ class PPOLSTMInferenceResponse(BaseModel):
 
 
 # ============================================================================
-# PPO + PatchTST models
+# SAC models (unified with dual forecasts: LSTM + PatchTST)
 # ============================================================================
 
 
-class PPOPatchTSTInferenceRequest(BaseModel):
-    """Request model for PPO + PatchTST inference endpoint."""
+class SACInferenceRequest(BaseModel):
+    """Request model for SAC inference endpoint (dual forecasts)."""
 
     portfolio: PortfolioSnapshot = Field(
         ...,
@@ -143,66 +143,8 @@ class PPOPatchTSTInferenceRequest(BaseModel):
     )
 
 
-class PPOPatchTSTInferenceResponse(BaseModel):
-    """Response model for PPO + PatchTST inference endpoint."""
-
-    target_weights: dict[str, float]
-    turnover: float
-    target_week_start: str  # YYYY-MM-DD
-    target_week_end: str  # YYYY-MM-DD
-    model_version: str
-    weight_changes: list[WeightChange]
-
-
-# ============================================================================
-# SAC + LSTM models
-# ============================================================================
-
-
-class SACLSTMInferenceRequest(BaseModel):
-    """Request model for SAC + LSTM inference endpoint."""
-
-    portfolio: PortfolioSnapshot = Field(
-        ...,
-        description="Current portfolio state (cash + positions)",
-    )
-    as_of_date: str | None = Field(
-        None,
-        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
-    )
-
-
-class SACLSTMInferenceResponse(BaseModel):
-    """Response model for SAC + LSTM inference endpoint."""
-
-    target_weights: dict[str, float]
-    turnover: float
-    target_week_start: str  # YYYY-MM-DD
-    target_week_end: str  # YYYY-MM-DD
-    model_version: str
-    weight_changes: list[WeightChange]
-
-
-# ============================================================================
-# SAC + PatchTST models
-# ============================================================================
-
-
-class SACPatchTSTInferenceRequest(BaseModel):
-    """Request model for SAC + PatchTST inference endpoint."""
-
-    portfolio: PortfolioSnapshot = Field(
-        ...,
-        description="Current portfolio state (cash + positions)",
-    )
-    as_of_date: str | None = Field(
-        None,
-        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
-    )
-
-
-class SACPatchTSTInferenceResponse(BaseModel):
-    """Response model for SAC + PatchTST inference endpoint."""
+class SACInferenceResponse(BaseModel):
+    """Response model for SAC inference endpoint."""
 
     target_weights: dict[str, float]
     turnover: float

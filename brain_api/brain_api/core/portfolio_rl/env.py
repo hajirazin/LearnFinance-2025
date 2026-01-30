@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from brain_api.core.portfolio_rl.config import DEFAULT_PPO_CONFIG, PPOConfig
+from brain_api.core.portfolio_rl.config import DEFAULT_PPO_BASE_CONFIG, PPOBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     compute_turnover,
@@ -55,9 +55,10 @@ class PortfolioEnv:
         self,
         symbol_returns: np.ndarray,
         signals: np.ndarray,
-        forecast_features: np.ndarray,
+        lstm_forecasts: np.ndarray,
+        patchtst_forecasts: np.ndarray,
         symbol_order: list[str],
-        config: PPOConfig | None = None,
+        config: PPOBaseConfig | None = None,
     ):
         """Initialize environment.
 
@@ -66,16 +67,19 @@ class PortfolioEnv:
                            Shape: (n_weeks, n_stocks).
             signals: Per-stock signals for each week.
                     Shape: (n_weeks, n_stocks, n_signals_per_stock).
-            forecast_features: Forecast feature for each stock each week.
-                              Shape: (n_weeks, n_stocks).
+            lstm_forecasts: LSTM forecast feature for each stock each week.
+                           Shape: (n_weeks, n_stocks).
+            patchtst_forecasts: PatchTST forecast feature for each stock each week.
+                               Shape: (n_weeks, n_stocks).
             symbol_order: Ordered list of stock symbols.
             config: PPO configuration.
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
-        self.forecast_features = forecast_features
+        self.lstm_forecasts = lstm_forecasts
+        self.patchtst_forecasts = patchtst_forecasts
         self.symbol_order = symbol_order
-        self.config = config or DEFAULT_PPO_CONFIG
+        self.config = config or DEFAULT_PPO_BASE_CONFIG
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
@@ -128,16 +132,24 @@ class PortfolioEnv:
                     week_signals[stock_idx, signal_idx]
                 )
 
-        # Get forecast features for this week
-        week_forecasts = self.forecast_features[week_idx]  # (n_stocks,)
-        forecast_dict = {
-            symbol: float(week_forecasts[stock_idx])
+        # Get LSTM forecast features for this week
+        week_lstm = self.lstm_forecasts[week_idx]  # (n_stocks,)
+        lstm_dict = {
+            symbol: float(week_lstm[stock_idx])
+            for stock_idx, symbol in enumerate(self.symbol_order)
+        }
+
+        # Get PatchTST forecast features for this week
+        week_patchtst = self.patchtst_forecasts[week_idx]  # (n_stocks,)
+        patchtst_dict = {
+            symbol: float(week_patchtst[stock_idx])
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
 
         return build_state_vector(
             signals=signals_dict,
-            forecast_features=forecast_dict,
+            lstm_forecasts=lstm_dict,
+            patchtst_forecasts=patchtst_dict,
             portfolio_weights=self.current_weights,
             symbol_order=self.symbol_order,
             schema=self.schema,
@@ -277,9 +289,10 @@ class PortfolioEnv:
 def create_env_from_data(
     prices: dict[str, np.ndarray],
     signals: dict[str, dict[str, np.ndarray]],
-    forecasts: dict[str, np.ndarray],
+    lstm_forecasts: dict[str, np.ndarray],
+    patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
-    config: PPOConfig | None = None,
+    config: PPOBaseConfig | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
 
@@ -288,7 +301,8 @@ def create_env_from_data(
     Args:
         prices: Dict of symbol -> array of prices (for computing returns).
         signals: Dict of symbol -> dict of signal_name -> array of values.
-        forecasts: Dict of symbol -> array of forecast values.
+        lstm_forecasts: Dict of symbol -> array of LSTM forecast values.
+        patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
         config: PPO configuration.
 
@@ -326,16 +340,23 @@ def create_env_from_data(
             signal_values = symbol_signals.get(signal_name, np.zeros(n_weeks))
             signals_array[:, stock_idx, signal_idx] = signal_values[:n_weeks]
 
-    # Build forecasts array
-    forecast_array = np.zeros((n_weeks, n_stocks))
+    # Build LSTM forecasts array
+    lstm_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        forecast_values = forecasts.get(symbol, np.zeros(n_weeks))
-        forecast_array[:, stock_idx] = forecast_values[:n_weeks]
+        forecast_values = lstm_forecasts.get(symbol, np.zeros(n_weeks))
+        lstm_array[:, stock_idx] = forecast_values[:n_weeks]
+
+    # Build PatchTST forecasts array
+    patchtst_array = np.zeros((n_weeks, n_stocks))
+    for stock_idx, symbol in enumerate(symbol_order):
+        forecast_values = patchtst_forecasts.get(symbol, np.zeros(n_weeks))
+        patchtst_array[:, stock_idx] = forecast_values[:n_weeks]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
         signals=signals_array,
-        forecast_features=forecast_array,
+        lstm_forecasts=lstm_array,
+        patchtst_forecasts=patchtst_array,
         symbol_order=symbol_order,
         config=config,
     )

@@ -2,7 +2,7 @@
 
 The state vector contains:
 - Market signals (news sentiment, fundamentals, fundamental_age)
-- Forecast feature (LSTM or PatchTST predicted weekly return) - INJECTABLE
+- Forecast features (LSTM AND PatchTST predicted weekly returns)
 - Current portfolio state (weights including CASH)
 """
 
@@ -52,8 +52,9 @@ class StateSchema:
 
     The state vector is a flat numpy array with the following segments:
     1. Per-stock signals (n_stocks * n_signals_per_stock)
-    2. Per-stock forecast feature (n_stocks * 1)
-    3. Current portfolio weights (n_stocks + 1 for CASH)
+    2. Per-stock LSTM forecast features (n_stocks * 1)
+    3. Per-stock PatchTST forecast features (n_stocks * 1)
+    4. Current portfolio weights (n_stocks + 1 for CASH)
 
     Signals per stock:
     - news_sentiment (1)
@@ -64,16 +65,18 @@ class StateSchema:
     - debt_to_equity (1)
     - fundamental_age (1)
 
-    Total per stock = 7 signals + 1 forecast = 8
+    Total per stock = 7 signals + 2 forecasts = 9 features
+    State dim for 15 stocks = 15*7 + 15*2 + 16 = 105 + 30 + 16 = 151
     """
 
     n_stocks: int = 15
     n_signals_per_stock: int = 7  # news + 5 fundamentals + fundamental_age
+    n_forecasts_per_stock: int = 2  # LSTM + PatchTST
 
     @property
     def n_forecast_features(self) -> int:
-        """One forecast feature per stock."""
-        return self.n_stocks
+        """Total forecast features (LSTM + PatchTST for each stock)."""
+        return self.n_stocks * self.n_forecasts_per_stock
 
     @property
     def n_portfolio_weights(self) -> int:
@@ -85,7 +88,7 @@ class StateSchema:
         """Total state vector dimension."""
         return (
             self.n_stocks * self.n_signals_per_stock  # signals
-            + self.n_forecast_features  # forecast
+            + self.n_forecast_features  # forecasts (LSTM + PatchTST)
             + self.n_portfolio_weights  # portfolio
         )
 
@@ -109,9 +112,21 @@ class StateSchema:
         return start, end
 
     def get_forecast_indices(self) -> tuple[int, int]:
-        """Get start/end indices for forecast features."""
+        """Get start/end indices for ALL forecast features (LSTM + PatchTST)."""
         start = self.n_stocks * self.n_signals_per_stock
         end = start + self.n_forecast_features
+        return start, end
+
+    def get_lstm_forecast_indices(self) -> tuple[int, int]:
+        """Get start/end indices for LSTM forecast features."""
+        start = self.n_stocks * self.n_signals_per_stock
+        end = start + self.n_stocks
+        return start, end
+
+    def get_patchtst_forecast_indices(self) -> tuple[int, int]:
+        """Get start/end indices for PatchTST forecast features."""
+        start = self.n_stocks * self.n_signals_per_stock + self.n_stocks
+        end = start + self.n_stocks
         return start, end
 
     def get_portfolio_indices(self) -> tuple[int, int]:
@@ -123,20 +138,21 @@ class StateSchema:
 
 def build_state_vector(
     signals: dict[str, dict[str, float]],
-    forecast_features: dict[str, float],
+    lstm_forecasts: dict[str, float],
+    patchtst_forecasts: dict[str, float],
     portfolio_weights: np.ndarray,
     symbol_order: list[str],
     schema: StateSchema | None = None,
 ) -> np.ndarray:
-    """Build the full state vector for PPO.
+    """Build the full state vector for RL agents (PPO/SAC).
 
     Args:
         signals: Dict of symbol -> signal_dict.
                  Each signal_dict has keys: news_sentiment, gross_margin,
                  operating_margin, net_margin, current_ratio, debt_to_equity,
                  fundamental_age.
-        forecast_features: Dict of symbol -> forecast value (LSTM or PatchTST
-                          predicted weekly return).
+        lstm_forecasts: Dict of symbol -> LSTM predicted weekly return.
+        patchtst_forecasts: Dict of symbol -> PatchTST predicted weekly return.
         portfolio_weights: Current portfolio weights with CASH last.
         symbol_order: Ordered list of stock symbols (determines ordering).
         schema: State schema (created from defaults if None).
@@ -158,12 +174,17 @@ def build_state_vector(
         for signal_idx, signal_name in enumerate(signal_names):
             state[start + signal_idx] = symbol_signals.get(signal_name, 0.0)
 
-    # 2. Fill forecast features
-    forecast_start, _forecast_end = schema.get_forecast_indices()
+    # 2. Fill LSTM forecast features
+    lstm_start, _lstm_end = schema.get_lstm_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
-        state[forecast_start + stock_idx] = forecast_features.get(symbol, 0.0)
+        state[lstm_start + stock_idx] = lstm_forecasts.get(symbol, 0.0)
 
-    # 3. Fill portfolio weights
+    # 3. Fill PatchTST forecast features
+    patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        state[patchtst_start + stock_idx] = patchtst_forecasts.get(symbol, 0.0)
+
+    # 4. Fill portfolio weights
     portfolio_start, portfolio_end = schema.get_portfolio_indices()
     state[portfolio_start:portfolio_end] = portfolio_weights
 
@@ -209,7 +230,8 @@ def state_to_dict(
 
     result: dict[str, Any] = {
         "signals": {},
-        "forecast_features": {},
+        "lstm_forecasts": {},
+        "patchtst_forecasts": {},
         "current_weights": {},
     }
 
@@ -221,10 +243,15 @@ def state_to_dict(
         for signal_idx, signal_name in enumerate(signal_names):
             result["signals"][symbol][signal_name] = float(state[start + signal_idx])
 
-    # Extract forecast features
-    forecast_start, _forecast_end = schema.get_forecast_indices()
+    # Extract LSTM forecast features
+    lstm_start, _lstm_end = schema.get_lstm_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
-        result["forecast_features"][symbol] = float(state[forecast_start + stock_idx])
+        result["lstm_forecasts"][symbol] = float(state[lstm_start + stock_idx])
+
+    # Extract PatchTST forecast features
+    patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        result["patchtst_forecasts"][symbol] = float(state[patchtst_start + stock_idx])
 
     # Extract portfolio weights
     portfolio_start, portfolio_end = schema.get_portfolio_indices()

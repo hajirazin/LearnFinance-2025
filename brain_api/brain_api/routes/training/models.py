@@ -34,8 +34,8 @@ class PatchTSTTrainResponse(BaseModel):
     signals_used: list[str]  # List of signal types included
 
 
-class PPOLSTMTrainResponse(BaseModel):
-    """Response model for PPO + LSTM training endpoint."""
+class PPOTrainResponse(BaseModel):
+    """Response model for PPO training endpoint (unified with dual forecasts)."""
 
     version: str
     data_window_start: str  # YYYY-MM-DD
@@ -48,43 +48,15 @@ class PPOLSTMTrainResponse(BaseModel):
     hf_url: str | None = None  # URL to model on HuggingFace
 
 
-class PPOPatchTSTTrainResponse(BaseModel):
-    """Response model for PPO + PatchTST training endpoint."""
+class SACTrainResponse(BaseModel):
+    """Response model for SAC training endpoint (unified with dual forecasts)."""
 
     version: str
-    data_window_start: str  # YYYY-MM-DD
-    data_window_end: str  # YYYY-MM-DD
-    metrics: dict[str, Any]
+    data_window_start: str
+    data_window_end: str
+    metrics: dict[str, float]
     promoted: bool
     prior_version: str | None = None
-    symbols_used: list[str]
-    hf_repo: str | None = None  # HuggingFace repo if uploaded
-    hf_url: str | None = None  # URL to model on HuggingFace
-
-
-class SACLSTMTrainResponse(BaseModel):
-    """Response model for SAC + LSTM training endpoint."""
-
-    version: str
-    data_window_start: str
-    data_window_end: str
-    metrics: dict[str, float]
-    promoted: bool
-    prior_version: str | None
-    symbols_used: list[str]
-    hf_repo: str | None = None
-    hf_url: str | None = None
-
-
-class SACPatchTSTTrainResponse(BaseModel):
-    """Response model for SAC + PatchTST training endpoint."""
-
-    version: str
-    data_window_start: str
-    data_window_end: str
-    metrics: dict[str, float]
-    promoted: bool
-    prior_version: str | None
     symbols_used: list[str]
     hf_repo: str | None = None
     hf_url: str | None = None

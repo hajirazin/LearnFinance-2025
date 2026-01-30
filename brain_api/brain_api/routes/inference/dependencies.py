@@ -8,19 +8,15 @@ from brain_api.core.lstm import compute_week_boundaries, load_prices_yfinance
 from brain_api.storage.local import (
     LocalModelStorage,
     PatchTSTModelStorage,
-    PPOLSTMLocalStorage,
-    PPOPatchTSTLocalStorage,
-    SACLSTMLocalStorage,
-    SACPatchTSTLocalStorage,
 )
+from brain_api.storage.ppo import PPOLocalStorage
+from brain_api.storage.sac import SACLocalStorage
 
 from .models import (
     LSTMInferenceRequest,
     PatchTSTInferenceRequest,
-    PPOLSTMInferenceRequest,
-    PPOPatchTSTInferenceRequest,
-    SACLSTMInferenceRequest,
-    SACPatchTSTInferenceRequest,
+    PPOInferenceRequest,
+    SACInferenceRequest,
 )
 
 # Type aliases for dependency injection
@@ -77,54 +73,32 @@ def get_sentiment_parquet_path() -> Path:
 
 
 # ============================================================================
-# PPO dependencies
+# PPO dependencies (unified with dual forecasts)
 # ============================================================================
 
 
-def get_ppo_lstm_storage() -> PPOLSTMLocalStorage:
-    """Get the PPO + LSTM storage instance."""
-    return PPOLSTMLocalStorage()
+def get_ppo_storage() -> PPOLocalStorage:
+    """Get the PPO storage instance."""
+    return PPOLocalStorage()
 
 
-def get_ppo_lstm_as_of_date(request: PPOLSTMInferenceRequest) -> date:
-    """Get cutoff date (always Friday) from request or computed from today."""
-    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
-    return resolve_cutoff_date(reference)
-
-
-def get_ppo_patchtst_storage() -> PPOPatchTSTLocalStorage:
-    """Get the PPO + PatchTST storage instance."""
-    return PPOPatchTSTLocalStorage()
-
-
-def get_ppo_patchtst_as_of_date(request: PPOPatchTSTInferenceRequest) -> date:
+def get_ppo_as_of_date(request: PPOInferenceRequest) -> date:
     """Get cutoff date (always Friday) from request or computed from today."""
     reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
     return resolve_cutoff_date(reference)
 
 
 # ============================================================================
-# SAC dependencies
+# SAC dependencies (unified with dual forecasts)
 # ============================================================================
 
 
-def get_sac_lstm_storage() -> SACLSTMLocalStorage:
-    """Get the SAC + LSTM storage instance."""
-    return SACLSTMLocalStorage()
+def get_sac_storage() -> SACLocalStorage:
+    """Get the SAC storage instance."""
+    return SACLocalStorage()
 
 
-def get_sac_lstm_as_of_date(request: SACLSTMInferenceRequest) -> date:
-    """Get cutoff date (always Friday) from request or computed from today."""
-    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
-    return resolve_cutoff_date(reference)
-
-
-def get_sac_patchtst_storage() -> SACPatchTSTLocalStorage:
-    """Get the SAC + PatchTST storage instance."""
-    return SACPatchTSTLocalStorage()
-
-
-def get_sac_patchtst_as_of_date(request: SACPatchTSTInferenceRequest) -> date:
+def get_sac_as_of_date(request: SACInferenceRequest) -> date:
     """Get cutoff date (always Friday) from request or computed from today."""
     reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
     return resolve_cutoff_date(reference)

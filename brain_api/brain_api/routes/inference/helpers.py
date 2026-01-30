@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from brain_api.core.config import (
     get_hf_lstm_model_repo,
     get_hf_patchtst_model_repo,
-    get_hf_sac_patchtst_model_repo,
     get_storage_backend,
 )
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
@@ -23,8 +22,6 @@ from brain_api.storage.local import (
     LSTMArtifacts,
     PatchTSTArtifacts,
     PatchTSTModelStorage,
-    SACPatchTSTArtifacts,
-    SACPatchTSTLocalStorage,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,10 +112,10 @@ def build_current_forecasts(
 
 def _load_model_artifacts_generic(
     model_type: str,
-    local_storage: LocalModelStorage | PatchTSTModelStorage | SACPatchTSTLocalStorage,
+    local_storage: LocalModelStorage | PatchTSTModelStorage,
     hf_storage_class: type,
     hf_model_repo: str | None,
-) -> LSTMArtifacts | PatchTSTArtifacts | SACPatchTSTArtifacts:
+) -> LSTMArtifacts | PatchTSTArtifacts:
     """Load model artifacts with HuggingFace fallback.
 
     Generic helper that handles local → HuggingFace fallback for any model type.
@@ -192,20 +189,6 @@ def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArt
         storage,
         PatchTSTHuggingFaceModelStorage,
         get_hf_patchtst_model_repo(),
-    )
-
-
-def _load_sac_patchtst_model_artifacts(
-    storage: SACPatchTSTLocalStorage,
-) -> SACPatchTSTArtifacts:
-    """Load SAC + PatchTST model artifacts with HuggingFace fallback."""
-    from brain_api.storage.huggingface import SACPatchTSTHuggingFaceModelStorage
-
-    return _load_model_artifacts_generic(
-        "SAC_PatchTST",
-        storage,
-        SACPatchTSTHuggingFaceModelStorage,
-        get_hf_sac_patchtst_model_repo(),
     )
 
 

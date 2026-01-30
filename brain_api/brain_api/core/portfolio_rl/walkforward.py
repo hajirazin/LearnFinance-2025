@@ -1034,3 +1034,51 @@ def build_forecast_features(
 
     print(f"[PortfolioRL] Generated forecasts for {len(forecasts)} symbols")
     return forecasts
+
+
+def build_dual_forecast_features(
+    weekly_prices: dict[str, np.ndarray],
+    weekly_dates: pd.DatetimeIndex,
+    symbols: list[str],
+    use_lstm_snapshots: bool = False,
+    use_patchtst_snapshots: bool = False,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Build both LSTM and PatchTST forecast features for RL training.
+
+    This is the main entry point for generating dual walk-forward forecasts
+    for unified RL agents (PPO, SAC) that use both forecasters.
+
+    Args:
+        weekly_prices: Dict of symbol -> weekly price array
+        weekly_dates: DatetimeIndex of weekly dates
+        symbols: List of symbols
+        use_lstm_snapshots: Whether to use pre-trained LSTM model snapshots
+        use_patchtst_snapshots: Whether to use pre-trained PatchTST model snapshots
+
+    Returns:
+        Tuple of (lstm_forecasts, patchtst_forecasts) where each is
+        Dict of symbol -> array of forecast values
+    """
+    print("[PortfolioRL] Generating dual walk-forward forecasts (LSTM + PatchTST)...")
+
+    lstm_forecasts = build_forecast_features(
+        weekly_prices,
+        weekly_dates,
+        symbols,
+        forecaster_type="lstm",
+        use_model_snapshots=use_lstm_snapshots,
+    )
+
+    patchtst_forecasts = build_forecast_features(
+        weekly_prices,
+        weekly_dates,
+        symbols,
+        forecaster_type="patchtst",
+        use_model_snapshots=use_patchtst_snapshots,
+    )
+
+    print(
+        f"[PortfolioRL] Generated dual forecasts for {len(lstm_forecasts)} symbols "
+        f"(LSTM: {use_lstm_snapshots}, PatchTST: {use_patchtst_snapshots})"
+    )
+    return lstm_forecasts, patchtst_forecasts

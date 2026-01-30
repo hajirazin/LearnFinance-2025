@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from brain_api.core.portfolio_rl.config import PPOConfig
+    from brain_api.core.portfolio_rl.config import PPOBaseConfig
 
 
 def compute_portfolio_return(
@@ -75,7 +75,7 @@ def compute_transaction_cost(
 def compute_reward(
     portfolio_return: float,
     turnover: float,
-    config: PPOConfig,
+    config: PPOBaseConfig,
 ) -> float:
     """Compute scaled reward for RL training.
 
@@ -101,7 +101,7 @@ def compute_reward(
 def compute_reward_from_log_return(
     portfolio_log_return: float,
     turnover: float,
-    config: PPOConfig,
+    config: PPOBaseConfig,
 ) -> float:
     """Compute scaled reward using log return.
 
