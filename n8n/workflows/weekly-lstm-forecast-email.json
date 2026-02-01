@@ -38,6 +38,32 @@
     {
       "parameters": {
         "method": "GET",
+        "url": "https://paper-api.alpaca.markets/v2/orders?status=open&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-ppo-open-orders",
+      "name": "Check PPO Open Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3744,
+        2844
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "YVMuh5FJ60TmYEVe",
+          "name": "PPO"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -88,6 +114,32 @@
     {
       "parameters": {
         "method": "GET",
+        "url": "https://paper-api.alpaca.markets/v2/orders?status=open&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-sac-open-orders",
+      "name": "Check SAC Open Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3744,
+        2652
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "LHsT9blDwa8KyKdR",
+          "name": "SAC"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
         "url": "https://paper-api.alpaca.markets/v2/account",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
@@ -134,6 +186,32 @@
           "name": "SAC"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://paper-api.alpaca.markets/v2/orders?status=open&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "check-hrp-open-orders",
+      "name": "Check HRP Open Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3744,
+        2444
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "Po4KepbDzUFZNYiG",
+          "name": "HRP"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -464,7 +542,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\n\n// Get real portfolios from earlier nodes - fail if not available\nlet portfolio_ppo, portfolio_sac, portfolio_hrp;\nlet errors = [];\n\ntry { portfolio_ppo = $('Build PPO Portfolio').first().json.portfolio_ppo; if (!portfolio_ppo) throw new Error('Empty'); } catch(e) { errors.push('PPO portfolio fetch failed'); }\ntry { portfolio_sac = $('Build SAC Portfolio').first().json.portfolio_sac; if (!portfolio_sac) throw new Error('Empty'); } catch(e) { errors.push('SAC portfolio fetch failed'); }\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp; if (!portfolio_hrp) throw new Error('Empty'); } catch(e) { errors.push('HRP portfolio fetch failed'); }\n\nif (errors.length > 0) { throw new Error('Portfolio fetch errors: ' + errors.join(', ') + '. Check Alpaca API credentials and connectivity.'); }\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    portfolio_ppo,\n    portfolio_sac,\n    portfolio_hrp\n  }\n};"
+        "jsCode": "const input = $input.first().json;\nconst asOfDate = input.as_of_date || new Date().toISOString().split('T')[0];\nconst runId = input.run_id || `paper:${asOfDate}`;\n\n// Check for open orders - if any exist, skip that algorithm\nlet ppoOpenOrders = [];\nlet sacOpenOrders = [];\nlet hrpOpenOrders = [];\ntry { ppoOpenOrders = $('Check PPO Open Orders').first().json; if (!Array.isArray(ppoOpenOrders)) ppoOpenOrders = []; } catch(e) { ppoOpenOrders = []; }\ntry { sacOpenOrders = $('Check SAC Open Orders').first().json; if (!Array.isArray(sacOpenOrders)) sacOpenOrders = []; } catch(e) { sacOpenOrders = []; }\ntry { hrpOpenOrders = $('Check HRP Open Orders').first().json; if (!Array.isArray(hrpOpenOrders)) hrpOpenOrders = []; } catch(e) { hrpOpenOrders = []; }\n\nconst run_ppo = ppoOpenOrders.length === 0;\nconst run_sac = sacOpenOrders.length === 0;\nconst run_hrp = hrpOpenOrders.length === 0;\n\nconst skipped_algorithms = [];\nif (!run_ppo) skipped_algorithms.push('PPO');\nif (!run_sac) skipped_algorithms.push('SAC');\nif (!run_hrp) skipped_algorithms.push('HRP');\n\nif (skipped_algorithms.length > 0) {\n  console.log(`Skipping algorithms with open orders: ${skipped_algorithms.join(', ')}`);\n}\n\n// Get real portfolios from earlier nodes - fail if not available\nlet portfolio_ppo, portfolio_sac, portfolio_hrp;\nlet errors = [];\n\ntry { portfolio_ppo = $('Build PPO Portfolio').first().json.portfolio_ppo; if (!portfolio_ppo) throw new Error('Empty'); } catch(e) { errors.push('PPO portfolio fetch failed'); }\ntry { portfolio_sac = $('Build SAC Portfolio').first().json.portfolio_sac; if (!portfolio_sac) throw new Error('Empty'); } catch(e) { errors.push('SAC portfolio fetch failed'); }\ntry { portfolio_hrp = $('Build HRP Portfolio').first().json.portfolio_hrp; if (!portfolio_hrp) throw new Error('Empty'); } catch(e) { errors.push('HRP portfolio fetch failed'); }\n\nif (errors.length > 0) { throw new Error('Portfolio fetch errors: ' + errors.join(', ') + '. Check Alpaca API credentials and connectivity.'); }\n\nreturn {\n  json: {\n    ...input,\n    as_of_date: asOfDate,\n    run_id: runId,\n    attempt: 1,\n    portfolio_ppo,\n    portfolio_sac,\n    portfolio_hrp,\n    run_ppo,\n    run_sac,\n    run_hrp,\n    skipped_algorithms,\n    ppo_open_count: ppoOpenOrders.length,\n    sac_open_count: sacOpenOrders.length,\n    hrp_open_count: hrpOpenOrders.length\n  }\n};"
       },
       "id": "451562bf-e0c8-4d68-8217-bba9fe2d9ba9",
       "name": "Prepare Phase 2",
@@ -477,19 +555,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/sac",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_sac, as_of_date: $json.as_of_date }) }}",
-        "options": {
-          "timeout": 120000
-        }
+        "jsCode": "// Check if SAC should be skipped due to open orders\nconst input = $input.first().json;\nif (!input.run_sac) {\n  return { json: { skipped: true, algorithm: 'sac', target_weights: {}, reason: 'Open orders exist', turnover: 0, model_version: 'skipped' } };\n}\n\n// Make inference call\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/inference/sac',\n  body: { portfolio: input.portfolio_sac, as_of_date: input.as_of_date },\n  json: true,\n  timeout: 120000\n});\n\nreturn { json: response };"
       },
       "id": "7e4b825d-9116-424f-9472-fb289ccbd726",
       "name": "POST SAC",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         5776,
         3056
@@ -497,19 +568,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/inference/ppo",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ portfolio: $json.portfolio_ppo, as_of_date: $json.as_of_date }) }}",
-        "options": {
-          "timeout": 120000
-        }
+        "jsCode": "// Check if PPO should be skipped due to open orders\nconst input = $input.first().json;\nif (!input.run_ppo) {\n  return { json: { skipped: true, algorithm: 'ppo', target_weights: {}, reason: 'Open orders exist', turnover: 0, model_version: 'skipped' } };\n}\n\n// Make inference call\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/inference/ppo',\n  body: { portfolio: input.portfolio_ppo, as_of_date: input.as_of_date },\n  json: true,\n  timeout: 120000\n});\n\nreturn { json: response };"
       },
       "id": "01af5976-13df-47f0-9208-9a3b5bdef3ba",
       "name": "POST PPO",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         5776,
         3248
@@ -517,19 +581,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/allocation/hrp",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ as_of_date: $json.as_of_date }) }}",
-        "options": {
-          "timeout": 120000
-        }
+        "jsCode": "// Check if HRP should be skipped due to open orders\nconst input = $input.first().json;\nif (!input.run_hrp) {\n  return { json: { skipped: true, algorithm: 'hrp', percentage_weights: {}, reason: 'Open orders exist', symbols_used: 0, symbols_excluded: [] } };\n}\n\n// Make allocation call\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/allocation/hrp',\n  body: { as_of_date: input.as_of_date },\n  json: true,\n  timeout: 120000\n});\n\nreturn { json: response };"
       },
       "id": "557eae98-a3f8-4304-bd0c-8ee40a710cec",
       "name": "POST HRP Allocation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         5776,
         3648
@@ -537,7 +594,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Generate orders for PPO\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_ppo,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'ppo',\n    allocation_result: allocation\n  }\n};"
+        "jsCode": "// Generate orders for PPO\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\n\n// If skipped due to open orders, short-circuit\nif (allocation.skipped) {\n  return { json: { skipped: true, algorithm: 'ppo', reason: allocation.reason, orders: [], target_weights: {} } };\n}\n\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_ppo,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'ppo',\n    allocation_result: allocation\n  }\n};"
       },
       "id": "79e1f144-d7fe-4b11-9e2b-c0b18a161ee1",
       "name": "Prep Orders PPO",
@@ -550,7 +607,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Generate orders for SAC\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_sac,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'sac',\n    allocation_result: allocation\n  }\n};"
+        "jsCode": "// Generate orders for SAC\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\n\n// If skipped due to open orders, short-circuit\nif (allocation.skipped) {\n  return { json: { skipped: true, algorithm: 'sac', reason: allocation.reason, orders: [], target_weights: {} } };\n}\n\nreturn {\n  json: {\n    target_weights: allocation.target_weights || {},\n    portfolio: phase2.portfolio_sac,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'sac',\n    allocation_result: allocation\n  }\n};"
       },
       "id": "1f8ef350-72e7-4195-baf7-eb9683441111",
       "name": "Prep Orders SAC",
@@ -563,7 +620,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Generate orders for HRP - convert percentage weights to decimal\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\nconst pctWeights = allocation.percentage_weights || {};\nconst decWeights = {};\nfor (const [sym, pct] of Object.entries(pctWeights)) {\n  decWeights[sym] = pct / 100;\n}\nreturn {\n  json: {\n    target_weights: decWeights,\n    portfolio: phase2.portfolio_hrp,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'hrp',\n    allocation_result: allocation\n  }\n};"
+        "jsCode": "// Generate orders for HRP - convert percentage weights to decimal\nconst phase2 = $('Prepare Phase 2').first().json;\nconst allocation = $input.first().json;\n\n// If skipped due to open orders, short-circuit\nif (allocation.skipped) {\n  return { json: { skipped: true, algorithm: 'hrp', reason: allocation.reason, orders: [], target_weights: {} } };\n}\n\nconst pctWeights = allocation.percentage_weights || {};\nconst decWeights = {};\nfor (const [sym, pct] of Object.entries(pctWeights)) {\n  decWeights[sym] = pct / 100;\n}\nreturn {\n  json: {\n    target_weights: decWeights,\n    portfolio: phase2.portfolio_hrp,\n    run_id: phase2.run_id,\n    attempt: phase2.attempt,\n    algorithm: 'hrp',\n    allocation_result: allocation\n  }\n};"
       },
       "id": "eb719f5c-e37a-47ef-ac7e-ca653dbfd706",
       "name": "Prep Orders HRP",
@@ -618,19 +675,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/orders/generate",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ target_weights: $json.target_weights, portfolio: $json.portfolio, run_id: $json.run_id, attempt: $json.attempt, algorithm: $json.algorithm }) }}",
-        "options": {
-          "timeout": 60000
-        }
+        "jsCode": "// Generate orders for PPO - skip if already skipped\nconst input = $input.first().json;\nif (input.skipped) {\n  return { json: { orders: [], skipped: true, algorithm: 'ppo', reason: input.reason } };\n}\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/orders/generate',\n  body: { target_weights: input.target_weights, portfolio: input.portfolio, run_id: input.run_id, attempt: input.attempt, algorithm: input.algorithm },\n  json: true,\n  timeout: 60000\n});\n\nreturn { json: response };"
       },
       "id": "c6a46375-7638-49b1-aa9c-92adca545bf1",
       "name": "Generate Orders PPO",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         6256,
         3248
@@ -638,19 +688,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/orders/generate",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ target_weights: $json.target_weights, portfolio: $json.portfolio, run_id: $json.run_id, attempt: $json.attempt, algorithm: $json.algorithm }) }}",
-        "options": {
-          "timeout": 60000
-        }
+        "jsCode": "// Generate orders for SAC - skip if already skipped\nconst input = $input.first().json;\nif (input.skipped) {\n  return { json: { orders: [], skipped: true, algorithm: 'sac', reason: input.reason } };\n}\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/orders/generate',\n  body: { target_weights: input.target_weights, portfolio: input.portfolio, run_id: input.run_id, attempt: input.attempt, algorithm: input.algorithm },\n  json: true,\n  timeout: 60000\n});\n\nreturn { json: response };"
       },
       "id": "df30e59b-9292-4e9a-a876-3863a825e939",
       "name": "Generate Orders SAC",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         6256,
         3056
@@ -658,19 +701,12 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8000/orders/generate",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ target_weights: $json.target_weights, portfolio: $json.portfolio, run_id: $json.run_id, attempt: $json.attempt, algorithm: $json.algorithm }) }}",
-        "options": {
-          "timeout": 60000
-        }
+        "jsCode": "// Generate orders for HRP - skip if already skipped\nconst input = $input.first().json;\nif (input.skipped) {\n  return { json: { orders: [], skipped: true, algorithm: 'hrp', reason: input.reason } };\n}\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://host.docker.internal:8000/orders/generate',\n  body: { target_weights: input.target_weights, portfolio: input.portfolio, run_id: input.run_id, attempt: input.attempt, algorithm: input.algorithm },\n  json: true,\n  timeout: 60000\n});\n\nreturn { json: response };"
       },
       "id": "525c92e8-4817-42c5-aa45-4570ec106f71",
       "name": "Generate Orders HRP",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         6256,
         3648
@@ -678,7 +714,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract orders and submit each to Alpaca\nconst orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'ppo' } }));"
+        "jsCode": "// Extract orders and submit each to Alpaca\nconst input = $input.first().json;\nif (input.skipped || !input.orders || input.orders.length === 0) {\n  // Return empty array or placeholder to allow workflow to continue\n  return [{ json: { skipped: true, account: 'ppo', orders_count: 0 } }];\n}\nconst orders = input.orders;\nreturn orders.map(order => ({ json: { ...order, account: 'ppo' } }));"
       },
       "id": "358b3769-fa73-4c81-a701-df25fb5b717d",
       "name": "Split Orders PPO",
@@ -691,7 +727,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'sac' } }));"
+        "jsCode": "// Extract orders and submit each to Alpaca\nconst input = $input.first().json;\nif (input.skipped || !input.orders || input.orders.length === 0) {\n  // Return empty array or placeholder to allow workflow to continue\n  return [{ json: { skipped: true, account: 'sac', orders_count: 0 } }];\n}\nconst orders = input.orders;\nreturn orders.map(order => ({ json: { ...order, account: 'sac' } }));"
       },
       "id": "872042d1-2a2b-4b10-8963-fd35300be278",
       "name": "Split Orders SAC",
@@ -704,7 +740,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const orders = $input.first().json.orders || [];\nreturn orders.map(order => ({ json: { ...order, account: 'hrp' } }));"
+        "jsCode": "// Extract orders and submit each to Alpaca\nconst input = $input.first().json;\nif (input.skipped || !input.orders || input.orders.length === 0) {\n  // Return empty array or placeholder to allow workflow to continue\n  return [{ json: { skipped: true, account: 'hrp', orders_count: 0 } }];\n}\nconst orders = input.orders;\nreturn orders.map(order => ({ json: { ...order, account: 'hrp' } }));"
       },
       "id": "f4f8246c-f6e6-4ae7-bfa3-b7b94dbb762f",
       "name": "Split Orders HRP",
@@ -804,7 +840,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Collect order results for PPO\nconst results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'ppo', orders_submitted: successful, orders_failed: failed, results } };"
+        "jsCode": "// Collect order results for PPO\nconst results = $input.all().map(i => i.json);\n// Check if skipped\nif (results.length === 1 && results[0].skipped) {\n  return { json: { account: 'ppo', orders_submitted: 0, orders_failed: 0, skipped: true, results: [] } };\n}\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'ppo', orders_submitted: successful, orders_failed: failed, results } };"
       },
       "id": "f20fc8c0-baf9-4558-9a4d-3a2dbea82b2a",
       "name": "Collect Results PPO",
@@ -817,7 +853,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'sac', orders_submitted: successful, orders_failed: failed, results } };"
+        "jsCode": "// Collect order results for SAC\nconst results = $input.all().map(i => i.json);\n// Check if skipped\nif (results.length === 1 && results[0].skipped) {\n  return { json: { account: 'sac', orders_submitted: 0, orders_failed: 0, skipped: true, results: [] } };\n}\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'sac', orders_submitted: successful, orders_failed: failed, results } };"
       },
       "id": "c8fa7361-890b-4861-a612-230d5e9399b2",
       "name": "Collect Results SAC",
@@ -830,7 +866,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'hrp', orders_submitted: successful, orders_failed: failed, results } };"
+        "jsCode": "// Collect order results for HRP\nconst results = $input.all().map(i => i.json);\n// Check if skipped\nif (results.length === 1 && results[0].skipped) {\n  return { json: { account: 'hrp', orders_submitted: 0, orders_failed: 0, skipped: true, results: [] } };\n}\nconst successful = results.filter(r => r.id && !r.error).length;\nconst failed = results.filter(r => r.error || !r.id).length;\nreturn { json: { account: 'hrp', orders_submitted: successful, orders_failed: failed, results } };"
       },
       "id": "1fcb2576-b9cc-4c41-a229-d7ac5b76f836",
       "name": "Collect Results HRP",
@@ -951,7 +987,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Order execution summary\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">\ud83d\udcc8 Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac?.orders_failed || 0}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_submitted || 0}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.orders_failed || 0}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} \u2192 ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} \u2192 ${targetWeekEnd})`, emailBody, orderResults } };"
+        "jsCode": "const input = $input.first().json;\nconst prevData = $('Prepare OpenAI Prompt').first().json;\nconst orderResults = prevData.order_results || {};\n\n// Get skipped algorithms info from Prepare Phase 2\nlet skippedAlgorithms = [];\ntry { skippedAlgorithms = $('Prepare Phase 2').first().json.skipped_algorithms || []; } catch(e) {}\n\nlet aiSummary = {};\ntry { const content = input.message?.content || '{}'; aiSummary = JSON.parse(content); } catch (e) { aiSummary = { para_1_overall_summary: 'Unable to generate AI summary' }; }\n\nconst lstmData = prevData.lstm || {};\nconst hrpData = prevData.hrp || {};\nconst targetWeekStart = lstmData.target_week_start || 'N/A';\nconst targetWeekEnd = lstmData.target_week_end || 'N/A';\nconst asOfDate = hrpData.as_of_date || 'N/A';\n\n// Skipped algorithms warning section\nlet skippedSection = '';\nif (skippedAlgorithms.length > 0) {\n  skippedSection = `<div style=\"margin-bottom: 24px; padding: 16px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px;\"><h3 style=\"color: #92400e; margin-top: 0;\">Skipped Algorithms</h3><p style=\"margin-bottom: 0;\">The following algorithms were skipped due to open orders: <strong>${skippedAlgorithms.join(', ')}</strong></p><p style=\"margin-top: 8px; font-size: 12px; color: #78716c;\">Cancel the open orders in Alpaca to allow these algorithms to run on the next execution.</p></div>`;\n}\n\n// Order execution summary - show 'Skipped' for skipped algorithms\nconst ppoStatus = orderResults.ppo?.skipped ? 'Skipped' : `${orderResults.ppo?.orders_submitted || 0}`;\nconst sacStatus = orderResults.sac?.skipped ? 'Skipped' : `${orderResults.sac?.orders_submitted || 0}`;\nconst hrpStatus = orderResults.hrp?.skipped ? 'Skipped' : `${orderResults.hrp?.orders_submitted || 0}`;\n\nconst orderSection = `\n<div style=\"margin-bottom: 24px; padding: 16px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 8px;\">\n  <h3 style=\"color: #166534; margin-top: 0;\">Order Execution Summary</h3>\n  <table style=\"width: 100%; border-collapse: collapse;\">\n    <tr style=\"background: #dcfce7;\"><th style=\"padding: 8px; text-align: left;\">Account</th><th style=\"padding: 8px;\">Submitted</th><th style=\"padding: 8px;\">Failed</th></tr>\n    <tr><td style=\"padding: 8px;\">PPO</td><td style=\"padding: 8px; text-align: center;\">${ppoStatus}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.ppo?.skipped ? '-' : (orderResults.ppo?.orders_failed || 0)}</td></tr>\n    <tr><td style=\"padding: 8px;\">SAC</td><td style=\"padding: 8px; text-align: center;\">${sacStatus}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.sac?.skipped ? '-' : (orderResults.sac?.orders_failed || 0)}</td></tr>\n    <tr><td style=\"padding: 8px;\">HRP</td><td style=\"padding: 8px; text-align: center;\">${hrpStatus}</td><td style=\"padding: 8px; text-align: center;\">${orderResults.hrp?.skipped ? '-' : (orderResults.hrp?.orders_failed || 0)}</td></tr>\n  </table>\n</div>`;\n\nconst aiSection = `<div style=\"margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;\"><h2 style=\"margin-top: 0;\">AI Analysis</h2><p>${aiSummary.para_1_overall_summary || 'N/A'}</p></div>`;\n\nconst emailBody = `<div style=\"font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;\"><h1>Weekly Portfolio Analysis</h1><div style=\"background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;\"><strong>Target Week:</strong> ${targetWeekStart} -> ${targetWeekEnd} | <strong>As-of:</strong> ${asOfDate}</div>${skippedSection}${orderSection}${aiSection}<div style=\"margin-top: 32px; font-size: 12px; color: #6b7280;\"><em>Generated by LearnFinance-2025 | Not financial advice</em></div></div>`;\n\nreturn { json: { emailSubject: `Weekly Portfolio Analysis (${targetWeekStart} -> ${targetWeekEnd})`, emailBody, orderResults, skippedAlgorithms } };"
       },
       "id": "5e243f9a-dcc1-4469-ad20-b15fc17d0c41",
       "name": "Format Email Body",
@@ -1174,6 +1210,21 @@
             "node": "Fetch HRP Account",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Check PPO Open Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check SAC Open Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check HRP Open Orders",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1198,6 +1249,21 @@
           },
           {
             "node": "Fetch HRP Account",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check PPO Open Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check SAC Open Orders",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check HRP Open Orders",
             "type": "main",
             "index": 0
           }
