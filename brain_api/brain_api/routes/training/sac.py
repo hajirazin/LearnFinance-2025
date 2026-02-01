@@ -12,6 +12,7 @@ from brain_api.core.config import (
     resolve_cutoff_date,
     resolve_training_window,
 )
+from brain_api.core.data_freshness import ensure_fresh_training_data
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
@@ -67,6 +68,20 @@ def train_sac_endpoint(
                 prior_version=existing_metadata.get("prior_version"),
                 symbols_used=existing_metadata["symbols"],
             )
+
+    # Ensure training data is fresh
+    try:
+        freshness_result = ensure_fresh_training_data(symbols, start_date, end_date)
+        logger.info(
+            f"[SAC] Data freshness: {freshness_result.sentiment_gaps_filled} sentiment gaps filled, "
+            f"{len(freshness_result.fundamentals_refreshed)} fundamentals refreshed"
+        )
+        if freshness_result.fundamentals_failed:
+            logger.warning(
+                f"[SAC] Failed to refresh fundamentals: {freshness_result.fundamentals_failed}"
+            )
+    except Exception as e:
+        logger.warning(f"[SAC] Data freshness check failed (continuing): {e}")
 
     # Load price data
     prices_dict = load_prices_yfinance(symbols, start_date, end_date)
@@ -378,6 +393,20 @@ def finetune_sac_endpoint(
                 prior_version=existing_metadata.get("prior_version"),
                 symbols_used=existing_metadata["symbols"],
             )
+
+    # Ensure training data is fresh
+    try:
+        freshness_result = ensure_fresh_training_data(symbols, start_date, end_date)
+        logger.info(
+            f"[SAC Finetune] Data freshness: {freshness_result.sentiment_gaps_filled} sentiment gaps filled, "
+            f"{len(freshness_result.fundamentals_refreshed)} fundamentals refreshed"
+        )
+        if freshness_result.fundamentals_failed:
+            logger.warning(
+                f"[SAC Finetune] Failed to refresh fundamentals: {freshness_result.fundamentals_failed}"
+            )
+    except Exception as e:
+        logger.warning(f"[SAC Finetune] Data freshness check failed (continuing): {e}")
 
     # Load price data
     prices_dict = load_prices_yfinance(symbols, start_date, end_date)

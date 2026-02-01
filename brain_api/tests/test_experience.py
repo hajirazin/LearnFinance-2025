@@ -360,7 +360,7 @@ class TestLabelPPOEndpoint:
         actual_weights = {"AAPL": 0.5, "MSFT": 0.3, "CASH": 0.2}
         symbol_returns = {"AAPL": 0.05, "MSFT": -0.02}  # 5% and -2%
 
-        reward, portfolio_return = _compute_reward_from_actual_weights(
+        _reward, portfolio_return = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
         )
@@ -376,7 +376,7 @@ class TestLabelPPOEndpoint:
         actual_weights = {"AAPL": 1.0, "CASH": 0.0}
         symbol_returns = {"AAPL": 0.10}  # 10% return
 
-        reward, portfolio_return = _compute_reward_from_actual_weights(
+        reward, _portfolio_return = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
         )
@@ -502,7 +502,7 @@ class TestLabelSACEndpoint:
         actual_weights = {"GOOGL": 0.4, "AMZN": 0.4, "CASH": 0.2}
         symbol_returns = {"GOOGL": 0.03, "AMZN": 0.02}
 
-        reward, portfolio_return = _compute_reward_from_actual_weights(
+        _reward, portfolio_return = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
         )

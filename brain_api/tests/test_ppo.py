@@ -8,11 +8,13 @@ Tests focus on:
 
 import os
 import tempfile
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from brain_api.core.data_freshness import DataFreshnessResult
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.ppo import (
     PPOConfig,
@@ -119,7 +121,24 @@ def temp_storage():
 
 
 @pytest.fixture
-def client_with_mocks(temp_storage):
+def mock_data_freshness():
+    """Mock ensure_fresh_training_data to avoid API calls in tests."""
+    with patch(
+        "brain_api.routes.training.ppo.ensure_fresh_training_data"
+    ) as mock_freshness:
+        mock_freshness.return_value = DataFreshnessResult(
+            sentiment_gaps_filled=0,
+            sentiment_gaps_remaining=0,
+            fundamentals_refreshed=[],
+            fundamentals_skipped_today=[],
+            fundamentals_failed=[],
+            duration_seconds=0.0,
+        )
+        yield mock_freshness
+
+
+@pytest.fixture
+def client_with_mocks(temp_storage, mock_data_freshness):
     """Create test client with mocked dependencies."""
     # Clear any existing overrides
     app.dependency_overrides.clear()
@@ -184,7 +203,7 @@ def trained_model_storage():
 
 
 @pytest.fixture
-def client_for_inference(trained_model_storage):
+def client_for_inference(trained_model_storage, mock_data_freshness):
     """Create test client with pre-trained model for inference and fine-tune tests."""
     app.dependency_overrides.clear()
     # Override both inference and training storage with same pre-trained storage
