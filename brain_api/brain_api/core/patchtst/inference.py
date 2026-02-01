@@ -37,6 +37,7 @@ class SymbolPrediction:
 
     symbol: str
     predicted_weekly_return_pct: float | None
+    predicted_volatility: float | None  # Std dev of 5 daily return predictions
     direction: str  # "UP", "DOWN", or "FLAT"
     has_enough_history: bool
     history_days_used: int
@@ -252,6 +253,7 @@ def run_inference(
             SymbolPrediction(
                 symbol=feat.symbol,
                 predicted_weekly_return_pct=None,
+                predicted_volatility=None,
                 direction="FLAT",
                 has_enough_history=False,
                 history_days_used=feat.history_days_used,
@@ -388,6 +390,10 @@ def run_inference(
             final_price = feat.starting_price * np.prod(1 + symbol_daily_returns)
             weekly_return = (final_price - feat.starting_price) / feat.starting_price
 
+        # Compute volatility as std dev of daily returns
+        # This gives the RL agent risk information alongside return prediction
+        volatility = float(np.std(symbol_daily_returns))
+
         weekly_return_pct = weekly_return * 100
         direction = classify_direction(weekly_return)
 
@@ -395,6 +401,7 @@ def run_inference(
             SymbolPrediction(
                 symbol=symbol,
                 predicted_weekly_return_pct=round(weekly_return_pct, 4),
+                predicted_volatility=round(volatility, 6),
                 direction=direction,
                 has_enough_history=True,
                 history_days_used=feat.history_days_used,

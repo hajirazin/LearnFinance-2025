@@ -7,10 +7,12 @@ from brain_api.core.lstm.config import LSTMConfig
 
 
 class LSTMModel(nn.Module):
-    """PyTorch LSTM model for weekly return prediction.
+    """PyTorch LSTM model for next-day return prediction.
 
-    Predicts a single scalar: the expected weekly return
-    (friday_close - monday_open) / monday_open.
+    Predicts a single scalar: the expected next-day return
+    (next_close - current_close) / current_close.
+
+    For weekly forecasts, run iteratively for 5 days and compound the returns.
     """
 
     def __init__(self, config: LSTMConfig):
@@ -25,7 +27,7 @@ class LSTMModel(nn.Module):
             batch_first=True,
         )
 
-        # Output layer: single value (weekly return)
+        # Output layer: single value (next-day return)
         self.fc = nn.Linear(config.hidden_size, config.forecast_horizon)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -35,7 +37,7 @@ class LSTMModel(nn.Module):
             x: Input tensor of shape (batch, seq_len, input_size)
 
         Returns:
-            Output tensor of shape (batch, 1) - predicted weekly return
+            Output tensor of shape (batch, 1) - predicted next-day return
         """
         lstm_out, _ = self.lstm(x)
         # Take the last time step's output

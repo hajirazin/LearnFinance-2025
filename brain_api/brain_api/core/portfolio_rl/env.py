@@ -62,6 +62,8 @@ class PortfolioEnv:
         patchtst_forecasts: np.ndarray,
         symbol_order: list[str],
         config: PPOBaseConfig | None = None,
+        lstm_volatilities: np.ndarray | None = None,
+        patchtst_volatilities: np.ndarray | None = None,
     ):
         """Initialize environment.
 
@@ -76,6 +78,10 @@ class PortfolioEnv:
                                Shape: (n_weeks, n_stocks).
             symbol_order: Ordered list of stock symbols.
             config: PPO configuration.
+            lstm_volatilities: LSTM forecast volatility for each stock each week.
+                              Shape: (n_weeks, n_stocks).
+            patchtst_volatilities: PatchTST forecast volatility for each stock each week.
+                                  Shape: (n_weeks, n_stocks).
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
@@ -86,6 +92,17 @@ class PortfolioEnv:
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
+
+        # Handle volatility arrays (default to zeros if not provided)
+        if lstm_volatilities is not None:
+            self.lstm_volatilities = lstm_volatilities
+        else:
+            self.lstm_volatilities = np.zeros((self.n_weeks, self.n_stocks))
+
+        if patchtst_volatilities is not None:
+            self.patchtst_volatilities = patchtst_volatilities
+        else:
+            self.patchtst_volatilities = np.zeros((self.n_weeks, self.n_stocks))
 
         # State schema
         self.schema = StateSchema(n_stocks=self.n_stocks)
@@ -142,10 +159,24 @@ class PortfolioEnv:
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
 
+        # Get LSTM volatility features for this week
+        week_lstm_vol = self.lstm_volatilities[week_idx]  # (n_stocks,)
+        lstm_vol_dict = {
+            symbol: float(week_lstm_vol[stock_idx])
+            for stock_idx, symbol in enumerate(self.symbol_order)
+        }
+
         # Get PatchTST forecast features for this week
         week_patchtst = self.patchtst_forecasts[week_idx]  # (n_stocks,)
         patchtst_dict = {
             symbol: float(week_patchtst[stock_idx])
+            for stock_idx, symbol in enumerate(self.symbol_order)
+        }
+
+        # Get PatchTST volatility features for this week
+        week_patchtst_vol = self.patchtst_volatilities[week_idx]  # (n_stocks,)
+        patchtst_vol_dict = {
+            symbol: float(week_patchtst_vol[stock_idx])
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
 
@@ -156,6 +187,8 @@ class PortfolioEnv:
             portfolio_weights=self.current_weights,
             symbol_order=self.symbol_order,
             schema=self.schema,
+            lstm_volatilities=lstm_vol_dict,
+            patchtst_volatilities=patchtst_vol_dict,
         )
 
     def reset(self, start_week: int | None = None) -> np.ndarray:
@@ -303,6 +336,8 @@ def create_env_from_data(
     patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
     config: PPOBaseConfig | None = None,
+    lstm_volatilities: dict[str, np.ndarray] | None = None,
+    patchtst_volatilities: dict[str, np.ndarray] | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
 
@@ -315,10 +350,17 @@ def create_env_from_data(
         patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
         config: PPO configuration.
+        lstm_volatilities: Dict of symbol -> array of LSTM volatility values.
+        patchtst_volatilities: Dict of symbol -> array of PatchTST volatility values.
 
     Returns:
         PortfolioEnv instance.
     """
+    if lstm_volatilities is None:
+        lstm_volatilities = {}
+    if patchtst_volatilities is None:
+        patchtst_volatilities = {}
+
     # Determine number of weeks from the first symbol
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because we compute returns
@@ -356,11 +398,23 @@ def create_env_from_data(
         forecast_values = lstm_forecasts.get(symbol, np.zeros(n_weeks))
         lstm_array[:, stock_idx] = forecast_values[:n_weeks]
 
+    # Build LSTM volatilities array
+    lstm_vol_array = np.zeros((n_weeks, n_stocks))
+    for stock_idx, symbol in enumerate(symbol_order):
+        vol_values = lstm_volatilities.get(symbol, np.zeros(n_weeks))
+        lstm_vol_array[:, stock_idx] = vol_values[:n_weeks]
+
     # Build PatchTST forecasts array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         forecast_values = patchtst_forecasts.get(symbol, np.zeros(n_weeks))
         patchtst_array[:, stock_idx] = forecast_values[:n_weeks]
+
+    # Build PatchTST volatilities array
+    patchtst_vol_array = np.zeros((n_weeks, n_stocks))
+    for stock_idx, symbol in enumerate(symbol_order):
+        vol_values = patchtst_volatilities.get(symbol, np.zeros(n_weeks))
+        patchtst_vol_array[:, stock_idx] = vol_values[:n_weeks]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
@@ -369,4 +423,6 @@ def create_env_from_data(
         patchtst_forecasts=patchtst_array,
         symbol_order=symbol_order,
         config=config,
+        lstm_volatilities=lstm_vol_array,
+        patchtst_volatilities=patchtst_vol_array,
     )

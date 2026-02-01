@@ -239,13 +239,16 @@ class TestWalkForwardForecasts:
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
         symbols = ["AAPL", "MSFT"]
 
-        forecasts = generate_walkforward_forecasts_simple(
+        forecasts, volatilities = generate_walkforward_forecasts_simple(
             weekly_prices, weekly_dates, symbols, bootstrap_years=1
         )
 
         assert "AAPL" in forecasts
         assert "MSFT" in forecasts
         assert len(forecasts["AAPL"]) == n_weeks - 1
+        # Volatilities should also be returned (zeros for momentum proxy)
+        assert "AAPL" in volatilities
+        assert "MSFT" in volatilities
 
     def test_generate_simple_forecasts_bootstrap(self):
         """Test bootstrap period uses zeros."""
@@ -256,12 +259,14 @@ class TestWalkForwardForecasts:
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
 
         # With 4 year bootstrap, all of 2020 should be zeros
-        forecasts = generate_walkforward_forecasts_simple(
+        forecasts, volatilities = generate_walkforward_forecasts_simple(
             weekly_prices, weekly_dates, ["AAPL"], bootstrap_years=4
         )
 
         # All forecasts should be 0 since we're in bootstrap period
         assert all(forecasts["AAPL"] == 0)
+        # Volatilities should also be zeros for momentum proxy
+        assert all(volatilities["AAPL"] == 0)
 
     def test_build_forecast_features_simple(self):
         """Test build_forecast_features with momentum proxy."""
@@ -271,7 +276,7 @@ class TestWalkForwardForecasts:
         }
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
 
-        forecasts = build_forecast_features(
+        forecasts, volatilities = build_forecast_features(
             weekly_prices,
             weekly_dates,
             ["AAPL"],
@@ -281,6 +286,7 @@ class TestWalkForwardForecasts:
 
         assert "AAPL" in forecasts
         assert len(forecasts["AAPL"]) == n_weeks - 1
+        assert "AAPL" in volatilities
 
     def test_build_forecast_features_with_missing_snapshots(self, tmp_path):
         """Test build_forecast_features falls back when no snapshots."""
@@ -297,7 +303,7 @@ class TestWalkForwardForecasts:
             mock.return_value = generate_walkforward_forecasts_simple(
                 weekly_prices, weekly_dates, ["AAPL"]
             )
-            forecasts = build_forecast_features(
+            forecasts, volatilities = build_forecast_features(
                 weekly_prices,
                 weekly_dates,
                 ["AAPL"],
@@ -306,11 +312,15 @@ class TestWalkForwardForecasts:
             )
 
         assert "AAPL" in forecasts
+        assert "AAPL" in volatilities
 
     def test_generate_forecasts_empty_prices(self):
         """Test forecast generation with empty prices."""
-        forecasts = generate_walkforward_forecasts_simple({}, pd.DatetimeIndex([]), [])
+        forecasts, volatilities = generate_walkforward_forecasts_simple(
+            {}, pd.DatetimeIndex([]), []
+        )
         assert forecasts == {}
+        assert volatilities == {}
 
 
 class TestSnapshotIntegration:
@@ -399,7 +409,7 @@ class TestSnapshotInferenceHelpers:
         weekly_dates = pd.date_range(start="2019-01-01", periods=10, freq="W-FRI")
 
         # Should fall back to momentum since no daily OHLCV available
-        predictions = _run_lstm_snapshot_inference(
+        predictions, volatilities = _run_lstm_snapshot_inference(
             artifacts,
             prices,
             year_indices,
@@ -407,6 +417,7 @@ class TestSnapshotInferenceHelpers:
             symbol="TEST",
         )
         assert len(predictions) == 3
+        assert len(volatilities) == 3
 
     def test_patchtst_inference_fallback_short_history(self):
         """Test PatchTST inference falls back with short history."""
@@ -432,5 +443,8 @@ class TestSnapshotInferenceHelpers:
         year_indices = [5, 6, 7]  # Indices to predict
 
         # Should fall back to momentum since context_length=20 > len(prices)
-        predictions = _run_patchtst_snapshot_inference(artifacts, prices, year_indices)
+        predictions, volatilities = _run_patchtst_snapshot_inference(
+            artifacts, prices, year_indices
+        )
         assert len(predictions) == 3
+        assert len(volatilities) == 3

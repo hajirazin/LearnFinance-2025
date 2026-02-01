@@ -51,13 +51,15 @@ class SACTrainingResult:
 
 @dataclass
 class TrainingData:
-    """Prepared training data for SAC with dual forecasts."""
+    """Prepared training data for SAC with dual forecasts and volatilities."""
 
     # Arrays aligned by week index
     symbol_returns: np.ndarray  # (n_weeks, n_stocks)
     signals: np.ndarray  # (n_weeks, n_stocks, n_signals)
     lstm_forecasts: np.ndarray  # (n_weeks, n_stocks)
+    lstm_volatilities: np.ndarray  # (n_weeks, n_stocks)
     patchtst_forecasts: np.ndarray  # (n_weeks, n_stocks)
+    patchtst_volatilities: np.ndarray  # (n_weeks, n_stocks)
 
     # Metadata
     symbol_order: list[str]
@@ -71,6 +73,8 @@ def build_training_data(
     lstm_predictions: dict[str, np.ndarray],
     patchtst_predictions: dict[str, np.ndarray],
     symbol_order: list[str],
+    lstm_volatilities: dict[str, np.ndarray] | None = None,
+    patchtst_volatilities: dict[str, np.ndarray] | None = None,
 ) -> TrainingData:
     """Build training data arrays from raw data.
 
@@ -80,10 +84,16 @@ def build_training_data(
         lstm_predictions: Dict of symbol -> array of LSTM weekly return predictions.
         patchtst_predictions: Dict of symbol -> array of PatchTST weekly return predictions.
         symbol_order: Ordered list of symbols to include.
+        lstm_volatilities: Dict of symbol -> array of LSTM forecast volatilities.
+        patchtst_volatilities: Dict of symbol -> array of PatchTST forecast volatilities.
 
     Returns:
         TrainingData with aligned arrays.
     """
+    if lstm_volatilities is None:
+        lstm_volatilities = {}
+    if patchtst_volatilities is None:
+        patchtst_volatilities = {}
     n_stocks = len(symbol_order)
 
     # Determine number of weeks from first symbol's prices
@@ -132,6 +142,13 @@ def build_training_data(
         if lstm_preds is not None:
             lstm_array[: len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
 
+    # Build LSTM volatility array
+    lstm_vol_array = np.zeros((n_weeks, n_stocks))
+    for stock_idx, symbol in enumerate(symbol_order):
+        lstm_vols = lstm_volatilities.get(symbol)
+        if lstm_vols is not None:
+            lstm_vol_array[: len(lstm_vols), stock_idx] = lstm_vols[:n_weeks]
+
     # Build PatchTST forecast features array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
@@ -139,11 +156,22 @@ def build_training_data(
         if patchtst_preds is not None:
             patchtst_array[: len(patchtst_preds), stock_idx] = patchtst_preds[:n_weeks]
 
+    # Build PatchTST volatility array
+    patchtst_vol_array = np.zeros((n_weeks, n_stocks))
+    for stock_idx, symbol in enumerate(symbol_order):
+        patchtst_vols = patchtst_volatilities.get(symbol)
+        if patchtst_vols is not None:
+            patchtst_vol_array[: len(patchtst_vols), stock_idx] = patchtst_vols[
+                :n_weeks
+            ]
+
     return TrainingData(
         symbol_returns=symbol_returns,
         signals=signals_array,
         lstm_forecasts=lstm_array,
+        lstm_volatilities=lstm_vol_array,
         patchtst_forecasts=patchtst_array,
+        patchtst_volatilities=patchtst_vol_array,
         symbol_order=symbol_order,
         n_weeks=n_weeks,
         n_stocks=n_stocks,
@@ -174,7 +202,9 @@ def create_env_from_training_data(
     symbol_returns = training_data.symbol_returns[start_week:end_week]
     signals = training_data.signals[start_week:end_week]
     lstm_forecasts = training_data.lstm_forecasts[start_week:end_week]
+    lstm_volatilities = training_data.lstm_volatilities[start_week:end_week]
     patchtst_forecasts = training_data.patchtst_forecasts[start_week:end_week]
+    patchtst_volatilities = training_data.patchtst_volatilities[start_week:end_week]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
@@ -183,6 +213,8 @@ def create_env_from_training_data(
         patchtst_forecasts=patchtst_forecasts,
         symbol_order=training_data.symbol_order,
         config=config,
+        lstm_volatilities=lstm_volatilities,
+        patchtst_volatilities=patchtst_volatilities,
     )
 
 

@@ -179,6 +179,7 @@ def test_inference_lstm_returns_required_fields(client_with_mocks):
     pred = data["predictions"][0]
     assert "symbol" in pred
     assert "predicted_weekly_return_pct" in pred
+    assert "predicted_volatility" in pred
     assert "direction" in pred
     assert "has_enough_history" in pred
     assert "history_days_used" in pred
@@ -200,6 +201,38 @@ def test_inference_lstm_returns_numeric_prediction(client_with_mocks):
     assert pred["has_enough_history"] is True
     assert isinstance(pred["predicted_weekly_return_pct"], int | float)
     assert pred["direction"] in ["UP", "DOWN", "FLAT"]
+
+
+def test_inference_lstm_returns_volatility_field(client_with_mocks):
+    """POST /inference/lstm returns predicted_volatility from 5-day iterative prediction."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    pred = data["predictions"][0]
+
+    # Volatility should be present for symbols with enough history
+    assert pred["has_enough_history"] is True
+    assert "predicted_volatility" in pred
+    assert pred["predicted_volatility"] is not None
+    assert isinstance(pred["predicted_volatility"], int | float)
+
+
+def test_inference_lstm_volatility_is_non_negative(client_with_mocks):
+    """Volatility (std dev) should be non-negative."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": ["AAPL", "MSFT", "GOOGL"]},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    for pred in data["predictions"]:
+        if pred["has_enough_history"] and pred["predicted_volatility"] is not None:
+            assert pred["predicted_volatility"] >= 0
 
 
 # ============================================================================

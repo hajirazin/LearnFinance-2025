@@ -8,8 +8,9 @@ from typing import Any
 class LSTMConfig:
     """LSTM model hyperparameters and training config.
 
-    The LSTM predicts weekly returns (Mon open → Fri close), not daily prices.
-    This aligns with the RL agent's weekly decision horizon.
+    The LSTM predicts next-day returns (close-to-close), enabling iterative
+    5-day prediction for weekly forecasts. This allows computing both weekly
+    return (compounded from daily) and volatility (std of daily returns).
     """
 
     # Model architecture
@@ -19,7 +20,7 @@ class LSTMConfig:
     dropout: float = 0.2
 
     # Forecast settings
-    # Single output: weekly return = (fri_close - mon_open) / mon_open
+    # Single output: next-day return (close-to-close)
     forecast_horizon: int = 1
 
     # Training

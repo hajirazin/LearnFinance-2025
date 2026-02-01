@@ -15,7 +15,7 @@ from brain_api.core.training_utils import get_device
 
 @dataclass
 class TrainingResult:
-    """Result of LSTM training for weekly return prediction."""
+    """Result of LSTM training for next-day return prediction."""
 
     model: LSTMModel
     feature_scaler: StandardScaler
@@ -43,7 +43,7 @@ def train_model_pytorch(
 
     Args:
         X: Input sequences, shape (n_samples, seq_len, n_features)
-        y: Targets, shape (n_samples, 1) - weekly returns (unscaled)
+        y: Targets, shape (n_samples, 1) - next-day returns (unscaled)
         feature_scaler: Fitted scaler for input features
         config: Model configuration
 
@@ -206,7 +206,7 @@ def train_model_pytorch(
             del train_X, train_y, train_outputs
     final_train_loss = total_final_train_loss / n_final_batches
 
-    # Baseline: predict 0 return (no change from week to week)
+    # Baseline: predict 0 return (no change from day to day)
     # This is the naive "persistence" baseline for returns
     baseline_loss = float(np.mean(y_val**2))
 

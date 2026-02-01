@@ -213,6 +213,7 @@ def test_inference_patchtst_returns_required_fields(client_with_mocks):
     pred = data["predictions"][0]
     assert "symbol" in pred
     assert "predicted_weekly_return_pct" in pred
+    assert "predicted_volatility" in pred
     assert "direction" in pred
     assert "has_enough_history" in pred
     assert "history_days_used" in pred
@@ -236,6 +237,31 @@ def test_inference_patchtst_returns_numeric_prediction(client_with_mocks):
     assert pred["has_enough_history"] is True
     assert isinstance(pred["predicted_weekly_return_pct"], int | float)
     assert pred["direction"] in ["UP", "DOWN", "FLAT"]
+
+
+def test_inference_patchtst_returns_volatility_field(client_with_mocks):
+    """POST /inference/patchtst returns predicted_volatility in each prediction."""
+    response = client_with_mocks.post(
+        "/inference/patchtst",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+
+    pred = response.json()["predictions"][0]
+    assert "predicted_volatility" in pred
+
+
+def test_inference_patchtst_volatility_is_non_negative(client_with_mocks):
+    """predicted_volatility should be non-negative (std dev >= 0)."""
+    response = client_with_mocks.post(
+        "/inference/patchtst",
+        json={"symbols": ["AAPL", "MSFT"]},
+    )
+    assert response.status_code == 200
+
+    for pred in response.json()["predictions"]:
+        if pred["predicted_volatility"] is not None:
+            assert pred["predicted_volatility"] >= 0
 
 
 def test_inference_patchtst_returns_signals_used(client_with_mocks):

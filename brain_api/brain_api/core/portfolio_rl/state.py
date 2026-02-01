@@ -52,9 +52,11 @@ class StateSchema:
 
     The state vector is a flat numpy array with the following segments:
     1. Per-stock signals (n_stocks * n_signals_per_stock)
-    2. Per-stock LSTM forecast features (n_stocks * 1)
-    3. Per-stock PatchTST forecast features (n_stocks * 1)
-    4. Current portfolio weights (n_stocks + 1 for CASH)
+    2. Per-stock LSTM forecast return (n_stocks * 1)
+    3. Per-stock LSTM forecast volatility (n_stocks * 1)
+    4. Per-stock PatchTST forecast return (n_stocks * 1)
+    5. Per-stock PatchTST forecast volatility (n_stocks * 1)
+    6. Current portfolio weights (n_stocks + 1 for CASH)
 
     Signals per stock:
     - news_sentiment (1)
@@ -65,13 +67,15 @@ class StateSchema:
     - debt_to_equity (1)
     - fundamental_age (1)
 
-    Total per stock = 7 signals + 2 forecasts = 9 features
-    State dim for 15 stocks = 15*7 + 15*2 + 16 = 105 + 30 + 16 = 151
+    Total per stock = 7 signals + 4 forecasts (return+vol for each) = 11 features
+    State dim for 15 stocks = 15*7 + 15*4 + 16 = 105 + 60 + 16 = 181
     """
 
     n_stocks: int = 15
     n_signals_per_stock: int = 7  # news + 5 fundamentals + fundamental_age
-    n_forecasts_per_stock: int = 2  # LSTM + PatchTST
+    n_forecasts_per_stock: int = (
+        4  # LSTM return + LSTM vol + PatchTST return + PatchTST vol
+    )
 
     @property
     def n_forecast_features(self) -> int:
@@ -118,14 +122,26 @@ class StateSchema:
         return start, end
 
     def get_lstm_forecast_indices(self) -> tuple[int, int]:
-        """Get start/end indices for LSTM forecast features."""
+        """Get start/end indices for LSTM forecast return features."""
         start = self.n_stocks * self.n_signals_per_stock
         end = start + self.n_stocks
         return start, end
 
-    def get_patchtst_forecast_indices(self) -> tuple[int, int]:
-        """Get start/end indices for PatchTST forecast features."""
+    def get_lstm_volatility_indices(self) -> tuple[int, int]:
+        """Get start/end indices for LSTM forecast volatility features."""
         start = self.n_stocks * self.n_signals_per_stock + self.n_stocks
+        end = start + self.n_stocks
+        return start, end
+
+    def get_patchtst_forecast_indices(self) -> tuple[int, int]:
+        """Get start/end indices for PatchTST forecast return features."""
+        start = self.n_stocks * self.n_signals_per_stock + 2 * self.n_stocks
+        end = start + self.n_stocks
+        return start, end
+
+    def get_patchtst_volatility_indices(self) -> tuple[int, int]:
+        """Get start/end indices for PatchTST forecast volatility features."""
+        start = self.n_stocks * self.n_signals_per_stock + 3 * self.n_stocks
         end = start + self.n_stocks
         return start, end
 
@@ -143,6 +159,8 @@ def build_state_vector(
     portfolio_weights: np.ndarray,
     symbol_order: list[str],
     schema: StateSchema | None = None,
+    lstm_volatilities: dict[str, float] | None = None,
+    patchtst_volatilities: dict[str, float] | None = None,
 ) -> np.ndarray:
     """Build the full state vector for RL agents (PPO/SAC).
 
@@ -156,12 +174,19 @@ def build_state_vector(
         portfolio_weights: Current portfolio weights with CASH last.
         symbol_order: Ordered list of stock symbols (determines ordering).
         schema: State schema (created from defaults if None).
+        lstm_volatilities: Dict of symbol -> LSTM forecast volatility (std of daily returns).
+        patchtst_volatilities: Dict of symbol -> PatchTST forecast volatility.
 
     Returns:
         Flat state vector of shape (state_dim,).
     """
     if schema is None:
         schema = StateSchema(n_stocks=len(symbol_order))
+
+    if lstm_volatilities is None:
+        lstm_volatilities = {}
+    if patchtst_volatilities is None:
+        patchtst_volatilities = {}
 
     state = np.zeros(schema.state_dim)
 
@@ -174,17 +199,27 @@ def build_state_vector(
         for signal_idx, signal_name in enumerate(signal_names):
             state[start + signal_idx] = symbol_signals.get(signal_name, 0.0)
 
-    # 2. Fill LSTM forecast features
+    # 2. Fill LSTM forecast return features
     lstm_start, _lstm_end = schema.get_lstm_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
         state[lstm_start + stock_idx] = lstm_forecasts.get(symbol, 0.0)
 
-    # 3. Fill PatchTST forecast features
+    # 3. Fill LSTM volatility features
+    lstm_vol_start, _lstm_vol_end = schema.get_lstm_volatility_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        state[lstm_vol_start + stock_idx] = lstm_volatilities.get(symbol, 0.0)
+
+    # 4. Fill PatchTST forecast return features
     patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
         state[patchtst_start + stock_idx] = patchtst_forecasts.get(symbol, 0.0)
 
-    # 4. Fill portfolio weights
+    # 5. Fill PatchTST volatility features
+    patchtst_vol_start, _patchtst_vol_end = schema.get_patchtst_volatility_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        state[patchtst_vol_start + stock_idx] = patchtst_volatilities.get(symbol, 0.0)
+
+    # 6. Fill portfolio weights
     portfolio_start, portfolio_end = schema.get_portfolio_indices()
     state[portfolio_start:portfolio_end] = portfolio_weights
 
@@ -223,7 +258,7 @@ def state_to_dict(
         schema: State schema.
 
     Returns:
-        Structured dict with signals, forecasts, and portfolio weights.
+        Structured dict with signals, forecasts, volatilities, and portfolio weights.
     """
     if schema is None:
         schema = StateSchema(n_stocks=len(symbol_order))
@@ -231,7 +266,9 @@ def state_to_dict(
     result: dict[str, Any] = {
         "signals": {},
         "lstm_forecasts": {},
+        "lstm_volatilities": {},
         "patchtst_forecasts": {},
+        "patchtst_volatilities": {},
         "current_weights": {},
     }
 
@@ -243,15 +280,27 @@ def state_to_dict(
         for signal_idx, signal_name in enumerate(signal_names):
             result["signals"][symbol][signal_name] = float(state[start + signal_idx])
 
-    # Extract LSTM forecast features
+    # Extract LSTM forecast return features
     lstm_start, _lstm_end = schema.get_lstm_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
         result["lstm_forecasts"][symbol] = float(state[lstm_start + stock_idx])
 
-    # Extract PatchTST forecast features
+    # Extract LSTM volatility features
+    lstm_vol_start, _lstm_vol_end = schema.get_lstm_volatility_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        result["lstm_volatilities"][symbol] = float(state[lstm_vol_start + stock_idx])
+
+    # Extract PatchTST forecast return features
     patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
         result["patchtst_forecasts"][symbol] = float(state[patchtst_start + stock_idx])
+
+    # Extract PatchTST volatility features
+    patchtst_vol_start, _patchtst_vol_end = schema.get_patchtst_volatility_indices()
+    for stock_idx, symbol in enumerate(symbol_order):
+        result["patchtst_volatilities"][symbol] = float(
+            state[patchtst_vol_start + stock_idx]
+        )
 
     # Extract portfolio weights
     portfolio_start, portfolio_end = schema.get_portfolio_indices()
