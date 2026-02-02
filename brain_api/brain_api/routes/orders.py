@@ -38,7 +38,8 @@ class PositionModel(BaseModel):
 class PortfolioModel(BaseModel):
     """Current portfolio state from Alpaca."""
 
-    cash: float = Field(..., ge=0, description="Cash balance in dollars")
+    # Note: Cash can be slightly negative due to pending settlements
+    cash: float = Field(..., description="Cash balance in dollars")
     positions: list[PositionModel] = Field(
         default_factory=list, description="List of current positions"
     )
@@ -124,6 +125,13 @@ class GenerateOrdersResponse(BaseModel):
 
 @router.post("/generate", response_model=GenerateOrdersResponse)
 def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersResponse:
+    # Log incoming request for debugging
+    logger.debug(
+        f"[Orders] Request received: algorithm={request.algorithm}, "
+        f"run_id={request.run_id}, attempt={request.attempt}, "
+        f"cash={request.portfolio.cash}, positions={len(request.portfolio.positions)}, "
+        f"target_weights_count={len(request.target_weights)}"
+    )
     """Generate orders to rebalance portfolio to target allocation.
 
     This endpoint converts target allocation weights into actionable limit orders

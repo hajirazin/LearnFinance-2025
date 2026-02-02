@@ -243,6 +243,33 @@ If tests are added later, they should be:
 - Integration-style API tests for routers/handlers
 - Deterministic unit tests for pure functions (feature transforms, idempotency key generation, screening ranking)
 
+**Test ownership:**
+
+- Agent must always write, fix, or modify tests for any code changes
+- Strive for excellent test quality focused on business logic coverage
+- 100% code coverage is not the goal; 100%+ business logic coverage is (all edge cases, error paths, boundary conditions)
+- Every feature/fix should have corresponding test updates
+
+## Code quality guidelines
+
+### Code reuse
+
+- Before writing new code, search for existing helpers, utilities, or similar implementations in the codebase
+- Best programmers factor out and reuse similar code
+- Avoid duplicating logic that already exists elsewhere
+
+### Naming conventions
+
+- Use real-world domain names that match DDD (Domain-Driven Design) principles
+- Class, function, and variable names should reflect business concepts clearly
+- Not mandatory to have infrastructure layers, but names must be intuitive and domain-accurate
+
+### File size limits
+
+- Keep files under 600 lines
+- If a file exceeds this limit, refactor into smaller, focused modules
+- Split by responsibility, not arbitrarily
+
 ## Non-negotiable invariants
 
 ### Run identity & rerun semantics
@@ -318,3 +345,13 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm storage abstraction is used (not hardcoded paths)
 - [ ] Confirm LSTM remains pure-price (no signals in input)
 - [ ] Confirm PatchTST/PPO/SAC receive correct signal state vector
+
+## AI assistant planning rules
+
+When operating in **plan mode**, the AI assistant must:
+
+1. Always include these two final TODOs at the end of every plan:
+   - [ ] Fix all ruff linting issues (related and unrelated to the change)
+   - [ ] Run and fix all tests (related and unrelated to the change)
+
+2. These cleanup tasks ensure the codebase stays healthy with every change.
