@@ -13,7 +13,6 @@ from brain_api.core.config import (
     resolve_cutoff_date,
     resolve_training_window,
 )
-from brain_api.core.data_freshness import ensure_fresh_training_data
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.walkforward import (
@@ -86,20 +85,6 @@ def train_ppo_endpoint(
                 prior_version=existing_metadata.get("prior_version"),
                 symbols_used=existing_metadata["symbols"],
             )
-
-    # Ensure training data is fresh
-    try:
-        freshness_result = ensure_fresh_training_data(symbols, start_date, end_date)
-        logger.info(
-            f"[PPO] Data freshness: {freshness_result.sentiment_gaps_filled} sentiment gaps filled, "
-            f"{len(freshness_result.fundamentals_refreshed)} fundamentals refreshed"
-        )
-        if freshness_result.fundamentals_failed:
-            logger.warning(
-                f"[PPO] Failed to refresh fundamentals: {freshness_result.fundamentals_failed}"
-            )
-    except Exception as e:
-        logger.warning(f"[PPO] Data freshness check failed (continuing): {e}")
 
     # Load price data
     logger.info("[PPO] Loading price data...")
@@ -467,20 +452,6 @@ def finetune_ppo_endpoint(
                 prior_version=existing_metadata.get("prior_version"),
                 symbols_used=existing_metadata["symbols"],
             )
-
-    # Ensure training data is fresh
-    try:
-        freshness_result = ensure_fresh_training_data(symbols, start_date, end_date)
-        logger.info(
-            f"[PPO Finetune] Data freshness: {freshness_result.sentiment_gaps_filled} sentiment gaps filled, "
-            f"{len(freshness_result.fundamentals_refreshed)} fundamentals refreshed"
-        )
-        if freshness_result.fundamentals_failed:
-            logger.warning(
-                f"[PPO Finetune] Failed to refresh fundamentals: {freshness_result.fundamentals_failed}"
-            )
-    except Exception as e:
-        logger.warning(f"[PPO Finetune] Data freshness check failed (continuing): {e}")
 
     # Load recent price data
     logger.info("[PPO Finetune] Loading price data...")

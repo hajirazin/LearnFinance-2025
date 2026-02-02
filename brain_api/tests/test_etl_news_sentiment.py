@@ -411,6 +411,123 @@ class TestGapFillUnmatchedSymbols:
                 assert symbol_row.iloc[0]["sentiment_score"] == 0.0
 
 
+class TestRefreshTrainingDataEndpoint:
+    """Tests for /etl/refresh-training-data endpoint."""
+
+    def test_refresh_training_data_returns_200(self):
+        """POST /etl/refresh-training-data should return 200 with valid request."""
+        with patch(
+            "brain_api.core.data_freshness.ensure_fresh_training_data"
+        ) as mock_refresh:
+            from brain_api.core.data_freshness import DataFreshnessResult
+
+            mock_refresh.return_value = DataFreshnessResult(
+                sentiment_gaps_filled=5,
+                sentiment_gaps_remaining=2,
+                fundamentals_refreshed=["AAPL"],
+                fundamentals_skipped_today=["MSFT"],
+                fundamentals_failed=[],
+                duration_seconds=1.5,
+            )
+
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={
+                    "symbols": ["AAPL", "MSFT"],
+                    "start_date": "2020-01-01",
+                    "end_date": "2025-01-01",
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "sentiment_gaps_filled" in data
+        assert "sentiment_gaps_remaining" in data
+        assert "fundamentals_refreshed" in data
+        assert "fundamentals_skipped" in data
+        assert "fundamentals_failed" in data
+        assert "duration_seconds" in data
+
+    def test_refresh_training_data_with_defaults(self):
+        """POST /etl/refresh-training-data with only symbols uses default dates."""
+        with patch(
+            "brain_api.core.data_freshness.ensure_fresh_training_data"
+        ) as mock_refresh:
+            from brain_api.core.data_freshness import DataFreshnessResult
+
+            mock_refresh.return_value = DataFreshnessResult(
+                sentiment_gaps_filled=0,
+                sentiment_gaps_remaining=0,
+                fundamentals_refreshed=[],
+                fundamentals_skipped_today=["AAPL"],
+                fundamentals_failed=[],
+                duration_seconds=0.5,
+            )
+
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={"symbols": ["AAPL"]},
+            )
+
+        assert response.status_code == 200
+        # Verify the function was called with default dates
+        mock_refresh.assert_called_once()
+        call_args = mock_refresh.call_args
+        # end_date should be today, start_date should be Jan 1, 15 years ago
+        assert call_args.kwargs["end_date"] == date.today()
+        assert call_args.kwargs["start_date"] == date(date.today().year - 15, 1, 1)
+
+    def test_refresh_training_data_missing_symbols(self):
+        """POST without symbols should return 422."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={},
+        )
+        assert response.status_code == 422
+
+    def test_refresh_training_data_empty_symbols(self):
+        """POST with empty symbols list should return 422."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={"symbols": []},
+        )
+        assert response.status_code == 422
+
+    def test_refresh_training_data_invalid_start_date(self):
+        """POST with invalid start_date should return 400."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={
+                "symbols": ["AAPL"],
+                "start_date": "not-a-date",
+            },
+        )
+        assert response.status_code == 400
+
+    def test_refresh_training_data_invalid_end_date(self):
+        """POST with invalid end_date should return 400."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={
+                "symbols": ["AAPL"],
+                "end_date": "not-a-date",
+            },
+        )
+        assert response.status_code == 400
+
+    def test_refresh_training_data_start_after_end(self):
+        """POST with start_date after end_date should return 400."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={
+                "symbols": ["AAPL"],
+                "start_date": "2025-01-01",
+                "end_date": "2020-01-01",
+            },
+        )
+        assert response.status_code == 400
+
+
 class TestSentimentGapsEndpoint:
     """Tests for /etl/sentiment-gaps endpoint."""
 

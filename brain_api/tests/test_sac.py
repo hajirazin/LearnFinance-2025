@@ -8,14 +8,12 @@ Tests focus on:
 
 import os
 import tempfile
-from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
 from fastapi.testclient import TestClient
 
-from brain_api.core.data_freshness import DataFreshnessResult
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac import (
@@ -116,23 +114,6 @@ def temp_storage():
 
 
 @pytest.fixture
-def mock_data_freshness():
-    """Mock ensure_fresh_training_data to avoid API calls in tests."""
-    with patch(
-        "brain_api.routes.training.sac.ensure_fresh_training_data"
-    ) as mock_freshness:
-        mock_freshness.return_value = DataFreshnessResult(
-            sentiment_gaps_filled=0,
-            sentiment_gaps_remaining=0,
-            fundamentals_refreshed=[],
-            fundamentals_skipped_today=[],
-            fundamentals_failed=[],
-            duration_seconds=0.0,
-        )
-        yield mock_freshness
-
-
-@pytest.fixture
 def trained_model_storage():
     """Create storage with a pre-trained model for inference tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -175,7 +156,7 @@ def trained_model_storage():
 
 
 @pytest.fixture
-def inference_client(trained_model_storage, mock_data_freshness):
+def inference_client(trained_model_storage):
     """Create test client with trained model for inference tests."""
     app.dependency_overrides.clear()
     app.dependency_overrides[get_inference_storage] = lambda: trained_model_storage
@@ -324,11 +305,8 @@ def mock_price_loader(symbols, start_date, end_date):
 class TestSACLSTMFinetune:
     """Tests for /train/sac/finetune endpoint."""
 
-    @patch("brain_api.routes.training.sac.ensure_fresh_training_data")
-    def test_finetune_without_prior_returns_400(self, mock_freshness, temp_storage):
+    def test_finetune_without_prior_returns_400(self, temp_storage):
         """Test that finetune without prior model returns 400."""
-        mock_freshness.return_value = DataFreshnessResult()
-
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
         app.dependency_overrides[get_top15_symbols] = mock_symbols
@@ -347,13 +325,10 @@ class TestSACLSTMFinetune:
         os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
         os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
-    @patch("brain_api.routes.training.sac.ensure_fresh_training_data")
     def test_finetune_end_date_is_always_friday(
-        self, mock_freshness, trained_model_storage, monkeypatch
+        self, trained_model_storage, monkeypatch
     ):
         """Finetune endpoint always uses Friday-anchored end_date."""
-        mock_freshness.return_value = DataFreshnessResult()
-
         from datetime import date as dt_date
 
         from brain_api.routes.training import sac
@@ -390,11 +365,8 @@ class TestSACLSTMFinetune:
 class TestSACFullTraining:
     """Tests for /train/sac/full endpoint."""
 
-    @patch("brain_api.routes.training.sac.ensure_fresh_training_data")
-    def test_full_training_returns_200(self, mock_freshness, temp_storage, monkeypatch):
+    def test_full_training_returns_200(self, temp_storage, monkeypatch):
         """Test that full training endpoint returns 200."""
-        mock_freshness.return_value = DataFreshnessResult()
-
         from brain_api.routes.training import sac
 
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
@@ -422,13 +394,8 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
-    @patch("brain_api.routes.training.sac.ensure_fresh_training_data")
-    def test_full_training_is_idempotent(
-        self, mock_freshness, temp_storage, monkeypatch
-    ):
+    def test_full_training_is_idempotent(self, temp_storage, monkeypatch):
         """Test that running full training twice with same data produces same version."""
-        mock_freshness.return_value = DataFreshnessResult()
-
         from brain_api.routes.training import sac
 
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)

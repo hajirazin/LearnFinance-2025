@@ -116,6 +116,7 @@ brain_api/
 | `GET /universe/halal` | Halal stock universe |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill |
+| `POST /etl/refresh-training-data` | Refresh training data (sentiment gaps + fundamentals) |
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/label` | Label experience with rewards |
 | `GET /experience/list` | List stored experiences |

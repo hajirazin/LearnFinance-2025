@@ -12,7 +12,6 @@ from brain_api.core.config import (
     get_storage_backend,
     resolve_training_window,
 )
-from brain_api.core.data_freshness import ensure_fresh_training_data
 from brain_api.core.patchtst import (
     PatchTSTConfig,
     align_multivariate_data,
@@ -135,20 +134,6 @@ def train_patchtst(
                 num_input_channels=config.num_input_channels,
                 signals_used=["ohlcv", "news_sentiment", "fundamentals"],
             )
-
-    # Ensure training data is fresh
-    try:
-        freshness_result = ensure_fresh_training_data(symbols, start_date, end_date)
-        logger.info(
-            f"[PatchTST] Data freshness: {freshness_result.sentiment_gaps_filled} sentiment gaps filled, "
-            f"{len(freshness_result.fundamentals_refreshed)} fundamentals refreshed"
-        )
-        if freshness_result.fundamentals_failed:
-            logger.warning(
-                f"[PatchTST] Failed to refresh fundamentals: {freshness_result.fundamentals_failed}"
-            )
-    except Exception as e:
-        logger.warning(f"[PatchTST] Data freshness check failed (continuing): {e}")
 
     # Load price data
     logger.info(f"[PatchTST] Loading price data for {len(symbols)} symbols...")

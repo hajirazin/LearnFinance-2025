@@ -2,7 +2,6 @@
 
 import os
 import tempfile
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -10,7 +9,6 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
-from brain_api.core.data_freshness import DataFreshnessResult
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
@@ -131,24 +129,7 @@ def temp_storage():
 
 
 @pytest.fixture
-def mock_data_freshness():
-    """Mock ensure_fresh_training_data to avoid API calls in tests."""
-    with patch(
-        "brain_api.routes.training.patchtst.ensure_fresh_training_data"
-    ) as mock_freshness:
-        mock_freshness.return_value = DataFreshnessResult(
-            sentiment_gaps_filled=0,
-            sentiment_gaps_remaining=0,
-            fundamentals_refreshed=[],
-            fundamentals_skipped_today=[],
-            fundamentals_failed=[],
-            duration_seconds=0.0,
-        )
-        yield mock_freshness
-
-
-@pytest.fixture
-def client_with_mocks(temp_storage, mock_data_freshness):
+def client_with_mocks(temp_storage):
     """Create test client with mocked dependencies."""
     # Override dependencies
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
@@ -289,11 +270,8 @@ def test_train_patchtst_first_model_always_promoted(client_with_mocks):
     assert data["promoted"] is True
 
 
-@patch("brain_api.routes.training.patchtst.ensure_fresh_training_data")
-def test_train_patchtst_not_promoted_when_worse_than_prior(mock_freshness):
+def test_train_patchtst_not_promoted_when_worse_than_prior():
     """Model is NOT promoted when worse than prior model."""
-    mock_freshness.return_value = DataFreshnessResult()
-
     with tempfile.TemporaryDirectory() as tmpdir:
         fresh_storage = PatchTSTModelStorage(base_path=tmpdir)
 
@@ -351,13 +329,8 @@ def test_train_patchtst_not_promoted_when_worse_than_prior(mock_freshness):
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-@patch("brain_api.routes.training.patchtst.ensure_fresh_training_data")
-def test_train_patchtst_current_unchanged_when_not_promoted(
-    mock_freshness, temp_storage
-):
+def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     """The 'current' pointer is unchanged when promotion fails."""
-    mock_freshness.return_value = DataFreshnessResult()
-
     app.dependency_overrides.clear()
 
     # First, create a good model that gets promoted

@@ -511,3 +511,127 @@ def get_sentiment_gaps_job_status(job_id: str) -> ETLJobStatusResponse:
         result=job.result,
         config=job.config,
     )
+
+
+# ============================================================================
+# Training Data Refresh Endpoint
+# ============================================================================
+
+
+class RefreshTrainingDataRequest(BaseModel):
+    """Request model for refreshing training data."""
+
+    symbols: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of stock symbols to refresh data for",
+        examples=[["AAPL", "MSFT", "GOOGL"]],
+    )
+    start_date: str | None = Field(
+        None,
+        description="Training window start date (YYYY-MM-DD). Defaults to Jan 1st, 15 years ago.",
+        examples=["2011-01-01"],
+    )
+    end_date: str | None = Field(
+        None,
+        description="Training window end date (YYYY-MM-DD). Defaults to today.",
+        examples=["2026-01-31"],
+    )
+
+
+class RefreshTrainingDataResponse(BaseModel):
+    """Response model for training data refresh."""
+
+    sentiment_gaps_filled: int = Field(
+        description="Number of sentiment gaps filled (2015+ only)"
+    )
+    sentiment_gaps_remaining: int = Field(
+        description="Gaps that couldn't be filled (pre-2015)"
+    )
+    fundamentals_refreshed: list[str] = Field(
+        description="Symbols whose fundamentals were refreshed"
+    )
+    fundamentals_skipped: list[str] = Field(
+        description="Symbols already fetched today (skipped)"
+    )
+    fundamentals_failed: list[str] = Field(description="Symbols that failed to refresh")
+    duration_seconds: float = Field(
+        description="Total time taken for refresh operation"
+    )
+
+
+@router.post("/refresh-training-data", response_model=RefreshTrainingDataResponse)
+def refresh_training_data(
+    request: RefreshTrainingDataRequest,
+) -> RefreshTrainingDataResponse:
+    """Refresh training data (sentiment gaps + fundamentals) for given symbols.
+
+    This endpoint ensures training data is fresh before training by:
+    1. Filling news sentiment gaps (2015+ via Alpaca API)
+    2. Refreshing fundamentals not fetched today (via Alpha Vantage API)
+
+    Call this before training endpoints (PatchTST, PPO, SAC) to ensure
+    up-to-date signals and fundamentals.
+
+    Note: This is a synchronous endpoint that may take several seconds
+    depending on how many symbols need refreshing.
+
+    Requires:
+    - ALPHA_VANTAGE_API_KEY for fundamentals refresh
+    - ALPACA_API_KEY and ALPACA_API_SECRET for news sentiment gaps
+
+    Args:
+        symbols: List of stock symbols to refresh data for (required)
+        start_date: Training window start (defaults to Jan 1st, 15 years ago)
+        end_date: Training window end (defaults to today)
+
+    Returns:
+        RefreshTrainingDataResponse with statistics on what was refreshed
+    """
+    from brain_api.core.data_freshness import ensure_fresh_training_data
+
+    # Parse end_date (default: today)
+    if request.end_date:
+        try:
+            end_date = date.fromisoformat(request.end_date)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid end_date format: {e}. Use YYYY-MM-DD.",
+            ) from e
+    else:
+        end_date = date.today()
+
+    # Parse start_date (default: Jan 1st, 15 years ago)
+    if request.start_date:
+        try:
+            start_date = date.fromisoformat(request.start_date)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid start_date format: {e}. Use YYYY-MM-DD.",
+            ) from e
+    else:
+        start_date = date(end_date.year - 15, 1, 1)
+
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date must be before or equal to end_date",
+        )
+
+    # Call the shared data freshness function
+    result = ensure_fresh_training_data(
+        symbols=request.symbols,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return RefreshTrainingDataResponse(
+        sentiment_gaps_filled=result.sentiment_gaps_filled,
+        sentiment_gaps_remaining=result.sentiment_gaps_remaining,
+        fundamentals_refreshed=result.fundamentals_refreshed,
+        fundamentals_skipped=result.fundamentals_skipped_today,
+        fundamentals_failed=result.fundamentals_failed,
+        duration_seconds=result.duration_seconds,
+    )
