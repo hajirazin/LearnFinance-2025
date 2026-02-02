@@ -28,6 +28,26 @@
       "brain:test": ["cd brain_api && uv sync --all-extras && uv run pytest"],
       "brain:lint": ["cd brain_api && uv sync --all-extras && uv run ruff check ."],
       "brain:format": ["cd brain_api && uv sync --all-extras && uv run ruff format ."],
+      "prefect:setup": ["cd prefect && uv sync --all-extras"],
+      "prefect:server": ["cd prefect && uv run prefect server start"],
+      "prefect:run": ["cd prefect && uv run python -m flows.weekly_training"],
+      "prefect:all": [
+        "echo '🚀 Starting Prefect Server, Brain API, and running flow...'",
+        "echo '   Prefect UI: http://localhost:4200'",
+        "echo '   Brain API:  http://localhost:8000'",
+        "echo ''",
+        "(cd prefect && uv run prefect server start) &",
+        "sleep 3",
+        "(cd brain_api && uv run uvicorn brain_api.main:app --host 0.0.0.0 --port 8000) &",
+        "sleep 5",
+        "echo '✅ Services started. Running flow...'",
+        "cd prefect && uv run python -m flows.weekly_training",
+        "echo ''",
+        "echo '⏳ Flow complete. Press Ctrl+C to stop services.'",
+        "wait"
+      ],
+      "prefect:lint": ["cd prefect && uv run ruff check ."],
+      "prefect:format": ["cd prefect && uv run ruff format ."],
       "hf:login": ["uv run huggingface-cli login"],
       "hf:whoami": ["uv run huggingface-cli whoami"]
     }
