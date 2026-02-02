@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 from brain_api.main import app
 from brain_api.routes.signals import (
     get_data_base_path,
-    get_fundamentals_fetcher,
 )
 
 # ============================================================================
@@ -164,7 +163,8 @@ class MockFundamentalsFetcher:
         self.client = MockAlphaVantageClient()
         self.daily_limit = 25
 
-    def fetch_symbol(self, symbol: str, force_refresh: bool = False):
+    def fetch_symbol(self, symbol: str):
+        """Fetch symbol data (no force_refresh - use PUT endpoint for refresh)."""
         from brain_api.core.fundamentals import (
             FundamentalsResult,
             parse_quarterly_statements,
@@ -180,7 +180,7 @@ class MockFundamentalsFetcher:
         from_cache = income_record is not None and balance_record is not None
         api_calls = 0
 
-        if income_record is None or force_refresh:
+        if income_record is None:
             income_data = self.client.fetch_income_statement(symbol)
             if income_data:
                 file_path = save_raw_response(
@@ -196,7 +196,7 @@ class MockFundamentalsFetcher:
                 api_calls += 1
                 from_cache = False
 
-        if balance_record is None or force_refresh:
+        if balance_record is None:
             balance_data = self.client.fetch_balance_sheet(symbol)
             if balance_data:
                 file_path = save_raw_response(
@@ -279,15 +279,36 @@ def client_with_yfinance_mock(mock_yfinance_ticker):
     yield client
 
 
+def _write_cache_file(base_path: Path, symbol: str, endpoint: str, data: dict) -> None:
+    """Helper to write a cached JSON file in the expected structure."""
+    import json
+
+    cache_dir = base_path / "raw" / "fundamentals" / symbol
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    file_path = cache_dir / f"{endpoint}.json"
+    with open(file_path, "w") as f:
+        json.dump(data, f)
+
+
 @pytest.fixture
 def client_with_historical_mock(temp_data_path):
-    """Create test client with mocked Alpha Vantage for historical endpoint."""
-    mock_fetcher = MockFundamentalsFetcher(base_path=temp_data_path)
+    """Create test client with pre-populated cache for historical endpoint.
 
-    def get_mock_fetcher():
-        return mock_fetcher
+    The historical endpoint now reads from cache only (no API calls).
+    """
+    # Pre-populate cache with sample data for common test symbols
+    for symbol in ["AAPL", "MSFT", "GOOGL"]:
+        income_data = SAMPLE_INCOME_STATEMENT.copy()
+        income_data["symbol"] = symbol
+        balance_data = SAMPLE_BALANCE_SHEET.copy()
+        balance_data["symbol"] = symbol
+        _write_cache_file(
+            temp_data_path, symbol, "income_statement", {"response": income_data}
+        )
+        _write_cache_file(
+            temp_data_path, symbol, "balance_sheet", {"response": balance_data}
+        )
 
-    app.dependency_overrides[get_fundamentals_fetcher] = get_mock_fetcher
     app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
 
     client = TestClient(app)
@@ -472,8 +493,9 @@ def test_historical_fundamentals_returns_required_fields(client_with_historical_
     data = response.json()
     assert "start_date" in data
     assert "end_date" in data
-    assert "api_status" in data
     assert "data" in data
+    # Note: api_status is NOT included in POST (cache-only) response
+    # Use PUT endpoint to refresh and get api_status
 
 
 def test_historical_fundamentals_returns_flat_list(client_with_historical_mock):
@@ -550,48 +572,161 @@ def test_historical_fundamentals_requires_date_range(client_with_historical_mock
 
 
 # ============================================================================
-# Historical Fundamentals - Caching tests
+# Historical Fundamentals - Cache-only behavior tests
 # ============================================================================
 
 
-def test_historical_caches_result(client_with_historical_mock):
-    """Second request uses cached data (fewer API calls)."""
+def test_historical_returns_empty_for_uncached_symbols(temp_data_path):
+    """POST returns empty data list for symbols not in cache."""
+    # Only cache AAPL, not NOTCACHED
+    _write_cache_file(
+        temp_data_path,
+        "AAPL",
+        "income_statement",
+        {"response": SAMPLE_INCOME_STATEMENT},
+    )
+    _write_cache_file(
+        temp_data_path, "AAPL", "balance_sheet", {"response": SAMPLE_BALANCE_SHEET}
+    )
+
+    app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/signals/fundamentals/historical",
+            json={
+                "symbols": ["NOTCACHED"],
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Should return empty data list (symbol not cached)
+        assert data["data"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_historical_reads_from_cache_only(client_with_historical_mock):
+    """POST reads from cache and returns consistent results."""
     request_body = {
         "symbols": ["AAPL"],
         "start_date": "2024-01-01",
         "end_date": "2024-12-31",
     }
 
-    # First request
+    # Multiple requests should return same data (cache-only, no API calls)
     response1 = client_with_historical_mock.post(
         "/signals/fundamentals/historical", json=request_body
     )
-    assert response1.status_code == 200
-    calls_after_first = response1.json()["api_status"]["calls_today"]
-
-    # Second request - should use cache (no new calls)
     response2 = client_with_historical_mock.post(
         "/signals/fundamentals/historical", json=request_body
     )
+
+    assert response1.status_code == 200
     assert response2.status_code == 200
-    calls_after_second = response2.json()["api_status"]["calls_today"]
-
-    # Calls should not increase (cached)
-    assert calls_after_second == calls_after_first
+    assert response1.json()["data"] == response2.json()["data"]
 
 
-def test_historical_includes_api_status(client_with_historical_mock):
-    """POST /signals/fundamentals/historical includes api_status in response."""
-    response = client_with_historical_mock.post(
-        "/signals/fundamentals/historical",
-        json={
-            "symbols": ["AAPL"],
-            "start_date": "2024-01-01",
-            "end_date": "2024-12-31",
-        },
-    )
-    assert response.status_code == 200
+# ============================================================================
+# PUT Fundamentals Refresh - Tests
+# ============================================================================
 
-    data = response.json()
-    assert "api_status" in data
-    assert data["api_status"]["daily_limit"] == 25
+
+def test_refresh_fundamentals_returns_200(temp_data_path):
+    """PUT /signals/fundamentals/historical returns 200."""
+    app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
+    client = TestClient(app)
+
+    try:
+        # Patch where the function is imported (in endpoints module)
+        with patch(
+            "brain_api.routes.signals.endpoints.refresh_stale_fundamentals"
+        ) as mock_refresh:
+            from brain_api.core.data_freshness import FundamentalsRefreshResult
+
+            mock_refresh.return_value = FundamentalsRefreshResult(
+                refreshed=[],
+                skipped=["AAPL"],
+                failed=[],
+                api_status={"calls_today": 0, "daily_limit": 25, "remaining": 25},
+            )
+
+            response = client.put(
+                "/signals/fundamentals/historical",
+                json={"symbols": ["AAPL"]},
+            )
+            assert response.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_refresh_skips_symbols_fetched_today(temp_data_path):
+    """PUT endpoint skips symbols that were already fetched today."""
+    app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
+    client = TestClient(app)
+
+    try:
+        # Patch where the function is imported (in endpoints module)
+        with patch(
+            "brain_api.routes.signals.endpoints.refresh_stale_fundamentals"
+        ) as mock_refresh:
+            from brain_api.core.data_freshness import FundamentalsRefreshResult
+
+            mock_refresh.return_value = FundamentalsRefreshResult(
+                refreshed=[],
+                skipped=["AAPL", "MSFT"],  # Both already fetched today
+                failed=[],
+                api_status={"calls_today": 5, "daily_limit": 25, "remaining": 20},
+            )
+
+            response = client.put(
+                "/signals/fundamentals/historical",
+                json={"symbols": ["AAPL", "MSFT"]},
+            )
+            assert response.status_code == 200
+
+            data = response.json()
+            assert data["refreshed"] == []
+            assert set(data["skipped"]) == {"AAPL", "MSFT"}
+            assert data["failed"] == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_refresh_returns_statistics(temp_data_path):
+    """PUT endpoint returns refresh statistics and API status."""
+    app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
+    client = TestClient(app)
+
+    try:
+        # Patch where the function is imported (in endpoints module)
+        with patch(
+            "brain_api.routes.signals.endpoints.refresh_stale_fundamentals"
+        ) as mock_refresh:
+            from brain_api.core.data_freshness import FundamentalsRefreshResult
+
+            mock_refresh.return_value = FundamentalsRefreshResult(
+                refreshed=["GOOGL"],
+                skipped=["AAPL"],
+                failed=["MSFT"],
+                api_status={"calls_today": 7, "daily_limit": 25, "remaining": 18},
+            )
+
+            response = client.put(
+                "/signals/fundamentals/historical",
+                json={"symbols": ["AAPL", "MSFT", "GOOGL"]},
+            )
+            assert response.status_code == 200
+
+            data = response.json()
+            assert data["refreshed"] == ["GOOGL"]
+            assert data["skipped"] == ["AAPL"]
+            assert data["failed"] == ["MSFT"]
+            assert data["api_status"]["calls_today"] == 7
+            assert data["api_status"]["daily_limit"] == 25
+            assert data["api_status"]["remaining"] == 18
+    finally:
+        app.dependency_overrides.clear()

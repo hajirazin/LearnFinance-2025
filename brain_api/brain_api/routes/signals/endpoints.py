@@ -6,12 +6,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from brain_api.core.fundamentals import (
-    FundamentalsFetcher,
-    compute_ratios,
-    load_raw_response,
-    parse_quarterly_statements,
-)
+from brain_api.core.data_freshness import refresh_stale_fundamentals
+from brain_api.core.fundamentals import load_historical_fundamentals_from_cache
 from brain_api.core.news_sentiment import (
     NewsFetcher,
     SentimentScorer,
@@ -19,7 +15,6 @@ from brain_api.core.news_sentiment import (
 )
 from brain_api.routes.signals.dependencies import (
     get_data_base_path,
-    get_fundamentals_fetcher,
     get_news_fetcher,
     get_sentiment_parquet_path,
     get_sentiment_scorer,
@@ -41,6 +36,8 @@ from brain_api.routes.signals.models import (
     NewsSignalRequest,
     NewsSignalResponse,
     RatiosResponse,
+    RefreshFundamentalsRequest,
+    RefreshFundamentalsResponse,
 )
 
 router = APIRouter()
@@ -172,110 +169,86 @@ def get_fundamentals(
 @router.post("/fundamentals/historical", response_model=HistoricalFundamentalsResponse)
 def get_historical_fundamentals(
     request: HistoricalFundamentalsRequest,
-    fetcher: Annotated[FundamentalsFetcher, Depends(get_fundamentals_fetcher)],
+    base_path: Annotated[Path, Depends(get_data_base_path)],
 ) -> HistoricalFundamentalsResponse:
     """Get HISTORICAL fundamental ratios for training (date range).
 
     Returns n symbols x m quarterly periods as a flat list. Each entry represents
     the financial ratios that would have been available at that point in time.
 
-    Data source: Alpha Vantage (INCOME_STATEMENT + BALANCE_SHEET)
+    Reads from cache ONLY. Use PUT /signals/fundamentals/historical to refresh cache.
+
+    Data source: Local cache (originally from Alpha Vantage)
     """
-    try:
-        all_ratios: list[RatiosResponse] = []
+    start_date = date.fromisoformat(request.start_date)
+    end_date = date.fromisoformat(request.end_date)
 
-        for symbol in request.symbols:
-            try:
-                # Fetch data (uses cache if available)
-                fetcher.fetch_symbol(
+    # Use the shared loader function (reads from cache only)
+    fundamentals = load_historical_fundamentals_from_cache(
+        symbols=request.symbols,
+        start_date=start_date,
+        end_date=end_date,
+        base_path=base_path,
+    )
+
+    # Helper to convert NaN to None for JSON serialization
+    def safe_float(value: float | None) -> float | None:
+        import math
+
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            return None
+        return value
+
+    # Convert dict[str, DataFrame] to list[RatiosResponse]
+    all_ratios: list[RatiosResponse] = []
+    for symbol, df in fundamentals.items():
+        for idx, row in df.iterrows():
+            all_ratios.append(
+                RatiosResponse(
                     symbol=symbol,
-                    force_refresh=request.force_refresh,
+                    as_of_date=idx.strftime("%Y-%m-%d"),
+                    gross_margin=safe_float(row.get("gross_margin")),
+                    operating_margin=safe_float(row.get("operating_margin")),
+                    net_margin=safe_float(row.get("net_margin")),
+                    current_ratio=safe_float(row.get("current_ratio")),
+                    debt_to_equity=safe_float(row.get("debt_to_equity")),
                 )
+            )
 
-                income_data = load_raw_response(
-                    fetcher.base_path, symbol, "income_statement"
-                )
-                balance_data = load_raw_response(
-                    fetcher.base_path, symbol, "balance_sheet"
-                )
+    return HistoricalFundamentalsResponse(
+        start_date=request.start_date,
+        end_date=request.end_date,
+        data=all_ratios,
+    )
 
-                if income_data is None and balance_data is None:
-                    continue
 
-                # Parse statements
-                income_stmts = []
-                balance_stmts = []
+@router.put("/fundamentals/historical", response_model=RefreshFundamentalsResponse)
+def refresh_fundamentals(
+    request: RefreshFundamentalsRequest,
+    base_path: Annotated[Path, Depends(get_data_base_path)],
+) -> RefreshFundamentalsResponse:
+    """Refresh fundamentals for symbols not fetched today.
 
-                if income_data:
-                    income_stmts = parse_quarterly_statements(
-                        symbol, "income_statement", income_data
-                    )
-                if balance_data:
-                    balance_stmts = parse_quarterly_statements(
-                        symbol, "balance_sheet", balance_data
-                    )
+    This endpoint checks which symbols haven't been fetched today and
+    fetches fresh data from Alpha Vantage API for those symbols only.
 
-                # Get all unique fiscal dates in range
-                fiscal_dates = set()
-                for stmt in income_stmts:
-                    if (
-                        request.start_date
-                        <= stmt.fiscal_date_ending
-                        <= request.end_date
-                    ):
-                        fiscal_dates.add(stmt.fiscal_date_ending)
-                for stmt in balance_stmts:
-                    if (
-                        request.start_date
-                        <= stmt.fiscal_date_ending
-                        <= request.end_date
-                    ):
-                        fiscal_dates.add(stmt.fiscal_date_ending)
+    Requires ALPHA_VANTAGE_API_KEY environment variable.
 
-                # Compute ratios for each fiscal date
-                for fiscal_date in sorted(fiscal_dates):
-                    income_stmt = next(
-                        (
-                            s
-                            for s in income_stmts
-                            if s.fiscal_date_ending == fiscal_date
-                        ),
-                        None,
-                    )
-                    balance_stmt = next(
-                        (
-                            s
-                            for s in balance_stmts
-                            if s.fiscal_date_ending == fiscal_date
-                        ),
-                        None,
-                    )
+    Use this before calling POST /signals/fundamentals/historical to ensure
+    data is fresh.
+    """
+    result = refresh_stale_fundamentals(
+        symbols=request.symbols,
+        base_path=base_path,
+    )
 
-                    ratios = compute_ratios(income_stmt, balance_stmt)
-                    if ratios:
-                        all_ratios.append(
-                            RatiosResponse(
-                                symbol=ratios.symbol,
-                                as_of_date=ratios.as_of_date,
-                                gross_margin=ratios.gross_margin,
-                                operating_margin=ratios.operating_margin,
-                                net_margin=ratios.net_margin,
-                                current_ratio=ratios.current_ratio,
-                                debt_to_equity=ratios.debt_to_equity,
-                            )
-                        )
-
-            except Exception:
-                continue
-
-        # Get API status
-        api_status = fetcher.get_api_status()
-
-        return HistoricalFundamentalsResponse(
-            start_date=request.start_date,
-            end_date=request.end_date,
-            api_status=ApiStatusResponse(**api_status),
-            data=all_ratios,
-        )
-    finally:
-        fetcher.close()
+    return RefreshFundamentalsResponse(
+        refreshed=result.refreshed,
+        skipped=result.skipped,
+        failed=result.failed,
+        api_status=ApiStatusResponse(
+            calls_today=result.api_status.get("calls_today", 0),
+            daily_limit=result.api_status.get("daily_limit", 25),
+            remaining=result.api_status.get("remaining", 25),
+        ),
+    )

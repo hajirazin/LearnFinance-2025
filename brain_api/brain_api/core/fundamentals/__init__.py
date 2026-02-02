@@ -28,6 +28,12 @@ from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
 
 # Index
 from brain_api.core.fundamentals.index import FundamentalsIndex
+
+# Loader (shared by all consumers)
+from brain_api.core.fundamentals.loader import (
+    get_default_data_path,
+    load_historical_fundamentals_from_cache,
+)
 from brain_api.core.fundamentals.models import (
     FetchRecord,
     FundamentalRatios,
@@ -63,9 +69,12 @@ __all__ = [
     "QuarterlyStatement",
     "RealAlphaVantageClient",
     "compute_ratios",
+    # Loader (shared by all consumers)
+    "get_default_data_path",
     # Storage
     "get_fundamentals_dir",
     "get_statement_as_of",
+    "load_historical_fundamentals_from_cache",
     "load_raw_response",
     # Parser
     "parse_quarterly_statements",

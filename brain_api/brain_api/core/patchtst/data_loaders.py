@@ -7,7 +7,11 @@ import numpy as np
 import pandas as pd
 
 from brain_api.core.features import compute_ohlcv_log_returns
+from brain_api.core.fundamentals import load_historical_fundamentals_from_cache
 from brain_api.core.patchtst.config import PatchTSTConfig
+
+# Alias for backward compatibility
+load_historical_fundamentals = load_historical_fundamentals_from_cache
 
 
 def load_historical_news_sentiment(
@@ -63,120 +67,6 @@ def load_historical_news_sentiment(
         print(f"[PatchTST] Error loading news sentiment: {e}")
 
     return sentiment
-
-
-def load_historical_fundamentals(
-    symbols: list[str],
-    start_date: date,
-    end_date: date,
-    cache_path: Path | None = None,
-) -> dict[str, pd.DataFrame]:
-    """Load historical fundamentals from cache.
-
-    Fundamentals are quarterly data that should be forward-filled to daily.
-    Expects cached JSON files from Alpha Vantage at:
-    brain_api/data/fundamentals_cache/{symbol}/
-
-    Args:
-        symbols: List of ticker symbols
-        start_date: Start of data window
-        end_date: End of data window
-        cache_path: Base path for fundamentals cache
-
-    Returns:
-        Dict mapping symbol -> DataFrame with fundamental ratio columns
-        and DatetimeIndex (quarterly dates, to be forward-filled later)
-    """
-    if cache_path is None:
-        # Use 4 levels up to reach brain_api/ root, then data/ (load_raw_response adds raw/fundamentals/)
-        cache_path = Path(__file__).parent.parent.parent.parent / "data"
-
-    fundamentals: dict[str, pd.DataFrame] = {}
-
-    # Import fundamentals parsing utilities
-    try:
-        from brain_api.core.fundamentals import (
-            compute_ratios,
-            load_raw_response,
-            parse_quarterly_statements,
-        )
-    except ImportError:
-        print("[PatchTST] Warning: Could not import fundamentals utilities")
-        return fundamentals
-
-    for symbol in symbols:
-        try:
-            # Load cached responses (cache_path is base_path, load_raw_response adds raw/fundamentals/)
-            income_data = load_raw_response(cache_path, symbol, "income_statement")
-            balance_data = load_raw_response(cache_path, symbol, "balance_sheet")
-
-            if income_data is None and balance_data is None:
-                continue
-
-            # Parse statements
-            income_stmts = []
-            balance_stmts = []
-
-            if income_data:
-                income_stmts = parse_quarterly_statements(
-                    symbol, "income_statement", income_data
-                )
-            if balance_data:
-                balance_stmts = parse_quarterly_statements(
-                    symbol, "balance_sheet", balance_data
-                )
-
-            # Collect ratios for each fiscal date
-            rows = []
-            fiscal_dates = set()
-
-            for stmt in income_stmts:
-                if (
-                    start_date
-                    <= date.fromisoformat(stmt.fiscal_date_ending)
-                    <= end_date
-                ):
-                    fiscal_dates.add(stmt.fiscal_date_ending)
-            for stmt in balance_stmts:
-                if (
-                    start_date
-                    <= date.fromisoformat(stmt.fiscal_date_ending)
-                    <= end_date
-                ):
-                    fiscal_dates.add(stmt.fiscal_date_ending)
-
-            for fiscal_date in sorted(fiscal_dates):
-                income_stmt = next(
-                    (s for s in income_stmts if s.fiscal_date_ending == fiscal_date),
-                    None,
-                )
-                balance_stmt = next(
-                    (s for s in balance_stmts if s.fiscal_date_ending == fiscal_date),
-                    None,
-                )
-
-                ratios = compute_ratios(income_stmt, balance_stmt)
-                if ratios:
-                    rows.append(
-                        {
-                            "date": pd.to_datetime(fiscal_date),
-                            "gross_margin": ratios.gross_margin,
-                            "operating_margin": ratios.operating_margin,
-                            "net_margin": ratios.net_margin,
-                            "current_ratio": ratios.current_ratio,
-                            "debt_to_equity": ratios.debt_to_equity,
-                        }
-                    )
-
-            if rows:
-                df = pd.DataFrame(rows).set_index("date").sort_index()
-                fundamentals[symbol] = df
-
-        except Exception as e:
-            print(f"[PatchTST] Error loading fundamentals for {symbol}: {e}")
-            continue
-
-    return fundamentals
 
 
 def align_multivariate_data(

@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
 from brain_api.core.fundamentals.index import FundamentalsIndex
@@ -22,6 +23,21 @@ logger = logging.getLogger(__name__)
 def get_default_data_path() -> Path:
     """Get the default data path for brain_api."""
     return Path(__file__).parent.parent.parent / "data"
+
+
+@dataclass
+class FundamentalsRefreshResult:
+    """Result of fundamentals refresh operation.
+
+    Shared by:
+    - PUT /signals/fundamentals/historical endpoint
+    - ensure_fresh_training_data() before training
+    """
+
+    refreshed: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)  # Already fetched today
+    failed: list[str] = field(default_factory=list)
+    api_status: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -72,6 +88,98 @@ def get_symbols_not_fetched_today(
     return not_fetched_today
 
 
+def refresh_stale_fundamentals(
+    symbols: list[str],
+    base_path: Path | None = None,
+) -> FundamentalsRefreshResult:
+    """Refresh fundamentals for symbols not fetched today.
+
+    SHARED BY:
+    - PUT /signals/fundamentals/historical endpoint
+    - ensure_fresh_training_data() before training
+
+    Only fetches symbols that haven't been fetched today.
+    Uses Alpha Vantage API (requires ALPHA_VANTAGE_API_KEY env var).
+
+    Args:
+        symbols: List of symbols to potentially refresh
+        base_path: Base path for fundamentals data (defaults to brain_api/data/)
+
+    Returns:
+        FundamentalsRefreshResult with refresh statistics
+    """
+    if base_path is None:
+        base_path = get_default_data_path()
+
+    cache_dir = base_path / "cache"
+    result = FundamentalsRefreshResult()
+
+    # Find symbols that need to be refreshed
+    symbols_to_fetch = get_symbols_not_fetched_today(symbols, cache_dir)
+    result.skipped = [s for s in symbols if s not in symbols_to_fetch]
+
+    if not symbols_to_fetch:
+        logger.info(
+            f"[RefreshFundamentals] All {len(symbols)} symbols already fetched today"
+        )
+        # Get API status even if nothing to fetch
+        api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+        if api_key:
+            index = FundamentalsIndex(cache_dir)
+            try:
+                calls_today = index.get_api_calls_today()
+                result.api_status = {
+                    "calls_today": calls_today,
+                    "daily_limit": 25,
+                    "remaining": max(0, 25 - calls_today),
+                }
+            finally:
+                index.close()
+        return result
+
+    logger.info(
+        f"[RefreshFundamentals] Refreshing {len(symbols_to_fetch)} symbols: {symbols_to_fetch}"
+    )
+
+    # Get Alpha Vantage API key
+    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+    if not api_key:
+        logger.warning(
+            "[RefreshFundamentals] ALPHA_VANTAGE_API_KEY not set, skipping refresh"
+        )
+        result.failed = symbols_to_fetch
+        return result
+
+    fetcher = FundamentalsFetcher(
+        api_key=api_key,
+        base_path=base_path / "raw" / "fundamentals",
+        cache_dir=cache_dir,
+    )
+
+    try:
+        # Fetch each symbol, continue on failure
+        for symbol in symbols_to_fetch:
+            try:
+                fetcher.fetch_symbol(symbol)
+                result.refreshed.append(symbol)
+                logger.info(f"[RefreshFundamentals] Refreshed {symbol}")
+            except Exception as e:
+                logger.warning(f"[RefreshFundamentals] Failed to fetch {symbol}: {e}")
+                result.failed.append(symbol)
+
+        # Get API status
+        result.api_status = fetcher.get_api_status()
+    finally:
+        fetcher.close()
+
+    logger.info(
+        f"[RefreshFundamentals] Complete - refreshed: {len(result.refreshed)}, "
+        f"skipped: {len(result.skipped)}, failed: {len(result.failed)}"
+    )
+
+    return result
+
+
 def ensure_fresh_training_data(
     symbols: list[str],
     start_date: date,
@@ -104,8 +212,6 @@ def ensure_fresh_training_data(
         parquet_path = get_default_data_path() / "output" / "daily_sentiment.parquet"
     if fundamentals_base_path is None:
         fundamentals_base_path = get_default_data_path()
-
-    cache_dir = fundamentals_base_path / "cache"
 
     logger.info(
         f"[DataFreshness] Ensuring fresh data for {len(symbols)} symbols, "
@@ -151,53 +257,11 @@ def ensure_fresh_training_data(
     logger.info("[DataFreshness] Phase 2: Checking fundamentals freshness...")
 
     try:
-        # Find symbols that need to be refreshed
-        symbols_to_fetch = get_symbols_not_fetched_today(symbols, cache_dir)
-        result.fundamentals_skipped_today = [
-            s for s in symbols if s not in symbols_to_fetch
-        ]
-
-        if not symbols_to_fetch:
-            logger.info(
-                f"[DataFreshness] All {len(symbols)} symbols have fresh fundamentals"
-            )
-        else:
-            logger.info(
-                f"[DataFreshness] Refreshing fundamentals for {len(symbols_to_fetch)} symbols: "
-                f"{symbols_to_fetch}"
-            )
-
-            # Get Alpha Vantage API key
-            api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
-            if not api_key:
-                logger.warning(
-                    "[DataFreshness] ALPHA_VANTAGE_API_KEY not set, skipping fundamentals refresh"
-                )
-            else:
-                fetcher = FundamentalsFetcher(
-                    api_key=api_key,
-                    base_path=fundamentals_base_path / "raw" / "fundamentals",
-                    cache_dir=cache_dir,
-                )
-
-                try:
-                    # Fetch each symbol, continue on failure
-                    for symbol in symbols_to_fetch:
-                        try:
-                            fetcher.fetch_symbol(symbol)
-                            result.fundamentals_refreshed.append(symbol)
-                            logger.info(
-                                f"[DataFreshness] Refreshed fundamentals for {symbol}"
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"[DataFreshness] Failed to fetch fundamentals for {symbol}: {e}"
-                            )
-                            result.fundamentals_failed.append(symbol)
-                            # Continue to next symbol, don't break
-                finally:
-                    fetcher.close()
-
+        # Use shared refresh_stale_fundamentals function
+        fund_result = refresh_stale_fundamentals(symbols, fundamentals_base_path)
+        result.fundamentals_refreshed = fund_result.refreshed
+        result.fundamentals_skipped_today = fund_result.skipped
+        result.fundamentals_failed = fund_result.failed
     except Exception as e:
         logger.warning(f"[DataFreshness] Fundamentals refresh failed: {e}")
 

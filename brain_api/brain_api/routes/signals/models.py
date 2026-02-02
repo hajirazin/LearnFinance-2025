@@ -151,7 +151,7 @@ class FundamentalsRequest(BaseModel):
 
 
 class HistoricalFundamentalsRequest(BaseModel):
-    """Request model for historical fundamentals endpoint (training via Alpha Vantage)."""
+    """Request model for historical fundamentals endpoint (reads from cache only)."""
 
     symbols: list[str] = Field(
         ...,
@@ -167,9 +167,16 @@ class HistoricalFundamentalsRequest(BaseModel):
         ...,
         description="End date for historical range (YYYY-MM-DD)",
     )
-    force_refresh: bool = Field(
-        False,
-        description="If True, ignore cache and re-fetch from API (uses API quota)",
+
+
+class RefreshFundamentalsRequest(BaseModel):
+    """Request model for PUT fundamentals refresh endpoint."""
+
+    symbols: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_FUNDAMENTALS_SYMBOLS,
+        description=f"List of ticker symbols to refresh (1-{MAX_FUNDAMENTALS_SYMBOLS})",
     )
 
 
@@ -219,5 +226,13 @@ class HistoricalFundamentalsResponse(BaseModel):
 
     start_date: str
     end_date: str
-    api_status: ApiStatusResponse
     data: list[RatiosResponse]
+
+
+class RefreshFundamentalsResponse(BaseModel):
+    """Response model for PUT fundamentals refresh endpoint."""
+
+    refreshed: list[str]  # Symbols that were refreshed
+    skipped: list[str]  # Already fetched today
+    failed: list[str]  # API errors
+    api_status: ApiStatusResponse

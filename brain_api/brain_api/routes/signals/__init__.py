@@ -31,6 +31,8 @@ from brain_api.routes.signals.models import (
     NewsSignalRequest,
     NewsSignalResponse,
     RatiosResponse,
+    RefreshFundamentalsRequest,
+    RefreshFundamentalsResponse,
     SentimentDataPoint,
     SymbolSentimentResponse,
 )
@@ -49,6 +51,8 @@ __all__ = [
     "NewsSignalRequest",
     "NewsSignalResponse",
     "RatiosResponse",
+    "RefreshFundamentalsRequest",
+    "RefreshFundamentalsResponse",
     "SentimentDataPoint",
     "SymbolSentimentResponse",
     "get_alpha_vantage_api_key",
