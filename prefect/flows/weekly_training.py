@@ -238,9 +238,19 @@ def weekly_training_flow() -> dict:
 
 
 # =============================================================================
-# Deployment (for prefect deploy)
+# Entry point
 # =============================================================================
 
 if __name__ == "__main__":
-    # Run the flow directly for testing
-    weekly_training_flow()
+    import sys
+
+    if "--test" in sys.argv:
+        # Run flow once immediately for testing
+        weekly_training_flow()
+    else:
+        # Create deployment and serve with cron schedule
+        # Every Sunday at 11 AM UTC: "0 11 * * 0"
+        weekly_training_flow.serve(
+            name="weekly-training",
+            cron="0 11 * * 0",
+        )
