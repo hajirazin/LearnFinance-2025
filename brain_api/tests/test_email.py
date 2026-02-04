@@ -292,3 +292,235 @@ class TestTrainingSummaryEmailEndpoint:
         # The body should contain "No" for SAC promoted status
         # This is rendered as <span style="color: #c62828;">No</span>
         assert "No" in body
+
+
+# =============================================================================
+# Weekly Report Email Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_weekly_report_email_request():
+    """Valid request payload for weekly report email endpoint."""
+    return {
+        "summary": {
+            "para_1_overall_summary": "This week shows bullish momentum.",
+            "para_2_sac": "SAC allocator favors tech stocks.",
+            "para_3_ppo": "PPO takes a conservative approach.",
+            "para_4_hrp_summary": "HRP maintains diversified allocation.",
+            "para_5_patchtst_forecast": "PatchTST predicts positive returns.",
+            "para_6_lstm_forecast": "LSTM shows bullish signals.",
+            "para_7_news_sentiment": "News sentiment is positive.",
+            "para_8_fundamentals": "Fundamentals remain strong.",
+        },
+        "order_results": {
+            "ppo": {"orders_submitted": 5, "orders_failed": 0, "skipped": False},
+            "sac": {"orders_submitted": 6, "orders_failed": 1, "skipped": False},
+            "hrp": {"orders_submitted": 4, "orders_failed": 0, "skipped": False},
+        },
+        "skipped_algorithms": [],
+        "target_week_start": "2026-02-03",
+        "target_week_end": "2026-02-07",
+        "as_of_date": "2026-02-03",
+        "sac": {
+            "target_weights": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.05},
+            "turnover": 0.15,
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "model_version": "v2026-01-15-sac001",
+            "weight_changes": [],
+        },
+        "ppo": {
+            "target_weights": {"AAPL": 0.11, "MSFT": 0.09, "CASH": 0.08},
+            "turnover": 0.12,
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "model_version": "v2026-01-15-ppo001",
+            "weight_changes": [],
+        },
+        "hrp": {
+            "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-02-03",
+        },
+        "lstm": {
+            "predictions": [
+                {
+                    "symbol": "AAPL",
+                    "predicted_weekly_return_pct": 2.5,
+                    "predicted_volatility": 0.03,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                },
+                {
+                    "symbol": "MSFT",
+                    "predicted_weekly_return_pct": 1.8,
+                    "predicted_volatility": 0.025,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                },
+            ],
+            "model_version": "v2026-01-15-lstm001",
+            "as_of_date": "2026-02-03",
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+        },
+        "patchtst": {
+            "predictions": [
+                {
+                    "symbol": "AAPL",
+                    "predicted_weekly_return_pct": 2.1,
+                    "predicted_volatility": 0.028,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                    "has_news_data": True,
+                    "has_fundamentals_data": True,
+                },
+            ],
+            "model_version": "v2026-01-15-patchtst001",
+            "as_of_date": "2026-02-03",
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "signals_used": ["price", "sentiment", "fundamentals"],
+        },
+    }
+
+
+class TestWeeklyReportEmailEndpoint:
+    """Tests for POST /email/weekly-report endpoint."""
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_successful_weekly_report_send(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Successful weekly report email send."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_success"] is True
+        assert "Weekly Portfolio Analysis" in data["subject"]
+        assert "2026-02-03" in data["subject"]
+        assert "2026-02-07" in data["subject"]
+        assert len(data["body"]) > 0
+        mock_send_email.assert_called_once()
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_with_skipped_algorithms(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Weekly report with skipped algorithms shows warning."""
+        mock_send_email.return_value = True
+        mock_weekly_report_email_request["skipped_algorithms"] = ["PPO"]
+        mock_weekly_report_email_request["order_results"]["ppo"]["skipped"] = True
+
+        response = client.post(
+            "/email/weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Skipped Algorithms" in body
+        assert "PPO" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_smtp_failure(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """SMTP send error returns 503."""
+        mock_send_email.side_effect = Exception("SMTP connection failed")
+
+        response = client.post(
+            "/email/weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+
+        assert response.status_code == 503
+        assert "Failed to send email" in response.json()["detail"]
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_gmail_config_error(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Gmail configuration error returns 500."""
+        mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
+
+        response = client.post(
+            "/email/weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+
+        assert response.status_code == 500
+        assert "Gmail configuration error" in response.json()["detail"]
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_body_contains_expected_sections(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Email body contains all expected sections."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        body = response.json()["body"]
+
+        # Check header
+        assert "Weekly Portfolio Analysis" in body
+        assert "2026-02-03" in body
+
+        # Check Order Execution Summary
+        assert "Order Execution Summary" in body
+
+        # Check AI Analysis section
+        assert "AI Analysis Summary" in body
+        assert "This week shows bullish momentum" in body
+
+        # Check RL Allocators section
+        assert "RL Allocations" in body
+        assert "SAC" in body
+        assert "PPO" in body
+
+        # Check HRP section
+        assert "HRP Allocation" in body
+
+        # Check Forecasters section
+        assert "Price Forecasts" in body
+        assert "LSTM" in body
+        assert "PatchTST" in body
+
+        # Check footer
+        assert "LearnFinance-2025" in body

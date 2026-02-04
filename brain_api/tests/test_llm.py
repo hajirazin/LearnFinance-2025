@@ -404,3 +404,234 @@ class TestTrainingSummaryEndpoint:
             assert response.status_code == 422
         finally:
             app.dependency_overrides.clear()
+
+
+# =============================================================================
+# Weekly Summary Endpoint Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_weekly_summary_request():
+    """Valid request payload for weekly summary endpoint."""
+    return {
+        "lstm": {
+            "predictions": [
+                {
+                    "symbol": "AAPL",
+                    "predicted_weekly_return_pct": 2.5,
+                    "predicted_volatility": 0.03,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                },
+                {
+                    "symbol": "MSFT",
+                    "predicted_weekly_return_pct": 1.8,
+                    "predicted_volatility": 0.025,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                },
+            ],
+            "model_version": "v2026-01-15-abc123",
+            "as_of_date": "2026-02-03",
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+        },
+        "patchtst": {
+            "predictions": [
+                {
+                    "symbol": "AAPL",
+                    "predicted_weekly_return_pct": 2.1,
+                    "predicted_volatility": 0.028,
+                    "direction": "UP",
+                    "has_enough_history": True,
+                    "history_days_used": 252,
+                    "data_end_date": "2026-02-03",
+                    "target_week_start": "2026-02-03",
+                    "target_week_end": "2026-02-07",
+                    "has_news_data": True,
+                    "has_fundamentals_data": True,
+                },
+            ],
+            "model_version": "v2026-01-15-def456",
+            "as_of_date": "2026-02-03",
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "signals_used": ["price", "sentiment", "fundamentals"],
+        },
+        "news": {
+            "run_id": "paper:2026-02-03",
+            "attempt": 1,
+            "as_of_date": "2026-02-03",
+            "from_cache": False,
+            "per_symbol": [
+                {
+                    "symbol": "AAPL",
+                    "article_count_fetched": 10,
+                    "article_count_used": 5,
+                    "sentiment_score": 0.65,
+                    "insufficient_news": False,
+                    "top_k_articles": [],
+                },
+            ],
+        },
+        "fundamentals": {
+            "as_of_date": "2026-02-03",
+            "per_symbol": [
+                {
+                    "symbol": "AAPL",
+                    "ratios": {
+                        "symbol": "AAPL",
+                        "as_of_date": "2026-02-03",
+                        "gross_margin": 0.43,
+                        "operating_margin": 0.30,
+                        "net_margin": 0.25,
+                        "current_ratio": 1.05,
+                        "debt_to_equity": 1.5,
+                    },
+                    "error": None,
+                },
+            ],
+        },
+        "hrp": {
+            "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-02-03",
+        },
+        "sac": {
+            "target_weights": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.05},
+            "turnover": 0.15,
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "model_version": "v2026-01-15-sac001",
+            "weight_changes": [],
+        },
+        "ppo": {
+            "target_weights": {"AAPL": 0.11, "MSFT": 0.09, "CASH": 0.08},
+            "turnover": 0.12,
+            "target_week_start": "2026-02-03",
+            "target_week_end": "2026-02-07",
+            "model_version": "v2026-01-15-ppo001",
+            "weight_changes": [],
+        },
+    }
+
+
+@pytest.fixture
+def mock_weekly_llm_json_response():
+    """Mock JSON response from LLM for weekly summary."""
+    return {
+        "para_1_overall_summary": "This week shows bullish momentum across tech stocks.",
+        "para_2_sac": "SAC allocator favors AAPL and MSFT with moderate turnover.",
+        "para_3_ppo": "PPO takes a similar but slightly more conservative approach.",
+        "para_4_hrp_summary": "HRP maintains diversified allocation across sectors.",
+        "para_5_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
+        "para_6_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
+        "para_7_news_sentiment": "News sentiment is generally positive for holdings.",
+        "para_8_fundamentals": "Fundamentals remain strong with solid margins.",
+    }
+
+
+class TestWeeklySummaryEndpoint:
+    """Tests for POST /llm/weekly-summary endpoint."""
+
+    def test_successful_weekly_summary_generation(
+        self,
+        mock_weekly_summary_request,
+        mock_weekly_llm_json_response,
+    ):
+        """Successful weekly summary generation."""
+        import json
+
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_weekly_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=800,
+            ),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/weekly-summary",
+                json=mock_weekly_summary_request,
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "summary" in data
+            assert data["provider"] == "openai"
+            assert data["model_used"] == "gpt-4o-mini"
+            assert data["tokens_used"] == 800
+            assert "para_1_overall_summary" in data["summary"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_weekly_summary_llm_failure(
+        self,
+        mock_weekly_summary_request,
+    ):
+        """LLM service failure returns 503."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="", model="", tokens_used=None),
+            error=Exception("API connection failed"),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/weekly-summary",
+                json=mock_weekly_summary_request,
+            )
+
+            assert response.status_code == 503
+            assert "LLM service unavailable" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_weekly_summary_json_parse_error(
+        self,
+        mock_weekly_summary_request,
+    ):
+        """Invalid JSON from LLM returns fallback summary."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content="This is not valid JSON at all",
+                model="gpt-4o-mini",
+                tokens_used=100,
+            ),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/weekly-summary",
+                json=mock_weekly_summary_request,
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "para_1_overall_summary" in data["summary"]
+            assert (
+                "Unable to generate AI summary"
+                in data["summary"]["para_1_overall_summary"]
+            )
+        finally:
+            app.dependency_overrides.clear()

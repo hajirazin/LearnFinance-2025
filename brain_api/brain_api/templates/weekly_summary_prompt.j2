@@ -1,0 +1,69 @@
+You are a financial analyst. Analyze the weekly portfolio allocation results and provide insights.
+
+## Forecaster Predictions
+
+### LSTM (Pure Price Forecaster)
+Model Version: {{ lstm.model_version }}
+Target Week: {{ lstm.target_week_start }} to {{ lstm.target_week_end }}
+Top Predictions:
+{% for p in lstm.predictions[:5] %}{% if p.has_enough_history %}
+- {{ p.symbol }}: {{ "%.2f" | format(p.predicted_weekly_return_pct) }}% ({{ p.direction }})
+{% endif %}{% endfor %}
+
+### PatchTST (Multi-Signal Forecaster)
+Model Version: {{ patchtst.model_version }}
+Signals Used: {{ patchtst.signals_used | join(", ") }}
+Top Predictions:
+{% for p in patchtst.predictions[:5] %}{% if p.has_enough_history %}
+- {{ p.symbol }}: {{ "%.2f" | format(p.predicted_weekly_return_pct) }}% ({{ p.direction }})
+{% endif %}{% endfor %}
+
+## Allocator Results
+
+### HRP (Risk Parity Baseline)
+As-of Date: {{ hrp.as_of_date }}
+Symbols Used: {{ hrp.symbols_used }}
+Top 5 Allocations:
+{% for sym, wt in hrp.percentage_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 %}
+- {{ sym }}: {{ "%.1f" | format(wt) }}%
+{% endif %}{% endfor %}
+
+### SAC (Off-Policy RL Allocator)
+Model Version: {{ sac.model_version }}
+Turnover: {{ "%.1f" | format(sac.turnover * 100) }}%
+Top 5 Allocations:
+{% for sym, wt in sac.target_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 and sym != 'CASH' %}
+- {{ sym }}: {{ "%.1f" | format(wt * 100) }}%
+{% endif %}{% endfor %}
+
+### PPO (On-Policy RL Allocator)
+Model Version: {{ ppo.model_version }}
+Turnover: {{ "%.1f" | format(ppo.turnover * 100) }}%
+Top 5 Allocations:
+{% for sym, wt in ppo.target_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 and sym != 'CASH' %}
+- {{ sym }}: {{ "%.1f" | format(wt * 100) }}%
+{% endif %}{% endfor %}
+
+## News Sentiment
+{% for item in news.per_symbol[:10] %}
+- {{ item.symbol }}: sentiment={{ "%.2f" | format(item.sentiment_score) }}{% if item.top_k_articles %} ({{ item.top_k_articles[0].title[:50] }}...){% endif %}
+{% endfor %}
+
+## Fundamentals (Financial Ratios)
+{% for item in fundamentals.per_symbol[:10] %}
+- {{ item.symbol }}: {% if item.ratios %}gross={{ "%.0f" | format((item.ratios.gross_margin or 0) * 100) }}%, op={{ "%.0f" | format((item.ratios.operating_margin or 0) * 100) }}%, curr_ratio={{ "%.1f" | format(item.ratios.current_ratio or 0) }}{% else %}N/A{% endif %}
+{% endfor %}
+
+## Instructions
+
+Provide a concise analysis. Respond with JSON only:
+{
+    "para_1_overall_summary": "<3 sentences: overall market outlook and key themes>",
+    "para_2_sac": "<3 sentences: SAC allocator insights and notable positions>",
+    "para_3_ppo": "<3 sentences: PPO allocator insights and comparison to SAC>",
+    "para_4_hrp_summary": "<3 sentences: HRP baseline allocation and diversification>",
+    "para_5_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
+    "para_6_lstm_forecast": "<3 sentences: LSTM predictions and price momentum>",
+    "para_7_news_sentiment": "<3 sentences: overall news sentiment themes>",
+    "para_8_fundamentals": "<3 sentences: fundamental strength of top picks>"
+}
