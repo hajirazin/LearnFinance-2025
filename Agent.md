@@ -329,6 +329,19 @@ Any implementation must include:
   - stage duration metrics (even if just logged)
   - clear error propagation back to n8n
 
+### Prefect flow configuration
+
+All Prefect flows must include:
+
+- **`persist_result=True`** at the flow level: enables result persistence for all tasks, allowing flows to resume from failure point instead of restarting from scratch
+- **Task-level retries**: critical tasks (especially external API calls) should have `retries` configured
+- **Retry delays**: use `retry_delay_seconds` to avoid hammering failing services
+
+Note: Prefect 3 does not have a "retry single task" button in the UI. To retry a failed task:
+1. Re-run the entire flow (fast if tasks are idempotent/cached)
+2. Call the underlying API endpoint directly
+3. Use `persist_result=True` to skip already-completed tasks on re-run
+
 ## Change safety checklists
 
 Before merging changes that touch trading logic:

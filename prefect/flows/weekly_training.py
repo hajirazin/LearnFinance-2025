@@ -329,6 +329,7 @@ def send_training_summary_email(
     description="Full training pipeline for all models (LSTM, PatchTST, PPO, SAC)",
     retries=0,
     timeout_seconds=14400,  # 4 hours total timeout
+    persist_result=True,  # Persist task results to allow resume from failure
 )
 def weekly_training_flow() -> dict:
     """Execute the full weekly training pipeline.
