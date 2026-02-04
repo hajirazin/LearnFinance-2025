@@ -56,7 +56,7 @@ def get_halal_universe() -> HalalUniverseResponse:
         data = response.json()
 
     result = HalalUniverseResponse(**data)
-    logger.info(f"Got {result.count} halal symbols")
+    logger.info(f"Got {result.total_stocks} halal symbols")
     return result
 
 
@@ -222,7 +222,7 @@ def weekly_training_flow() -> dict:
     logger.info("Weekly training pipeline complete!")
 
     return {
-        "universe_count": universe.count,
+        "universe_count": universe.total_stocks,
         "refresh": {
             "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
             "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),

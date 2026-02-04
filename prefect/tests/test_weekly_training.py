@@ -4,20 +4,42 @@ from unittest.mock import patch
 
 import pytest
 
+from flows import weekly_training  # noqa: F401 - needed for patching
 from flows.models import (
     HalalUniverseResponse,
     RefreshTrainingDataResponse,
     TrainingResponse,
 )
+from flows.weekly_training import weekly_training_flow
 
 
 @pytest.fixture
 def mock_universe_response():
     """Mock response for halal universe endpoint."""
     return {
-        "symbols": ["AAPL", "MSFT", "GOOGL"],
-        "count": 3,
-        "source": "test",
+        "stocks": [
+            {
+                "symbol": "AAPL",
+                "name": "Apple Inc.",
+                "max_weight": 10.5,
+                "sources": ["SPUS", "HLAL"],
+            },
+            {
+                "symbol": "MSFT",
+                "name": "Microsoft Corp.",
+                "max_weight": 8.2,
+                "sources": ["SPUS"],
+            },
+            {
+                "symbol": "GOOGL",
+                "name": "Alphabet Inc.",
+                "max_weight": 5.1,
+                "sources": ["HLAL"],
+            },
+        ],
+        "etfs_used": ["SPUS", "HLAL", "SPTE"],
+        "total_stocks": 3,
+        "fetched_at": "2026-02-03T12:00:00+00:00",
     }
 
 
@@ -54,8 +76,11 @@ class TestModels:
         """Test HalalUniverseResponse model."""
         response = HalalUniverseResponse(**mock_universe_response)
         assert response.symbols == ["AAPL", "MSFT", "GOOGL"]
-        assert response.count == 3
-        assert response.source == "test"
+        assert response.total_stocks == 3
+        assert response.etfs_used == ["SPUS", "HLAL", "SPTE"]
+        assert len(response.stocks) == 3
+        assert response.stocks[0].symbol == "AAPL"
+        assert response.stocks[0].max_weight == 10.5
 
     def test_refresh_training_data_response(self, mock_refresh_response):
         """Test RefreshTrainingDataResponse model."""
@@ -110,8 +135,6 @@ class TestFlow:
         mock_training_response,
     ):
         """Test full weekly training flow execution."""
-        from flows.weekly_training import weekly_training_flow
-
         # Setup mocks
         mock_universe.return_value = HalalUniverseResponse(**mock_universe_response)
         mock_refresh.return_value = RefreshTrainingDataResponse(**mock_refresh_response)
@@ -159,13 +182,25 @@ class TestFlow:
         mock_sac,
     ):
         """Test that flow passes universe symbols to refresh_training_data."""
-        from flows.weekly_training import weekly_training_flow
-
         # Setup mocks with different symbols
         mock_universe.return_value = HalalUniverseResponse(
-            symbols=["TSLA", "NVDA"],
-            count=2,
-            source="test",
+            stocks=[
+                {
+                    "symbol": "TSLA",
+                    "name": "Tesla Inc.",
+                    "max_weight": 7.5,
+                    "sources": ["SPUS"],
+                },
+                {
+                    "symbol": "NVDA",
+                    "name": "NVIDIA Corp.",
+                    "max_weight": 6.2,
+                    "sources": ["HLAL"],
+                },
+            ],
+            etfs_used=["SPUS", "HLAL"],
+            total_stocks=2,
+            fetched_at="2026-02-03T12:00:00+00:00",
         )
         mock_refresh.return_value = RefreshTrainingDataResponse(
             sentiment_gaps_filled=5,
