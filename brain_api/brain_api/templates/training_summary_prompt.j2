@@ -1,0 +1,56 @@
+You are a financial ML training analyst. Analyze and summarize the following model training results for a weekly portfolio management system.
+
+## Training Results
+
+### LSTM (Pure Price Forecaster)
+This model predicts weekly stock returns using only historical OHLCV price data.
+
+- **Version**: {{ lstm.version }}
+- **Data Window**: {{ lstm.data_window_start }} to {{ lstm.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if lstm.promoted else "No" }}
+- **Metrics**: {{ lstm.metrics | tojson }}
+
+### PatchTST (Multi-Signal Forecaster)
+This model predicts weekly stock returns using price data combined with fundamental and sentiment signals.
+
+- **Version**: {{ patchtst.version }}
+- **Data Window**: {{ patchtst.data_window_start }} to {{ patchtst.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if patchtst.promoted else "No" }}
+- **Input Channels**: {{ patchtst.num_input_channels }}
+- **Signals Used**: {{ patchtst.signals_used | join(", ") }}
+- **Metrics**: {{ patchtst.metrics | tojson }}
+
+### PPO (Reinforcement Learning Allocator)
+This model learns portfolio allocation strategies using Proximal Policy Optimization.
+
+- **Version**: {{ ppo.version }}
+- **Data Window**: {{ ppo.data_window_start }} to {{ ppo.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if ppo.promoted else "No" }}
+- **Symbols Used**: {{ ppo.symbols_used | length }} stocks
+- **Metrics**: {{ ppo.metrics | tojson }}
+
+### SAC (Reinforcement Learning Allocator)
+This model learns portfolio allocation strategies using Soft Actor-Critic algorithm.
+
+- **Version**: {{ sac.version }}
+- **Data Window**: {{ sac.data_window_start }} to {{ sac.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if sac.promoted else "No" }}
+- **Symbols Used**: {{ sac.symbols_used | length }} stocks
+- **Metrics**: {{ sac.metrics | tojson }}
+
+## Instructions
+
+Provide a concise analysis of these training results. Focus on:
+1. Overall training health and model promotion status
+2. Individual model performance insights
+3. Any concerns or recommendations
+
+Respond with JSON only, using this exact structure:
+{
+    "para_1_overall": "2-3 sentence summary of overall training results and model health",
+    "para_2_lstm": "2-3 sentences about LSTM model training and performance",
+    "para_3_patchtst": "2-3 sentences about PatchTST model training and its multi-signal approach",
+    "para_4_ppo": "2-3 sentences about PPO allocator training",
+    "para_5_sac": "2-3 sentences about SAC allocator training",
+    "para_6_recommendations": "2-3 sentences with any recommendations or concerns"
+}

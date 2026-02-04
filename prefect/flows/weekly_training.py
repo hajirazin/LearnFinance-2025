@@ -7,6 +7,7 @@ This flow runs every Sunday at 11 AM UTC and executes the full training pipeline
 4. Train PatchTST (multi-signal forecaster)
 5. Train PPO (RL allocator)
 6. Train SAC (RL allocator)
+7. Generate training summary (LLM-powered analysis)
 """
 
 import os
@@ -20,6 +21,7 @@ from flows.models import (
     RefreshTrainingDataRequest,
     RefreshTrainingDataResponse,
     TrainingResponse,
+    TrainingSummaryResponse,
 )
 
 # Configuration
@@ -158,6 +160,86 @@ def train_sac() -> TrainingResponse:
     return result
 
 
+@task(name="Generate Training Summary", retries=1, retry_delay_seconds=30)
+def generate_training_summary(
+    lstm: TrainingResponse,
+    patchtst: TrainingResponse,
+    ppo: TrainingResponse,
+    sac: TrainingResponse,
+) -> TrainingSummaryResponse:
+    """Generate LLM summary of all training results.
+
+    Calls POST /llm/training-summary with all 4 training results
+    to generate an AI-powered analysis of the training run.
+
+    Args:
+        lstm: LSTM training result
+        patchtst: PatchTST training result
+        ppo: PPO training result
+        sac: SAC training result
+
+    Returns:
+        TrainingSummaryResponse with LLM-generated summary
+    """
+    logger = get_run_logger()
+    logger.info("Generating training summary via LLM...")
+
+    # Build request payload matching brain_api's TrainingSummaryRequest
+    payload = {
+        "lstm": {
+            "version": lstm.version,
+            "data_window_start": lstm.data_window_start,
+            "data_window_end": lstm.data_window_end,
+            "metrics": lstm.metrics,
+            "promoted": lstm.promoted,
+        },
+        "patchtst": {
+            "version": patchtst.version,
+            "data_window_start": patchtst.data_window_start,
+            "data_window_end": patchtst.data_window_end,
+            "metrics": patchtst.metrics,
+            "promoted": patchtst.promoted,
+            "num_input_channels": patchtst.num_input_channels or 0,
+            "signals_used": patchtst.signals_used or [],
+        },
+        "ppo": {
+            "version": ppo.version,
+            "data_window_start": ppo.data_window_start,
+            "data_window_end": ppo.data_window_end,
+            "metrics": ppo.metrics,
+            "promoted": ppo.promoted,
+            "symbols_used": ppo.symbols_used or [],
+        },
+        "sac": {
+            "version": sac.version,
+            "data_window_start": sac.data_window_start,
+            "data_window_end": sac.data_window_end,
+            "metrics": sac.metrics,
+            "promoted": sac.promoted,
+            "symbols_used": sac.symbols_used or [],
+        },
+    }
+
+    with get_client() as client:
+        response = client.post("/llm/training-summary", json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+    result = TrainingSummaryResponse(**data)
+    logger.info(
+        f"Training summary generated via {result.provider} ({result.model_used}), "
+        f"tokens_used={result.tokens_used}"
+    )
+
+    # Log the summary content
+    logger.info("=== Training Summary ===")
+    for key, value in result.summary.items():
+        logger.info(f"{key}: {value}")
+    logger.info("========================")
+
+    return result
+
+
 # =============================================================================
 # Flow
 # =============================================================================
@@ -188,10 +270,15 @@ def weekly_training_flow() -> dict:
            ┌──────┴───────┐
            ▼              ▼
        train_ppo      train_sac
+           │              │
+           └──────┬───────┘
+                  │
+                  ▼
+    generate_training_summary
     ```
 
     Returns:
-        dict with training results for each model
+        dict with training results for each model and LLM summary
     """
     logger = get_run_logger()
     logger.info("Starting weekly training pipeline...")
@@ -219,6 +306,14 @@ def weekly_training_flow() -> dict:
     ppo_result = ppo_future.result()
     sac_result = sac_future.result()
 
+    # Step 7: Generate training summary using LLM
+    summary_result = generate_training_summary(
+        lstm=lstm_result,
+        patchtst=patchtst_result,
+        ppo=ppo_result,
+        sac=sac_result,
+    )
+
     logger.info("Weekly training pipeline complete!")
 
     return {
@@ -234,6 +329,11 @@ def weekly_training_flow() -> dict:
         },
         "ppo": {"version": ppo_result.version, "promoted": ppo_result.promoted},
         "sac": {"version": sac_result.version, "promoted": sac_result.promoted},
+        "summary": {
+            "provider": summary_result.provider,
+            "model_used": summary_result.model_used,
+            "content": summary_result.summary,
+        },
     }
 
 

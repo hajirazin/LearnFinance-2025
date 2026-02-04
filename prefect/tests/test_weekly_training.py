@@ -9,6 +9,7 @@ from flows.models import (
     HalalUniverseResponse,
     RefreshTrainingDataResponse,
     TrainingResponse,
+    TrainingSummaryResponse,
 )
 from flows.weekly_training import weekly_training_flow
 
@@ -69,6 +70,24 @@ def mock_training_response():
     }
 
 
+@pytest.fixture
+def mock_summary_response():
+    """Mock response for training summary endpoint."""
+    return {
+        "summary": {
+            "para_1_overall": "All models trained successfully.",
+            "para_2_lstm": "LSTM shows good performance.",
+            "para_3_patchtst": "PatchTST leverages multi-signal approach.",
+            "para_4_ppo": "PPO demonstrates solid returns.",
+            "para_5_sac": "SAC shows promising results.",
+            "para_6_recommendations": "Continue monitoring.",
+        },
+        "provider": "openai",
+        "model_used": "gpt-4o-mini",
+        "tokens_used": 500,
+    }
+
+
 class TestModels:
     """Test Pydantic models."""
 
@@ -112,10 +131,19 @@ class TestModels:
         assert response.hf_repo == "user/model"
         assert response.symbols_used == ["AAPL", "MSFT"]
 
+    def test_training_summary_response(self, mock_summary_response):
+        """Test TrainingSummaryResponse model."""
+        response = TrainingSummaryResponse(**mock_summary_response)
+        assert response.provider == "openai"
+        assert response.model_used == "gpt-4o-mini"
+        assert response.tokens_used == 500
+        assert "para_1_overall" in response.summary
+
 
 class TestFlow:
     """Test the full flow with mocked tasks."""
 
+    @patch("flows.weekly_training.generate_training_summary")
     @patch("flows.weekly_training.train_sac")
     @patch("flows.weekly_training.train_ppo")
     @patch("flows.weekly_training.train_patchtst")
@@ -130,9 +158,11 @@ class TestFlow:
         mock_patchtst,
         mock_ppo,
         mock_sac,
+        mock_summary,
         mock_universe_response,
         mock_refresh_response,
         mock_training_response,
+        mock_summary_response,
     ):
         """Test full weekly training flow execution."""
         # Setup mocks
@@ -144,6 +174,9 @@ class TestFlow:
         mock_patchtst.submit.return_value.result.return_value = training_resp
         mock_ppo.submit.return_value.result.return_value = training_resp
         mock_sac.submit.return_value.result.return_value = training_resp
+
+        summary_resp = TrainingSummaryResponse(**mock_summary_response)
+        mock_summary.return_value = summary_resp
 
         # Run flow
         result = weekly_training_flow()
@@ -157,6 +190,8 @@ class TestFlow:
         assert result["patchtst"]["version"] == "v1.0.0"
         assert result["ppo"]["version"] == "v1.0.0"
         assert result["sac"]["version"] == "v1.0.0"
+        assert result["summary"]["provider"] == "openai"
+        assert result["summary"]["model_used"] == "gpt-4o-mini"
 
         # Verify task calls
         mock_universe.assert_called_once()
@@ -165,7 +200,9 @@ class TestFlow:
         mock_patchtst.submit.assert_called_once()
         mock_ppo.submit.assert_called_once()
         mock_sac.submit.assert_called_once()
+        mock_summary.assert_called_once()
 
+    @patch("flows.weekly_training.generate_training_summary")
     @patch("flows.weekly_training.train_sac")
     @patch("flows.weekly_training.train_ppo")
     @patch("flows.weekly_training.train_patchtst")
@@ -180,6 +217,7 @@ class TestFlow:
         mock_patchtst,
         mock_ppo,
         mock_sac,
+        mock_summary,
     ):
         """Test that flow passes universe symbols to refresh_training_data."""
         # Setup mocks with different symbols
@@ -222,6 +260,13 @@ class TestFlow:
         mock_patchtst.submit.return_value.result.return_value = training_resp
         mock_ppo.submit.return_value.result.return_value = training_resp
         mock_sac.submit.return_value.result.return_value = training_resp
+
+        mock_summary.return_value = TrainingSummaryResponse(
+            summary={"para_1_overall": "Test summary"},
+            provider="openai",
+            model_used="gpt-4o-mini",
+            tokens_used=100,
+        )
 
         # Run flow
         weekly_training_flow()

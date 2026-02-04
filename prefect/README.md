@@ -12,6 +12,7 @@ This package contains Prefect flows that orchestrate the weekly training pipelin
 4. **Train PatchTST** - Multi-signal forecaster model
 5. **Train PPO** - Reinforcement learning allocator
 6. **Train SAC** - Reinforcement learning allocator
+7. **Generate Training Summary** - LLM-powered analysis of training results (OpenAI/OLLAMA)
 
 ## Prerequisites
 
@@ -133,6 +134,7 @@ prefect worker start --pool default-agent-pool
 | Train PatchTST | 1 | 120s |
 | Train PPO | 1 | 120s |
 | Train SAC | 1 | 120s |
+| Generate Training Summary | 1 | 30s |
 
 ## Monitoring
 

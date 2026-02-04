@@ -369,6 +369,12 @@ We store three kinds of data:
 | `POST /train/sac_patchtst/full` | Full SAC+PatchTST retrain | Monthly (manual) |
 | `POST /train/sac_patchtst/finetune` | SAC+PatchTST fine-tune | Weekly (cron) |
 
+### LLM endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
+
 ### Other endpoints
 
 | Endpoint | Purpose |

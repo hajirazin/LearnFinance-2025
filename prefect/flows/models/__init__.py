@@ -1,6 +1,7 @@
 """Pydantic models for brain_api requests and responses."""
 
 from flows.models.etl import RefreshTrainingDataRequest, RefreshTrainingDataResponse
+from flows.models.llm import TrainingSummaryResponse
 from flows.models.training import TrainingResponse
 from flows.models.universe import HalalUniverseResponse
 
@@ -9,4 +10,5 @@ __all__ = [
     "RefreshTrainingDataRequest",
     "RefreshTrainingDataResponse",
     "TrainingResponse",
+    "TrainingSummaryResponse",
 ]
