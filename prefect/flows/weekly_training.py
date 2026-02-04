@@ -8,6 +8,7 @@ This flow runs every Sunday at 11 AM UTC and executes the full training pipeline
 5. Train PPO (RL allocator)
 6. Train SAC (RL allocator)
 7. Generate training summary (LLM-powered analysis)
+8. Send training summary email
 """
 
 import os
@@ -21,6 +22,7 @@ from flows.models import (
     RefreshTrainingDataRequest,
     RefreshTrainingDataResponse,
     TrainingResponse,
+    TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
 )
 
@@ -240,6 +242,83 @@ def generate_training_summary(
     return result
 
 
+@task(name="Send Training Summary Email", retries=1, retry_delay_seconds=30)
+def send_training_summary_email(
+    lstm: TrainingResponse,
+    patchtst: TrainingResponse,
+    ppo: TrainingResponse,
+    sac: TrainingResponse,
+    summary: TrainingSummaryResponse,
+) -> TrainingSummaryEmailResponse:
+    """Send training summary via email.
+
+    Calls POST /email/training-summary with all training results and LLM summary
+    to send an email notification with side-by-side comparison tables.
+
+    Args:
+        lstm: LSTM training result
+        patchtst: PatchTST training result
+        ppo: PPO training result
+        sac: SAC training result
+        summary: LLM-generated summary from generate_training_summary
+
+    Returns:
+        TrainingSummaryEmailResponse with success status and email details
+    """
+    logger = get_run_logger()
+    logger.info("Sending training summary email...")
+
+    # Build request payload matching brain_api's TrainingSummaryEmailRequest
+    payload = {
+        "lstm": {
+            "version": lstm.version,
+            "data_window_start": lstm.data_window_start,
+            "data_window_end": lstm.data_window_end,
+            "metrics": lstm.metrics,
+            "promoted": lstm.promoted,
+        },
+        "patchtst": {
+            "version": patchtst.version,
+            "data_window_start": patchtst.data_window_start,
+            "data_window_end": patchtst.data_window_end,
+            "metrics": patchtst.metrics,
+            "promoted": patchtst.promoted,
+            "num_input_channels": patchtst.num_input_channels or 0,
+            "signals_used": patchtst.signals_used or [],
+        },
+        "ppo": {
+            "version": ppo.version,
+            "data_window_start": ppo.data_window_start,
+            "data_window_end": ppo.data_window_end,
+            "metrics": ppo.metrics,
+            "promoted": ppo.promoted,
+            "symbols_used": ppo.symbols_used or [],
+        },
+        "sac": {
+            "version": sac.version,
+            "data_window_start": sac.data_window_start,
+            "data_window_end": sac.data_window_end,
+            "metrics": sac.metrics,
+            "promoted": sac.promoted,
+            "symbols_used": sac.symbols_used or [],
+        },
+        "summary": summary.summary,
+    }
+
+    with get_client() as client:
+        response = client.post("/email/training-summary", json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+    result = TrainingSummaryEmailResponse(**data)
+    logger.info(
+        f"Training summary email sent: is_success={result.is_success}, "
+        f"subject={result.subject}"
+    )
+
+    return result
+
+
 # =============================================================================
 # Flow
 # =============================================================================
@@ -275,10 +354,13 @@ def weekly_training_flow() -> dict:
                   │
                   ▼
     generate_training_summary
+                  │
+                  ▼
+    send_training_summary_email
     ```
 
     Returns:
-        dict with training results for each model and LLM summary
+        dict with training results for each model, LLM summary, and email status
     """
     logger = get_run_logger()
     logger.info("Starting weekly training pipeline...")
@@ -314,6 +396,15 @@ def weekly_training_flow() -> dict:
         sac=sac_result,
     )
 
+    # Step 8: Send training summary email
+    email_result = send_training_summary_email(
+        lstm=lstm_result,
+        patchtst=patchtst_result,
+        ppo=ppo_result,
+        sac=sac_result,
+        summary=summary_result,
+    )
+
     logger.info("Weekly training pipeline complete!")
 
     return {
@@ -333,6 +424,10 @@ def weekly_training_flow() -> dict:
             "provider": summary_result.provider,
             "model_used": summary_result.model_used,
             "content": summary_result.summary,
+        },
+        "email": {
+            "is_success": email_result.is_success,
+            "subject": email_result.subject,
         },
     }
 

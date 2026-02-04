@@ -9,6 +9,7 @@ from flows.models import (
     HalalUniverseResponse,
     RefreshTrainingDataResponse,
     TrainingResponse,
+    TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
 )
 from flows.weekly_training import weekly_training_flow
@@ -88,6 +89,16 @@ def mock_summary_response():
     }
 
 
+@pytest.fixture
+def mock_email_response():
+    """Mock response for training summary email endpoint."""
+    return {
+        "is_success": True,
+        "subject": "Training Summary: 2020-01-01 to 2024-01-01",
+        "body": "<html><body>Training summary email body</body></html>",
+    }
+
+
 class TestModels:
     """Test Pydantic models."""
 
@@ -143,6 +154,7 @@ class TestModels:
 class TestFlow:
     """Test the full flow with mocked tasks."""
 
+    @patch("flows.weekly_training.send_training_summary_email")
     @patch("flows.weekly_training.generate_training_summary")
     @patch("flows.weekly_training.train_sac")
     @patch("flows.weekly_training.train_ppo")
@@ -159,10 +171,12 @@ class TestFlow:
         mock_ppo,
         mock_sac,
         mock_summary,
+        mock_email,
         mock_universe_response,
         mock_refresh_response,
         mock_training_response,
         mock_summary_response,
+        mock_email_response,
     ):
         """Test full weekly training flow execution."""
         # Setup mocks
@@ -178,6 +192,9 @@ class TestFlow:
         summary_resp = TrainingSummaryResponse(**mock_summary_response)
         mock_summary.return_value = summary_resp
 
+        email_resp = TrainingSummaryEmailResponse(**mock_email_response)
+        mock_email.return_value = email_resp
+
         # Run flow
         result = weekly_training_flow()
 
@@ -192,6 +209,8 @@ class TestFlow:
         assert result["sac"]["version"] == "v1.0.0"
         assert result["summary"]["provider"] == "openai"
         assert result["summary"]["model_used"] == "gpt-4o-mini"
+        assert result["email"]["is_success"] is True
+        assert "Training Summary" in result["email"]["subject"]
 
         # Verify task calls
         mock_universe.assert_called_once()
@@ -201,7 +220,9 @@ class TestFlow:
         mock_ppo.submit.assert_called_once()
         mock_sac.submit.assert_called_once()
         mock_summary.assert_called_once()
+        mock_email.assert_called_once()
 
+    @patch("flows.weekly_training.send_training_summary_email")
     @patch("flows.weekly_training.generate_training_summary")
     @patch("flows.weekly_training.train_sac")
     @patch("flows.weekly_training.train_ppo")
@@ -218,6 +239,7 @@ class TestFlow:
         mock_ppo,
         mock_sac,
         mock_summary,
+        mock_email,
     ):
         """Test that flow passes universe symbols to refresh_training_data."""
         # Setup mocks with different symbols
@@ -266,6 +288,12 @@ class TestFlow:
             provider="openai",
             model_used="gpt-4o-mini",
             tokens_used=100,
+        )
+
+        mock_email.return_value = TrainingSummaryEmailResponse(
+            is_success=True,
+            subject="Training Summary: 2020-01-01 to 2024-01-01",
+            body="<html>Test</html>",
         )
 
         # Run flow
