@@ -170,15 +170,51 @@ class StoreExperienceResponse(BaseModel):
     model_type: str
 
 
+class IntendedOrder(BaseModel):
+    """An order that was intended to be submitted."""
+
+    symbol: str
+    qty: float
+    side: str  # "buy" or "sell"
+    client_order_id: str
+
+
+class ExecutedOrder(BaseModel):
+    """An order from Alpaca order history (raw response)."""
+
+    client_order_id: str
+    status: str  # "filled", "partially_filled", "canceled", "expired", etc.
+    filled_qty: str | None = None
+    filled_avg_price: str | None = None
+
+
 class UpdateExecutionRequest(BaseModel):
-    """Request to update experience with execution report after orders settle."""
+    """Request to update experience with execution report after orders settle.
+
+    Can provide EITHER:
+    1. Pre-computed execution_report (legacy)
+    2. Raw intended_orders + executed_orders (new - matching done internally)
+    """
 
     run_id: str
     model_type: str  # "ppo" or "sac"
-    execution_report: list[dict] = Field(
-        ...,
-        description="Per-order execution status from Alpaca",
+
+    # Option 1: Pre-computed execution report (legacy)
+    execution_report: list[dict] | None = Field(
+        None,
+        description="Pre-computed per-order execution status (legacy)",
     )
+
+    # Option 2: Raw data for internal matching (new)
+    intended_orders: list[IntendedOrder] | list[dict] | None = Field(
+        None,
+        description="Orders we intended to submit (from /orders/generate)",
+    )
+    executed_orders: list[ExecutedOrder] | list[dict] | None = Field(
+        None,
+        description="Raw order history from Alpaca (from /alpaca/order-history)",
+    )
+
     actual_weights: dict[str, float] | None = Field(
         None,
         description="Actual portfolio weights after orders settled",
@@ -264,6 +300,61 @@ class ExperienceStorage:
 def get_experience_storage() -> ExperienceStorage:
     """Get experience storage instance."""
     return ExperienceStorage()
+
+
+# ============================================================================
+# Order Matching
+# ============================================================================
+
+
+def match_orders(
+    intended_orders: list[dict],
+    executed_orders: list[dict],
+) -> list[dict]:
+    """Match intended orders with executed orders by client_order_id.
+
+    Args:
+        intended_orders: Orders we intended to submit (from /orders/generate).
+            Each must have: symbol, qty, side, client_order_id
+        executed_orders: Raw order history from Alpaca (from /alpaca/order-history).
+            Each must have: client_order_id, status, filled_qty, filled_avg_price
+
+    Returns:
+        List of execution report dicts with:
+            symbol, side, intended_qty, filled_qty, filled_avg_price, status, client_order_id
+    """
+    # Build lookup map for executed orders
+    executed_map = {o.get("client_order_id", ""): o for o in executed_orders}
+
+    execution_report = []
+    for intended in intended_orders:
+        client_order_id = intended.get("client_order_id", "")
+        executed = executed_map.get(client_order_id, {})
+
+        # Parse filled_qty (Alpaca returns as string)
+        filled_qty_str = executed.get("filled_qty")
+        filled_qty = float(filled_qty_str) if filled_qty_str else 0.0
+
+        # Parse filled_avg_price (Alpaca returns as string)
+        filled_price_str = executed.get("filled_avg_price")
+        filled_avg_price = float(filled_price_str) if filled_price_str else None
+
+        # Determine status
+        status = executed.get("status", "not_found")
+
+        execution_report.append(
+            {
+                "symbol": intended.get("symbol", ""),
+                "side": intended.get("side", ""),
+                "intended_qty": intended.get("qty", 0),
+                "filled_qty": filled_qty,
+                "filled_avg_price": filled_avg_price,
+                "status": status,
+                "client_order_id": client_order_id,
+            }
+        )
+
+    return execution_report
 
 
 # ============================================================================
@@ -384,11 +475,17 @@ def update_execution(
 ) -> UpdateExecutionResponse:
     """Update experience record with execution report after orders settle.
 
-    This is called after orders have been submitted and we know the execution
-    status (filled, partial, expired) from Alpaca order history.
+    This endpoint supports two modes:
+
+    1. **New mode (recommended)**: Provide `intended_orders` and `executed_orders`.
+       The endpoint will match them by `client_order_id` and compute the execution report.
+
+    2. **Legacy mode**: Provide pre-computed `execution_report` directly.
 
     Args:
-        request: Contains run_id, model_type, execution_report, and actual_weights.
+        request: Contains run_id, model_type, and either:
+            - intended_orders + executed_orders (new mode), or
+            - execution_report (legacy mode)
 
     Returns:
         Update status with counts of filled/partial/expired orders.
@@ -409,22 +506,55 @@ def update_execution(
             orders_expired=0,
         )
 
+    # Determine execution_report: either from raw data (new) or pre-computed (legacy)
+    if request.intended_orders is not None and request.executed_orders is not None:
+        # New mode: match intended vs executed orders internally
+        logger.info(
+            f"[Experience] Matching {len(request.intended_orders)} intended orders "
+            f"with {len(request.executed_orders)} executed orders"
+        )
+
+        # Convert Pydantic models to dicts if needed
+        intended_dicts = [
+            o.model_dump() if hasattr(o, "model_dump") else o
+            for o in request.intended_orders
+        ]
+        executed_dicts = [
+            o.model_dump() if hasattr(o, "model_dump") else o
+            for o in request.executed_orders
+        ]
+
+        execution_report = match_orders(intended_dicts, executed_dicts)
+    elif request.execution_report is not None:
+        # Legacy mode: use pre-computed execution report
+        execution_report = request.execution_report
+    else:
+        # Neither provided - error
+        logger.error(f"[Experience] No execution data provided for {run_id}")
+        return UpdateExecutionResponse(
+            run_id=run_id,
+            updated=False,
+            orders_filled=0,
+            orders_partial=0,
+            orders_expired=0,
+        )
+
     # Count order statuses
     orders_filled = 0
     orders_partial = 0
     orders_expired = 0
 
-    for order in request.execution_report:
+    for order in execution_report:
         status = order.get("status", "").lower()
         if status == "filled":
             orders_filled += 1
         elif status == "partial" or status == "partially_filled":
             orders_partial += 1
-        elif status in ("expired", "canceled", "rejected"):
+        elif status in ("expired", "canceled", "rejected", "not_found"):
             orders_expired += 1
 
     # Update record
-    record.execution_report = request.execution_report
+    record.execution_report = execution_report
     record.actual_weights = request.actual_weights
     record.execution_updated_at = datetime.now(UTC).isoformat()
 

@@ -768,3 +768,325 @@ class TestOrderComparison:
 
         assert report[0]["status"] == "filled"
         assert report[1]["status"] == "not_found"
+
+
+class TestMatchOrdersFunction:
+    """Tests for match_orders() helper function in experience module."""
+
+    def test_match_orders_all_matched(self):
+        """Test match_orders with all orders successfully matched."""
+        from brain_api.routes.experience import match_orders
+
+        intended = [
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 10,
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+            },
+            {
+                "symbol": "MSFT",
+                "side": "sell",
+                "qty": 5,
+                "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+            },
+        ]
+        executed = [
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                "status": "filled",
+                "filled_qty": "10",
+                "filled_avg_price": "175.50",
+            },
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+                "status": "filled",
+                "filled_qty": "5",
+                "filled_avg_price": "400.25",
+            },
+        ]
+
+        report = match_orders(intended, executed)
+
+        assert len(report) == 2
+        # Check AAPL order
+        assert report[0]["symbol"] == "AAPL"
+        assert report[0]["side"] == "buy"
+        assert report[0]["intended_qty"] == 10
+        assert report[0]["filled_qty"] == 10.0
+        assert report[0]["filled_avg_price"] == 175.50
+        assert report[0]["status"] == "filled"
+        assert report[0]["client_order_id"] == "paper:2026-02-05:attempt-1:AAPL:BUY"
+        # Check MSFT order
+        assert report[1]["symbol"] == "MSFT"
+        assert report[1]["side"] == "sell"
+        assert report[1]["filled_qty"] == 5.0
+        assert report[1]["filled_avg_price"] == 400.25
+        assert report[1]["status"] == "filled"
+
+    def test_match_orders_some_not_found(self):
+        """Test match_orders with some orders not found in Alpaca history."""
+        from brain_api.routes.experience import match_orders
+
+        intended = [
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 10,
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+            },
+            {
+                "symbol": "GOOGL",
+                "side": "buy",
+                "qty": 3,
+                "client_order_id": "paper:2026-02-05:attempt-1:GOOGL:BUY",
+            },
+            {
+                "symbol": "MSFT",
+                "side": "sell",
+                "qty": 5,
+                "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+            },
+        ]
+        executed = [
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                "status": "filled",
+                "filled_qty": "10",
+                "filled_avg_price": "175.50",
+            },
+            # GOOGL not present - order might have been rejected before reaching Alpaca
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+                "status": "canceled",
+                "filled_qty": "0",
+                "filled_avg_price": None,
+            },
+        ]
+
+        report = match_orders(intended, executed)
+
+        assert len(report) == 3
+        # AAPL matched
+        assert report[0]["status"] == "filled"
+        assert report[0]["filled_qty"] == 10.0
+        # GOOGL not found
+        assert report[1]["symbol"] == "GOOGL"
+        assert report[1]["status"] == "not_found"
+        assert report[1]["filled_qty"] == 0.0
+        assert report[1]["filled_avg_price"] is None
+        # MSFT canceled
+        assert report[2]["status"] == "canceled"
+        assert report[2]["filled_qty"] == 0.0
+
+    def test_match_orders_partial_fills(self):
+        """Test match_orders with partial fills."""
+        from brain_api.routes.experience import match_orders
+
+        intended = [
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 100,
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+            },
+            {
+                "symbol": "TSLA",
+                "side": "buy",
+                "qty": 50,
+                "client_order_id": "paper:2026-02-05:attempt-1:TSLA:BUY",
+            },
+        ]
+        executed = [
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                "status": "partially_filled",
+                "filled_qty": "75",
+                "filled_avg_price": "175.00",
+            },
+            {
+                "client_order_id": "paper:2026-02-05:attempt-1:TSLA:BUY",
+                "status": "filled",
+                "filled_qty": "50",
+                "filled_avg_price": "250.00",
+            },
+        ]
+
+        report = match_orders(intended, executed)
+
+        assert len(report) == 2
+        # AAPL partial fill
+        assert report[0]["symbol"] == "AAPL"
+        assert report[0]["intended_qty"] == 100
+        assert report[0]["filled_qty"] == 75.0
+        assert report[0]["status"] == "partially_filled"
+        # TSLA full fill
+        assert report[1]["filled_qty"] == 50.0
+        assert report[1]["status"] == "filled"
+
+    def test_match_orders_empty_lists(self):
+        """Test match_orders with empty input lists."""
+        from brain_api.routes.experience import match_orders
+
+        # Empty intended
+        report = match_orders([], [])
+        assert len(report) == 0
+
+        # Empty executed - all should be not_found
+        intended = [
+            {"symbol": "AAPL", "side": "buy", "qty": 10, "client_order_id": "id1"}
+        ]
+        report = match_orders(intended, [])
+        assert len(report) == 1
+        assert report[0]["status"] == "not_found"
+
+    def test_match_orders_handles_string_quantities(self):
+        """Test that match_orders properly parses string quantities from Alpaca."""
+        from brain_api.routes.experience import match_orders
+
+        intended = [
+            {"symbol": "AAPL", "side": "buy", "qty": 10, "client_order_id": "id1"}
+        ]
+        executed = [
+            {
+                "client_order_id": "id1",
+                "status": "filled",
+                "filled_qty": "10.5",  # String with decimal
+                "filled_avg_price": "175.123456",  # String with precision
+            }
+        ]
+
+        report = match_orders(intended, executed)
+
+        assert report[0]["filled_qty"] == 10.5
+        assert report[0]["filled_avg_price"] == 175.123456
+
+
+class TestUpdateExecutionWithMatching:
+    """Tests for /experience/update-execution with raw order matching."""
+
+    def test_update_execution_with_raw_orders(
+        self, client, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """Test update-execution accepts intended_orders and executed_orders."""
+        with patch(
+            "brain_api.routes.experience.get_experience_storage",
+            return_value=temp_storage,
+        ):
+            # First create a record
+            client.post(
+                "/experience/store",
+                json={
+                    "run_id": "paper:2026-02-05",
+                    "week_start": "2026-02-05",
+                    "week_end": "2026-02-09",
+                    "model_type": "ppo",
+                    "model_version": "v1.0.0",
+                    "state": sample_full_state,
+                    "intended_action": sample_intended_action,
+                    "intended_turnover": 0.1,
+                },
+            )
+
+            # Update with raw orders instead of pre-matched report
+            response = client.post(
+                "/experience/update-execution",
+                json={
+                    "run_id": "paper:2026-02-05",
+                    "model_type": "ppo",
+                    "intended_orders": [
+                        {
+                            "symbol": "AAPL",
+                            "side": "buy",
+                            "qty": 10,
+                            "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                        },
+                        {
+                            "symbol": "MSFT",
+                            "side": "sell",
+                            "qty": 5,
+                            "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+                        },
+                    ],
+                    "executed_orders": [
+                        {
+                            "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                            "status": "filled",
+                            "filled_qty": "10",
+                            "filled_avg_price": "175.50",
+                        },
+                        {
+                            "client_order_id": "paper:2026-02-05:attempt-1:MSFT:SELL",
+                            "status": "filled",
+                            "filled_qty": "5",
+                            "filled_avg_price": "400.00",
+                        },
+                    ],
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["updated"] is True
+            assert data["orders_filled"] == 2
+
+    def test_update_execution_raw_orders_with_not_found(
+        self, client, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """Test that raw orders matching handles missing orders correctly."""
+        with patch(
+            "brain_api.routes.experience.get_experience_storage",
+            return_value=temp_storage,
+        ):
+            client.post(
+                "/experience/store",
+                json={
+                    "run_id": "paper:2026-02-05",
+                    "week_start": "2026-02-05",
+                    "week_end": "2026-02-09",
+                    "model_type": "sac",
+                    "model_version": "v1.0.0",
+                    "state": sample_full_state,
+                    "intended_action": sample_intended_action,
+                    "intended_turnover": 0.1,
+                },
+            )
+
+            # One order has no match in executed
+            response = client.post(
+                "/experience/update-execution",
+                json={
+                    "run_id": "paper:2026-02-05",
+                    "model_type": "sac",
+                    "intended_orders": [
+                        {
+                            "symbol": "AAPL",
+                            "side": "buy",
+                            "qty": 10,
+                            "client_order_id": "id1",
+                        },
+                        {
+                            "symbol": "GOOGL",
+                            "side": "buy",
+                            "qty": 5,
+                            "client_order_id": "id2",
+                        },
+                    ],
+                    "executed_orders": [
+                        {
+                            "client_order_id": "id1",
+                            "status": "filled",
+                            "filled_qty": "10",
+                            "filled_avg_price": "175.00",
+                        },
+                        # id2 missing - order was rejected before Alpaca
+                    ],
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["updated"] is True
+            assert data["orders_filled"] == 1
+            # The not_found order shouldn't count as filled
+            assert data.get("orders_expired", 0) + data.get("orders_partial", 0) <= 1
