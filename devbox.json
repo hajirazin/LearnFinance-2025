@@ -24,7 +24,7 @@
       "n8n:down": ["docker compose down"],
       "n8n:logs": ["docker compose logs -f"],
       "brain:setup": ["cd brain_api && uv sync --all-extras"],
-      "brain:run": ["cd brain_api && uv sync --all-extras && uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000"],
+      "brain:run": ["cd brain_api && uv sync --all-extras && uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8001"],
       "brain:test": ["cd brain_api && uv sync --all-extras && uv run pytest"],
       "brain:lint": ["cd brain_api && uv sync --all-extras && uv run ruff check ."],
       "brain:format": ["cd brain_api && uv sync --all-extras && uv run ruff format ."],

@@ -15,6 +15,47 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
+  brain-api:
+    build: ./brain_api
+    container_name: learnfinance-brain-api
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./brain_api/.env
+
+  prefect-server:
+    build: ./prefect
+    container_name: learnfinance-prefect-server
+    restart: always
+    ports:
+      - "4200:4200"
+    command: ["uv", "run", "prefect", "server", "start", "--host", "0.0.0.0"]
+
+  prefect-training:
+    build: ./prefect
+    container_name: learnfinance-prefect-training
+    restart: always
+    depends_on:
+      - prefect-server
+      - brain-api
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - BRAIN_API_URL=http://brain-api:8000
+    command: ["uv", "run", "python", "-m", "flows.weekly_training"]
+
+  prefect-email:
+    build: ./prefect
+    container_name: learnfinance-prefect-email
+    restart: always
+    depends_on:
+      - prefect-server
+      - brain-api
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - BRAIN_API_URL=http://brain-api:8000
+    command: ["uv", "run", "python", "-m", "flows.weekly_forecast_email"]
+
 volumes:
   n8n_data:
 
