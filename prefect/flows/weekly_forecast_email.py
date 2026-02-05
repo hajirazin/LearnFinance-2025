@@ -267,9 +267,8 @@ if __name__ == "__main__":
         weekly_forecast_email_flow()
     else:
         # Create deployment and serve with cron schedule
-        # Every Monday at 18:00 IST: "0 18 * * 1"
+        # Every Monday at 11 AM UTC: "0 11 * * 1"
         weekly_forecast_email_flow.serve(
             name="weekly-forecast-email",
-            cron="0 18 * * 1",
-            timezone="Asia/Kolkata",
+            cron="0 11 * * 1",
         )
