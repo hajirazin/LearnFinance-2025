@@ -1,20 +1,4 @@
 services:
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: learnfinance-n8n
-    restart: unless-stopped
-    ports:
-      - "${N8N_PORT:-5678}:5678"
-    environment:
-      - N8N_HOST=${N8N_HOST:-localhost}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
-      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
-      - GENERIC_TIMEZONE=${TZ:-Asia/Kolkata}
-      - TZ=${TZ:-Asia/Kolkata}
-    volumes:
-      - n8n_data:/home/node/.n8n
-
   brain-api:
     build: ./brain_api
     container_name: learnfinance-brain-api
@@ -55,7 +39,3 @@ services:
       - PREFECT_API_URL=http://prefect-server:4200/api
       - BRAIN_API_URL=http://brain-api:8000
     command: ["uv", "run", "python", "-m", "flows.weekly_forecast_email"]
-
-volumes:
-  n8n_data:
-

@@ -26,7 +26,7 @@ The email shows **all allocations side-by-side** so you can learn which approach
 
 ```mermaid
 flowchart LR
-  n8n[n8n_orchestrator] -->|schedule_Mon_18_IST| runApi[brain_api_FastAPI]
+  prefect[Prefect_orchestrator] -->|schedule_Mon_18_IST| runApi[brain_api_FastAPI]
 
   subgraph brain[python_brain]
     runApi --> universe[universe_service]
@@ -39,14 +39,15 @@ flowchart LR
   forecasters --> db[run_db_Postgres]
   allocators --> db
 
-  n8n -->|LLM_summary| openai[OpenAI_GPT]
-  n8n -->|send_comparison_email| email[Gmail]
-  n8n -->|submit_limit_orders| alpaca[alpaca_paper_api]
+  runApi -->|LLM_summary| openai[OpenAI_GPT]
+  runApi -->|send_comparison_email| email[Gmail_SMTP]
+  runApi -->|submit_limit_orders| alpaca[alpaca_paper_api]
 ```
 
 **Architecture overview:**
 
-- **n8n** for scheduling/orchestration and integrations (Alpaca + email + LLM summary)
+- **Prefect** for scheduling/orchestration (triggers brain_api endpoints)
+- **brain_api** handles all integrations: Alpaca trading, OpenAI/LLM summaries, Gmail SMTP
 - A Python "AI brain" for price forecasting, allocation, and signal collection
 
 ## Model hierarchy
@@ -101,10 +102,11 @@ This repo compares multiple approaches at each stage:
 
 ## Prerequisites
 
-- **Docker & Docker Compose** (for n8n and Postgres)
+- **Docker & Docker Compose** (for Postgres)
 - **Python 3.11+** with `uv` package manager
-- A Google account (for Gmail OAuth)
-- A Google Cloud project with OAuth credentials (for n8n email integration)
+- **Prefect 3.x** (for workflow orchestration)
+- Gmail app password (for email notifications)
+- Alpaca paper trading accounts (for order execution)
 
 ## Quick Start
 
@@ -115,142 +117,200 @@ docker compose up -d
 ```
 
 This starts:
-- n8n at http://localhost:5678
-- Postgres for run tracking
+- brain-api at http://localhost:8000
+- Prefect server at http://localhost:4200
+- Prefect training worker (Sunday cron)
+- Prefect email worker (Monday cron)
 
 ### 2. Start Brain API
 
 ```bash
 cd brain_api
+cp .env.example .env
+# Edit .env with your credentials (see below)
 uv sync --extra dev
 uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 API available at http://localhost:8000 (docs at `/docs`)
 
-### 3. Configure Gmail in n8n (for email notifications)
+### 3. Configure credentials in brain_api/.env
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project (or use an existing one)
-3. Go to **APIs & Services → OAuth consent screen**
-   - Choose **External** (or Internal if using Workspace)
-   - Fill in app name, user support email, developer email
-   - Add your email as a test user
-4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-   - Application type: **Web application**
-   - Name: `n8n Gmail`
-   - Authorized redirect URIs: `http://localhost:5678/rest/oauth2-credential/callback`
-5. Copy the **Client ID** and **Client Secret**
-6. In n8n: **Settings → Credentials → Add Credential → Gmail OAuth2**
-   - Fill in Client ID and Client Secret
-   - Click **Sign in with Google** and authorize
+The brain_api handles all external integrations. Configure these environment variables:
 
-### 4. Configure Alpaca Paper Trading (for order execution)
+**Gmail (for email notifications):**
+```bash
+GMAIL_USER=your-email@gmail.com
+GMAIL_APP_PASSWORD=your-app-password
+```
 
-The system submits orders to 3 separate Alpaca paper trading accounts:
+To get a Gmail app password:
+1. Go to [Google Account Security](https://myaccount.google.com/security)
+2. Enable 2-Step Verification if not already enabled
+3. Go to **App passwords** → Generate a new app password for "Mail"
+4. Copy the 16-character password (no spaces)
+
+**Alpaca Paper Trading (for order execution):**
+```bash
+# PPO account
+ALPACA_PPO_KEY=your-ppo-api-key
+ALPACA_PPO_SECRET=your-ppo-api-secret
+
+# SAC account
+ALPACA_SAC_KEY=your-sac-api-key
+ALPACA_SAC_SECRET=your-sac-api-secret
+
+# HRP account
+ALPACA_HRP_KEY=your-hrp-api-key
+ALPACA_HRP_SECRET=your-hrp-api-secret
+```
+
+Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API keys from each dashboard.
 
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
-| PPO_LSTM | PPO + LSTM | On-policy RL with pure price forecasts |
-| SAC_PatchTST | SAC + PatchTST | Off-policy RL with multi-signal forecasts |
+| PPO | PPO + LSTM | On-policy RL with pure price forecasts |
+| SAC | SAC + PatchTST | Off-policy RL with multi-signal forecasts |
 | HRP | HRP | Risk parity baseline |
 
-**Setup steps:**
+**OpenAI (for LLM summaries):**
+```bash
+OPENAI_API_KEY=your-openai-api-key
+```
 
-1. Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/)
-2. For each account, get the API Key and Secret from the dashboard
-3. In n8n: **Settings → Credentials → Add Credential → Header Auth**
-   - Create 3 credentials named: `Alpaca PPO_LSTM`, `Alpaca SAC_PatchTST`, `Alpaca HRP`
-   - For each, add two headers:
-     - `APCA-API-KEY-ID`: your API key
-     - `APCA-API-SECRET-KEY`: your API secret
+### 4. Install Prefect
 
-**Note:** The other 2 algorithms (PPO+PatchTST, SAC+LSTM) run with mock portfolios for comparison but don't execute real paper trades.
+```bash
+cd prefect
+uv sync --extra dev
+```
 
-### 5. Test with hello world email
+### 5. Test the workflow
 
-1. In n8n, import `n8n/workflows/hello-world-email.json`
-2. Configure Gmail credentials and recipient address
-3. Execute workflow
+```bash
+# Make sure brain_api is running, then in another terminal:
+cd prefect
+python flows/weekly_forecast_email.py --test
+```
 
-You should receive a "Hello World from LearnFinance-2025" email.
+This runs a single execution of the weekly forecast email flow.
 
 ## Weekly workflow setup
 
-Import `n8n/workflows/weekly-lstm-forecast-email.json` and enable the schedule. The cron runs every Monday at 18:00 IST.
+The Prefect flow runs every Monday at 18:00 IST. See [prefect/README.md](prefect/README.md) for full details.
+
+### Deploy the workflow
+
+```bash
+cd prefect
+
+# Option 1: Serve locally (for development)
+python flows/weekly_forecast_email.py
+
+# Option 2: Deploy to Prefect Cloud/Server
+prefect deploy flows/weekly_forecast_email.py:weekly_forecast_email_flow \
+    --name "weekly-forecast-email" \
+    --cron "0 18 * * 1" \
+    --timezone "Asia/Kolkata"
+
+# Start a worker to execute flows
+prefect worker start --pool default-agent-pool
+```
 
 ### Workflow flow
 
 ```mermaid
 sequenceDiagram
-  participant N8N as n8n
-  participant Alpaca as alpaca_paper
+  participant Prefect as Prefect
   participant Brain as brain_api
+  participant Alpaca as alpaca_paper
   participant DB as run_db
-  participant Raw as raw_store
-  participant Email as email
+  participant Email as Gmail_SMTP
 
-  N8N->>Alpaca: Fetch_positions_and_cash
-  N8N->>Brain: Start_run(run_date_IST, portfolio, cash)
-  Brain->>DB: Create_run(run_id, attempt=1, config_hash)
-  Brain->>Brain: Build_halal_universe
-  Brain->>Brain: Screen_to_Top15_plus_holdings
-  Brain->>Raw: Save_raw_inputs(news_social_market_snapshots)
-  Brain->>Brain: Run_forecasters(LSTM, PatchTST)
-  Brain->>Brain: Run_allocators(HRP, PPO, SAC)
-  Brain->>DB: Persist_trade_plan_and_explanations
-  Brain-->>N8N: Return_orders_with_client_order_ids
-  N8N->>Alpaca: Submit_limit_orders(idempotent_client_order_id)
-  N8N->>DB: Store_submission_results(alpaca_order_id,status)
-  N8N->>Email: Send_summary(run_id,attempt,orders,why)
+  Prefect->>Brain: GET /universe/halal
+  Prefect->>Brain: GET /alpaca/portfolio (PPO, SAC, HRP)
+  Brain->>Alpaca: Fetch positions and cash
+  Prefect->>Brain: POST /signals/fundamentals, /signals/news
+  Prefect->>Brain: POST /inference/lstm, /inference/patchtst
+  Prefect->>Brain: POST /inference/ppo, /inference/sac, /allocation/hrp
+  Prefect->>Brain: POST /orders/generate (for each algorithm)
+  Prefect->>Brain: POST /alpaca/submit-orders
+  Brain->>Alpaca: Submit limit orders
+  Prefect->>Brain: POST /llm/weekly-summary
+  Prefect->>Brain: POST /email/weekly-report
+  Brain->>Email: Send via SMTP
 ```
 
-### 2-Phase execution architecture
+### 7-Phase execution architecture
 
-The n8n workflow executes in two phases to ensure forecasters complete before RL allocators run:
+The Prefect flow executes in 7 phases with parallel tasks where possible:
 
 ```mermaid
 flowchart TD
-    Trigger[Trigger] --> GetUniverse[GET Halal Universe]
-    GetUniverse --> PickSymbols[Pick Top 20 Symbols]
-    
+    Trigger[Monday_18_IST] --> Phase0
+
+    subgraph Phase0[Phase 0 - Universe and Portfolios]
+        GetUniverse[GET Universe]
+        GetPPO[GET PPO Portfolio]
+        GetSAC[GET SAC Portfolio]
+        GetHRP[GET HRP Portfolio]
+    end
+
+    Phase0 --> Phase1
+
     subgraph Phase1[Phase 1 - Signals and Forecasts]
-        PickSymbols --> Fundamentals[POST Fundamentals]
-        PickSymbols --> NewsSentiment[POST News Sentiment]
-        PickSymbols --> LSTMForecast[POST LSTM Forecast]
-        PickSymbols --> PatchTSTForecast[POST PatchTST Forecast]
+        Fundamentals[POST Fundamentals]
+        NewsSentiment[POST News Sentiment]
+        LSTMForecast[POST LSTM Forecast]
+        PatchTSTForecast[POST PatchTST Forecast]
     end
-    
+
+    Phase1 --> Phase2
+
     subgraph Phase2[Phase 2 - Allocators]
-        LSTMForecast --> SAC_LSTM[POST SAC+LSTM]
-        LSTMForecast --> PPO_LSTM[POST PPO+LSTM]
-        PatchTSTForecast --> SAC_PatchTST[POST SAC+PatchTST]
-        PatchTSTForecast --> PPO_PatchTST[POST PPO+PatchTST]
-        Fundamentals --> HRP[POST HRP]
+        PPO[POST PPO Inference]
+        SAC[POST SAC Inference]
+        HRP[POST HRP Allocation]
     end
-    
-    SAC_LSTM --> MergeAll[Merge All Results]
-    SAC_PatchTST --> MergeAll
-    PPO_LSTM --> MergeAll
-    PPO_PatchTST --> MergeAll
-    HRP --> MergeAll
-    
-    MergeAll --> OpenAI[OpenAI Summary]
-    OpenAI --> Email[Gmail Send]
+
+    Phase2 --> Phase3
+
+    subgraph Phase3[Phase 3 - Generate Orders]
+        OrdersPPO[Generate PPO Orders]
+        OrdersSAC[Generate SAC Orders]
+        OrdersHRP[Generate HRP Orders]
+    end
+
+    Phase3 --> Phase4
+
+    subgraph Phase4[Phase 4 - Submit Orders]
+        SubmitPPO[Submit PPO to Alpaca]
+        SubmitSAC[Submit SAC to Alpaca]
+        SubmitHRP[Submit HRP to Alpaca]
+    end
+
+    Phase4 --> Phase5
+
+    subgraph Phase5[Phase 5 - Update Execution]
+        HistoryPPO[Get PPO Order History]
+        HistorySAC[Get SAC Order History]
+    end
+
+    Phase5 --> Phase6
+
+    subgraph Phase6[Phase 6 - Summary and Email]
+        Summary[POST LLM Summary]
+        Summary --> SendEmail[POST Send Email]
+    end
 ```
 
-**Phase 1** runs 4 nodes in parallel: fundamentals, news sentiment, LSTM forecast, PatchTST forecast.
+**Skip logic:** Algorithms are skipped if they have open orders from a previous run (prevents duplicate submissions).
 
-**Phase 2** runs 5 nodes in parallel after Phase 1 completes: SAC+LSTM, SAC+PatchTST, PPO+LSTM, PPO+PatchTST, HRP. The RL allocators use a mock portfolio (cash=10000, no positions) for paper trading simulation.
-
-### Environment variables (optional)
+### Environment variables
 
 ```bash
-# n8n configuration
-N8N_HOST=localhost
-N8N_PORT=5678
-N8N_PROTOCOL=http
-WEBHOOK_URL=http://localhost:5678/
+# Brain API URL (for Prefect to call)
+BRAIN_API_URL=http://localhost:8000
 
 # Timezone (IST for Monday 6 PM runs)
 TZ=Asia/Kolkata
@@ -373,7 +433,23 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
+| `POST /llm/weekly-summary` | Generate AI summary of weekly forecasts and allocations |
 | `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
+
+### Email endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP |
+| `POST /email/training-summary` | Send training summary email |
+
+### Alpaca endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /alpaca/portfolio` | Get account positions, cash, and open orders count |
+| `POST /alpaca/submit-orders` | Submit orders to Alpaca paper trading |
+| `GET /alpaca/order-history` | Get order execution history |
 
 ### Other endpoints
 
@@ -432,8 +508,8 @@ Monday inference runs **do not retrain** models. Training happens separately.
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all models | Manual |
-| Weekly (Sunday) | Fine-tune PPO + SAC variants | Cron |
-| Monday 6 PM IST | Inference only (all models) | Cron (n8n) |
+| Weekly (Sunday) | Fine-tune PPO + SAC variants | Cron (Prefect) |
+| Monday 6 PM IST | Inference only (all models) | Cron (Prefect) |
 
 ### Training workflow
 
@@ -536,7 +612,7 @@ The API is designed so each endpoint can become a standalone **Google Cloud Func
 1. Extract endpoint handler → standalone `main.py` with `def handler(request):`
 2. Swap `LocalStorage` → `HuggingFaceStorage` via environment variable
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
-4. Update n8n to call Cloud Function URL instead of local FastAPI
+4. Update `BRAIN_API_URL` in Prefect to call Cloud Function URL instead of local FastAPI
 
 ## Code structure
 
