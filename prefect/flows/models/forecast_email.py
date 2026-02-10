@@ -68,9 +68,14 @@ class LSTMPrediction(BaseModel):
     """A single LSTM prediction."""
 
     symbol: str
-    predicted_weekly_return_pct: float
+    predicted_weekly_return_pct: float | None = None
+    predicted_volatility: float | None = None
     direction: str
     has_enough_history: bool
+    history_days_used: int = 0
+    data_end_date: str | None = None
+    target_week_start: str = ""
+    target_week_end: str = ""
 
 
 class LSTMInferenceResponse(BaseModel):
@@ -87,9 +92,16 @@ class PatchTSTPrediction(BaseModel):
     """A single PatchTST prediction."""
 
     symbol: str
-    predicted_weekly_return_pct: float
+    predicted_weekly_return_pct: float | None = None
+    predicted_volatility: float | None = None
     direction: str
     has_enough_history: bool
+    history_days_used: int = 0
+    data_end_date: str | None = None
+    target_week_start: str = ""
+    target_week_end: str = ""
+    has_news_data: bool = False
+    has_fundamentals_data: bool = False
 
 
 class PatchTSTInferenceResponse(BaseModel):
@@ -103,6 +115,15 @@ class PatchTSTInferenceResponse(BaseModel):
     target_week_end: str | None = None
 
 
+class WeightChange(BaseModel):
+    """Weight change for a single symbol."""
+
+    symbol: str
+    current_weight: float
+    target_weight: float
+    change: float
+
+
 class PPOInferenceResponse(BaseModel):
     """Response from POST /inference/ppo."""
 
@@ -111,6 +132,7 @@ class PPOInferenceResponse(BaseModel):
     model_version: str
     target_week_start: str | None = None
     target_week_end: str | None = None
+    weight_changes: list[WeightChange] = []
 
 
 class SACInferenceResponse(BaseModel):
@@ -121,6 +143,7 @@ class SACInferenceResponse(BaseModel):
     model_version: str
     target_week_start: str | None = None
     target_week_end: str | None = None
+    weight_changes: list[WeightChange] = []
 
 
 class HRPAllocationResponse(BaseModel):
@@ -129,6 +152,7 @@ class HRPAllocationResponse(BaseModel):
     percentage_weights: dict[str, float]
     symbols_used: int
     symbols_excluded: list[str] = []
+    lookback_days: int = 0
     as_of_date: str
 
 
@@ -141,6 +165,14 @@ class NewsArticle(BaseModel):
     """A news article with sentiment."""
 
     title: str
+    publisher: str = ""
+    link: str = ""
+    published: str | None = None
+    finbert_label: str = ""
+    finbert_p_pos: float = 0.0
+    finbert_p_neg: float = 0.0
+    finbert_p_neu: float = 0.0
+    article_score: float = 0.0
     url: str | None = None
     sentiment_score: float | None = None
 
@@ -151,12 +183,18 @@ class PerSymbolNews(BaseModel):
     symbol: str
     sentiment_score: float
     article_count: int = 0
+    article_count_fetched: int = 0
+    article_count_used: int = 0
+    insufficient_news: bool = False
     top_k_articles: list[NewsArticle] = []
 
 
 class NewsSignalResponse(BaseModel):
     """Response from POST /signals/news."""
 
+    run_id: str = ""
+    attempt: int = 1
+    from_cache: bool = False
     per_symbol: list[PerSymbolNews]
     as_of_date: str
 
@@ -164,6 +202,8 @@ class NewsSignalResponse(BaseModel):
 class FundamentalRatios(BaseModel):
     """Financial ratios for a stock."""
 
+    symbol: str = ""
+    as_of_date: str = ""
     gross_margin: float | None = None
     operating_margin: float | None = None
     net_margin: float | None = None
@@ -176,6 +216,7 @@ class PerSymbolFundamentals(BaseModel):
 
     symbol: str
     ratios: FundamentalRatios | None = None
+    error: str | None = None
 
 
 class FundamentalsResponse(BaseModel):

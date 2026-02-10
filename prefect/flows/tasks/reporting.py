@@ -28,19 +28,23 @@ def _alloc_to_dict(alloc, is_hrp: bool = False, as_of_date: str = "") -> dict:
                 "percentage_weights": {},
                 "symbols_used": 0,
                 "symbols_excluded": [],
+                "lookback_days": 0,
                 "as_of_date": as_of_date,
             }
         return {
             "target_weights": {},
             "turnover": 0,
             "model_version": "skipped",
+            "target_week_start": "",
+            "target_week_end": "",
+            "weight_changes": [],
         }
     return alloc.model_dump()
 
 
 def _submit_to_dict(submit) -> dict:
     """Convert submit response to dict."""
-    if isinstance(submit, SkippedSubmitResponse) or submit.skipped:
+    if isinstance(submit, SkippedSubmitResponse) or getattr(submit, "skipped", False):
         return {"orders_submitted": 0, "orders_failed": 0, "skipped": True}
     return {
         "orders_submitted": submit.orders_submitted,

@@ -107,7 +107,7 @@ def submit_orders_ppo(
     """Submit PPO orders to Alpaca."""
     logger = get_run_logger()
 
-    if isinstance(orders, SkippedOrdersResponse) or orders.skipped:
+    if isinstance(orders, SkippedOrdersResponse) or getattr(orders, "skipped", False):
         logger.info("PPO orders skipped")
         return SkippedSubmitResponse(account="ppo", skipped=True)
 

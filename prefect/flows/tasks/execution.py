@@ -36,7 +36,9 @@ def generate_orders_ppo(
     """Generate orders for PPO allocation."""
     logger = get_run_logger()
 
-    if isinstance(allocation, SkippedAllocation) or allocation.skipped:
+    if isinstance(allocation, SkippedAllocation) or getattr(
+        allocation, "skipped", False
+    ):
         logger.info("PPO skipped - returning empty orders")
         return SkippedOrdersResponse(skipped=True, algorithm="ppo")
 

@@ -1,6 +1,6 @@
 # Commit Message Generator Command
 
-## 🚨 CRITICAL: NEVER BYPASS PRE-COMMIT HOOKS
+## 🚨 CRITICAL: NEVER BYPASS PRE-COMMIT HOOKS AND NEVER DO OTHER BY PASS WAYS LIKE NOQA (SKIP TEST OR SKIP RUFF)
 
 **NEVER USE `--no-verify` OR `-n` FLAGS WITH GIT COMMIT**
 
@@ -15,6 +15,9 @@ If hooks fail, FIX THE ISSUE instead of bypassing the check.
 
 ## Purpose
 Analyze all staged Git changes and generate a beautiful, detailed commit message that clearly explains what was changed, why, and the impact.
+
+## ⚠️ CRITICAL: NO CoAuthor
+Never add something like co author by cursor or any agent.
 
 ## ⚠️ CRITICAL: Prevent Pager/User Input Issues
 
