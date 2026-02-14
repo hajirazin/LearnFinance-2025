@@ -1,4 +1,12 @@
-"""PatchTST inference helpers."""
+"""PatchTST inference helpers.
+
+5-channel OHLCV direct 5-day multi-task inference.
+
+Single forward pass produces (batch, 5, 5) output -- 5 days x 5 channels.
+RevIN automatically denormalizes output to original log-return scale.
+Extract close_ret channel for weekly return prediction. NO inverse-transform
+needed.
+"""
 
 from dataclasses import dataclass
 from datetime import date
@@ -20,7 +28,7 @@ class InferenceFeatures:
     """Multi-channel features prepared for inference for a single symbol."""
 
     symbol: str
-    features: np.ndarray | None  # Shape: (context_length, n_channels) or None
+    features: np.ndarray | None  # Shape: (context_length, 5) -- OHLCV only, or None
     has_enough_history: bool
     history_days_used: int
     data_end_date: date | None
@@ -46,6 +54,7 @@ class SymbolPrediction:
     target_week_end: str
     has_news_data: bool
     has_fundamentals_data: bool
+    daily_returns: list[float] | None = None  # 5 daily close_ret predictions
 
 
 def build_inference_features(
@@ -56,12 +65,11 @@ def build_inference_features(
     config: PatchTSTConfig,
     cutoff_date: date,
 ) -> InferenceFeatures:
-    """Build multi-channel feature sequence for inference.
+    """Build 5-channel OHLCV feature sequence for inference.
 
-    Constructs the same features as training:
-    - OHLCV log returns (5 channels)
-    - News sentiment (1 channel) - forward-filled
-    - Fundamentals (5 channels) - forward-filled
+    Still loads news/fundamentals data to set has_news_data/has_fundamentals_data
+    flags in the response. But only OHLCV log returns (5 channels) are returned
+    as model features.
 
     Args:
         symbol: Ticker symbol
@@ -72,7 +80,7 @@ def build_inference_features(
         cutoff_date: Features end before this date (typically target_week_start)
 
     Returns:
-        InferenceFeatures with prepared multi-channel feature sequence
+        InferenceFeatures with 5-channel OHLCV feature sequence (UNSCALED)
     """
     has_news_data = news_df is not None and len(news_df) > 0
     has_fundamentals_data = fundamentals_df is not None and len(fundamentals_df) > 0
@@ -120,10 +128,10 @@ def build_inference_features(
             starting_price=None,
         )
 
-    # Compute price features using shared utility
+    # Compute OHLCV log returns (5 channels)
     features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
 
-    # Normalize index to timezone-naive for consistent comparisons with news/fundamentals data
+    # Normalize index to timezone-naive for consistent comparisons
     if features_df.index.tz is not None:
         features_df.index = features_df.index.tz_localize(None)
 
@@ -141,68 +149,15 @@ def build_inference_features(
             starting_price=None,
         )
 
-    # Add news sentiment (forward-fill missing days)
-    if news_df is not None and len(news_df) > 0:
-        sentiment_aligned = news_df.reindex(features_df.index, method="ffill")
-        features_df["news_sentiment"] = sentiment_aligned["sentiment_score"].fillna(0.0)
-    else:
-        features_df["news_sentiment"] = 0.0  # Neutral if no news data
-
-    # Add fundamentals (forward-fill quarterly data)
-    fundamental_cols = [
-        "gross_margin",
-        "operating_margin",
-        "net_margin",
-        "current_ratio",
-        "debt_to_equity",
-    ]
-    if fundamentals_df is not None and len(fundamentals_df) > 0:
-        fund_aligned = fundamentals_df.reindex(features_df.index, method="ffill")
-
-        # Vectorized calculation of days since last fundamental update
-        fund_dates = fundamentals_df.index.values
-        if len(fund_dates) > 0:
-            positions = np.searchsorted(
-                fund_dates, features_df.index.values, side="right"
-            )
-            valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
-            last_updates = fund_dates[valid_positions]
-            days_old = (
-                (features_df.index.values - last_updates)
-                .astype("timedelta64[D]")
-                .astype(float)
-            )
-            days_old[positions == 0] = 999.0
-        else:
-            days_old = np.full(len(features_df), 999.0)
-
-        # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
-        features_df["fundamental_age"] = days_old / 90.0
-
-        for col in fundamental_cols:
-            if col in fund_aligned.columns:
-                features_df[col] = fund_aligned[col].fillna(0.0)
-            else:
-                features_df[col] = 0.0
-    else:
-        # No fundamentals - use zeros and max age
-        features_df["fundamental_age"] = 1.0  # Max age (90+ days)
-        for col in fundamental_cols:
-            features_df[col] = 0.0
-
-    # Ensure column order matches config.feature_names
-    features_df = features_df[config.feature_names]
-
-    # Take last context_length rows
-    sequence = features_df.iloc[-config.context_length :].values
+    # Extract only 5 OHLCV columns for model input
+    ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+    sequence = features_df[ohlcv_cols].iloc[-config.context_length :].values  # (60, 5)
     data_end_date = features_df.index[-1].date()
 
     # Get starting price: last close price before cutoff_date (for weekly return calculation)
-    # This will be used as the base price for computing weekly return from daily predictions
     starting_price = None
     if len(df) > 0:
         try:
-            # Get the last close price before cutoff_date
             last_close = df.iloc[-1]["close"]
             if pd.notna(last_close) and last_close > 0:
                 starting_price = float(last_close)
@@ -211,7 +166,7 @@ def build_inference_features(
 
     return InferenceFeatures(
         symbol=symbol,
-        features=sequence,
+        features=sequence,  # (context_length, 5) -- OHLCV only, UNSCALED
         has_enough_history=True,
         history_days_used=len(features_df),
         data_end_date=data_end_date,
@@ -228,13 +183,15 @@ def run_inference(
     week_boundaries: WeekBoundaries,
     config: PatchTSTConfig,
 ) -> list[SymbolPrediction]:
-    """Run PatchTST inference on prepared multi-channel feature sequences.
+    """Run PatchTST inference -- single forward pass, 5-day direct prediction.
 
-    Predicts 5 daily returns iteratively (Monday-Friday) and aggregates to weekly return.
+    Single forward pass produces (batch, 5, 5) output. RevIN automatically
+    denormalizes output to original log-return scale. Extract close_ret
+    channel for weekly return. NO scaler inverse-transform needed.
 
     Args:
         model: Loaded PatchTSTForPrediction model in eval mode
-        feature_scaler: Fitted StandardScaler from training
+        feature_scaler: Fitted StandardScaler (diagnostic only -- NOT used here)
         features_list: List of InferenceFeatures (one per symbol)
         week_boundaries: Target week info for the response
         config: PatchTST configuration (for feature names)
@@ -264,135 +221,47 @@ def run_inference(
                 target_week_end=week_boundaries.target_week_end.isoformat(),
                 has_news_data=feat.has_news_data,
                 has_fundamentals_data=feat.has_fundamentals_data,
+                daily_returns=None,
             )
         )
 
     if not valid_features:
         return predictions
 
-    # Find close_ret channel index
-    try:
-        close_ret_idx = config.feature_names.index("close_ret")
-    except ValueError as e:
-        raise ValueError(
-            f"close_ret not found in feature_names: {config.feature_names}"
-        ) from e
+    # close_ret channel index in the 5-channel OHLCV output
+    close_ret_idx = config.feature_names.index("close_ret")  # = 3
 
-    # Prepare initial input sequences for all symbols
-    # Shape: (n_samples, context_length, num_channels)
+    # Prepare input batch: (n_samples, context_length, 5) -- raw OHLCV log returns
     X_batch = np.array([f.features for _, f in valid_features])
-
-    # Scale features using the training scaler
-    original_shape = X_batch.shape
-    X_flat = X_batch.reshape(-1, X_batch.shape[-1])
-    X_scaled = feature_scaler.transform(X_flat)
-    X_batch = X_scaled.reshape(original_shape)
 
     model.eval()
     device = next(model.parameters()).device
 
-    # Find indices for OHLCV channels (for constructing new day's features)
-    try:
-        open_ret_idx = config.feature_names.index("open_ret")
-        high_ret_idx = config.feature_names.index("high_ret")
-        low_ret_idx = config.feature_names.index("low_ret")
-        volume_ret_idx = config.feature_names.index("volume_ret")
-    except ValueError as e:
-        raise ValueError(f"Required channel not found in feature_names: {e}") from e
-
-    # Predict 5 daily returns iteratively (Monday through Friday)
-    # Pre-allocate arrays to avoid memory fragmentation
-    n_samples = len(valid_features)
-    daily_returns = np.zeros((5, n_samples), dtype=np.float32)
-
-    # Pre-compute OHLCV channel mask for vectorized operations
-    ohlcv_indices = np.array(
-        [open_ret_idx, high_ret_idx, low_ret_idx, close_ret_idx, volume_ret_idx]
-    )
-    non_ohlcv_mask = np.ones(config.num_input_channels, dtype=bool)
-    non_ohlcv_mask[ohlcv_indices] = False
-
-    # Pre-allocate working arrays (reused each iteration to reduce memory allocation)
-    X_current = X_batch  # No copy needed - we'll modify in place
-    new_day_features = np.zeros(
-        (n_samples, config.num_input_channels), dtype=np.float32
-    )
-
+    # Single forward pass -- NO scaler transform, RevIN normalizes internally
+    # Output is (batch, 5, 5) already in ORIGINAL scale (denormalized by RevIN)
     with torch.no_grad():
-        for day in range(5):
-            # Convert to tensor and move to device
-            X_tensor = torch.from_numpy(X_current).float().to(device)
+        X_tensor = torch.from_numpy(X_batch).float().to(device)  # (batch, 60, 5)
+        outputs = model(
+            past_values=X_tensor
+        ).prediction_outputs  # (batch, 5, 5) original scale
+        # Extract close_ret channel -- already in log-return scale (denormalized by RevIN)
+        daily_preds = outputs[:, :, close_ret_idx].cpu().numpy()  # (batch, 5)
+        del X_tensor, outputs
 
-            # Predict next-day return
-            outputs = model(past_values=X_tensor).prediction_outputs
-            # Extract close_ret channel for next-day return prediction (in scaled space)
-            scaled_preds = outputs[:, 0, close_ret_idx].cpu().numpy()
-
-            # CRITICAL: Inverse transform predictions from scaled space back to return space
-            # Model outputs are in StandardScaler space, need to convert back:
-            # unscaled = scaled * std + mean
-            daily_returns[day] = (
-                scaled_preds * feature_scaler.scale_[close_ret_idx]
-                + feature_scaler.mean_[close_ret_idx]
-            )
-
-            # Explicit cleanup of GPU tensor
-            del X_tensor, outputs
-
-            # Update input sequences for next iteration (except for the last day)
-            if day < 4:  # Don't need to update after Friday prediction
-                # Get the last day's scaled features for non-OHLCV channels (forward-fill)
-                # Instead of inverse transform + transform, work directly in scaled space
-                # for non-OHLCV channels since they just get copied forward
-                last_day_scaled = X_current[:, -1, :]
-
-                # Vectorized feature construction
-                # Set OHLCV returns to predicted close_ret (in scaled space)
-                # Note: predicted returns are already in unscaled space, need to scale them
-                pred_returns = daily_returns[day].reshape(-1, 1)
-                # Scale the predicted returns using scaler's mean/std for close_ret
-                scaled_pred = (
-                    pred_returns - feature_scaler.mean_[close_ret_idx]
-                ) / feature_scaler.scale_[close_ret_idx]
-
-                # Fill new_day_features vectorized
-                new_day_features[:, open_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, high_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, low_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, close_ret_idx] = scaled_pred.ravel()
-                # Scale volume_ret (0.0 in unscaled space)
-                new_day_features[:, volume_ret_idx] = (
-                    -feature_scaler.mean_[volume_ret_idx]
-                    / feature_scaler.scale_[volume_ret_idx]
-                )
-
-                # Copy non-OHLCV channels from last day (already scaled)
-                new_day_features[:, non_ohlcv_mask] = last_day_scaled[:, non_ohlcv_mask]
-
-                # Update sequences in-place: shift left and add new day
-                X_current[:, :-1, :] = X_current[:, 1:, :]
-                X_current[:, -1, :] = new_day_features
-
-    # Transpose to get shape (5, n_samples) - already in correct shape
+    # NO inverse-transform needed! prediction_outputs are denormalized by RevIN
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):
-        # Get 5 daily returns for this symbol
-        symbol_daily_returns = daily_returns[:, i]  # Shape: (5,)
+        symbol_daily = daily_preds[i]  # (5,) daily close log returns
 
-        # Compute weekly return from 5 daily returns
-        # Method 1: Compound returns: (1 + r1) * (1 + r2) * ... * (1 + r5) - 1
-        weekly_return = float(np.prod(1 + symbol_daily_returns) - 1)
+        # Compound log returns: weekly_return = exp(sum(5 log returns)) - 1
+        weekly_return = float(np.exp(np.sum(symbol_daily)) - 1)
 
-        # Alternative: If we have starting_price, compute final price and return
-        # This is more accurate but requires starting_price
-        if feat.starting_price is not None and feat.starting_price > 0:
-            final_price = feat.starting_price * np.prod(1 + symbol_daily_returns)
-            weekly_return = (final_price - feat.starting_price) / feat.starting_price
+        # Compute volatility as std dev of daily log returns
+        volatility = float(np.std(symbol_daily))
 
-        # Compute volatility as std dev of daily returns
-        # This gives the RL agent risk information alongside return prediction
-        volatility = float(np.std(symbol_daily_returns))
+        # Daily returns list for response
+        daily_returns_list = symbol_daily.tolist()
 
         weekly_return_pct = weekly_return * 100
         direction = classify_direction(weekly_return)
@@ -412,6 +281,7 @@ def run_inference(
                 target_week_end=week_boundaries.target_week_end.isoformat(),
                 has_news_data=feat.has_news_data,
                 has_fundamentals_data=feat.has_fundamentals_data,
+                daily_returns=daily_returns_list,
             )
         )
 

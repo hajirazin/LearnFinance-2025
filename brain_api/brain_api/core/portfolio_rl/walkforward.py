@@ -533,17 +533,18 @@ def _run_patchtst_snapshot_inference(
     weekly_dates: pd.DatetimeIndex | None = None,
     symbol: str | None = None,
 ) -> tuple[list[float], list[float]]:
-    """Run PatchTST snapshot inference for a symbol with multi-channel support.
+    """Run PatchTST snapshot inference for a symbol.
 
-    Enhanced to load daily OHLCV, news sentiment, and fundamentals for
-    proper multi-channel PatchTST inference when available.
+    Loads daily OHLCV data only (no news/fundamentals -- PatchTST uses
+    5-channel OHLCV input). Single forward pass per week produces
+    direct 5-day predictions.
 
     Args:
         artifacts: Loaded PatchTST snapshot artifacts
         prices: Weekly price array for the symbol (fallback only)
         year_indices: Indices to predict
         weekly_dates: DatetimeIndex of weekly dates (for loading daily data)
-        symbol: Stock symbol (for loading historical signals)
+        symbol: Stock symbol (for loading historical OHLCV)
 
     Returns:
         Tuple of (predictions, volatilities) lists
@@ -557,17 +558,11 @@ def _run_patchtst_snapshot_inference(
     config = artifacts.config
     context_length = config.context_length
 
-    # Determine if we can use multi-channel features
-    use_multichannel = (
-        weekly_dates is not None
-        and symbol is not None
-        and config.num_input_channels > 1
-    )
+    # Determine if we can use OHLCV features
+    use_multichannel = weekly_dates is not None and symbol is not None
 
-    # Load daily data if multi-channel is enabled
+    # Load daily OHLCV only (skip news/fundamentals -- PatchTST uses 5 OHLCV channels)
     daily_ohlcv: pd.DataFrame | None = None
-    daily_news: pd.DataFrame | None = None
-    daily_fundamentals: pd.DataFrame | None = None
 
     if use_multichannel and len(year_indices) > 0:
         try:
@@ -581,27 +576,15 @@ def _run_patchtst_snapshot_inference(
             )
             end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
 
-            # Load daily OHLCV
+            # Load daily OHLCV only
             daily_ohlcv = _load_daily_ohlcv(symbol, start_date, end_date)
-
-            # Load news sentiment
-            daily_news = _load_historical_news_for_walkforward(
-                symbol, start_date, end_date
-            )
-
-            # Load fundamentals
-            daily_fundamentals = _load_historical_fundamentals_for_walkforward(
-                symbol, start_date, end_date
-            )
 
             if daily_ohlcv is not None:
                 logger.debug(
                     f"[WalkForward] Loaded {len(daily_ohlcv)} days of OHLCV for {symbol}"
                 )
         except Exception as e:
-            logger.warning(
-                f"[WalkForward] Failed to load multi-channel data for {symbol}: {e}"
-            )
+            logger.warning(f"[WalkForward] Failed to load OHLCV data for {symbol}: {e}")
             use_multichannel = False
 
     model.eval()
@@ -616,8 +599,8 @@ def _run_patchtst_snapshot_inference(
                 weekly_prices=prices,
                 weekly_dates=weekly_dates,
                 daily_ohlcv=daily_ohlcv,
-                daily_news=daily_news,
-                daily_fundamentals=daily_fundamentals,
+                daily_news=None,
+                daily_fundamentals=None,
                 use_multichannel=use_multichannel,
             )
             predictions.append(ret)
@@ -638,12 +621,15 @@ def _predict_single_week_patchtst(
     daily_fundamentals: pd.DataFrame | None,
     use_multichannel: bool,
 ) -> tuple[float, float]:
-    """Generate PatchTST weekly prediction using 5-day iterative forecasting.
+    """Generate PatchTST weekly prediction using direct 5-day forecasting.
 
-    Predicts 5 daily returns (Mon-Fri) iteratively and compounds them to get
-    a weekly return. This matches the inference endpoint logic in patchtst/inference.py.
+    Single forward pass produces (1, 5, 5) output -- 5 days x 5 channels.
+    RevIN denormalizes output to original log-return scale automatically.
+    Extract close_ret channel. NO scaler inverse-transform needed.
 
-    Uses multi-channel features if available, falls back to simple close returns.
+    Bug fixes applied:
+    - Bug #E: Removed .permute(0, 2, 1) that crashed PatchTST
+    - Bug #F: Uses exp(sum(log_returns)) - 1 instead of prod(1 + log_returns) - 1
 
     Returns:
         Tuple of (weekly_return, volatility) where volatility is std of daily returns.
@@ -664,7 +650,7 @@ def _predict_single_week_patchtst(
             return (ret, 0.0)
         return (0.0, 0.0)
 
-    # Try multi-channel approach with 5-day iterative prediction
+    # Use 5-channel OHLCV features with single forward pass
     if use_multichannel and daily_ohlcv is not None and weekly_dates is not None:
         try:
             # Get cutoff date (Friday of this week - predict for next week)
@@ -692,223 +678,37 @@ def _predict_single_week_patchtst(
             if len(features_df) < context_length:
                 return momentum_fallback()
 
-            # Take last context_length rows
-            features_df = features_df.iloc[-context_length:]
+            # Extract only 5 OHLCV columns
+            ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+            ohlcv_features = (
+                features_df[ohlcv_cols].iloc[-context_length:].values
+            )  # (60, 5)
 
-            # Add news sentiment channel if available
-            if daily_news is not None and len(daily_news) > 0:
-                news_aligned = daily_news.reindex(
-                    features_df.index, method="ffill"
-                ).fillna(0.0)
-                features_df["news_sentiment"] = news_aligned["sentiment_score"]
-            elif config.num_input_channels > 5:
-                features_df["news_sentiment"] = 0.0
+            # close_ret channel index
+            close_ret_idx = 3
 
-            # Add fundamentals channels if available
-            fund_cols = [
-                "gross_margin",
-                "operating_margin",
-                "net_margin",
-                "current_ratio",
-                "debt_to_equity",
-            ]
-            if daily_fundamentals is not None and len(daily_fundamentals) > 0:
-                fund_aligned = daily_fundamentals.reindex(
-                    features_df.index, method="ffill"
-                ).fillna(0.0)
-                for col in fund_cols:
-                    if col in fund_aligned.columns:
-                        features_df[col] = fund_aligned[col]
-                    elif config.num_input_channels > 6:
-                        features_df[col] = 0.0
-            elif config.num_input_channels > 6:
-                for col in fund_cols:
-                    features_df[col] = 0.0
+            # NO scaler transform -- RevIN normalizes internally
+            # Single forward pass -- NO permute! (Bug #E fix)
+            x = torch.tensor(ohlcv_features, dtype=torch.float32).unsqueeze(
+                0
+            )  # (1, 60, 5)
+            output = model(past_values=x).prediction_outputs  # (1, 5, 5) ORIGINAL scale
 
-            # Add fundamental_age if needed (matches config.feature_names)
-            if config.num_input_channels > 11:
-                features_df["fundamental_age"] = 1.0  # Default max age
+            # Extract close_ret channel -- already denormalized by RevIN
+            daily_log_returns = output[0, :, close_ret_idx].cpu().numpy()  # (5,)
 
-            # Build feature array
-            features = features_df.values  # (context_length, n_channels)
-
-            # Match expected channels
-            if features.shape[1] != config.num_input_channels:
-                # Pad or truncate to match model
-                if features.shape[1] < config.num_input_channels:
-                    padding = np.zeros(
-                        (
-                            features.shape[0],
-                            config.num_input_channels - features.shape[1],
-                        )
-                    )
-                    features = np.hstack([features, padding])
-                else:
-                    features = features[:, : config.num_input_channels]
-
-            # Apply scaler
-            if scaler is not None:
-                features_scaled = scaler.transform(features)
-            else:
-                features_scaled = features
-
-            # Find close_ret channel index for extracting predictions
-            try:
-                close_ret_idx = config.feature_names.index("close_ret")
-            except (ValueError, AttributeError):
-                close_ret_idx = 3  # Default position in OHLCV
-
-            # Find OHLCV channel indices for updating sequence
-            try:
-                open_ret_idx = config.feature_names.index("open_ret")
-                high_ret_idx = config.feature_names.index("high_ret")
-                low_ret_idx = config.feature_names.index("low_ret")
-                volume_ret_idx = config.feature_names.index("volume_ret")
-            except (ValueError, AttributeError):
-                open_ret_idx, high_ret_idx, low_ret_idx, volume_ret_idx = 0, 1, 2, 4
-
-            # Predict 5 daily returns iteratively (Mon-Fri)
-            daily_returns = []
-            X_current = features_scaled.copy()
-
-            for day in range(5):
-                # Shape: (1, context_length, n_channels) -> permute to (1, n_channels, context_length)
-                x = (
-                    torch.tensor(X_current, dtype=torch.float32)
-                    .unsqueeze(0)
-                    .permute(0, 2, 1)
-                )
-
-                # Run inference
-                output = model(past_values=x)
-
-                # Get prediction (scaled)
-                if hasattr(output, "prediction_outputs"):
-                    scaled_pred = output.prediction_outputs[:, 0, close_ret_idx].item()
-                elif hasattr(output, "last_hidden_state"):
-                    scaled_pred = output.last_hidden_state[:, -1, close_ret_idx].item()
-                else:
-                    return momentum_fallback()
-
-                # Inverse transform prediction from scaled space back to return space
-                if scaler is not None:
-                    daily_return = (
-                        scaled_pred * scaler.scale_[close_ret_idx]
-                        + scaler.mean_[close_ret_idx]
-                    )
-                else:
-                    daily_return = scaled_pred
-
-                daily_returns.append(daily_return)
-
-                # Update input sequence for next iteration (except for last day)
-                if day < 4:
-                    # Get last day's features for non-OHLCV channels (forward-fill)
-                    last_day_scaled = X_current[-1, :].copy()
-
-                    # Create new day features
-                    new_day = last_day_scaled.copy()
-
-                    # Scale predicted return back to scaled space for OHLCV channels
-                    if scaler is not None:
-                        scaled_return = (
-                            daily_return - scaler.mean_[close_ret_idx]
-                        ) / scaler.scale_[close_ret_idx]
-                    else:
-                        scaled_return = daily_return
-
-                    # Set OHLCV returns to predicted value (in scaled space)
-                    new_day[open_ret_idx] = scaled_return
-                    new_day[high_ret_idx] = scaled_return
-                    new_day[low_ret_idx] = scaled_return
-                    new_day[close_ret_idx] = scaled_return
-                    # Volume return stays at 0 (scaled)
-                    if scaler is not None:
-                        new_day[volume_ret_idx] = (
-                            -scaler.mean_[volume_ret_idx]
-                            / scaler.scale_[volume_ret_idx]
-                        )
-                    else:
-                        new_day[volume_ret_idx] = 0.0
-
-                    # Shift sequence left and add new day
-                    X_current[:-1, :] = X_current[1:, :]
-                    X_current[-1, :] = new_day
-
-            # Compound 5 daily returns to get weekly return
-            daily_returns_arr = np.array(daily_returns)
-            weekly_return = float(np.prod(1 + daily_returns_arr) - 1)
-            # Compute volatility as std of daily returns
-            volatility = float(np.std(daily_returns_arr))
+            # NO inverse-transform needed! RevIN already denormalized
+            # Bug #F fix: exp(sum) not prod(1+)
+            weekly_return = float(np.exp(np.sum(daily_log_returns)) - 1)
+            volatility = float(np.std(daily_log_returns))
             return (weekly_return, volatility)
 
         except Exception as e:
-            logger.debug(f"[WalkForward] Multi-channel 5-day inference failed: {e}")
+            logger.debug(f"[WalkForward] PatchTST 5-channel inference failed: {e}")
             return momentum_fallback()
 
-    # Fallback: single-channel from weekly prices with 5-day prediction
-    if weekly_idx < context_length:
-        return momentum_fallback()
-
-    price_seq = weekly_prices[weekly_idx - context_length : weekly_idx]
-    returns = np.diff(price_seq) / (price_seq[:-1] + 1e-8)
-
-    if len(returns) != context_length - 1:
-        return (0.0, 0.0)
-
-    features = returns.copy()
-
-    if scaler is not None:
-        flat_features = features.reshape(-1, 1)
-        flat_features = scaler.transform(flat_features)
-        features = flat_features.flatten()
-
-    import torch
-
-    # Predict 5 daily returns iteratively
-    daily_returns = []
-    X_current = features.copy()
-
-    for day in range(5):
-        x = torch.tensor(X_current.reshape(1, -1, 1), dtype=torch.float32).permute(
-            0, 2, 1
-        )
-
-        try:
-            output = model(past_values=x)
-            if hasattr(output, "prediction_outputs"):
-                scaled_pred = output.prediction_outputs[:, 0, 0].item()
-            elif hasattr(output, "last_hidden_state"):
-                scaled_pred = output.last_hidden_state[:, -1, 0].item()
-            else:
-                return momentum_fallback()
-
-            # Inverse transform
-            if scaler is not None:
-                daily_return = scaled_pred * scaler.scale_[0] + scaler.mean_[0]
-            else:
-                daily_return = scaled_pred
-
-            daily_returns.append(daily_return)
-
-            # Update sequence for next iteration
-            if day < 4:
-                if scaler is not None:
-                    scaled_return = (daily_return - scaler.mean_[0]) / scaler.scale_[0]
-                else:
-                    scaled_return = daily_return
-                X_current[:-1] = X_current[1:]
-                X_current[-1] = scaled_return
-
-        except Exception:
-            return momentum_fallback()
-
-    # Compound 5 daily returns to get weekly return
-    daily_returns_arr = np.array(daily_returns)
-    weekly_return = float(np.prod(1 + daily_returns_arr) - 1)
-    # Compute volatility as std of daily returns
-    volatility = float(np.std(daily_returns_arr))
-    return (weekly_return, volatility)
+    # Fallback: momentum proxy (no daily OHLCV available)
+    return momentum_fallback()
 
 
 def _load_daily_ohlcv(

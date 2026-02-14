@@ -32,9 +32,9 @@ def create_mock_patchtst_artifacts(
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
 
-    # Create a fitted scaler (fit on dummy data)
+    # Create a fitted scaler (fit on dummy data -- diagnostic only, not used for model normalization)
     scaler = StandardScaler()
-    dummy_data = np.random.randn(100, config.num_input_channels)
+    dummy_data = np.random.randn(100, 5)  # 5 OHLCV channels
     scaler.fit(dummy_data)
 
     # Create metadata
@@ -221,6 +221,8 @@ def test_inference_patchtst_returns_required_fields(client_with_mocks):
     assert "target_week_end" in pred
     assert "has_news_data" in pred
     assert "has_fundamentals_data" in pred
+    # daily_returns field (5 daily close_ret predictions)
+    assert "daily_returns" in pred
 
 
 def test_inference_patchtst_returns_numeric_prediction(client_with_mocks):
@@ -420,3 +422,28 @@ def test_inference_patchtst_signal_flags_in_predictions(client_with_mocks):
     # With mocks, both should be True
     assert pred["has_news_data"] is True
     assert pred["has_fundamentals_data"] is True
+
+
+# ============================================================================
+# Scenario 6: daily_returns field
+# ============================================================================
+
+
+def test_inference_patchtst_returns_daily_returns_field(client_with_mocks):
+    """POST /inference/patchtst returns daily_returns list in each prediction."""
+    response = client_with_mocks.post(
+        "/inference/patchtst",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+
+    pred = response.json()["predictions"][0]
+    assert "daily_returns" in pred
+
+    if pred["has_enough_history"]:
+        # daily_returns should be a list of 5 floats
+        assert pred["daily_returns"] is not None
+        assert isinstance(pred["daily_returns"], list)
+        assert len(pred["daily_returns"]) == 5
+        for dr in pred["daily_returns"]:
+            assert isinstance(dr, int | float)

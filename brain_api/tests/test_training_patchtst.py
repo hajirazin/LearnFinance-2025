@@ -83,12 +83,14 @@ def mock_data_aligner(prices, news_sentiment, fundamentals, config):
 
 
 def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
-    """Return a mock dataset result for weekly return prediction."""
+    """Return a mock dataset result for 5-channel OHLCV multi-task prediction."""
     # Return non-empty arrays to pass validation checks
+    # X: (n_samples, context_length, 5) -- 5 OHLCV channels
+    # y: (n_samples, 5, 5) -- 5 days x 5 channels (multi-task targets)
     n_samples = 10
     return DatasetResult(
-        X=np.random.randn(n_samples, config.context_length, config.num_input_channels),
-        y=np.random.randn(n_samples, config.prediction_length),
+        X=np.random.randn(n_samples, config.context_length, 5),
+        y=np.random.randn(n_samples, 5, 5),
         feature_scaler=StandardScaler(),
     )
 
@@ -208,8 +210,8 @@ def test_train_patchtst_returns_required_fields(client_with_mocks):
     assert isinstance(data["metrics"], dict)
 
     # Check PatchTST-specific fields
-    # 12 channels: OHLCV (5) + News (1) + Fundamentals (5) + FundamentalAge (1)
-    assert data["num_input_channels"] == 12  # Default config
+    # 5 channels: OHLCV only (open_ret, high_ret, low_ret, close_ret, volume_ret)
+    assert data["num_input_channels"] == 5  # Default config
     assert "ohlcv" in data["signals_used"]
     assert "news_sentiment" in data["signals_used"]
     assert "fundamentals" in data["signals_used"]

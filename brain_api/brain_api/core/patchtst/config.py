@@ -11,22 +11,22 @@ if TYPE_CHECKING:
 class PatchTSTConfig:
     """PatchTST model hyperparameters and training config.
 
-    PatchTST (Patch Time Series Transformer) configuration for multi-channel
-    weekly return prediction. This model supports multiple input channels:
-    - Price features (OHLCV log returns)
-    - News sentiment features
-    - Fundamental ratios
+    5-channel OHLCV direct 5-day multi-task prediction with RevIN.
 
-    The model predicts weekly returns aligned with the RL agent's weekly
-    decision horizon (Mon open → Fri close).
+    Uses channel-independent architecture with shared Transformer weights.
+    Multi-task loss on ALL 5 OHLCV channels provides data augmentation for
+    the shared weights. At inference, close_ret predictions are extracted
+    for the RL agent. RevIN (scaling="std") handles per-channel per-sample
+    normalization internally.
+
+    Input channels: OHLCV log returns (open_ret, high_ret, low_ret,
+    close_ret, volume_ret).
     """
 
     # Model architecture
-    num_input_channels: int = (
-        12  # OHLCV (5) + News (1) + Fundamentals (5) + FundamentalAge (1)
-    )
+    num_input_channels: int = 5  # OHLCV log returns only
     context_length: int = 60  # 60 trading days lookback (same as LSTM)
-    prediction_length: int = 1  # Single output: weekly return
+    prediction_length: int = 5  # Direct 5-day prediction
     patch_length: int = 16  # Standard patch size for PatchTST
     stride: int = 8  # 50% overlap between patches
 
@@ -45,9 +45,6 @@ class PatchTSTConfig:
     early_stopping_patience: int = 15  # Stop if val_loss doesn't improve for N epochs
     weight_decay: float = 1e-4  # L2 regularization
     max_grad_norm: float = 1.0  # Gradient clipping
-    sample_stride: int = (
-        5  # Sample every Nth day (5=weekly samples, 1=daily, reduces dataset 5x)
-    )
 
     # Feature engineering
     use_returns: bool = True  # Use log returns for OHLCV (more stationary)
@@ -55,21 +52,14 @@ class PatchTSTConfig:
     # Week filtering
     min_week_days: int = 3  # Skip weeks with fewer than 3 trading days
 
-    # Feature channel names for documentation
+    # Feature channel names (OHLCV only)
     feature_names: list[str] = field(
         default_factory=lambda: [
             "open_ret",
             "high_ret",
             "low_ret",
             "close_ret",
-            "volume_ret",  # OHLCV
-            "news_sentiment",  # News
-            "gross_margin",
-            "operating_margin",
-            "net_margin",  # Fundamentals
-            "current_ratio",
-            "debt_to_equity",
-            "fundamental_age",  # Fundamentals + age indicator
+            "volume_ret",
         ]
     )
 
@@ -93,7 +83,6 @@ class PatchTSTConfig:
             "early_stopping_patience": self.early_stopping_patience,
             "weight_decay": self.weight_decay,
             "max_grad_norm": self.max_grad_norm,
-            "sample_stride": self.sample_stride,
             "use_returns": self.use_returns,
             "min_week_days": self.min_week_days,
             "feature_names": self.feature_names,
@@ -104,6 +93,9 @@ class PatchTSTConfig:
 
         IMPORTANT: This must match _create_patchtst_model() in training.py exactly
         to ensure model architecture consistency between training and inference.
+
+        RevIN (scaling="std") is kept as default -- handles per-channel per-sample
+        normalization internally. DO NOT set scaling=None.
         """
         from transformers import PatchTSTConfig as HFPatchTSTConfig
 
@@ -111,13 +103,14 @@ class PatchTSTConfig:
             num_input_channels=self.num_input_channels,
             context_length=self.context_length,
             patch_length=self.patch_length,
-            stride=self.stride,  # Use "stride" to match training code
+            stride=self.stride,
             d_model=self.d_model,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             ffn_dim=self.ffn_dim,
             dropout=self.dropout,
             prediction_length=self.prediction_length,
+            # RevIN defaults to scaling="std" -- handles per-channel normalization
             # Additional settings to match training
             attention_dropout=self.dropout,
             positional_dropout=self.dropout,

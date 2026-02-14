@@ -140,8 +140,8 @@ class PatchTSTForecaster(BaseForecaster):
     ) -> dict[str, float]:
         """Build PatchTST forecast features.
 
-        Loads all 12 channels (OHLCV + news + fundamentals) for proper
-        multi-channel PatchTST inference.
+        Loads prices (+ news/fundamentals for response flags). Model uses
+        5 OHLCV channels only. News/fundamentals still loaded for flags.
 
         Args:
             symbols: List of stock ticker symbols
@@ -203,7 +203,7 @@ class PatchTSTForecaster(BaseForecaster):
                 f"[PatchTSTForecaster] Loaded fundamentals for {len(fundamentals_data)} symbols"
             )
 
-            # Build features with all 12 channels
+            # Build features (5 OHLCV channels for model, news/fundamentals for flags)
             features_list = []
             for symbol in symbols:
                 prices_df = prices.get(symbol)

@@ -1,4 +1,17 @@
-"""Dataset building for PatchTST training."""
+"""Dataset building for PatchTST training.
+
+Builds week-aligned samples for direct 5-day multi-task prediction.
+Each sample is anchored at the last trading day of a week. The input
+is a sequence of OHLCV log returns ending at the anchor day (inclusive),
+and the target is all 5 OHLCV log returns for the next 5 trading days.
+
+Multi-task: targets include ALL 5 channels (open_ret, high_ret, low_ret,
+close_ret, volume_ret) so the shared Transformer weights learn from all
+channels simultaneously (data augmentation effect).
+
+Targets and inputs are UNSCALED -- RevIN inside PatchTST handles
+per-channel per-sample normalization internally.
+"""
 
 from dataclasses import dataclass
 
@@ -11,39 +24,18 @@ from brain_api.core.patchtst.config import PatchTSTConfig
 
 @dataclass
 class DatasetResult:
-    """Result of dataset building for weekly return prediction."""
+    """Result of dataset building for direct 5-day multi-task prediction.
 
-    X: np.ndarray  # Input sequences: (n_samples, context_length, n_channels)
-    y: np.ndarray  # Targets: (n_samples, prediction_length) - weekly returns
-    feature_scaler: StandardScaler  # Scaler for input features
-
-
-def _compute_weekly_return(
-    price_df: pd.DataFrame,
-    week_start: pd.Timestamp,
-    week_end: pd.Timestamp,
-) -> float | None:
-    """Compute weekly return from OHLCV data.
-
-    Args:
-        price_df: DataFrame with OHLCV columns and DatetimeIndex
-        week_start: First trading day of the week
-        week_end: Last trading day of the week
-
-    Returns:
-        Weekly return = (week_end_close - week_start_open) / week_start_open
-        or None if data is missing
+    X: Input sequences of OHLCV log returns (UNSCALED -- RevIN normalizes internally).
+    y: Targets of ALL 5 OHLCV channels for next 5 trading days (UNSCALED).
+    feature_scaler: Fitted for diagnostics only (data drift monitoring). NOT used for model normalization.
     """
-    try:
-        start_price = price_df.loc[week_start, "open"]
-        end_price = price_df.loc[week_end, "close"]
 
-        if start_price == 0 or pd.isna(start_price) or pd.isna(end_price):
-            return None
-
-        return (end_price - start_price) / start_price
-    except KeyError:
-        return None
+    X: (
+        np.ndarray
+    )  # Input sequences: (n_samples, context_length, 5) -- OHLCV log returns
+    y: np.ndarray  # Targets: (n_samples, 5, 5) -- (5 days, 5 channels) UNSCALED
+    feature_scaler: StandardScaler  # Diagnostic only -- NOT applied to X or y
 
 
 def build_dataset(
@@ -51,21 +43,35 @@ def build_dataset(
     prices: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> DatasetResult:
-    """Build training dataset for next-day return prediction.
+    """Build training dataset for direct 5-day multi-task prediction.
 
-    Creates samples for daily return prediction:
-    - Input: context_length days of multi-channel features ending at day t
-    - Target: next-day return (close_ret channel for day t+1)
+    Creates week-aligned samples:
+    - Anchors at the last trading day of each week (detected by calendar gap >= 2 days)
+    - Input: context_length days of OHLCV log returns ending at anchor (inclusive)
+    - Target: ALL 5 OHLCV channels for the next 5 trading days
+
+    The aligned_features DataFrames may contain up to 12 channels (including
+    news/fundamentals). Only the 5 OHLCV columns are extracted for model input
+    and targets.
+
+    X and y are UNSCALED raw log returns. PatchTST's internal RevIN handles
+    per-channel per-sample normalization. A StandardScaler is still fitted on X
+    for diagnostics (data drift monitoring) but is NOT applied.
+
+    No holiday logic is needed: targets are always the next 5 rows in
+    the DataFrame, which are trading days by definition.
 
     Args:
         aligned_features: Dict of symbol -> aligned multi-channel DataFrame
-                         (output from align_multivariate_data)
-        prices: Dict of symbol -> raw OHLCV DataFrame (not used, kept for compatibility)
+                         (output from align_multivariate_data, may have 12 cols)
+        prices: Dict of symbol -> raw OHLCV DataFrame (not used, kept for interface compatibility)
         config: PatchTST configuration
 
     Returns:
-        DatasetResult with X, y (next-day returns), and feature_scaler
+        DatasetResult with X (UNSCALED), y (UNSCALED), and diagnostic feature_scaler
     """
+    ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+
     all_sequences = []
     all_targets = []
 
@@ -73,44 +79,64 @@ def build_dataset(
     symbols_used = 0
     total_samples = 0
 
-    # Find close_ret channel index
-    try:
-        close_ret_idx = config.feature_names.index("close_ret")
-    except ValueError as e:
-        raise ValueError(
-            f"close_ret not found in feature_names: {config.feature_names}"
-        ) from e
-
     for _symbol, features_df in aligned_features.items():
-        if len(features_df) < config.context_length + 1:
+        # Extract OHLCV columns only (5 channels)
+        missing_cols = [c for c in ohlcv_cols if c not in features_df.columns]
+        if missing_cols:
+            print(f"[PatchTST] Skipping {_symbol}: missing columns {missing_cols}")
             continue
+
+        ohlcv_df = features_df[ohlcv_cols]
+
+        # Need at least context_length + 5 rows
+        if len(ohlcv_df) < config.context_length + 5:
+            continue
+
+        # Detect week-end anchors: last trading day of each week
+        # A week-end is any day followed by a gap of >= 2 calendar days
+        # (weekends have 2-day gap, holiday weekends have 3+)
+        dates = ohlcv_df.index
+        n_dates = len(dates)
+
+        gaps = pd.Series(
+            [(dates[i + 1] - dates[i]).days for i in range(n_dates - 1)],
+            index=range(n_dates - 1),
+        )
+        week_ends = [i for i in range(len(gaps)) if gaps.iloc[i] >= 2]
 
         symbol_samples = 0
 
-        # Create samples: for each day t, predict day t+1's return
-        # We need at least context_length days of history, and at least 1 day ahead
-        # Use sample_stride to reduce dataset size (5=weekly-like sampling, 1=daily)
-        for t in range(
-            config.context_length, len(features_df) - 1, config.sample_stride
-        ):
-            # Extract input sequence: days [t-context_length, t)
-            seq_start_idx = t - config.context_length
-            seq_end_idx = t
+        for t in week_ends:
+            # Skip if not enough history for input sequence
+            if t < config.context_length - 1:
+                continue
 
-            sequence = features_df.iloc[seq_start_idx:seq_end_idx].values
+            # Skip if not enough future data for 5-day target
+            if t + 5 >= n_dates:
+                continue
+
+            # Input: context_length days ending at anchor (inclusive)
+            seq_start = t - config.context_length + 1
+            seq_end = t + 1  # exclusive, so includes position t
+            sequence = ohlcv_df.iloc[seq_start:seq_end].values  # (context_length, 5)
 
             if len(sequence) != config.context_length:
                 continue
 
-            # Target: next-day close return (day t+1)
-            next_day_close_ret = features_df.iloc[t + 1, close_ret_idx]
+            # Target: ALL 5 OHLCV channels for next 5 trading days
+            target = ohlcv_df.iloc[t + 1 : t + 6].values  # (5, 5) = 5 days x 5 channels
 
-            # Skip if target is NaN or Inf
-            if pd.isna(next_day_close_ret) or np.isinf(next_day_close_ret):
+            if target.shape != (5, 5):
+                continue
+
+            # Skip if any NaN or Inf in sequence or target
+            if np.any(np.isnan(sequence)) or np.any(np.isinf(sequence)):
+                continue
+            if np.any(np.isnan(target)) or np.any(np.isinf(target)):
                 continue
 
             all_sequences.append(sequence)
-            all_targets.append([next_day_close_ret])
+            all_targets.append(target)
             symbol_samples += 1
 
         if symbol_samples > 0:
@@ -118,60 +144,55 @@ def build_dataset(
             total_samples += symbol_samples
 
     print(
-        f"[PatchTST] Dataset built: {total_samples} samples from {symbols_used} symbols (stride={config.sample_stride})"
+        f"[PatchTST] Dataset built: {total_samples} week-aligned samples "
+        f"from {symbols_used} symbols"
     )
 
     if not all_sequences:
-        empty_X = np.array([]).reshape(
-            0, config.context_length, config.num_input_channels
-        )
-        empty_y = np.array([]).reshape(0, config.prediction_length)
+        empty_X = np.array([]).reshape(0, config.context_length, 5)
+        empty_y = np.array([]).reshape(0, 5, 5)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
             feature_scaler=StandardScaler(),
         )
 
-    X = np.array(all_sequences)
-    y = np.array(all_targets)
+    X = np.array(all_sequences)  # (n_samples, context_length, 5)
+    y = np.array(all_targets)  # (n_samples, 5, 5)
 
     # CRITICAL VERIFICATION: Dataset shape and channel count
-    assert X.shape[2] == config.num_input_channels, (
-        f"CRITICAL: Expected {config.num_input_channels} channels in X, got {X.shape[2]}"
-    )
+    assert X.shape[2] == 5, f"CRITICAL: Expected 5 channels in X, got {X.shape[2]}"
+    assert y.shape[1:] == (5, 5), f"CRITICAL: Expected y shape (n, 5, 5), got {y.shape}"
+
     print("[PatchTST] VERIFY DATASET:")
     print(
-        f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels={config.num_input_channels})"
+        f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels=5)"
     )
-    print(
-        f"  y shape: {y.shape} (samples, prediction_length={config.prediction_length})"
-    )
-    print(f"  Expected channels: {config.feature_names}")
-    print(f"  Target: next-day close_ret (channel {close_ret_idx})")
+    print(f"  y shape: {y.shape} (samples, 5 days, 5 channels)")
+    print(f"  Channels: {ohlcv_cols}")
+    print("  Targets: ALL 5 channels for next 5 trading days (UNSCALED)")
 
-    # Verify no NaN/Inf in X
+    # Verify no NaN/Inf
     x_nan_count = np.isnan(X).sum()
     x_inf_count = np.isinf(X).sum()
     y_nan_count = np.isnan(y).sum()
     y_inf_count = np.isinf(y).sum()
     if x_nan_count > 0:
-        print(f"  ⚠️ CRITICAL: X has {x_nan_count} NaN values")
+        print(f"  WARNING: X has {x_nan_count} NaN values")
     if x_inf_count > 0:
-        print(f"  ⚠️ CRITICAL: X has {x_inf_count} Inf values")
+        print(f"  WARNING: X has {x_inf_count} Inf values")
     if y_nan_count > 0:
-        print(f"  ⚠️ CRITICAL: y has {y_nan_count} NaN values")
+        print(f"  WARNING: y has {y_nan_count} NaN values")
     if y_inf_count > 0:
-        print(f"  ⚠️ CRITICAL: y has {y_inf_count} Inf values")
+        print(f"  WARNING: y has {y_inf_count} Inf values")
 
-    # Fit feature scaler on input sequences
-    original_shape = X.shape
-    X_flat = X.reshape(-1, X.shape[-1])
+    # Fit scaler for diagnostics ONLY (data drift monitoring)
+    # DO NOT apply to X or y -- RevIN handles normalization internally
     feature_scaler = StandardScaler()
-    X_flat_scaled = feature_scaler.fit_transform(X_flat)
-    X = X_flat_scaled.reshape(original_shape)
+    feature_scaler.fit(X.reshape(-1, 5))  # fit only, don't transform
 
-    # Log data statistics after scaling
-    print("[PatchTST] Data statistics after scaling:")
+    # Log data statistics (raw, unscaled)
+    print("[PatchTST] Data statistics (raw, unscaled -- RevIN normalizes internally):")
     print(
         f"  X: mean={X.mean():.6f}, std={X.std():.6f}, min={X.min():.6f}, max={X.max():.6f}"
     )

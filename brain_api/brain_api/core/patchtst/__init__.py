@@ -1,12 +1,10 @@
-"""PatchTST model module for multi-channel weekly return prediction.
+"""PatchTST model module for 5-channel OHLCV multi-task prediction.
 
-PatchTST (Patch Time Series Transformer) with multi-channel support:
-- Price features (OHLCV log returns)
-- News sentiment features
-- Fundamental ratios
+PatchTST (Patch Time Series Transformer) with channel-independent shared weights.
+5-channel OHLCV input (open_ret, high_ret, low_ret, close_ret, volume_ret).
+Multi-task loss on ALL 5 channels. Direct 5-day prediction with RevIN normalization.
 
-The model predicts weekly returns aligned with the RL agent's weekly
-decision horizon (Mon open → Fri close).
+At inference, close_ret predictions are extracted for weekly return calculation.
 """
 
 # Config

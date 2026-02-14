@@ -1,6 +1,6 @@
 # 5-Day Direct Multi-Channel Forecast + RL Bug Fixes
 
-> **Status:** LSTM phase implemented (close-only, not multi-channel). PatchTST and RL phases still planned.
+> **Status:** LSTM phase implemented (close-only). PatchTST phase implemented (5-channel OHLCV multi-task). RL phases still planned.
 >
 > **Scope:** Change LSTM and PatchTST from 1-day autoregressive prediction to direct 5-day
 > prediction. Fix pre-existing bugs across forecasters,
@@ -231,48 +231,61 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 ### 7.2 PatchTST Changes
 
+> **DEVIATION FROM ORIGINAL PLAN (implemented):**
+> PatchTST converted to **5-channel OHLCV multi-task** prediction instead of 12-channel.
+> See detailed plan: `patchtst_ohlcv_multi-task_34d759d3.plan.md`
+>
+> Key changes from original plan:
+> - **5 channels** (OHLCV only), not 12. News/fundamentals dropped from model input due to negative transfer risk with shared weights.
+> - **RevIN enabled** (default `scaling="std"`) for per-channel per-sample normalization. NO external StandardScaler applied to X or y.
+> - **HuggingFace built-in loss** with `future_values=batch_y`. Equal-weight MSE on all 5 channels in RevIN-normalized space.
+> - **NO inverse-transform at inference**. `prediction_outputs` are already denormalized by RevIN.
+> - **Bug #E fixed**: Removed `.permute(0,2,1)` in walkforward that crashed PatchTST. PatchTST walk-forward predictions had NEVER worked.
+> - **Bug #F fixed**: Changed `prod(1 + log_ret)` to `exp(sum(log_ret))` for correct log-return compounding.
+> - **All old snapshots deleted** (incompatible architecture).
+
 #### 7.2.1 Config (`brain_api/core/patchtst/config.py`)
 
-- `prediction_length`: 1 -> 5
+- `num_input_channels`: 12 -> 5 (OHLCV only)
+- `prediction_length`: 1 -> 5 (direct 5-day)
+- `feature_names`: 12 names -> 5 OHLCV names
+- `sample_stride` field removed (week-aligned sampling)
+- RevIN kept enabled (default `scaling="std"`)
 
 #### 7.2.2 Dataset (`brain_api/core/patchtst/dataset.py`)
 
-**Major rewrite.** Same week-aligned sampling as LSTM but with 12 channels:
+**Major rewrite.** Week-aligned sampling (identical to LSTM). 5-channel OHLCV only:
 
-- **Targets**: For each anchor, compute 5-day returns for ALL 12 channels from the aligned features DataFrame (OHLCV + news + fundamentals). Shape: `(5, 12)`.
-- **`DatasetResult.y`**: Shape changes from `(n_samples, 1)` to `(n_samples, 5, 12)`
-- **CRITICAL: Scale targets using the same feature_scaler.** Unlike LSTM (which uses a final linear layer and can output in any space), PatchTST's architecture reconstructs input channels -- its output is inherently in the scaled input space. The current code trains with unscaled targets against scaled-space output, creating a training mismatch. Fix: after fitting the `feature_scaler` on X, also apply it to y: `y_flat = y.reshape(-1, 12); y_scaled = feature_scaler.transform(y_flat); y = y_scaled.reshape(n_samples, 5, 12)`. This ensures the MSE loss compares like-for-like.
-- Remove `_compute_weekly_return()` helper function (lines 21-46) -- no longer needed
-- Remove close_ret-specific target extraction (line 106) -- target is now ALL channels
+- **Input**: Extract 5 OHLCV columns from `aligned_features`. Shape: `(context_length, 5)`.
+- **Targets**: ALL 5 OHLCV channels for next 5 trading days. Shape: `(5, 5)`.
+- **`DatasetResult.y`**: Shape `(n_samples, 5, 5)` -- UNSCALED raw log returns.
+- **X and y are UNSCALED** -- RevIN handles normalization internally.
+- **StandardScaler** fitted for diagnostics only (data drift), NOT applied to X or y.
+- Remove `_compute_weekly_return()` helper.
 
 #### 7.2.3 Training (`brain_api/core/patchtst/training.py`)
 
-- **Standard all-channel MSE loss.** PatchTST with `prediction_length=5` outputs `(batch, 5, 12)`. Target `y` is `(batch, 5, 12)` (now in scaled space). Loss = `MSELoss(output.prediction_outputs, y_batch)`. No channel masking needed. Both output and target are in the same scaled space.
-- Remove any `close_ret_idx` extraction from the training loss
-- Update baseline_loss for new shape
+- **HuggingFace built-in loss**: `outputs = model(past_values=batch_X, future_values=batch_y); loss = outputs.loss`. Equal-weight MSE on all 5 channels in RevIN-normalized space.
+- Remove `close_ret_idx`, manual `nn.MSELoss()`, per-channel extraction.
+- Update baseline_loss for y shape `(n, 5, 5)`.
 
 #### 7.2.4 Inference (`brain_api/core/patchtst/inference.py`)
 
-**`InferenceFeatures` dataclass:**
-
-- Add `starting_open_price: float | None` (alongside existing `starting_price` which is last close)
-
 **`SymbolPrediction` dataclass:**
 
-- Add `daily_returns: list[float] | None`
-- Remove `predicted_volatility: float | None`
+- Add `daily_returns: list[float] | None` (5 daily close_ret log returns)
 
 **`build_inference_features()`:**
 
-- Extract `starting_open_price` from `df.iloc[-1]["open"]` (last open before cutoff)
+- Still loads news/fundamentals for response flags.
+- Returns only 5 OHLCV columns as model features (UNSCALED).
 
-**`run_inference()` -- DELETE autoregressive loop (lines 303-374). Replace with:**
+**`run_inference()` -- DELETE autoregressive loop. Replace with:**
 
-1. Single forward pass: `outputs = model(past_values=X_tensor).prediction_outputs` -> `(batch, 5, 12)`
-2. **Inverse transform per channel** (correct for PatchTST since targets are now scaled). For each of the 12 channels: `unscaled = scaled * feature_scaler.scale_[ch] + feature_scaler.mean_[ch]`. This converts from scaled space back to raw returns.
-3. Extract `open_ret` channel (index 0 in `config.feature_names`) at day 0 and `close_ret` channel (index 3) at all 5 days
-4. Same price reconstruction and weekly return formula as LSTM
-5. `daily_returns = close_ret_preds.tolist()`
+1. Single forward pass: `outputs = model(past_values=X_tensor).prediction_outputs` -> `(batch, 5, 5)` already in original scale.
+2. Extract `close_ret` channel (index 3). NO inverse-transform needed (RevIN denormalizes).
+3. `weekly_return = exp(sum(5 daily log returns)) - 1`
+4. `daily_returns = close_ret_preds.tolist()`
 
 ---
 
