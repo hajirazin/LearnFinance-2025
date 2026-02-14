@@ -21,12 +21,12 @@ class SACBaseConfig:
     critic_lr: float = 3e-4
     alpha_lr: float = 3e-4  # For auto-entropy tuning
     tau: float = 0.005  # Target network Polyak update rate
-    gamma: float = 0.99  # Discount factor
+    gamma: float = 0.97  # Weekly steps: 1/(1-0.97) ≈ 33 weeks (~8-month horizon)
 
     # === Entropy tuning ===
-    # With tanh squashing to [-10, 10], entropy scale changes.
-    # Using -dim(action) as target encourages some stochasticity.
-    # For 16 dims, -16 pushes toward moderate exploration.
+    # Standard tanh squashing bounds actions to [-1, 1].
+    # target_entropy = -dim(action) is the textbook default for continuous SAC.
+    # For 16 dims (15 stocks + cash), -16 encourages moderate exploration.
     auto_entropy_tuning: bool = True
     target_entropy: float | None = -16.0  # Standard: -dim(action) for squashed actions
     init_alpha: float = 0.2  # Moderate initial entropy coefficient

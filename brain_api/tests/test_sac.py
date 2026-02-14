@@ -678,3 +678,64 @@ class TestSACLSTMStorage:
         # Verify can load current artifacts
         loaded = temp_storage.load_current_artifacts()
         assert loaded.version == version
+
+
+# ============================================================================
+# SAC actor output range tests (post * 10.0 removal)
+# ============================================================================
+
+
+class TestSACActorOutputRange:
+    """Tests that the SAC actor produces actions in [-1, 1] (standard tanh)."""
+
+    def _make_actor(self, state_dim: int = 10, action_dim: int = 6):
+        return GaussianActor(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            hidden_sizes=(16, 16),
+        )
+
+    def test_actor_deterministic_output_in_tanh_range(self):
+        """Deterministic actor output must be in [-1, 1] (not [-10, 10])."""
+        actor = self._make_actor()
+        state = torch.randn(32, 10)
+
+        with torch.no_grad():
+            action, _ = actor(state, deterministic=True)
+
+        assert action.min() >= -1.0, f"Min action {action.min()} < -1.0"
+        assert action.max() <= 1.0, f"Max action {action.max()} > 1.0"
+
+    def test_actor_stochastic_output_in_tanh_range(self):
+        """Stochastic actor output must be in [-1, 1] (not [-10, 10])."""
+        actor = self._make_actor()
+        state = torch.randn(128, 10)
+
+        with torch.no_grad():
+            action, log_prob = actor(state, deterministic=False)
+
+        assert action.min() >= -1.0, f"Min action {action.min()} < -1.0"
+        assert action.max() <= 1.0, f"Max action {action.max()} > 1.0"
+        # log_prob should be finite
+        assert torch.isfinite(log_prob).all(), "log_prob contains non-finite values"
+
+    def test_actor_output_produces_valid_softmax_weights(self):
+        """Softmax of actor output should produce valid portfolio weights."""
+        actor = self._make_actor()
+        state = torch.randn(16, 10)
+
+        with torch.no_grad():
+            action, _ = actor(state, deterministic=True)
+
+        action_np = action.numpy()
+        for i in range(action_np.shape[0]):
+            logits = action_np[i]
+            # Apply softmax (same as constraints.apply_softmax_to_weights)
+            shifted = logits - np.max(logits)
+            exp_logits = np.exp(shifted)
+            weights = exp_logits / np.sum(exp_logits)
+
+            assert np.all(weights >= 0), f"Negative weight found: {weights}"
+            assert abs(np.sum(weights) - 1.0) < 1e-6, (
+                f"Weights sum to {np.sum(weights)}"
+            )

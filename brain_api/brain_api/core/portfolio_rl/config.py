@@ -20,7 +20,7 @@ class PPOBaseConfig:
     learning_rate: float = 3e-4
     clip_epsilon: float = 0.2
     gae_lambda: float = 0.95
-    gamma: float = 0.99  # discount factor
+    gamma: float = 0.97  # Weekly steps: 1/(1-0.97) ≈ 33 weeks (~8-month horizon)
     entropy_coef: float = 0.01  # entropy bonus for exploration
     value_coef: float = 0.5  # value function loss coefficient
     max_grad_norm: float = 0.5  # gradient clipping

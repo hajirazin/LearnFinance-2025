@@ -115,24 +115,22 @@ class GaussianActor(nn.Module):
         std = torch.exp(log_std)
 
         if deterministic:
-            # Apply tanh squashing for bounded outputs
-            action = torch.tanh(mean) * 10.0  # Scale to [-10, 10] for softmax
+            # Apply tanh squashing for bounded outputs in [-1, 1]
+            action = torch.tanh(mean)
             log_prob = torch.zeros(state.shape[0], device=state.device)
         else:
             # Sample from Gaussian
             dist = Normal(mean, std)
             raw_action = dist.rsample()  # Reparameterization trick
 
-            # Apply tanh squashing (standard SAC technique for bounded actions)
-            action = torch.tanh(raw_action) * 10.0  # Scale to [-10, 10]
+            # Apply tanh squashing to [-1, 1] (standard SAC technique)
+            action = torch.tanh(raw_action)
 
             # Compute log probability with Jacobian correction for tanh
-            # log_prob = log_prob_gaussian - sum(log(1 - tanh^2(a) + eps))
+            # log pi(a|s) = log N(u; mean, std) - sum(log(1 - tanh^2(u)))
             log_prob = dist.log_prob(raw_action).sum(dim=-1)
-            # Jacobian correction: log(1 - tanh(x)^2) = log(1 - action^2/100)
-            log_prob = log_prob - torch.log(1 - (action / 10.0).pow(2) + 1e-6).sum(
-                dim=-1
-            )
+            # Jacobian correction for a = tanh(u): log|da/du| = log(1 - a²)
+            log_prob = log_prob - torch.log(1 - action.pow(2) + 1e-6).sum(dim=-1)
 
         return action, log_prob
 
