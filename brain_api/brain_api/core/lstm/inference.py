@@ -43,6 +43,7 @@ class SymbolPrediction:
     data_end_date: str | None  # ISO format
     target_week_start: str  # ISO format
     target_week_end: str  # ISO format
+    daily_returns: list[float] | None = None  # 5 predicted daily close log returns
 
 
 def build_inference_features(
@@ -136,8 +137,13 @@ def run_inference(
 ) -> list[SymbolPrediction]:
     """Run LSTM inference on prepared feature sequences.
 
-    Predicts 5 daily returns iteratively (Monday-Friday) and aggregates to weekly return.
-    This matches the walk-forward training approach and enables volatility computation.
+    Single forward pass predicts 5 daily close log returns directly.
+    Weekly return = exp(sum(5 log returns)) - 1.
+    Volatility = std of the 5 daily predictions.
+
+    NO inverse transform is applied -- targets are never scaled during training
+    (dataset.py keeps returns in original scale), so the model's linear layer
+    outputs raw log returns directly.
 
     Args:
         model: Loaded LSTMModel in eval mode
@@ -185,75 +191,26 @@ def run_inference(
     X_scaled = feature_scaler.transform(X_flat)
     X_batch = X_scaled.reshape(original_shape)
 
-    # OHLCV feature indices: open_ret=0, high_ret=1, low_ret=2, close_ret=3, volume_ret=4
-    close_ret_idx = 3
-    open_ret_idx = 0
-    high_ret_idx = 1
-    low_ret_idx = 2
-    volume_ret_idx = 4
-
-    # Predict 5 daily returns iteratively (Monday through Friday)
-    n_samples = len(valid_features)
-    daily_returns = np.zeros((5, n_samples), dtype=np.float32)
-
+    # Single forward pass: model outputs (batch, 5) = 5 close log returns
     model.eval()
-    X_current = X_batch.copy()  # Working copy that we'll update each iteration
-
     with torch.no_grad():
-        for day in range(5):
-            # Convert to tensor and run model
-            X_tensor = torch.FloatTensor(X_current)
-            outputs = model(X_tensor)
-            scaled_preds = outputs.cpu().numpy().flatten()
+        X_tensor = torch.FloatTensor(X_batch)
+        outputs = model(X_tensor)
+        daily_preds = outputs.cpu().numpy()  # (batch, 5)
 
-            # Inverse transform predictions from scaled space back to return space
-            # Model outputs are in StandardScaler space: unscaled = scaled * std + mean
-            # For LSTM trained on daily returns, output is close_ret prediction
-            daily_returns[day] = (
-                scaled_preds * feature_scaler.scale_[close_ret_idx]
-                + feature_scaler.mean_[close_ret_idx]
-            )
-
-            # Clean up tensor
-            del X_tensor, outputs
-
-            # Update input sequences for next iteration (except for the last day)
-            if day < 4:
-                # Construct new day features
-                # Set all OHLCV returns to predicted close_ret (simplified assumption)
-                pred_returns = daily_returns[day].reshape(-1, 1)
-
-                # Scale the predicted returns back to StandardScaler space
-                scaled_pred = (
-                    pred_returns - feature_scaler.mean_[close_ret_idx]
-                ) / feature_scaler.scale_[close_ret_idx]
-
-                # Create new day features array
-                new_day_features = np.zeros((n_samples, 5), dtype=np.float32)
-                new_day_features[:, open_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, high_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, low_ret_idx] = scaled_pred.ravel()
-                new_day_features[:, close_ret_idx] = scaled_pred.ravel()
-                # Volume return assumed 0 (scaled)
-                new_day_features[:, volume_ret_idx] = (
-                    -feature_scaler.mean_[volume_ret_idx]
-                    / feature_scaler.scale_[volume_ret_idx]
-                )
-
-                # Update sequences: shift left and add new day
-                X_current[:, :-1, :] = X_current[:, 1:, :]
-                X_current[:, -1, :] = new_day_features
+    # NO inverse transform -- Bug #1 fix.
+    # Targets are never scaled (dataset.py keeps returns in original scale).
+    # Model linear layer outputs raw log returns directly.
 
     # Build prediction results
     for i, (symbol, feat) in enumerate(valid_features):
-        # Get 5 daily returns for this symbol
-        symbol_daily_returns = daily_returns[:, i]  # Shape: (5,)
+        symbol_daily = daily_preds[i]  # (5,) = 5 close log returns
 
-        # Compute weekly return by compounding daily returns
-        weekly_return = float(np.prod(1 + symbol_daily_returns) - 1)
+        # Weekly return by compounding log returns: exp(sum) - 1
+        weekly_return = float(np.exp(np.sum(symbol_daily)) - 1)
 
-        # Compute volatility as std dev of daily returns
-        volatility = float(np.std(symbol_daily_returns))
+        # Volatility as std dev of daily log return predictions
+        volatility = float(np.std(symbol_daily))
 
         weekly_return_pct = weekly_return * 100  # Convert to percentage
         direction = classify_direction(weekly_return)
@@ -271,6 +228,7 @@ def run_inference(
                 else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
+                daily_returns=[round(float(r), 6) for r in symbol_daily],
             )
         )
 

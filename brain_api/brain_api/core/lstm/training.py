@@ -1,4 +1,4 @@
-"""LSTM model training."""
+"""LSTM model training with gradient clipping and early stopping."""
 
 from dataclasses import dataclass
 
@@ -15,7 +15,7 @@ from brain_api.core.training_utils import get_device
 
 @dataclass
 class TrainingResult:
-    """Result of LSTM training for next-day return prediction."""
+    """Result of LSTM training for direct 5-day close-return prediction."""
 
     model: LSTMModel
     feature_scaler: StandardScaler
@@ -43,7 +43,7 @@ def train_model_pytorch(
 
     Args:
         X: Input sequences, shape (n_samples, seq_len, n_features)
-        y: Targets, shape (n_samples, 1) - next-day returns (unscaled)
+        y: Targets, shape (n_samples, 5) - next 5 close log returns (unscaled)
         feature_scaler: Fitted scaler for input features
         config: Model configuration
 
@@ -105,10 +105,11 @@ def train_model_pytorch(
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 
-    # Training loop
+    # Training loop with early stopping
     best_val_loss = float("inf")
     best_model_state = None
     best_epoch = 0
+    epochs_without_improvement = 0
     log_interval = max(1, config.epochs // 5)  # Log ~5 times during training
 
     print("[LSTM] Starting training...")
@@ -128,6 +129,10 @@ def train_model_pytorch(
             outputs = model(batch_X)
             loss = criterion(outputs, batch_y)
             loss.backward()
+            # Gradient clipping to prevent exploding gradients (Bug #3 fix)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.gradient_clip_norm
+            )
             optimizer.step()
 
             total_train_loss += loss.item()
@@ -164,6 +169,15 @@ def train_model_pytorch(
             best_model_state = {
                 k: v.cpu().clone() for k, v in model.state_dict().items()
             }
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= config.early_stopping_patience:
+                print(
+                    f"[LSTM] Early stopping at epoch {epoch + 1} "
+                    f"(no improvement for {config.early_stopping_patience} epochs)"
+                )
+                break
 
         # MPS synchronization and periodic cache clearing to prevent hangs
         # MPS operations are async - sync ensures all ops complete before next epoch

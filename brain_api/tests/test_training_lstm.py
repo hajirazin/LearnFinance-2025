@@ -53,12 +53,12 @@ def mock_price_loader(symbols, start_date, end_date):
 
 
 def mock_dataset_builder(prices, config) -> DatasetResult:
-    """Return a mock dataset result for weekly return prediction."""
+    """Return a mock dataset result for direct 5-day close-return prediction."""
     # Return non-empty arrays to pass validation checks
     n_samples = 10
     return DatasetResult(
         X=np.random.randn(n_samples, config.sequence_length, config.input_size),
-        y=np.random.randn(n_samples, 1),  # Single weekly return per sample
+        y=np.random.randn(n_samples, 5),  # 5 close log returns per sample
         feature_scaler=StandardScaler(),
     )
 

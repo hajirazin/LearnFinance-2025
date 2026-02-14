@@ -1,10 +1,18 @@
 # 5-Day Direct Multi-Channel Forecast + RL Bug Fixes
 
-> **Status:** Planned (not yet implemented)
+> **Status:** LSTM phase implemented (close-only, not multi-channel). PatchTST and RL phases still planned.
 >
 > **Scope:** Change LSTM and PatchTST from 1-day autoregressive prediction to direct 5-day
-> multi-channel prediction with multi-task learning. Fix 8 pre-existing bugs across forecasters,
+> prediction. Fix pre-existing bugs across forecasters,
 > SAC actor, RL reward, gamma, and experience storage. Drop volatility from the RL state vector.
+>
+> **LSTM implementation notes (deviations from original plan):**
+> - LSTM uses **close-only** targets (5 values), NOT multi-channel OHLCV (25 values). Research shows close-only is more proven; multi-channel risks negative transfer.
+> - Holiday handling: **no calendar logic**. Targets are always the next 5 rows in `features_df` (trading days by definition). No zero-padding, no position mapping.
+> - 3 additional bugs fixed: inverse-transform (Bug #1), off-by-one alignment (Bug #2), no gradient clipping (Bug #3).
+> - Early stopping added to training loop.
+> - `predicted_volatility` kept (for RL interface compat), computed as `std(5 daily predictions)`.
+> - `daily_returns` field added to inference response (5 close log returns per symbol).
 
 ---
 
@@ -78,7 +86,21 @@ flowchart TD
 
 ## 3. Training Target Construction
 
-**All targets are standard same-series day-over-day returns.** No special formulas. For the 5 next trading days after a Friday anchor:
+### LSTM (IMPLEMENTED -- close-only)
+
+**Targets are close-to-close log returns only.** For the 5 next trading days after a week-end anchor:
+
+- `y[i] = log(close[t+i+1] / close[t+i])` for i = 0..4
+
+y shape: `(n_samples, 5)`. Uses `compute_ohlcv_log_returns()` to extract `close_ret` column.
+
+**Samples anchored at last trading day of each week** (detected by gap >= 2 calendar days in the trading date index). Input includes the anchor day's return (Bug #2 fix).
+
+**Holiday handling: none needed.** Targets are always the next 5 rows in `features_df`, which are trading days by definition. Holidays don't appear in the data. The model predicts "next 5 trading day returns" regardless of which calendar days they are. No calendar awareness, no zero-padding, no position mapping. Research consensus (pandas_market_calendars docs, DataCamp LSTM guides, interrupted time series literature) confirms: filter to trading days, skip non-trading days entirely.
+
+### PatchTST (PLANNED -- multi-channel, still per original plan)
+
+**All targets are standard same-series day-over-day returns.** For the 5 next trading days after a Friday anchor:
 
 - `open_ret[i] = (open[day_i] - open[day_{i-1}]) / open[day_{i-1}]`
 - `high_ret[i] = (high[day_i] - high[day_{i-1}]) / high[day_{i-1}]`
@@ -87,18 +109,6 @@ flowchart TD
 - `volume_ret[i] = (volume[day_i] - volume[day_{i-1}]) / volume[day_{i-1}]`
 
 (For log returns, use `log(price_t / price_{t-1})` per current `use_returns=True` config.)
-
-**Samples anchored at last trading day of each week.** Features end at Friday (or last day before a trading week). The 5 targets are the **next 5 trading days** in the price data.
-
-**No week filtering / skipping.** Holiday handling:
-
-- Model always outputs 5 positions (Mon=0 through Fri=4)
-- During training, holiday days get 0-return targets (market closed = no price change). The surrounding day's return absorbs the gap naturally.
-- At inference, use market calendar to identify first/last valid trading day positions:
-  - Normal week: `open[0]`, `close[4]`
-  - Monday holiday: `open[1]`, `close[4]`
-  - Friday holiday: `open[0]`, `close[3]`
-  - Mid-week holiday: `open[0]`, `close[4]` (unchanged -- intermediate days don't matter)
 
 ---
 
@@ -152,80 +162,70 @@ After (151 dims for 15 stocks):
 
 ## 6. Bugs Fixed by This Plan
 
-This plan fixes **8 pre-existing bugs**, ordered by severity:
+This plan fixes **10 pre-existing bugs**, ordered by severity:
 
-| # | Severity | Bug | File(s) | Fix |
-|---|---|---|---|---|
-| 1 | CRITICAL | LSTM inverse-transform applied to already-unscaled model output, compressing predictions ~20x | `lstm/inference.py:210-215`, `lstm/dataset.py:121-123` | Remove inverse-transform for LSTM inference |
-| 2 | CRITICAL | PatchTST training loss compares scaled model output against unscaled targets | `patchtst/training.py:199`, `patchtst/dataset.py:166-171` | Scale PatchTST targets during dataset construction; keep inverse-transform at inference |
-| 3 | MAJOR | Autoregressive error accumulation -- 5-day loop feeds synthetic features back as input | `lstm/inference.py:195-245`, `patchtst/inference.py:303-374` | Direct 5-day multi-channel prediction |
-| 4 | MAJOR | Volatility train/inference mismatch -- ppo/sac inference never pass volatility params, causing zeros | `ppo/inference.py`, `sac/inference.py` | Drop volatility entirely from RL state |
-| 5 | SIGNIFICANT | SAC `* 10.0` scaling makes softmax extremely peaked, fighting entropy maximization | `sac_networks.py:119,127` | Remove `* 10.0`, fix Jacobian correction |
-| 6 | SIGNIFICANT | `gamma=0.99` gives ~1+ year effective horizon for weekly steps (too long) | `config.py:23`, `sac_config.py:24` | `gamma=0.97` (~6-month effective horizon) |
-| 7 | MINOR | Reward function subtracts linear transaction cost from log return (different units) | `rewards.py:117` | Use `log(1 + tc)` instead of raw `tc` |
-| 8 | MINOR | Experience storage stores percentage returns instead of documented decimal | `execution.py:186-189` | Divide by 100 |
+| # | Severity | Bug | File(s) | Fix | Status |
+|---|---|---|---|---|---|
+| 1 | CRITICAL | LSTM inverse-transform applied to already-unscaled model output, compressing predictions ~20x | `lstm/inference.py:210-215`, `walkforward.py:523-527` | Remove inverse-transform for LSTM inference. Model outputs raw log returns (targets never scaled). | **FIXED** |
+| 2 | CRITICAL | PatchTST training loss compares scaled model output against unscaled targets | `patchtst/training.py:199`, `patchtst/dataset.py:166-171` | Scale PatchTST targets during dataset construction; keep inverse-transform at inference | Planned |
+| 3 | MAJOR | Autoregressive error accumulation -- 5-day loop feeds synthetic features back as input | `lstm/inference.py:195-245`, `patchtst/inference.py:303-374` | Direct 5-day prediction (single forward pass) | **FIXED** (LSTM) |
+| 4 | MAJOR | Volatility train/inference mismatch -- ppo/sac inference never pass volatility params, causing zeros | `ppo/inference.py`, `sac/inference.py` | Drop volatility entirely from RL state | Planned |
+| 5 | SIGNIFICANT | Off-by-one in dataset alignment. Input ends at position t-1, target starts at t+1. Model trained as 2-step forecaster instead of 1-step. | `lstm/dataset.py:69-74` | Include anchor day's return in input: `features_df.iloc[t-seq_len+1 : t+1]` | **FIXED** |
+| 6 | SIGNIFICANT | SAC `* 10.0` scaling makes softmax extremely peaked, fighting entropy maximization | `sac_networks.py:119,127` | Remove `* 10.0`, fix Jacobian correction | Planned |
+| 7 | SIGNIFICANT | `gamma=0.99` gives ~1+ year effective horizon for weekly steps (too long) | `config.py:23`, `sac_config.py:24` | `gamma=0.97` (~6-month effective horizon) | Planned |
+| 8 | MINOR | No gradient clipping. LSTMs with seq_len=60 are susceptible to exploding gradients. | `lstm/training.py` (missing) | Add `torch.nn.utils.clip_grad_norm_()` before `optimizer.step()` | **FIXED** |
+| 9 | MINOR | Reward function subtracts linear transaction cost from log return (different units) | `rewards.py:117` | Use `log(1 + tc)` instead of raw `tc` | Planned |
+| 10 | MINOR | Experience storage stores percentage returns instead of documented decimal | `execution.py:186-189` | Divide by 100 | Planned |
 
 ---
 
 ## 7. Detailed File-by-File Changes
 
-### 7.1 LSTM Changes
+### 7.1 LSTM Changes -- **IMPLEMENTED (close-only)**
 
-#### 7.1.1 Config (`brain_api/core/lstm/config.py`)
+> **Deviation from original plan:** LSTM uses close-only targets (5 outputs), NOT multi-channel OHLCV (25 outputs). Research shows close-only is more proven for stock forecasting; multi-channel risks negative transfer without complex loss balancing. `predicted_volatility` kept for RL interface compat.
 
-- `forecast_horizon`: 1 -> 5
-- Add `output_channels: int = 5` (OHLCV: open, high, low, close, volume)
-- `hidden_size`: 64 -> 128 (25 outputs from 64 hidden is tight)
-- Update `to_dict()` to serialize `output_channels`
+#### 7.1.1 Config (`brain_api/core/lstm/config.py`) -- DONE
 
-#### 7.1.2 Model (`brain_api/core/lstm/model.py`)
+- `forecast_horizon`: 1 -> 5 (direct 5-day prediction)
+- `hidden_size`: 64 -> 128 (more capacity for 5-step prediction)
+- NO `output_channels` (close-only means `forecast_horizon` alone is sufficient)
+- Add `gradient_clip_norm: float = 1.0` (Bug #8 fix)
+- Add `early_stopping_patience: int = 10`
+- Update `to_dict()` to serialize new fields
+- Update docstring
 
-- Change `self.fc = nn.Linear(config.hidden_size, config.forecast_horizon)` to `self.fc = nn.Linear(config.hidden_size, config.forecast_horizon * config.output_channels)`
-- In `forward()`: reshape output from `(batch, 25)` to `(batch, 5, 5)` using `.view(-1, config.forecast_horizon, config.output_channels)`
-- Update docstring: "Predicts 5 OHLCV channels for 5 days" instead of "single scalar next-day return"
+#### 7.1.2 Model (`brain_api/core/lstm/model.py`) -- DONE (no code changes)
 
-#### 7.1.3 Dataset (`brain_api/core/lstm/dataset.py`)
+- `nn.Linear(config.hidden_size, config.forecast_horizon)` already outputs `forecast_horizon` values
+- `forecast_horizon=5` -> `nn.Linear(128, 5)` -> output `(batch, 5)`. No reshape needed.
+- Only docstrings updated
 
-**Major rewrite.** Current logic (lines 49-91) iterates every day and creates 1-day-ahead close targets. New logic:
+#### 7.1.3 Dataset (`brain_api/core/lstm/dataset.py`) -- DONE
 
-- **Week-aligned sampling**: Iterate through the price data finding week-end anchor dates (Fridays or last trading day before a gap >= 2 calendar days). For each anchor:
-  - Input: `sequence_length` days of features ending at the anchor (same as current)
-  - Target: Apply `compute_ohlcv_log_returns()` to the next 5 trading days after the anchor. Result shape: `(5, 5)` = 5 days x 5 OHLCV features.
-- **Holiday handling**: If fewer than 5 trading days exist after the anchor (e.g., end of data), skip the sample. The function `compute_ohlcv_log_returns()` naturally handles gaps (returns are computed from actual consecutive trading days).
-- **`DatasetResult.y`**: Shape changes from `(n_samples, 1)` to `(n_samples, 5, 5)`
-- Remove the manual `next_day_return = (next_close - current_close) / current_close` logic -- use the shared `compute_ohlcv_log_returns()` utility instead for consistency
+- **Week-aligned sampling**: anchors at last trading day of each week (gap >= 2 calendar days)
+- **Input**: `features_df.iloc[t-seq_len+1 : t+1]` -- includes anchor day's return (Bug #5 fix)
+- **Target**: `features_df["close_ret"].iloc[t+1 : t+6]` -- next 5 close log returns. Shape `(5,)` per sample, `(n, 5)` total.
+- **No holiday logic**: targets are always next 5 rows in features_df = next 5 trading days
+- Removed `df_aligned`, manual `next_day_return` logic
+- Empty dataset shapes: `(0, seq_len, 5)` and `(0, 5)`
 
-#### 7.1.4 Training (`brain_api/core/lstm/training.py`)
+#### 7.1.4 Training (`brain_api/core/lstm/training.py`) -- DONE
 
-- Flatten `y` from `(n, 5, 5)` to `(n, 25)` before creating TensorDataset (MSE loss works on flat tensors)
-- Update `baseline_loss` computation: `np.mean(y_val**2)` still works but now over 25 values per sample
-- Update print statements to reflect new dimensions
+- **Gradient clipping** (Bug #8 fix): `torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip_norm)` between `loss.backward()` and `optimizer.step()`
+- **Early stopping**: `epochs_without_improvement` counter, break if >= `config.early_stopping_patience`
+- MSELoss on `(batch, 5)` vs `(batch, 5)` works as-is. No flattening needed.
+- Docstrings updated for y shape `(n_samples, 5)`
 
-#### 7.1.5 Inference (`brain_api/core/lstm/inference.py`)
+#### 7.1.5 Inference (`brain_api/core/lstm/inference.py`) -- DONE
 
-**`InferenceFeatures` dataclass:**
-
-- Add `starting_open_price: float | None` (last open price before cutoff, for Mon_open reconstruction)
-
-**`SymbolPrediction` dataclass:**
-
-- Add `daily_returns: list[float] | None` (5 close_ret values, uncompounded)
-- Remove `predicted_volatility: float | None`
-
-**`build_inference_features()` function:**
-
-- After existing `starting_price` logic (PatchTST has this, LSTM doesn't yet): extract `last_open = df.iloc[-1]["open"]` and set `starting_open_price`
-
-**`run_inference()` function -- DELETE lines 195-245 (autoregressive loop). Replace with:**
-
-1. Single forward pass: `outputs = model(X_tensor)` -> shape `(batch, 5, 5)`
-2. **NO inverse transform.** LSTM targets are never scaled (see `dataset.py:121-123`), so the model's linear layer outputs raw returns directly. Applying `* scale + mean` would compress predictions by ~20x. Use model output as-is.
-3. Extract `open_ret_preds = outputs[:, 0, 0]` (day 0, open channel) and `close_ret_preds = outputs[:, :, 3]` (all 5 days, close channel)
-4. Reconstruct prices per symbol:
-   - `Mon_open = starting_open_price * (1 + open_ret_preds[0])`
-   - `Fri_close = starting_close_price * prod(1 + close_ret_preds[0..4])`
-5. `weekly_return = (Fri_close - Mon_open) / Mon_open`
-6. `daily_returns = close_ret_preds.tolist()` (5 values)
+- `SymbolPrediction`: Added `daily_returns: list[float] | None = None`. Kept `predicted_volatility`.
+- `InferenceFeatures` and `build_inference_features()`: No changes needed.
+- `run_inference()`: Deleted autoregressive loop. Single forward pass -> `(batch, 5)`.
+  - **NO inverse transform** (Bug #1 fix). Model outputs raw log returns.
+  - `weekly_return = exp(sum(5 log returns)) - 1`
+  - `volatility = std(5 daily predictions)`
+  - `daily_returns = [round(float(r), 6) for r in symbol_daily]`
 
 ---
 
@@ -567,14 +567,14 @@ Ordered by dependency (implement top-to-bottom):
 
 | # | ID | Task |
 |---|---|---|
-| 1 | `lstm-config` | `config.py`: forecast_horizon=5, add output_channels=5, increase hidden_size from 64 to 128. Update to_dict(). |
-| 2 | `lstm-model` | `model.py`: Change nn.Linear to forecast_horizon * output_channels. Reshape output to (batch, 5, 5). Update docstrings. |
-| 3 | `lstm-dataset` | `dataset.py`: Rewrite build_dataset() with week-aligned sampling. Targets = ALL 5 OHLCV channels x 5 days. y shape (n, 5, 5). Holiday days get 0-return targets. |
-| 4 | `lstm-training` | `training.py`: Flatten y to (n, 25). Update baseline_loss and print statements. |
-| 5 | `lstm-inference-features` | `inference.py`: Add starting_open_price to InferenceFeatures. |
-| 6 | `lstm-inference-prediction` | `inference.py`: Add daily_returns to SymbolPrediction. Remove predicted_volatility. |
-| 7 | `lstm-inference-run` | `inference.py`: Delete autoregressive loop. Single forward pass. NO inverse-transform. Extract open_ret + close_ret. Compute weekly return. Holiday adjustment. |
-| 8 | `lstm-inference-build-features` | `inference.py`: Add starting_open_price extraction in build_inference_features(). |
+| 1 | `lstm-config` | **DONE.** `config.py`: forecast_horizon=5, hidden_size=128. Added gradient_clip_norm=1.0, early_stopping_patience=10. No output_channels (close-only). |
+| 2 | `lstm-model` | **DONE.** `model.py`: No code changes. fc layer already uses config.forecast_horizon. Docstrings updated. |
+| 3 | `lstm-dataset` | **DONE.** `dataset.py`: Week-aligned sampling, close-only targets, y shape (n, 5). Bug #5 fix (off-by-one). No holiday logic. |
+| 4 | `lstm-training` | **DONE.** `training.py`: Gradient clipping (Bug #8). Early stopping (patience=10). Docstrings for y=(n,5). |
+| 5 | `lstm-inference` | **DONE.** `inference.py`: Added daily_returns to SymbolPrediction. Kept predicted_volatility. Deleted autoregressive loop. Single forward pass. NO inverse-transform (Bug #1). weekly_return = exp(sum(log_rets)) - 1. |
+| 6 | `lstm-walkforward` | **DONE.** `walkforward.py`: Rewrote _predict_single_week_lstm. Single forward pass. NO inverse-transform. Bug #1 + #5 fixed. |
+| 7 | `prefect-model` | **DONE.** `forecast_email.py`: Added daily_returns to LSTMPrediction for email/LLM flow-through. |
+| 8 | `lstm-tests` | **DONE.** Updated test_inference_lstm.py (daily_returns), test_training_lstm.py (y shape), test_forecaster_snapshots.py. |
 
 ### Phase 2: PatchTST Forecaster
 

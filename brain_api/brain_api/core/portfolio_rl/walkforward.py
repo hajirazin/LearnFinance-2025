@@ -333,10 +333,10 @@ def _run_lstm_snapshot_inference(
     weekly_dates: pd.DatetimeIndex | None = None,
     symbol: str | None = None,
 ) -> tuple[list[float], list[float]]:
-    """Run LSTM snapshot inference for a symbol with multi-channel OHLCV support.
+    """Run LSTM snapshot inference for a symbol using direct 5-day prediction.
 
-    Enhanced to load daily OHLCV data for proper 5-feature LSTM inference
-    when available. Falls back to momentum if daily data unavailable.
+    Uses single forward pass for 5 close log returns (no autoregressive loop).
+    Falls back to momentum if daily data unavailable.
 
     Args:
         artifacts: Loaded LSTM snapshot artifacts
@@ -436,11 +436,16 @@ def _predict_single_week_lstm(
     weekly_dates: pd.DatetimeIndex,
     daily_ohlcv: pd.DataFrame,
 ) -> tuple[float, float]:
-    """Generate LSTM weekly prediction using 5-day iterative forecasting.
+    """Generate LSTM weekly prediction using direct 5-day forward pass.
 
-    Predicts 5 daily returns (Mon-Fri) iteratively and compounds them to get
-    a weekly return. Uses daily OHLCV data to build proper 5-feature sequences
-    matching how the LSTM was trained.
+    Single forward pass predicts 5 daily close log returns. Weekly return
+    is computed by compounding: exp(sum(5 log returns)) - 1.
+
+    NO inverse transform is applied -- targets are never scaled during
+    training, so the model outputs raw log returns directly (Bug #1 fix).
+
+    Input includes anchor day's return (last row of features_df), matching
+    the corrected training alignment (Bug #2 fix).
 
     Returns:
         Tuple of (weekly_return, volatility) where volatility is std of daily returns.
@@ -485,7 +490,8 @@ def _predict_single_week_lstm(
         if len(features_df) < seq_len:
             return momentum_fallback()
 
-        # Take last seq_len rows
+        # Take last seq_len rows -- includes anchor day's return (last row),
+        # matching the fixed training alignment (Bug #2 fix).
         features_df = features_df.iloc[-seq_len:]
 
         # Build feature array: (seq_len, 5)
@@ -501,76 +507,22 @@ def _predict_single_week_lstm(
         # Apply scaler
         features_scaled = scaler.transform(features) if scaler is not None else features
 
-        # OHLCV channel indices: open_ret=0, high_ret=1, low_ret=2, close_ret=3, volume_ret=4
-        close_ret_idx = 3
+        # Single forward pass: model outputs (1, 5) = 5 close log returns
+        x = torch.tensor(features_scaled, dtype=torch.float32).unsqueeze(0)
+        output = model(x)  # (1, 5)
+        daily_log_returns = output.squeeze().cpu().numpy()  # (5,)
 
-        # Predict 5 daily returns iteratively (Mon-Fri)
-        daily_returns = []
-        X_current = features_scaled.copy()
+        # NO inverse transform -- Bug #1 fix.
+        # Targets are never scaled during training. Model outputs raw log returns.
 
-        for day in range(5):
-            # Shape: (1, seq_len, 5)
-            x = torch.tensor(X_current, dtype=torch.float32).unsqueeze(0)
-
-            # Run inference
-            output = model(x)
-
-            # Get prediction (scaled)
-            scaled_pred = output.squeeze().item()
-
-            # Inverse transform prediction from scaled space back to return space
-            # LSTM predicts close_ret, which is at index 3
-            if scaler is not None:
-                daily_return = (
-                    scaled_pred * scaler.scale_[close_ret_idx]
-                    + scaler.mean_[close_ret_idx]
-                )
-            else:
-                daily_return = scaled_pred
-
-            daily_returns.append(daily_return)
-
-            # Update input sequence for next iteration (except for last day)
-            if day < 4:
-                # Get last day's features for reference
-                last_day_scaled = X_current[-1, :].copy()
-
-                # Create new day features
-                new_day = last_day_scaled.copy()
-
-                # Scale predicted return back to scaled space
-                if scaler is not None:
-                    scaled_return = (
-                        daily_return - scaler.mean_[close_ret_idx]
-                    ) / scaler.scale_[close_ret_idx]
-                else:
-                    scaled_return = daily_return
-
-                # Set OHLCV returns to predicted value (in scaled space)
-                # open, high, low, close all use the predicted return
-                new_day[0] = scaled_return  # open_ret
-                new_day[1] = scaled_return  # high_ret
-                new_day[2] = scaled_return  # low_ret
-                new_day[3] = scaled_return  # close_ret
-                # Volume return stays at 0 (scaled)
-                if scaler is not None:
-                    new_day[4] = -scaler.mean_[4] / scaler.scale_[4]
-                else:
-                    new_day[4] = 0.0
-
-                # Shift sequence left and add new day
-                X_current[:-1, :] = X_current[1:, :]
-                X_current[-1, :] = new_day
-
-        # Compound 5 daily returns to get weekly return
-        daily_returns_arr = np.array(daily_returns)
-        weekly_return = float(np.prod(1 + daily_returns_arr) - 1)
-        # Compute volatility as std of daily returns
-        volatility = float(np.std(daily_returns_arr))
+        # Compound log returns to get weekly return: exp(sum) - 1
+        weekly_return = float(np.exp(np.sum(daily_log_returns)) - 1)
+        # Volatility as std of daily log return predictions
+        volatility = float(np.std(daily_log_returns))
         return (weekly_return, volatility)
 
     except Exception as e:
-        logger.debug(f"[WalkForward] LSTM 5-day inference failed: {e}")
+        logger.debug(f"[WalkForward] LSTM direct 5-day inference failed: {e}")
         return momentum_fallback()
 
 

@@ -8,20 +8,21 @@ from typing import Any
 class LSTMConfig:
     """LSTM model hyperparameters and training config.
 
-    The LSTM predicts next-day returns (close-to-close), enabling iterative
-    5-day prediction for weekly forecasts. This allows computing both weekly
-    return (compounded from daily) and volatility (std of daily returns).
+    The LSTM directly predicts 5 daily close-to-close log returns in a single
+    forward pass (no autoregressive loop). Weekly return is computed by
+    compounding: exp(sum(5 log returns)) - 1. Volatility is std of the 5
+    daily predictions.
     """
 
     # Model architecture
     input_size: int = 5  # OHLCV features (log returns)
-    hidden_size: int = 64
+    hidden_size: int = 128
     num_layers: int = 2
     dropout: float = 0.2
 
     # Forecast settings
-    # Single output: next-day return (close-to-close)
-    forecast_horizon: int = 1
+    # Direct 5-day prediction: outputs 5 close-to-close log returns
+    forecast_horizon: int = 5
 
     # Training
     sequence_length: int = 60  # 60 trading days lookback
@@ -35,6 +36,12 @@ class LSTMConfig:
 
     # Week filtering
     min_week_days: int = 3  # Skip weeks with fewer than 3 trading days
+
+    # Training stability
+    gradient_clip_norm: float = (
+        1.0  # Max gradient norm for clipping (prevents exploding gradients)
+    )
+    early_stopping_patience: int = 10  # Epochs without val improvement before stopping
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -51,6 +58,8 @@ class LSTMConfig:
             "validation_split": self.validation_split,
             "use_returns": self.use_returns,
             "min_week_days": self.min_week_days,
+            "gradient_clip_norm": self.gradient_clip_norm,
+            "early_stopping_patience": self.early_stopping_patience,
         }
 
 

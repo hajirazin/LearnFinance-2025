@@ -180,6 +180,7 @@ def test_inference_lstm_returns_required_fields(client_with_mocks):
     assert "symbol" in pred
     assert "predicted_weekly_return_pct" in pred
     assert "predicted_volatility" in pred
+    assert "daily_returns" in pred
     assert "direction" in pred
     assert "has_enough_history" in pred
     assert "history_days_used" in pred
@@ -233,6 +234,50 @@ def test_inference_lstm_volatility_is_non_negative(client_with_mocks):
     for pred in data["predictions"]:
         if pred["has_enough_history"] and pred["predicted_volatility"] is not None:
             assert pred["predicted_volatility"] >= 0
+
+
+def test_inference_lstm_returns_daily_returns_field(client_with_mocks):
+    """POST /inference/lstm returns daily_returns as a list of 5 floats."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    pred = data["predictions"][0]
+
+    assert pred["has_enough_history"] is True
+    assert "daily_returns" in pred
+    assert pred["daily_returns"] is not None
+    assert isinstance(pred["daily_returns"], list)
+    assert len(pred["daily_returns"]) == 5
+    for r in pred["daily_returns"]:
+        assert isinstance(r, int | float)
+
+
+def test_inference_lstm_daily_returns_null_for_insufficient_history(temp_storage):
+    """daily_returns should be null for symbols without enough history."""
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_storage] = lambda: temp_storage
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
+
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/inference/lstm",
+            json={"symbols": ["UNKNOWNSYMBOL"]},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        pred = data["predictions"][0]
+
+        assert pred["has_enough_history"] is False
+        assert pred["daily_returns"] is None
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ============================================================================

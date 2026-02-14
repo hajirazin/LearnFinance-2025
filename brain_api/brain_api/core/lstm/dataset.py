@@ -1,4 +1,10 @@
-"""Dataset building for LSTM training."""
+"""Dataset building for LSTM training.
+
+Builds week-aligned samples for direct 5-day close-return prediction.
+Each sample is anchored at the last trading day of a week. The input
+is a sequence of OHLCV log returns ending at the anchor day (inclusive),
+and the target is the next 5 close-to-close log returns.
+"""
 
 from dataclasses import dataclass
 
@@ -12,10 +18,10 @@ from brain_api.core.lstm.config import LSTMConfig
 
 @dataclass
 class DatasetResult:
-    """Result of dataset building for next-day return prediction."""
+    """Result of dataset building for direct 5-day close-return prediction."""
 
     X: np.ndarray  # Input sequences: (n_samples, seq_len, n_features)
-    y: np.ndarray  # Targets: (n_samples, 1) - next-day returns
+    y: np.ndarray  # Targets: (n_samples, 5) - next 5 close log returns
     feature_scaler: StandardScaler  # Scaler for input features
 
 
@@ -23,21 +29,26 @@ def build_dataset(
     prices: dict[str, pd.DataFrame],
     config: LSTMConfig,
 ) -> DatasetResult:
-    """Build training dataset for next-day return prediction.
+    """Build training dataset for direct 5-day close-return prediction.
 
-    Creates samples for each trading day:
-    - Input: sequence_length days of OHLCV features
-    - Target: next-day return (next_close - current_close) / current_close
+    Creates week-aligned samples:
+    - Anchors at the last trading day of each week (detected by calendar gap >= 2 days)
+    - Input: sequence_length days of OHLCV log returns ending at anchor (inclusive)
+    - Target: next 5 close-to-close log returns after the anchor
 
-    This enables iterative 5-day prediction for weekly forecasts, allowing
-    computation of both weekly return (compounded) and volatility (std of daily).
+    The input includes the anchor day's return so the model knows the close
+    price at the anchor. Targets start from the next trading day.
+
+    No holiday logic is needed: targets are always the next 5 rows in
+    features_df, which are trading days by definition. Holidays don't
+    appear in the data.
 
     Args:
         prices: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
         config: LSTM configuration
 
     Returns:
-        DatasetResult with X, y (next-day returns), and feature_scaler
+        DatasetResult with X, y (5 close log returns per sample), and feature_scaler
     """
     all_sequences = []
     all_targets = []
@@ -47,47 +58,62 @@ def build_dataset(
     total_samples = 0
 
     for _symbol, df in prices.items():
-        # Skip if not enough data
-        # Need at least sequence_length + 2 days (for features + target)
-        if len(df) < config.sequence_length + 2:
+        # Need at least sequence_length + 7 days (for features + 5 targets + returns shift)
+        if len(df) < config.sequence_length + 7:
             continue
 
-        # Compute features using shared utility
+        # Compute features using shared utility (OHLCV log returns, 5 features)
         features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
 
-        # Align original df with features (first row dropped when using returns)
-        df_aligned = df.iloc[1:] if config.use_returns else df
-
-        if len(features_df) < config.sequence_length + 1:
+        if len(features_df) < config.sequence_length + 5:
             continue
+
+        # Detect week-end anchors: last trading day of each week
+        # A week-end is any day followed by a gap of >= 2 calendar days
+        # (weekends have 2-day gap, holiday weekends have 3+)
+        dates = features_df.index
+        n_dates = len(dates)
+
+        # Compute gaps between consecutive trading days
+        gaps = pd.Series(
+            [(dates[i + 1] - dates[i]).days for i in range(n_dates - 1)],
+            index=range(n_dates - 1),
+        )
+        week_ends = [i for i in range(len(gaps)) if gaps.iloc[i] >= 2]
 
         symbol_samples = 0
 
-        # For each day where we have enough history, create a training sample
-        # Input: features from sequence_length days ending at day t
-        # Target: return from day t to day t+1
-        for t in range(config.sequence_length, len(features_df) - 1):
-            # Extract input sequence (sequence_length days ending at day t)
-            seq_start_idx = t - config.sequence_length
-            seq_end_idx = t  # Exclusive, so features up to day t-1
+        for t in week_ends:
+            # Skip if not enough history for input sequence
+            if t < config.sequence_length - 1:
+                continue
 
-            sequence = features_df.iloc[seq_start_idx:seq_end_idx].values
+            # Skip if not enough future data for 5 targets
+            if t + 5 >= n_dates:
+                continue
+
+            # Input: seq_len days ending at anchor (inclusive)
+            # Bug #2 fix: include anchor day's return so model knows close at t
+            seq_start = t - config.sequence_length + 1
+            seq_end = t + 1  # exclusive, so includes position t
+            sequence = features_df.iloc[seq_start:seq_end].values
 
             if len(sequence) != config.sequence_length:
                 continue
 
-            # Compute target: next-day return (close-to-close)
-            # day t close -> day t+1 close
-            current_close = df_aligned["close"].iloc[t]
-            next_close = df_aligned["close"].iloc[t + 1]
+            # Target: next 5 close log returns after anchor
+            # close_ret is the 4th column (index 3) in OHLCV log returns
+            target = features_df.iloc[t + 1 : t + 6]["close_ret"].values
 
-            if current_close == 0:
+            if len(target) != 5:
                 continue
 
-            next_day_return = (next_close - current_close) / current_close
+            # Skip if any NaN or Inf in target
+            if np.any(np.isnan(target)) or np.any(np.isinf(target)):
+                continue
 
             all_sequences.append(sequence)
-            all_targets.append([next_day_return])
+            all_targets.append(target)
             symbol_samples += 1
 
         if symbol_samples > 0:
@@ -95,13 +121,14 @@ def build_dataset(
             total_samples += symbol_samples
 
     print(
-        f"[LSTM] Dataset built: {total_samples} daily samples from {symbols_used} symbols"
+        f"[LSTM] Dataset built: {total_samples} week-aligned samples "
+        f"from {symbols_used} symbols"
     )
 
     if not all_sequences:
         # Return empty arrays if no data
         empty_X = np.array([]).reshape(0, config.sequence_length, config.input_size)
-        empty_y = np.array([]).reshape(0, 1)
+        empty_y = np.array([]).reshape(0, 5)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
@@ -118,9 +145,10 @@ def build_dataset(
     X_flat_scaled = feature_scaler.fit_transform(X_flat)
     X = X_flat_scaled.reshape(original_shape)
 
-    # Note: We do NOT scale the targets (daily returns).
+    # Note: We do NOT scale the targets (close log returns).
     # Returns are already naturally bounded (typically -0.05 to +0.05) and
-    # keeping them in original scale makes interpretation straightforward.
+    # keeping them in original scale means the model's linear layer outputs
+    # raw log returns directly. NO inverse transform needed at inference.
 
     return DatasetResult(
         X=X,
