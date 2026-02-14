@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from brain_api.core.portfolio_rl.rewards import compute_reward_from_log_return
 from brain_api.main import app
 from brain_api.routes.experience import (
     ExperienceRecord,
@@ -1090,3 +1091,65 @@ class TestUpdateExecutionWithMatching:
             assert data["orders_filled"] == 1
             # The not_found order shouldn't count as filled
             assert data.get("orders_expired", 0) + data.get("orders_partial", 0) <= 1
+
+
+class TestRewardLogSpaceConsistency:
+    """Tests verifying reward function uses log-space for both return and cost."""
+
+    def test_reward_log_space_consistency(self):
+        """Verify reward = (log(1+r) - log(1+tc)) * scale equals log((1+r)/(1+tc)) * scale."""
+        import numpy as np
+
+        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+
+        config = PPOBaseConfig(cost_bps=10, reward_scale=100.0)
+        r = 0.02  # 2% weekly return
+        turnover = 0.5  # 50% turnover
+        tc = turnover * (config.cost_bps / 10_000)  # 0.0005
+
+        portfolio_log_return = np.log(1 + r)
+        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+
+        # The reward should equal log((1+r)/(1+tc)) * scale
+        expected = np.log((1 + r) / (1 + tc)) * config.reward_scale
+        assert abs(reward - expected) < 1e-10
+
+    def test_reward_zero_return_with_cost(self):
+        """Zero return with nonzero cost gives exactly -log(1+tc) * scale."""
+        import numpy as np
+
+        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+
+        config = PPOBaseConfig(cost_bps=10, reward_scale=100.0)
+        turnover = 0.5
+        tc = turnover * (config.cost_bps / 10_000)
+
+        portfolio_log_return = 0.0  # log(1 + 0) = 0
+        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+
+        expected = -np.log(1 + tc) * config.reward_scale
+        assert abs(reward - expected) < 1e-10
+        # Also verify it differs from the old (incorrect) formula
+        incorrect_reward = (0.0 - tc) * config.reward_scale
+        assert abs(reward - incorrect_reward) > 1e-10
+
+    def test_reward_cost_is_log_transformed(self):
+        """Verify the transaction cost term is log(1+tc), not raw tc."""
+        import numpy as np
+
+        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+
+        config = PPOBaseConfig(
+            cost_bps=100, reward_scale=1.0
+        )  # 1% cost for larger diff
+        turnover = 1.0  # 100% turnover for maximum cost
+        tc = turnover * (config.cost_bps / 10_000)  # 0.01
+
+        portfolio_log_return = 0.0
+        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+
+        # With log transform: reward = -log(1.01) * 1.0 = -0.00995...
+        # Without log transform (old bug): reward = -0.01 * 1.0 = -0.01
+        log_tc = np.log(1 + tc)
+        assert abs(reward - (-log_tc)) < 1e-10
+        assert abs(reward - (-tc)) > 1e-6  # Must differ from raw tc

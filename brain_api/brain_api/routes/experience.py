@@ -758,7 +758,9 @@ def _compute_reward_from_actual_weights(
     estimated_turnover = 0.1  # Estimate 10% turnover per week
 
     transaction_cost = estimated_turnover * cost_rate
-    net_return = portfolio_log_return - transaction_cost
+    # Both terms in log space for mathematical consistency:
+    # net_return = log(1 + r) - log(1 + tc) = log((1 + r) / (1 + tc))
+    net_return = portfolio_log_return - np.log(1 + transaction_cost)
     reward = net_return * reward_scale
 
     return reward, portfolio_return

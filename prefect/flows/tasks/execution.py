@@ -183,9 +183,13 @@ def _build_state_dict(
                 signals[fs.symbol] = {}
             signals[fs.symbol].update(fs.ratios.model_dump())
 
-    lstm_forecasts = {p.symbol: p.predicted_weekly_return_pct for p in lstm.predictions}
+    # Convert from percentage (e.g. 2.5) to decimal (e.g. 0.025) to match
+    # ExperienceState schema which documents forecasts as decimal returns
+    lstm_forecasts = {
+        p.symbol: p.predicted_weekly_return_pct / 100.0 for p in lstm.predictions
+    }
     patchtst_forecasts = {
-        p.symbol: p.predicted_weekly_return_pct for p in patchtst.predictions
+        p.symbol: p.predicted_weekly_return_pct / 100.0 for p in patchtst.predictions
     }
 
     return {

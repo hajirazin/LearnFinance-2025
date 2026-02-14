@@ -1,7 +1,8 @@
 """Reward computation for portfolio RL.
 
-Reward = scaled(portfolio_log_return - transaction_cost)
+Reward = scaled(portfolio_log_return - log(1 + transaction_cost))
 
+Both terms are in log space for mathematical consistency.
 All rewards are scaled by reward_scale (default 100) so that
 a 1% weekly return becomes a reward of 1.0.
 """
@@ -105,8 +106,14 @@ def compute_reward_from_log_return(
 ) -> float:
     """Compute scaled reward using log return.
 
+    Both the portfolio return and transaction cost are in log space:
+      net_return = log(1 + r) - log(1 + tc) = log((1 + r) / (1 + tc))
+
+    This ensures mathematical consistency -- subtracting a linear cost
+    from a log return would mix units.
+
     Args:
-        portfolio_log_return: Log portfolio return.
+        portfolio_log_return: Log portfolio return, i.e. log(1 + r).
         turnover: Portfolio turnover (0 to 1).
         config: PPO config.
 
@@ -114,5 +121,5 @@ def compute_reward_from_log_return(
         Scaled reward for RL training.
     """
     transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
-    net_return = portfolio_log_return - transaction_cost
+    net_return = portfolio_log_return - np.log(1 + transaction_cost)
     return net_return * config.reward_scale
