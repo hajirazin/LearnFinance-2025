@@ -13,7 +13,7 @@ Runs every Sunday at 11:00 AM UTC to train all models:
 1. **Get Halal Universe** - Fetch the list of halal stock symbols
 2. **Refresh Training Data** - Fill sentiment gaps and refresh stale fundamentals
 3. **Train LSTM** - Pure price forecaster model
-4. **Train PatchTST** - Multi-signal forecaster model
+4. **Train PatchTST** - OHLCV forecaster model
 5. **Train PPO** - Reinforcement learning allocator
 6. **Train SAC** - Reinforcement learning allocator
 7. **Generate Training Summary** - LLM-powered analysis of training results (OpenAI/OLLAMA)
@@ -261,7 +261,7 @@ The email is always sent, indicating which algorithms were skipped.
 | `POST /signals/fundamentals` | Get fundamental ratios |
 | `POST /signals/news` | Get news sentiment |
 | `POST /inference/lstm` | LSTM price forecasts |
-| `POST /inference/patchtst` | PatchTST multi-signal forecasts |
+| `POST /inference/patchtst` | PatchTST OHLCV forecasts |
 | `POST /inference/ppo` | PPO target weights |
 | `POST /inference/sac` | SAC target weights |
 | `POST /allocation/hrp` | HRP percentage weights |

@@ -75,21 +75,20 @@ def align_multivariate_data(
     fundamentals: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> dict[str, pd.DataFrame]:
-    """Align OHLCV, news sentiment, and fundamentals into multi-channel features.
+    """Align OHLCV data into feature channels for PatchTST.
 
-    Creates a unified DataFrame per symbol with all 11 feature channels:
-    - OHLCV log returns (5 channels)
-    - News sentiment (1 channel) - forward-filled for missing days
-    - Fundamentals (5 channels) - forward-filled quarterly data
+    Computes OHLCV log returns and filters to config.feature_names (5 OHLCV channels).
+    News sentiment and fundamentals are loaded for alignment but filtered out --
+    the model only uses the 5 OHLCV channels specified in config.feature_names.
 
     Args:
         prices: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
-        news_sentiment: Dict of symbol -> sentiment DataFrame
-        fundamentals: Dict of symbol -> fundamentals DataFrame
-        config: PatchTST configuration
+        news_sentiment: Dict of symbol -> sentiment DataFrame (loaded but not used by model)
+        fundamentals: Dict of symbol -> fundamentals DataFrame (loaded but not used by model)
+        config: PatchTST configuration (num_input_channels=5, feature_names=OHLCV only)
 
     Returns:
-        Dict of symbol -> aligned multi-channel DataFrame
+        Dict of symbol -> aligned DataFrame with config.num_input_channels columns
     """
     aligned: dict[str, pd.DataFrame] = {}
 

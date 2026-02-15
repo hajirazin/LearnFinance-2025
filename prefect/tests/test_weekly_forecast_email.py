@@ -129,7 +129,7 @@ def mock_patchtst_response():
         ],
         model_version="v1.0.0",
         as_of_date="2026-02-05",
-        signals_used=["price", "sentiment", "fundamentals"],
+        signals_used=["ohlcv"],
         target_week_start="2026-02-10",
         target_week_end="2026-02-14",
     )

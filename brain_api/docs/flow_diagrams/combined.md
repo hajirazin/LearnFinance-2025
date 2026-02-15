@@ -254,7 +254,7 @@ graph LR
 graph LR
     subgraph Layer1 [Layer 1: Forecasters]
         L1A["LSTM<br>5ch OHLCV"]
-        L1B["PatchTST<br>11ch Multi-Signal"]
+        L1B["PatchTST<br>5ch OHLCV"]
     end
 
     subgraph Layer2 [Layer 2: RL Algorithms]

@@ -81,15 +81,14 @@ def train_patchtst(
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
     trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
 ) -> PatchTSTTrainResponse:
-    """Train the multi-signal PatchTST model for weekly return prediction.
+    """Train the OHLCV PatchTST model for weekly return prediction.
 
-    PatchTST uses OHLCV + external signals (news sentiment, fundamentals) to predict
-    weekly returns. This contrasts with the pure-price LSTM baseline.
+    PatchTST uses 5-channel OHLCV log returns (open, high, low, close, volume)
+    to predict weekly returns. Channel-independent shared Transformer weights
+    learn temporal patterns from all 5 related OHLCV signals.
 
-    Input channels (11 total):
-    - OHLCV log returns (5)
-    - News sentiment (1)
-    - Fundamentals: gross_margin, operating_margin, net_margin, current_ratio, debt_to_equity (5)
+    Input channels (5 total):
+    - OHLCV log returns: open_ret, high_ret, low_ret, close_ret, volume_ret
 
     Uses API config for data window (default: last 15 years).
     Writes versioned artifacts and promotes if evaluation passes.
@@ -132,7 +131,7 @@ def train_patchtst(
                 promoted=existing_metadata["promoted"],
                 prior_version=existing_metadata.get("prior_version"),
                 num_input_channels=config.num_input_channels,
-                signals_used=["ohlcv", "news_sentiment", "fundamentals"],
+                signals_used=["ohlcv"],
             )
 
     # Load price data
@@ -364,7 +363,7 @@ def train_patchtst(
         hf_repo=hf_repo,
         hf_url=hf_url,
         num_input_channels=config.num_input_channels,
-        signals_used=["ohlcv", "news_sentiment", "fundamentals"],
+        signals_used=["ohlcv"],
     )
 
 

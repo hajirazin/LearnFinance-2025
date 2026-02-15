@@ -104,9 +104,9 @@ flowchart LR
 
 ### POST /infer/patchtst
 
-**PatchTST Multi-Signal Prediction**
+**PatchTST OHLCV Prediction**
 
-Predicts weekly returns using OHLCV + news sentiment + fundamentals.
+Predicts weekly returns using 5-channel OHLCV log returns (open, high, low, close, volume).
 
 ### Flow Diagram
 

@@ -23,7 +23,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
-  - price forecasting (LSTM pure-price, PatchTST multi-signal)
+  - price forecasting (LSTM pure-price, PatchTST OHLCV 5-channel)
   - portfolio allocation (HRP math baseline, PPO variants, SAC variants)
   - order generation (convert weights to limit orders with idempotent IDs)
   - Alpaca integration (portfolio queries, order submission)
@@ -79,7 +79,7 @@ brain_api/
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /inference/lstm` | Price predictions (OHLCV only) |
-| `POST /inference/patchtst` | Price predictions (multi-signal) |
+| `POST /inference/patchtst` | Price predictions (OHLCV) |
 | `POST /inference/ppo` | PPO allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
@@ -187,9 +187,9 @@ When migrating an endpoint to GCP:
 | Cash available | Portfolio state |
 
 **Key distinction:**
-- **LSTM** = pure price forecaster (OHLCV only, does NOT receive signals)
-- **PatchTST** = multi-signal forecaster (receives all signals + OHLCV)
-- **PPO/SAC** = RL allocators (receive all signals + forecaster output)
+- **LSTM** = pure price forecaster (close returns only)
+- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
+- **PPO/SAC** = RL allocators (receive signals + dual forecaster output)
 
 ## Data storage rules
 

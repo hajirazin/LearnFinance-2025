@@ -10,7 +10,7 @@ Top Predictions:
 - {{ p.symbol }}: {{ "%.2f" | format(p.predicted_weekly_return_pct) }}% ({{ p.direction }})
 {% endif %}{% endfor %}
 
-### PatchTST (Multi-Signal Forecaster)
+### PatchTST (OHLCV Forecaster)
 Model Version: {{ patchtst.model_version }}
 Signals Used: {{ patchtst.signals_used | join(", ") }}
 Top Predictions:

@@ -35,16 +35,14 @@ def infer_patchtst(
     request: PatchTSTInferenceRequest,
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
 ) -> PatchTSTInferenceResponse:
-    """Predict weekly returns using multi-signal PatchTST model.
+    """Predict weekly returns using OHLCV PatchTST model.
 
-    This endpoint uses OHLCV + news sentiment + fundamentals to predict
-    weekly returns. It provides richer predictions than the pure-price LSTM.
+    This endpoint uses 5-channel OHLCV log returns to predict weekly returns.
+    Channel-independent shared Transformer weights learn temporal patterns
+    from all 5 related OHLCV signals.
 
-    Input channels (11 total):
-    - OHLCV log returns (5)
-    - News sentiment (1)
-    - Fundamentals (5): gross_margin, operating_margin, net_margin,
-      current_ratio, debt_to_equity
+    Input channels (5 total):
+    - OHLCV log returns: open_ret, high_ret, low_ret, close_ret, volume_ret
 
     Args:
         request: PatchTSTInferenceRequest with symbols list
@@ -180,12 +178,8 @@ def infer_patchtst(
     # Sort predictions
     predictions = _sort_patchtst_predictions(predictions)
 
-    # Determine which signals were available
+    # Model only uses OHLCV channels (news/fundamentals loaded for metadata flags only)
     signals_used = ["ohlcv"]
-    if any(f.has_news_data for f in features_list):
-        signals_used.append("news_sentiment")
-    if any(f.has_fundamentals_data for f in features_list):
-        signals_used.append("fundamentals")
 
     # Summary
     valid_predictions = [

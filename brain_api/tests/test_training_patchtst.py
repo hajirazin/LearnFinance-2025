@@ -212,9 +212,7 @@ def test_train_patchtst_returns_required_fields(client_with_mocks):
     # Check PatchTST-specific fields
     # 5 channels: OHLCV only (open_ret, high_ret, low_ret, close_ret, volume_ret)
     assert data["num_input_channels"] == 5  # Default config
-    assert "ohlcv" in data["signals_used"]
-    assert "news_sentiment" in data["signals_used"]
-    assert "fundamentals" in data["signals_used"]
+    assert data["signals_used"] == ["ohlcv"]
 
 
 # ============================================================================

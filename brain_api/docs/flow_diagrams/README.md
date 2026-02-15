@@ -148,7 +148,7 @@ flowchart LR
 | Model | Type | Input | Output | Use Case |
 |-------|------|-------|--------|----------|
 | LSTM | Forecaster | 60-day OHLCV | Weekly return % | Simple baseline |
-| PatchTST | Forecaster | 60-day 11-channel | Weekly return % | Multi-signal |
+| PatchTST | Forecaster | 60-day 5-channel OHLCV | Weekly return % | OHLCV |
 | PPO | Allocator | Signals + Forecasts + Weights | Target weights | On-policy RL |
 | SAC | Allocator | Signals + Forecasts + Weights | Target weights | Off-policy RL |
 

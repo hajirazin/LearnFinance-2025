@@ -4,7 +4,7 @@ This flow runs every Sunday at 11 AM UTC and executes the full training pipeline
 1. Get halal universe (symbols list)
 2. Refresh training data (sentiment gaps + fundamentals)
 3. Train LSTM (pure price forecaster)
-4. Train PatchTST (multi-signal forecaster)
+4. Train PatchTST (OHLCV forecaster)
 5. Train PPO (RL allocator)
 6. Train SAC (RL allocator)
 7. Generate training summary (LLM-powered analysis)
@@ -109,7 +109,7 @@ def train_lstm() -> TrainingResponse:
 
 @task(name="Train PatchTST", retries=1, retry_delay_seconds=120)
 def train_patchtst() -> TrainingResponse:
-    """Train the PatchTST multi-signal forecaster model."""
+    """Train the PatchTST OHLCV forecaster model."""
     logger = get_run_logger()
     logger.info("Starting PatchTST training...")
 

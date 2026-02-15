@@ -10,8 +10,8 @@ This model predicts weekly stock returns using only historical OHLCV price data.
 - **Promoted to Production**: {{ "Yes" if lstm.promoted else "No" }}
 - **Metrics**: {{ lstm.metrics | tojson }}
 
-### PatchTST (Multi-Signal Forecaster)
-This model predicts weekly stock returns using price data combined with fundamental and sentiment signals.
+### PatchTST (OHLCV Forecaster)
+This model predicts weekly stock returns using 5-channel OHLCV price data (open, high, low, close, volume log returns).
 
 - **Version**: {{ patchtst.version }}
 - **Data Window**: {{ patchtst.data_window_start }} to {{ patchtst.data_window_end }}
@@ -49,7 +49,7 @@ Respond with JSON only, using this exact structure:
 {
     "para_1_overall": "2-3 sentence summary of overall training results and model health",
     "para_2_lstm": "2-3 sentences about LSTM model training and performance",
-    "para_3_patchtst": "2-3 sentences about PatchTST model training and its multi-signal approach",
+    "para_3_patchtst": "2-3 sentences about PatchTST model training and its OHLCV approach",
     "para_4_ppo": "2-3 sentences about PPO allocator training",
     "para_5_sac": "2-3 sentences about SAC allocator training",
     "para_6_recommendations": "2-3 sentences with any recommendations or concerns"

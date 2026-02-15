@@ -78,7 +78,7 @@ def mock_summary_response():
         "summary": {
             "para_1_overall": "All models trained successfully.",
             "para_2_lstm": "LSTM shows good performance.",
-            "para_3_patchtst": "PatchTST leverages multi-signal approach.",
+            "para_3_patchtst": "PatchTST leverages OHLCV approach.",
             "para_4_ppo": "PPO demonstrates solid returns.",
             "para_5_sac": "SAC shows promising results.",
             "para_6_recommendations": "Continue monitoring.",

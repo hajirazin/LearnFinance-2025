@@ -276,10 +276,8 @@ def test_inference_patchtst_returns_signals_used(client_with_mocks):
 
     data = response.json()
     assert "signals_used" in data
-    assert "ohlcv" in data["signals_used"]
-    # With mocks, news and fundamentals should also be present
-    assert "news_sentiment" in data["signals_used"]
-    assert "fundamentals" in data["signals_used"]
+    # Model only uses OHLCV channels (news/fundamentals loaded for metadata flags only)
+    assert data["signals_used"] == ["ohlcv"]
 
 
 # ============================================================================

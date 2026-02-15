@@ -40,8 +40,8 @@ def mock_training_summary_request():
             "data_window_end": "2025-12-31",
             "metrics": {"mae": 0.020, "rmse": 0.030},
             "promoted": True,
-            "num_input_channels": 12,
-            "signals_used": ["price", "sentiment", "fundamentals"],
+            "num_input_channels": 5,
+            "signals_used": ["ohlcv"],
         },
         "ppo": {
             "version": "v2026-01-15-ghi789",
@@ -68,7 +68,7 @@ def mock_llm_json_response():
     return {
         "para_1_overall": "All models trained successfully with good metrics.",
         "para_2_lstm": "LSTM model shows strong price prediction capability.",
-        "para_3_patchtst": "PatchTST leverages multi-signal approach effectively.",
+        "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
         "para_4_ppo": "PPO allocator demonstrates solid risk-adjusted returns.",
         "para_5_sac": "SAC shows promising results but was not promoted.",
         "para_6_recommendations": "Consider investigating SAC promotion criteria.",
@@ -465,7 +465,7 @@ def mock_weekly_summary_request():
             "as_of_date": "2026-02-03",
             "target_week_start": "2026-02-03",
             "target_week_end": "2026-02-07",
-            "signals_used": ["price", "sentiment", "fundamentals"],
+            "signals_used": ["ohlcv"],
         },
         "news": {
             "run_id": "paper:2026-02-03",

@@ -7,7 +7,7 @@ A **learning-focused** weekly paper-trading portfolio system for **halal Nasdaq-
 Every Monday **6:00 PM IST** (pre US open), the system orchestrates:
 
 1. **Universe & Signals**: Fetch halal universe, collect signals (news sentiment, fundamentals)
-2. **Price Forecasting**: Run LSTM (price-only) and PatchTST (multi-signal)
+2. **Price Forecasting**: Run LSTM (price-only) and PatchTST (OHLCV 5-channel)
 3. **Portfolio Allocation**: Run multiple allocators for comparison:
    - **HRP** (Hierarchical Risk Parity) — math baseline
    - **PPO + LSTM** / **PPO + PatchTST** — on-policy RL agents
@@ -96,9 +96,9 @@ This repo compares multiple approaches at each stage:
 | Cash available | Portfolio state |
 
 **Key distinction:**
-- **LSTM** = pure price forecaster (OHLCV only, does NOT receive signals)
-- **PatchTST** = multi-signal forecaster (receives all signals + OHLCV)
-- **PPO/SAC** = RL allocators (receive all signals + forecaster output)
+- **LSTM** = pure price forecaster (close returns only)
+- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
+- **PPO/SAC** = RL allocators (receive signals + dual forecaster output)
 
 ## Prerequisites
 
@@ -170,7 +170,7 @@ Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
 | PPO | PPO + LSTM | On-policy RL with pure price forecasts |
-| SAC | SAC + PatchTST | Off-policy RL with multi-signal forecasts |
+| SAC | SAC + PatchTST | Off-policy RL with OHLCV forecasts |
 | HRP | HRP | Risk parity baseline |
 
 **OpenAI (for LLM summaries):**
@@ -392,7 +392,7 @@ We store three kinds of data:
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /inference/lstm` | LSTM price predictions (OHLCV only) |
-| `POST /inference/patchtst` | PatchTST price predictions (multi-signal) |
+| `POST /inference/patchtst` | PatchTST price predictions (OHLCV) |
 | `POST /inference/ppo_lstm` | PPO allocation using LSTM forecasts |
 | `POST /inference/ppo_patchtst` | PPO allocation using PatchTST forecasts |
 | `POST /inference/sac_lstm` | SAC allocation using LSTM forecasts |

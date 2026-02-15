@@ -116,9 +116,9 @@ flowchart LR
 
 ### POST /train/patchtst
 
-**Train PatchTST Multi-Signal Forecaster**
+**Train PatchTST OHLCV Forecaster**
 
-Trains PatchTST with OHLCV + news sentiment + fundamentals.
+Trains PatchTST with 5-channel OHLCV log returns (open, high, low, close, volume).
 
 ### Flow Diagram
 

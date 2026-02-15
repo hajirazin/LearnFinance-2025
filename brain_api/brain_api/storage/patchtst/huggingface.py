@@ -98,7 +98,7 @@ tags:
 
 # LearnFinance PatchTST Model - {version}
 
-Multi-signal PatchTST transformer model for predicting weekly stock returns.
+OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
 
 ## Model Details
 
