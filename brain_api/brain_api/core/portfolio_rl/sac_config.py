@@ -48,8 +48,18 @@ class SACBaseConfig:
     cost_bps: int = 10  # Transaction cost in basis points
     cash_buffer: float = 0.02  # Minimum cash weight (2%)
     max_position_weight: float = 0.20  # Max weight per stock (20%)
-    reward_scale: float = 100.0  # 1% return → reward of 1.0
+    reward_scale: float = 1.0  # Let normalize_rewards handle magnitude.
+    # SAC paper: alpha ≡ 1/reward_scale. Having reward_scale=100
+    # AND normalize_rewards AND auto_entropy_tuning creates 3 competing
+    # magnitude controls. With reward_scale=1.0, Welford normalization
+    # produces mean~0 std~1 rewards, giving alpha a stable target.
     n_stocks: int = 15  # Top-15 stocks by liquidity
+
+    # === Reward shaping ===
+    sharpe_weight: float = (
+        0.5  # Blend: sharpe_weight * DSR + (1-sharpe_weight) * return_reward
+    )
+    sharpe_eta: float = 0.01  # EMA decay for differential Sharpe (~100-week window)
 
     # === Reproducibility ===
     seed: int = 42
@@ -98,6 +108,8 @@ class SACBaseConfig:
             "seed": self.seed,
             "validation_years": self.validation_years,
             "min_cagr_improvement": self.min_cagr_improvement,
+            "sharpe_weight": self.sharpe_weight,
+            "sharpe_eta": self.sharpe_eta,
         }
 
     @classmethod

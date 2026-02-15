@@ -138,12 +138,7 @@ def train_sac_endpoint(
     # Generate walk-forward forecast features for both LSTM and PatchTST
     use_lstm_snapshots = snapshots_available("lstm")
     use_patchtst_snapshots = snapshots_available("patchtst")
-    (
-        lstm_predictions,
-        lstm_volatilities,
-        patchtst_predictions,
-        patchtst_volatilities,
-    ) = build_dual_forecast_features(
+    lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
@@ -164,19 +159,6 @@ def train_sac_endpoint(
         else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
-    # Align LSTM volatility to common week count
-    for symbol in available_symbols:
-        if symbol in lstm_volatilities:
-            vol_arr = lstm_volatilities[symbol]
-            if len(vol_arr) >= min_weeks - 1:
-                lstm_volatilities[symbol] = vol_arr[-(min_weeks - 1) :]
-            else:
-                padded = np.zeros(min_weeks - 1)
-                padded[-len(vol_arr) :] = vol_arr
-                lstm_volatilities[symbol] = padded
-        else:
-            lstm_volatilities[symbol] = np.zeros(min_weeks - 1)
-
     # Align PatchTST forecast features to common week count
     for symbol in available_symbols:
         if symbol in patchtst_predictions:
@@ -190,28 +172,13 @@ def train_sac_endpoint(
         else:
             patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
 
-    # Align PatchTST volatility to common week count
-    for symbol in available_symbols:
-        if symbol in patchtst_volatilities:
-            vol_arr = patchtst_volatilities[symbol]
-            if len(vol_arr) >= min_weeks - 1:
-                patchtst_volatilities[symbol] = vol_arr[-(min_weeks - 1) :]
-            else:
-                padded = np.zeros(min_weeks - 1)
-                padded[-len(vol_arr) :] = vol_arr
-                patchtst_volatilities[symbol] = padded
-        else:
-            patchtst_volatilities[symbol] = np.zeros(min_weeks - 1)
-
-    # Build training data with dual forecasts and volatilities
+    # Build training data with dual forecasts
     training_data = sac_build_training_data(
         weekly_prices,
         signals,
         lstm_predictions,
         patchtst_predictions,
         available_symbols,
-        lstm_volatilities=lstm_volatilities,
-        patchtst_volatilities=patchtst_volatilities,
     )
     result = train_sac(training_data, config)
 
@@ -447,12 +414,7 @@ def finetune_sac_endpoint(
     # Generate walk-forward forecast features for both LSTM and PatchTST
     use_lstm_snapshots = snapshots_available("lstm")
     use_patchtst_snapshots = snapshots_available("patchtst")
-    (
-        lstm_predictions,
-        lstm_volatilities,
-        patchtst_predictions,
-        patchtst_volatilities,
-    ) = build_dual_forecast_features(
+    lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
@@ -473,19 +435,6 @@ def finetune_sac_endpoint(
         else:
             lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
-    # Align LSTM volatility to common week count
-    for symbol in available_symbols:
-        if symbol in lstm_volatilities:
-            vol_arr = lstm_volatilities[symbol]
-            if len(vol_arr) >= min_weeks - 1:
-                lstm_volatilities[symbol] = vol_arr[-(min_weeks - 1) :]
-            else:
-                padded = np.zeros(min_weeks - 1)
-                padded[-len(vol_arr) :] = vol_arr
-                lstm_volatilities[symbol] = padded
-        else:
-            lstm_volatilities[symbol] = np.zeros(min_weeks - 1)
-
     # Align PatchTST forecast features to common week count
     for symbol in available_symbols:
         if symbol in patchtst_predictions:
@@ -499,28 +448,13 @@ def finetune_sac_endpoint(
         else:
             patchtst_predictions[symbol] = np.zeros(min_weeks - 1)
 
-    # Align PatchTST volatility to common week count
-    for symbol in available_symbols:
-        if symbol in patchtst_volatilities:
-            vol_arr = patchtst_volatilities[symbol]
-            if len(vol_arr) >= min_weeks - 1:
-                patchtst_volatilities[symbol] = vol_arr[-(min_weeks - 1) :]
-            else:
-                padded = np.zeros(min_weeks - 1)
-                padded[-len(vol_arr) :] = vol_arr
-                patchtst_volatilities[symbol] = padded
-        else:
-            patchtst_volatilities[symbol] = np.zeros(min_weeks - 1)
-
-    # Build training data with dual forecasts and volatilities
+    # Build training data with dual forecasts
     training_data = sac_build_training_data(
         weekly_prices,
         signals,
         lstm_predictions,
         patchtst_predictions,
         available_symbols,
-        lstm_volatilities=lstm_volatilities,
-        patchtst_volatilities=patchtst_volatilities,
     )
     result = finetune_sac(
         training_data,

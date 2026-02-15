@@ -5,6 +5,9 @@ Reward = scaled(portfolio_log_return - log(1 + transaction_cost))
 Both terms are in log space for mathematical consistency.
 All rewards are scaled by reward_scale (default 100) so that
 a 1% weekly return becomes a reward of 1.0.
+
+Includes Differential Sharpe Ratio (Moody & Saffell 2001) for
+risk-adjusted reward shaping.
 """
 
 from __future__ import annotations
@@ -15,6 +18,101 @@ import numpy as np
 
 if TYPE_CHECKING:
     from brain_api.core.portfolio_rl.config import PPOBaseConfig
+
+
+class DifferentialSharpe:
+    """Online incremental Sharpe ratio estimator (Moody & Saffell 2001).
+
+    Computes the differential Sharpe ratio as an incremental reward signal.
+    Uses exponential moving averages of returns and squared returns.
+
+    The reward at each step measures how much the current return improves
+    the running Sharpe ratio -- positive for returns above risk-adjusted
+    expectations, negative for returns that increase risk without return.
+    """
+
+    def __init__(self, eta: float = 0.01):
+        """Initialize with learning rate eta.
+
+        Args:
+            eta: EMA decay rate. Lower = more stable, higher = more responsive.
+                 0.01 is standard for weekly data (~100-week effective window).
+        """
+        self.eta = eta
+        self.A = 0.0  # EMA of returns
+        self.B = 0.0  # EMA of squared returns
+
+    def update(self, r: float) -> float:
+        """Compute differential Sharpe ratio for this step's return.
+
+        Args:
+            r: Portfolio return for this step (simple return, not log).
+
+        Returns:
+            Differential Sharpe ratio reward.
+        """
+        dA = r - self.A
+        dB = r**2 - self.B
+        denominator = (self.B - self.A**2) ** 1.5
+
+        if abs(denominator) < 1e-12:
+            # Not enough variance yet (early episodes), return 0
+            dsr = 0.0
+        else:
+            dsr = (self.B * dA - 0.5 * self.A * dB) / denominator
+
+        # Update EMAs
+        self.A += self.eta * dA
+        self.B += self.eta * dB
+
+        return dsr
+
+    def reset(self) -> None:
+        """Reset EMAs for new episode."""
+        self.A = 0.0
+        self.B = 0.0
+
+
+def compute_blended_reward(
+    portfolio_log_return: float,
+    portfolio_simple_return: float,
+    turnover: float,
+    differential_sharpe: DifferentialSharpe,
+    config: PPOBaseConfig,
+) -> float:
+    """Compute blended reward: return + differential Sharpe.
+
+    reward = sharpe_weight * DSR + (1 - sharpe_weight) * return_reward
+
+    The return component incentivizes making money.
+    The DSR component penalizes volatile strategies and rewards
+    consistent risk-adjusted performance.
+
+    Args:
+        portfolio_log_return: Log portfolio return log(1 + r).
+        portfolio_simple_return: Simple portfolio return r.
+        turnover: Portfolio turnover (0 to 1).
+        differential_sharpe: DifferentialSharpe instance (stateful, updates EMAs).
+        config: Config with cost_bps, reward_scale, sharpe_weight.
+
+    Returns:
+        Blended reward for RL training.
+    """
+    # Return component (existing formula, in log space)
+    transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
+    return_reward = (
+        portfolio_log_return - np.log(1 + transaction_cost)
+    ) * config.reward_scale
+
+    # Differential Sharpe component (uses simple return net of costs)
+    net_simple_return = portfolio_simple_return - transaction_cost
+    dsr = differential_sharpe.update(net_simple_return)
+    # Scale DSR to similar magnitude as return_reward
+    dsr_reward = dsr * config.reward_scale
+
+    return (
+        config.sharpe_weight * dsr_reward + (1 - config.sharpe_weight) * return_reward
+    )
 
 
 def compute_portfolio_return(

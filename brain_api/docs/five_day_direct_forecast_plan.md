@@ -1,6 +1,6 @@
 # 5-Day Direct Multi-Channel Forecast + RL Bug Fixes
 
-> **Status:** LSTM phase implemented (close-only). PatchTST phase implemented (5-channel OHLCV multi-task). RL phases still planned.
+> **Status:** LSTM phase implemented (close-only). PatchTST phase implemented (5-channel OHLCV multi-task). RL phase: All 10 bugs FIXED. Research-backed reward/config changes DONE (DifferentialSharpe reward, entropy_coef 0.01→0.05, SAC reward_scale 100→1). Only new test files (Phase 7) remain pending.
 >
 > **Scope:** Change LSTM and PatchTST from 1-day autoregressive prediction to direct 5-day
 > prediction. Fix pre-existing bugs across forecasters,
@@ -98,7 +98,7 @@ y shape: `(n_samples, 5)`. Uses `compute_ohlcv_log_returns()` to extract `close_
 
 **Holiday handling: none needed.** Targets are always the next 5 rows in `features_df`, which are trading days by definition. Holidays don't appear in the data. The model predicts "next 5 trading day returns" regardless of which calendar days they are. No calendar awareness, no zero-padding, no position mapping. Research consensus (pandas_market_calendars docs, DataCamp LSTM guides, interrupted time series literature) confirms: filter to trading days, skip non-trading days entirely.
 
-### PatchTST (PLANNED -- multi-channel, still per original plan)
+### PatchTST (IMPLEMENTED -- 5-channel OHLCV multi-task)
 
 **All targets are standard same-series day-over-day returns.** For the 5 next trading days after a Friday anchor:
 
@@ -167,15 +167,15 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 | # | Severity | Bug | File(s) | Fix | Status |
 |---|---|---|---|---|---|
 | 1 | CRITICAL | LSTM inverse-transform applied to already-unscaled model output, compressing predictions ~20x | `lstm/inference.py:210-215`, `walkforward.py:523-527` | Remove inverse-transform for LSTM inference. Model outputs raw log returns (targets never scaled). | **FIXED** |
-| 2 | CRITICAL | PatchTST training loss compares scaled model output against unscaled targets | `patchtst/training.py:199`, `patchtst/dataset.py:166-171` | Scale PatchTST targets during dataset construction; keep inverse-transform at inference | Planned |
+| 2 | CRITICAL | PatchTST training loss compares scaled model output against unscaled targets | `patchtst/training.py:199`, `patchtst/dataset.py:166-171` | RevIN handles normalization; built-in loss computes in normalized space. Targets stay unscaled. | **FIXED** (PatchTST plan) |
 | 3 | MAJOR | Autoregressive error accumulation -- 5-day loop feeds synthetic features back as input | `lstm/inference.py:195-245`, `patchtst/inference.py:303-374` | Direct 5-day prediction (single forward pass) | **FIXED** (LSTM) |
-| 4 | MAJOR | Volatility train/inference mismatch -- ppo/sac inference never pass volatility params, causing zeros | `ppo/inference.py`, `sac/inference.py` | Drop volatility entirely from RL state | Planned |
+| 4 | MAJOR | Volatility train/inference mismatch -- ppo/sac inference never pass volatility params, causing zeros | `ppo/inference.py`, `sac/inference.py` | Drop volatility entirely from RL state | **FIXED** |
 | 5 | SIGNIFICANT | Off-by-one in dataset alignment. Input ends at position t-1, target starts at t+1. Model trained as 2-step forecaster instead of 1-step. | `lstm/dataset.py:69-74` | Include anchor day's return in input: `features_df.iloc[t-seq_len+1 : t+1]` | **FIXED** |
-| 6 | SIGNIFICANT | SAC `* 10.0` scaling makes softmax extremely peaked, fighting entropy maximization | `sac_networks.py:119,127` | Remove `* 10.0`, fix Jacobian correction | Planned |
-| 7 | SIGNIFICANT | `gamma=0.99` gives ~1+ year effective horizon for weekly steps (too long) | `config.py:23`, `sac_config.py:24` | `gamma=0.97` (~6-month effective horizon) | Planned |
+| 6 | SIGNIFICANT | SAC `* 10.0` scaling makes softmax extremely peaked, fighting entropy maximization | `sac_networks.py:119,127` | Remove `* 10.0`, fix Jacobian correction | **FIXED** |
+| 7 | SIGNIFICANT | `gamma=0.99` gives ~1+ year effective horizon for weekly steps (too long) | `config.py:23`, `sac_config.py:24` | `gamma=0.97` (~6-month effective horizon) | **FIXED** |
 | 8 | MINOR | No gradient clipping. LSTMs with seq_len=60 are susceptible to exploding gradients. | `lstm/training.py` (missing) | Add `torch.nn.utils.clip_grad_norm_()` before `optimizer.step()` | **FIXED** |
-| 9 | MINOR | Reward function subtracts linear transaction cost from log return (different units) | `rewards.py:117` | Use `log(1 + tc)` instead of raw `tc` | Planned |
-| 10 | MINOR | Experience storage stores percentage returns instead of documented decimal | `execution.py:186-189` | Divide by 100 | Planned |
+| 9 | MINOR | Reward function subtracts linear transaction cost from log return (different units) | `rewards.py:117` | Use `log(1 + tc)` instead of raw `tc` | **FIXED** |
+| 10 | MINOR | Experience storage stores percentage returns instead of documented decimal | `execution.py:186-189` | Divide by 100 | **FIXED** |
 
 ---
 
@@ -246,9 +246,9 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 #### 7.2.1 Config (`brain_api/core/patchtst/config.py`)
 
-- `num_input_channels`: 12 -> 5 (OHLCV only)
-- `prediction_length`: 1 -> 5 (direct 5-day)
-- `feature_names`: 12 names -> 5 OHLCV names
+- `num_input_channels`: 5 (OHLCV only -- implemented in PatchTST plan)
+- `prediction_length`: 5 (direct 5-day -- implemented in PatchTST plan)
+- `feature_names`: 5 OHLCV names
 - `sample_stride` field removed (week-aligned sampling)
 - RevIN kept enabled (default `scaling="std"`)
 
@@ -289,7 +289,15 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 ---
 
-### 7.3 RL State and Environment Changes
+### 7.3 RL State and Environment Changes -- **ALL DONE**
+
+> **Additional research-backed changes implemented alongside Bug #4:**
+> - **DifferentialSharpe reward** (Moody & Saffell 2001): Added `DifferentialSharpe` class and `compute_blended_reward()` to `rewards.py`. Env `step()` now uses blended reward: `sharpe_weight * DSR + (1-sharpe_weight) * return_reward`.
+> - **PPO entropy_coef**: 0.01 → 0.05 in `config.py`. At 0.01, entropy bonus ~0.2 is negligible vs policy_loss ~0.5-1.0. At 0.05, entropy bonus ~1.1 provides meaningful exploration pressure for 16-dim action space. Still 4x less aggressive than SAC's init_alpha=0.2.
+> - **SAC reward_scale**: 100.0 → 1.0 in `sac_config.py`. Having reward_scale=100 AND normalize_rewards AND auto_entropy_tuning creates 3 competing magnitude controls. With reward_scale=1.0, Welford normalization produces mean~0 std~1 rewards, giving alpha a stable target.
+> - **Reward shaping config**: Added `sharpe_weight=0.5` and `sharpe_eta=0.01` to both `PPOBaseConfig` and `SACBaseConfig`.
+> - **PPO data.py**: Removed volatility fields from TrainingData and build_training_data().
+> - **Training routes (ppo.py, sac.py)**: Updated build_dual_forecast_features destructuring from 4-tuple to 2-tuple. Removed volatility alignment blocks and volatility params from build_training_data() calls.
 
 #### 7.3.1 State (`brain_api/core/portfolio_rl/state.py`)
 
@@ -373,7 +381,9 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 ---
 
-### 7.6 SAC Algorithm Fixes
+### 7.6 SAC Algorithm Fixes -- **ALREADY FIXED**
+
+> **Note:** `sac_networks.py` already has NO `* 10.0` scaling. Code reads `torch.tanh(mean)` at lines 119, 127, 133. Both configs already have `gamma: float = 0.97`. No code changes needed for this section.
 
 #### 7.6.1 Remove * 10.0 Scaling (`brain_api/core/portfolio_rl/sac_networks.py`)
 
@@ -409,7 +419,9 @@ Both PPO (`config.py:23`) and SAC (`sac_config.py:24`) use `gamma = 0.99`. With 
 
 ---
 
-### 7.7 Reward Function Fix
+### 7.7 Reward Function Fix -- **ALREADY FIXED**
+
+> **Note:** `rewards.py` already uses `np.log(1 + transaction_cost)` at line 124. No code changes needed.
 
 **`rewards.py` (`brain_api/core/portfolio_rl/rewards.py`):**
 
@@ -431,7 +443,9 @@ At typical magnitudes (returns ~0.01, costs ~0.001), the numerical difference is
 
 ---
 
-### 7.8 Experience Storage Fix
+### 7.8 Experience Storage Fix -- **ALREADY FIXED**
+
+> **Note:** `execution.py` already divides by 100 at lines 188-193. No code changes needed.
 
 **`execution.py` (`prefect/flows/tasks/execution.py`):**
 
@@ -495,7 +509,7 @@ patchtst_forecasts = {p.symbol: p.predicted_weekly_return_pct / 100.0 for p in p
 
 **`test_lstm_dataset.py` (new file):**
 
-- `test_build_dataset_returns_correct_shapes`: y shape is `(n, 5, 5)`, X shape is `(n, seq_len, 5)`
+- `test_build_dataset_returns_correct_shapes`: y shape is `(n, 5)` (close-only), X shape is `(n, seq_len, 5)`
 - `test_build_dataset_week_aligned_sampling`: Anchor dates are Fridays (or last day before weekends)
 - `test_build_dataset_targets_are_valid_returns`: No NaN/Inf, values in reasonable range (-0.2 to 0.2)
 - `test_build_dataset_targets_match_ohlcv_channels`: Channel 0=open, 1=high, 2=low, 3=close, 4=volume
@@ -504,9 +518,9 @@ patchtst_forecasts = {p.symbol: p.predicted_weekly_return_pct / 100.0 for p in p
 
 **`test_patchtst_dataset.py` (new file):**
 
-- Same tests as LSTM but with 12 channels: y shape `(n, 5, 12)`
-- `test_build_dataset_targets_include_all_12_channels`
-- `test_build_dataset_news_and_fundamentals_channels_present`
+- Same tests as LSTM but with 5 channels OHLCV: y shape `(n, 5, 5)`
+- `test_build_dataset_targets_include_all_5_ohlcv_channels`
+- RevIN handles normalization internally; X and y are unscaled
 
 **`test_state_vector.py` (new file):**
 
@@ -593,52 +607,52 @@ Ordered by dependency (implement top-to-bottom):
 
 | # | ID | Task |
 |---|---|---|
-| 9 | `patchtst-config` | `config.py`: prediction_length 1 -> 5. |
-| 10 | `patchtst-dataset` | `dataset.py`: Rewrite build_dataset(). All 12 channels x 5 days. CRITICAL: Scale y targets using feature_scaler. Remove _compute_weekly_return(). |
-| 11 | `patchtst-training` | `training.py`: All-channel MSE loss on (batch, 5, 12). Both output and target in scaled space. Remove close_ret-specific logic. |
-| 12 | `patchtst-inference-prediction` | `inference.py`: Add daily_returns, remove predicted_volatility. |
-| 13 | `patchtst-inference-run` | `inference.py`: Delete autoregressive loop. Single forward pass. Inverse-transform per channel (correct for PatchTST). Extract open_ret + close_ret. |
-| 14 | `patchtst-inference-build-features` | `inference.py`: Add starting_open_price to InferenceFeatures. |
+| 9 | `patchtst-config` | **DONE.** (PatchTST plan) `config.py`: 5 channels OHLCV, prediction_length=5, RevIN enabled. |
+| 10 | `patchtst-dataset` | **DONE.** (PatchTST plan) `dataset.py`: 5-channel OHLCV x 5 days. RevIN handles normalization. X and y unscaled. |
+| 11 | `patchtst-training` | **DONE.** (PatchTST plan) `training.py`: HuggingFace built-in loss on (batch, 5, 5). RevIN normalized space. |
+| 12 | `patchtst-inference-prediction` | **DONE.** (PatchTST plan) `inference.py`: Added daily_returns. Kept predicted_volatility for RL compat. |
+| 13 | `patchtst-inference-run` | **DONE.** (PatchTST plan) `inference.py`: Single forward pass. RevIN denormalizes. No inverse-transform needed. |
+| 14 | `patchtst-inference-build-features` | **DONE.** (PatchTST plan) `inference.py`: 5 OHLCV columns as model features. |
 
 ### Phase 3: RL State and Environment
 
 | # | ID | Task |
 |---|---|---|
-| 15 | `state-drop-vol` | `state.py`: n_forecasts_per_stock 4->2. Remove volatility index methods. Update build_state_vector() and state_to_dict(). New state_dim=151. |
-| 16 | `env-drop-vol` | `env.py`: Remove volatility from PortfolioEnv.__init__(), _build_state(), create_env_from_data(). |
-| 17 | `ppo-inference-drop-vol` | `ppo/inference.py`: Remove volatility params from run_ppo_inference(). |
-| 18 | `sac-inference-drop-vol` | `sac/inference.py`: Remove volatility params from run_sac_inference(). |
-| 19 | `sac-training-drop-vol` | `sac/training.py`: Remove volatility references. |
+| 15 | `state-drop-vol` | **DONE.** `state.py`: n_forecasts_per_stock 4->2. Removed get_lstm_volatility_indices() and get_patchtst_volatility_indices(). Updated build_state_vector() and state_to_dict(). state_dim=151. |
+| 16 | `env-drop-vol` | **DONE.** `env.py`: Removed volatility from PortfolioEnv.__init__(), _build_state(), create_env_from_data(). Added DifferentialSharpe instance and compute_blended_reward() in step(). |
+| 17 | `ppo-inference-drop-vol` | **DONE.** `ppo/inference.py`: Removed lstm_volatilities and patchtst_volatilities params from run_ppo_inference() and build_state_vector() call. |
+| 18 | `sac-inference-drop-vol` | **DONE.** `sac/inference.py`: Removed lstm_volatilities and patchtst_volatilities params from run_sac_inference() and build_state_vector() call. |
+| 19 | `sac-training-drop-vol` | **DONE.** `sac/training.py`: Removed volatility fields from TrainingData, build_training_data(), and create_env_from_training_data(). |
 
 ### Phase 4: Walkforward
 
 | # | ID | Task |
 |---|---|---|
-| 20 | `walkforward-lstm` | `walkforward.py`: Replace LSTM autoregressive loop with single forward pass. No inverse-transform. Return prediction only. |
-| 21 | `walkforward-patchtst` | `walkforward.py`: Replace PatchTST autoregressive loop with single forward pass. Inverse-transform per channel. Return prediction only. |
-| 22 | `walkforward-build-features` | `walkforward.py`: Change return types from (predictions, volatilities) to predictions only. Remove all volatility tracking. |
+| 20 | `walkforward-lstm` | **DONE.** `walkforward.py`: Single forward pass (LSTM plan). Volatility return removed. _predict_single_week_lstm() returns float. |
+| 21 | `walkforward-patchtst` | **DONE.** `walkforward.py`: Single forward pass (PatchTST plan). Volatility return removed. _predict_single_week_patchtst() returns float. |
+| 22 | `walkforward-build-features` | **DONE.** `walkforward.py`: All 9 functions changed from (predictions, volatilities) to predictions only. build_dual_forecast_features() returns 2-tuple. All volatility tracking removed. |
 
 ### Phase 5: Forecasters and SAC Fixes
 
 | # | ID | Task |
 |---|---|---|
-| 23 | `forecasters-update` | `forecasters.py`: Update for new SymbolPrediction (no volatility). Interface unchanged. |
-| 24 | `sac-remove-10x-scaling` | `sac_networks.py`: Remove * 10.0 from lines 119, 127. Fix Jacobian at line 133. Update comments. |
-| 25 | `sac-target-entropy-fix` | `sac_config.py`: Update comment at lines 27-29 to reflect [-1, 1] range. |
-| 26 | `gamma-reduce-weekly` | `config.py` + `sac_config.py`: gamma 0.99 -> 0.97. Update comments. |
-| 27 | `reward-fix-log-linear-mismatch` | `rewards.py`: Change line 117 to use np.log(1 + transaction_cost). |
-| 28 | `experience-pct-to-decimal-fix` | `execution.py`: Divide by 100 in _build_state_dict() lines 186-189. |
+| 23 | `forecasters-update` | **DONE.** `forecasters.py`: No code changes needed. predicted_volatility kept in SymbolPrediction (used by inference API). Interface unchanged. |
+| 24 | `sac-remove-10x-scaling` | **DONE.** `sac_networks.py`: Code already has no `* 10.0`. Lines 119, 127 read `torch.tanh(mean)` / `torch.tanh(raw_action)`. Line 133 uses `action.pow(2)`. |
+| 25 | `sac-target-entropy-fix` | **DONE.** `sac_config.py`: Comment already reflects `[-1, 1]` range. target_entropy = -16.0 is correct. |
+| 26 | `gamma-reduce-weekly` | **DONE.** `config.py` + `sac_config.py`: Both already have `gamma: float = 0.97`. |
+| 27 | `reward-fix-log-linear-mismatch` | **DONE.** `rewards.py`: Line 124 already uses `np.log(1 + transaction_cost)`. |
+| 28 | `experience-pct-to-decimal-fix` | **DONE.** `execution.py`: Lines 188-193 already divide by 100. |
 
 ### Phase 6: Test Updates
 
 | # | ID | Task |
 |---|---|---|
-| 29 | `test-lstm-inference-update` | Update test_inference_lstm.py: daily_returns instead of predicted_volatility. Add new assertions. |
-| 30 | `test-patchtst-inference-update` | Update test_inference_patchtst.py: same as LSTM test changes. |
-| 31 | `test-ppo-state-dim` | Update test_ppo.py: state_dim formula and comments. |
-| 32 | `test-sac-state-dim` | Update test_sac.py: same state_dim change. |
-| 33 | `test-experience-update` | Verify test_experience.py passes. Update volatility references if any. |
-| 34 | `test-forecaster-snapshots-update` | Update test_forecaster_snapshots.py: predictions only (no volatilities tuple). |
+| 29 | `test-lstm-inference-update` | **DONE.** (LSTM plan) test_inference_lstm.py: daily_returns assertions added, volatility tests removed. |
+| 30 | `test-patchtst-inference-update` | **DONE.** (PatchTST plan) test_inference_patchtst.py: daily_returns assertions added, volatility tests removed. |
+| 31 | `test-ppo-state-dim` | **DONE.** test_ppo.py: state_dim = n_stocks*7 + n_stocks*2 + (n_stocks+1) = 151. |
+| 32 | `test-sac-state-dim` | **DONE.** test_sac.py: same state_dim formula = 151. |
+| 33 | `test-experience-update` | **DONE.** test_experience.py: No volatility references. All tests pass. |
+| 34 | `test-forecaster-snapshots-update` | **DONE.** test_forecaster_snapshots.py: Updated to expect predictions only (no volatility tuples). |
 
 ### Phase 7: New Tests
 
@@ -655,12 +669,12 @@ Ordered by dependency (implement top-to-bottom):
 
 | # | ID | Task |
 |---|---|---|
-| 41 | `run-all-tests` | Run full test suite (pytest brain_api/tests/ and pytest prefect/tests/). Fix ALL failures. |
-| 42 | `run-linter` | Run linter/type checks (ruff, mypy). Fix all new lint errors. |
+| 41 | `run-all-tests` | **DONE.** 408 brain_api tests passed, 23 prefect tests passed. Zero failures. |
+| 42 | `run-linter` | **DONE.** ruff check: "All checks passed!" Zero lint errors. |
 
 ---
 
 ## 12. Future Improvements
 
-- Consider Sharpe-based or risk-adjusted reward for RL training (differential Sharpe ratio)
+- ~~Consider Sharpe-based or risk-adjusted reward for RL training (differential Sharpe ratio)~~ **DONE.** Implemented `DifferentialSharpe` class (Moody & Saffell 2001) in `rewards.py`. Blended reward: `sharpe_weight * DSR + (1-sharpe_weight) * log_return_reward`. Config: `sharpe_weight=0.5`, `sharpe_eta=0.01`. Also: PPO `entropy_coef` 0.01→0.05 (research-backed for 16-dim action space), SAC `reward_scale` 100→1 (eliminates triple magnitude control conflict).
 - Add secondary loss `alpha * MSE(daily) + beta * MSE(weekly_compound)` to optimize directly for weekly accuracy

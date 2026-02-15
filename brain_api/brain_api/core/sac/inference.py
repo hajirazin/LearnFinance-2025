@@ -41,8 +41,6 @@ def run_sac_inference(
     lstm_forecasts: dict[str, float],
     patchtst_forecasts: dict[str, float],
     model_version: str,
-    lstm_volatilities: dict[str, float] | None = None,
-    patchtst_volatilities: dict[str, float] | None = None,
 ) -> SACInferenceResult:
     """Run SAC inference to get portfolio allocation.
 
@@ -56,21 +54,17 @@ def run_sac_inference(
         lstm_forecasts: Dict of symbol -> LSTM forecast value.
         patchtst_forecasts: Dict of symbol -> PatchTST forecast value.
         model_version: Model version string.
-        lstm_volatilities: Dict of symbol -> LSTM forecast volatility.
-        patchtst_volatilities: Dict of symbol -> PatchTST forecast volatility.
 
     Returns:
         Inference result with allocation weights.
     """
-    # Build state vector with dual forecasts and volatilities
+    # Build state vector with dual forecasts
     state = build_state_vector(
         signals=signals,
         lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         portfolio_weights=current_weights,
         symbol_order=symbol_order,
-        lstm_volatilities=lstm_volatilities,
-        patchtst_volatilities=patchtst_volatilities,
     )
 
     # Normalize state

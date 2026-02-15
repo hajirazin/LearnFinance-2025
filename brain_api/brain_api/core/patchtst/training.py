@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import PatchTSTConfig as HFPatchTSTConfig
@@ -288,7 +289,7 @@ def train_model_pytorch(
         torch.cuda.empty_cache()
 
     print(
-        f"[PatchTST] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f}"
+        f"[PatchTST] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f} (normalized)"
     )
 
     # Restore best model on CPU
@@ -296,30 +297,54 @@ def train_model_pytorch(
     if best_model_state is not None:
         model_cpu.load_state_dict(best_model_state)
 
-    # Final metrics (batch by batch to save memory)
+    # Final metrics in RAW space (denormalized by RevIN) for comparable baseline.
+    # During training, built-in loss operates in RevIN-normalized space (~1.0 scale).
+    # For final reporting, compute MSE on prediction_outputs (denormalized by RevIN)
+    # so train_loss, val_loss, and baseline_loss are all in raw log-return space.
     model.eval()
+
     total_final_train_loss = 0.0
     n_final_batches = 0
     with torch.no_grad():
         for train_X, train_y in train_loader:
             train_X = train_X.to(device)
             train_y = train_y.to(device)
-            train_outputs = model(past_values=train_X, future_values=train_y)
-            total_final_train_loss += train_outputs.loss.item()
+            preds = model(past_values=train_X).prediction_outputs  # denormalized
+            total_final_train_loss += F.mse_loss(preds, train_y).item()
             n_final_batches += 1
-            del train_X, train_y, train_outputs
+            del train_X, train_y, preds
     final_train_loss = total_final_train_loss / n_final_batches
 
-    # Baseline: predict mean return per channel per day
+    total_raw_val_loss = 0.0
+    n_raw_val_batches = 0
+    with torch.no_grad():
+        for val_X, val_y in val_loader:
+            val_X = val_X.to(device)
+            val_y = val_y.to(device)
+            preds = model(past_values=val_X).prediction_outputs  # denormalized
+            total_raw_val_loss += F.mse_loss(preds, val_y).item()
+            n_raw_val_batches += 1
+            del val_X, val_y, preds
+    final_val_loss = total_raw_val_loss / n_raw_val_batches
+
+    # Baseline: predict mean return per channel per day (raw space)
     # y_val shape: (n, 5, 5) -- compute mean across samples for each (day, channel)
     y_val_mean = np.mean(y_val, axis=0, keepdims=True)  # (1, 5, 5)
     baseline_loss = float(np.mean((y_val - y_val_mean) ** 2))
 
     print(
-        f"[PatchTST] Training complete: train_loss={final_train_loss:.6f}, val_loss={best_val_loss:.6f}, baseline={baseline_loss:.6f}"
+        f"[PatchTST] Training complete (normalized): "
+        f"train_loss={avg_train_loss:.6f}, val_loss={best_val_loss:.6f}"
     )
-    beats_baseline = best_val_loss < baseline_loss
-    print(f"[PatchTST] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline")
+    print(
+        f"[PatchTST] Training complete (raw/denorm): "
+        f"train_loss={final_train_loss:.6f}, val_loss={final_val_loss:.6f}, "
+        f"baseline={baseline_loss:.6f}"
+    )
+    beats_baseline = final_val_loss < baseline_loss
+    print(
+        f"[PatchTST] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline (raw space)"
+    )
 
     # Final GPU cache cleanup before returning
     if device.type == "mps":
@@ -332,6 +357,6 @@ def train_model_pytorch(
         feature_scaler=feature_scaler,
         config=config,
         train_loss=final_train_loss,
-        val_loss=best_val_loss,
+        val_loss=final_val_loss,
         baseline_loss=baseline_loss,
     )

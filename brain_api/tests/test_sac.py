@@ -53,11 +53,11 @@ def mock_config() -> SACConfig:
 def create_mock_training_result(config: SACConfig) -> SACTrainingResult:
     """Create a mock training result for testing."""
     n_stocks = config.n_stocks
-    # State dim: signals (7 per stock) + forecasts with volatility (4 per stock) + weights
-    # LSTM return + LSTM vol + PatchTST return + PatchTST vol = 4 forecast features per stock
+    # State dim: signals (7 per stock) + forecasts (2 per stock) + weights
+    # LSTM return + PatchTST return = 2 forecast features per stock (no volatility)
     state_dim = (
-        n_stocks * 7 + n_stocks * 4 + (n_stocks + 1)
-    )  # signals + dual forecasts with vol + weights
+        n_stocks * 7 + n_stocks * 2 + (n_stocks + 1)
+    )  # signals + dual forecasts + weights
     action_dim = n_stocks + 1
 
     actor = GaussianActor(

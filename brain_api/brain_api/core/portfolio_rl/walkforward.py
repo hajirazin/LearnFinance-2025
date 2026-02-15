@@ -60,7 +60,7 @@ def generate_walkforward_forecasts_simple(
     weekly_dates: pd.DatetimeIndex,
     symbols: list[str],
     bootstrap_years: int = 4,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> dict[str, np.ndarray]:
     """Generate walk-forward forecasts using simple momentum proxy.
 
     For v1, we use momentum as a proxy for forecast features during training.
@@ -76,18 +76,14 @@ def generate_walkforward_forecasts_simple(
         bootstrap_years: First N years use zeros (truly no forecast)
 
     Returns:
-        Tuple of (forecasts, volatilities) where each is
-        Dict of symbol -> array of values (same length as prices - 1).
-        Volatilities are all zeros since momentum has no daily return path.
+        Dict of symbol -> array of forecast values (same length as prices - 1).
     """
     forecasts: dict[str, np.ndarray] = {}
-    volatilities: dict[str, np.ndarray] = {}
 
     if len(weekly_dates) == 0:
-        return (forecasts, volatilities)
+        return forecasts
 
     start_year = weekly_dates[0].year
-    weekly_dates[-1].year
 
     for symbol in symbols:
         if symbol not in weekly_prices:
@@ -101,8 +97,6 @@ def generate_walkforward_forecasts_simple(
 
         # Initialize forecasts (length = n_weeks - 1, for returns)
         symbol_forecasts = np.zeros(n_weeks - 1)
-        # Momentum proxy has no daily returns, so volatility is always 0
-        symbol_volatilities = np.zeros(n_weeks - 1)
 
         for i in range(n_weeks - 1):
             week_date = weekly_dates[i]
@@ -122,9 +116,8 @@ def generate_walkforward_forecasts_simple(
                         ) / prices[i - lookback]
 
         forecasts[symbol] = symbol_forecasts
-        volatilities[symbol] = symbol_volatilities
 
-    return (forecasts, volatilities)
+    return forecasts
 
 
 def generate_walkforward_forecasts_with_model(
@@ -134,7 +127,7 @@ def generate_walkforward_forecasts_with_model(
     forecaster_type: Literal["lstm", "patchtst"],
     bootstrap_years: int = 4,
     snapshot_dir: Path | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> dict[str, np.ndarray]:
     """Generate walk-forward forecasts using trained LSTM/PatchTST snapshots.
 
     For each year after bootstrap, loads a forecaster trained on prior data
@@ -152,7 +145,7 @@ def generate_walkforward_forecasts_with_model(
         snapshot_dir: Directory containing forecaster snapshots (for testing)
 
     Returns:
-        Tuple of (forecasts, volatilities) where each is Dict of symbol -> array
+        Dict of symbol -> array of forecast values
     """
     from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 
@@ -169,10 +162,9 @@ def generate_walkforward_forecasts_with_model(
         )
 
     forecasts: dict[str, np.ndarray] = {}
-    volatilities: dict[str, np.ndarray] = {}
 
     if len(weekly_dates) == 0:
-        return (forecasts, volatilities)
+        return forecasts
 
     start_year = weekly_dates[0].year
     end_year = weekly_dates[-1].year
@@ -196,7 +188,6 @@ def generate_walkforward_forecasts_with_model(
             continue
 
         symbol_forecasts = np.zeros(n_weeks - 1)
-        symbol_volatilities = np.zeros(n_weeks - 1)
 
         for year in range(start_year, end_year + 1):
             if year not in year_groups:
@@ -229,7 +220,7 @@ def generate_walkforward_forecasts_with_model(
                         snapshot_path = (
                             snapshot_dir / f"snapshot_{cutoff_date.isoformat()}"
                         )
-                        preds, vols = _run_snapshot_inference(
+                        preds = _run_snapshot_inference(
                             snapshot_path,
                             forecaster_type,
                             symbol,
@@ -237,12 +228,9 @@ def generate_walkforward_forecasts_with_model(
                             year_indices,
                             weekly_dates=weekly_dates,
                         )
-                        for idx, pred, vol in zip(
-                            year_indices, preds, vols, strict=False
-                        ):
+                        for idx, pred in zip(year_indices, preds, strict=False):
                             if idx < n_weeks - 1:
                                 symbol_forecasts[idx] = pred
-                                symbol_volatilities[idx] = vol
                     except Exception as e:
                         print(
                             f"[WalkForward] Error running snapshot for {symbol} year {year}: {e}"
@@ -266,9 +254,8 @@ def generate_walkforward_forecasts_with_model(
                                 ) / prices[i - lookback]
 
         forecasts[symbol] = symbol_forecasts
-        volatilities[symbol] = symbol_volatilities
 
-    return (forecasts, volatilities)
+    return forecasts
 
 
 def _run_snapshot_inference(
@@ -278,7 +265,7 @@ def _run_snapshot_inference(
     prices: np.ndarray,
     year_indices: list[int],
     weekly_dates: pd.DatetimeIndex | None = None,
-) -> tuple[list[float], list[float]]:
+) -> list[float]:
     """Run inference using a snapshot model.
 
     Loads a pre-trained LSTM or PatchTST snapshot and generates
@@ -293,7 +280,7 @@ def _run_snapshot_inference(
         weekly_dates: DatetimeIndex of weekly dates (for multi-channel PatchTST)
 
     Returns:
-        Tuple of (predictions, volatilities) lists for each week in year_indices
+        List of predictions for each week in year_indices
     """
     from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 
@@ -306,7 +293,7 @@ def _run_snapshot_inference(
 
     if forecaster_type == "lstm":
         # Run LSTM inference (with multi-channel OHLCV support)
-        predictions, volatilities = _run_lstm_snapshot_inference(
+        predictions = _run_lstm_snapshot_inference(
             artifacts,
             prices,
             year_indices,
@@ -315,7 +302,7 @@ def _run_snapshot_inference(
         )
     else:
         # Run PatchTST inference (multi-channel when available)
-        predictions, volatilities = _run_patchtst_snapshot_inference(
+        predictions = _run_patchtst_snapshot_inference(
             artifacts,
             prices,
             year_indices,
@@ -323,7 +310,7 @@ def _run_snapshot_inference(
             symbol=symbol,
         )
 
-    return (predictions, volatilities)
+    return predictions
 
 
 def _run_lstm_snapshot_inference(
@@ -332,7 +319,7 @@ def _run_lstm_snapshot_inference(
     year_indices: list[int],
     weekly_dates: pd.DatetimeIndex | None = None,
     symbol: str | None = None,
-) -> tuple[list[float], list[float]]:
+) -> list[float]:
     """Run LSTM snapshot inference for a symbol using direct 5-day prediction.
 
     Uses single forward pass for 5 close log returns (no autoregressive loop).
@@ -346,24 +333,22 @@ def _run_lstm_snapshot_inference(
         symbol: Stock symbol (for loading daily OHLCV)
 
     Returns:
-        Tuple of (predictions, volatilities) lists
+        List of predictions
     """
     import torch
 
     predictions = []
-    volatilities = []
     model = artifacts.model
     scaler = artifacts.feature_scaler
     config = artifacts.config
     seq_len = config.sequence_length
 
-    # Momentum fallback helper - returns (return, 0.0 volatility)
-    def momentum_fallback(idx: int) -> tuple[float, float]:
+    # Momentum fallback helper
+    def momentum_fallback(idx: int) -> float:
         lookback = 4
         if idx >= lookback and prices[idx - lookback] > 0:
-            ret = (prices[idx] - prices[idx - lookback]) / prices[idx - lookback]
-            return (ret, 0.0)
-        return (0.0, 0.0)
+            return (prices[idx] - prices[idx - lookback]) / prices[idx - lookback]
+        return 0.0
 
     # Determine if we can use multi-channel features
     use_multichannel = weekly_dates is not None and symbol is not None
@@ -403,16 +388,14 @@ def _run_lstm_snapshot_inference(
             f"(multichannel={use_multichannel}, has_ohlcv={daily_ohlcv is not None})"
         )
         for i in year_indices:
-            ret, vol = momentum_fallback(i)
-            predictions.append(ret)
-            volatilities.append(vol)
-        return (predictions, volatilities)
+            predictions.append(momentum_fallback(i))
+        return predictions
 
     model.eval()
 
     with torch.no_grad():
         for i in year_indices:
-            ret, vol = _predict_single_week_lstm(
+            ret = _predict_single_week_lstm(
                 model=model,
                 scaler=scaler,
                 config=config,
@@ -422,9 +405,8 @@ def _run_lstm_snapshot_inference(
                 daily_ohlcv=daily_ohlcv,
             )
             predictions.append(ret)
-            volatilities.append(vol)
 
-    return (predictions, volatilities)
+    return predictions
 
 
 def _predict_single_week_lstm(
@@ -435,7 +417,7 @@ def _predict_single_week_lstm(
     weekly_prices: np.ndarray,
     weekly_dates: pd.DatetimeIndex,
     daily_ohlcv: pd.DataFrame,
-) -> tuple[float, float]:
+) -> float:
     """Generate LSTM weekly prediction using direct 5-day forward pass.
 
     Single forward pass predicts 5 daily close log returns. Weekly return
@@ -448,7 +430,7 @@ def _predict_single_week_lstm(
     the corrected training alignment (Bug #2 fix).
 
     Returns:
-        Tuple of (weekly_return, volatility) where volatility is std of daily returns.
+        Weekly return prediction.
     """
     import torch
 
@@ -456,15 +438,14 @@ def _predict_single_week_lstm(
 
     seq_len = config.sequence_length
 
-    # Momentum fallback helper - returns (return, 0.0 volatility) since no daily path
-    def momentum_fallback() -> tuple[float, float]:
+    # Momentum fallback helper
+    def momentum_fallback() -> float:
         lookback = 4
         if weekly_idx >= lookback and weekly_prices[weekly_idx - lookback] > 0:
-            ret = (
+            return (
                 weekly_prices[weekly_idx] - weekly_prices[weekly_idx - lookback]
             ) / weekly_prices[weekly_idx - lookback]
-            return (ret, 0.0)
-        return (0.0, 0.0)
+        return 0.0
 
     try:
         # Get cutoff date (Friday of this week - predict for next week)
@@ -517,9 +498,7 @@ def _predict_single_week_lstm(
 
         # Compound log returns to get weekly return: exp(sum) - 1
         weekly_return = float(np.exp(np.sum(daily_log_returns)) - 1)
-        # Volatility as std of daily log return predictions
-        volatility = float(np.std(daily_log_returns))
-        return (weekly_return, volatility)
+        return weekly_return
 
     except Exception as e:
         logger.debug(f"[WalkForward] LSTM direct 5-day inference failed: {e}")
@@ -532,7 +511,7 @@ def _run_patchtst_snapshot_inference(
     year_indices: list[int],
     weekly_dates: pd.DatetimeIndex | None = None,
     symbol: str | None = None,
-) -> tuple[list[float], list[float]]:
+) -> list[float]:
     """Run PatchTST snapshot inference for a symbol.
 
     Loads daily OHLCV data only (no news/fundamentals -- PatchTST uses
@@ -547,12 +526,11 @@ def _run_patchtst_snapshot_inference(
         symbol: Stock symbol (for loading historical OHLCV)
 
     Returns:
-        Tuple of (predictions, volatilities) lists
+        List of predictions
     """
     import torch
 
     predictions = []
-    volatilities = []
     model = artifacts.model
     scaler = artifacts.feature_scaler
     config = artifacts.config
@@ -591,7 +569,7 @@ def _run_patchtst_snapshot_inference(
 
     with torch.no_grad():
         for i in year_indices:
-            ret, vol = _predict_single_week_patchtst(
+            ret = _predict_single_week_patchtst(
                 model=model,
                 scaler=scaler,
                 config=config,
@@ -604,9 +582,8 @@ def _run_patchtst_snapshot_inference(
                 use_multichannel=use_multichannel,
             )
             predictions.append(ret)
-            volatilities.append(vol)
 
-    return (predictions, volatilities)
+    return predictions
 
 
 def _predict_single_week_patchtst(
@@ -620,7 +597,7 @@ def _predict_single_week_patchtst(
     daily_news: pd.DataFrame | None,
     daily_fundamentals: pd.DataFrame | None,
     use_multichannel: bool,
-) -> tuple[float, float]:
+) -> float:
     """Generate PatchTST weekly prediction using direct 5-day forecasting.
 
     Single forward pass produces (1, 5, 5) output -- 5 days x 5 channels.
@@ -632,7 +609,7 @@ def _predict_single_week_patchtst(
     - Bug #F: Uses exp(sum(log_returns)) - 1 instead of prod(1 + log_returns) - 1
 
     Returns:
-        Tuple of (weekly_return, volatility) where volatility is std of daily returns.
+        Weekly return prediction.
     """
     import torch
 
@@ -640,15 +617,14 @@ def _predict_single_week_patchtst(
 
     context_length = config.context_length
 
-    # Momentum fallback helper - returns (return, 0.0 volatility) since no daily path
-    def momentum_fallback() -> tuple[float, float]:
+    # Momentum fallback helper
+    def momentum_fallback() -> float:
         lookback = 4
         if weekly_idx >= lookback and weekly_prices[weekly_idx - lookback] > 0:
-            ret = (
+            return (
                 weekly_prices[weekly_idx] - weekly_prices[weekly_idx - lookback]
             ) / weekly_prices[weekly_idx - lookback]
-            return (ret, 0.0)
-        return (0.0, 0.0)
+        return 0.0
 
     # Use 5-channel OHLCV features with single forward pass
     if use_multichannel and daily_ohlcv is not None and weekly_dates is not None:
@@ -700,8 +676,7 @@ def _predict_single_week_patchtst(
             # NO inverse-transform needed! RevIN already denormalized
             # Bug #F fix: exp(sum) not prod(1+)
             weekly_return = float(np.exp(np.sum(daily_log_returns)) - 1)
-            volatility = float(np.std(daily_log_returns))
-            return (weekly_return, volatility)
+            return weekly_return
 
         except Exception as e:
             logger.debug(f"[WalkForward] PatchTST 5-channel inference failed: {e}")
@@ -792,7 +767,7 @@ def build_forecast_features(
     symbols: list[str],
     forecaster_type: Literal["lstm", "patchtst"] = "lstm",
     use_model_snapshots: bool = False,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+) -> dict[str, np.ndarray]:
     """Build forecast features for RL training.
 
     Main entry point for generating walk-forward forecasts.
@@ -805,23 +780,22 @@ def build_forecast_features(
         use_model_snapshots: Whether to use pre-trained model snapshots
 
     Returns:
-        Tuple of (forecasts, volatilities) where each is
-        Dict of symbol -> array of values
+        Dict of symbol -> array of forecast values
     """
     print(f"[PortfolioRL] Generating walk-forward forecasts ({forecaster_type})...")
 
     if use_model_snapshots:
-        forecasts, volatilities = generate_walkforward_forecasts_with_model(
+        forecasts = generate_walkforward_forecasts_with_model(
             weekly_prices, weekly_dates, symbols, forecaster_type
         )
     else:
         # Use momentum proxy (simple, no snapshots needed)
-        forecasts, volatilities = generate_walkforward_forecasts_simple(
+        forecasts = generate_walkforward_forecasts_simple(
             weekly_prices, weekly_dates, symbols
         )
 
     print(f"[PortfolioRL] Generated forecasts for {len(forecasts)} symbols")
-    return (forecasts, volatilities)
+    return forecasts
 
 
 def build_dual_forecast_features(
@@ -830,12 +804,7 @@ def build_dual_forecast_features(
     symbols: list[str],
     use_lstm_snapshots: bool = False,
     use_patchtst_snapshots: bool = False,
-) -> tuple[
-    dict[str, np.ndarray],
-    dict[str, np.ndarray],
-    dict[str, np.ndarray],
-    dict[str, np.ndarray],
-]:
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Build both LSTM and PatchTST forecast features for RL training.
 
     This is the main entry point for generating dual walk-forward forecasts
@@ -849,12 +818,11 @@ def build_dual_forecast_features(
         use_patchtst_snapshots: Whether to use pre-trained PatchTST model snapshots
 
     Returns:
-        Tuple of (lstm_forecasts, lstm_volatilities, patchtst_forecasts, patchtst_volatilities)
-        where each is Dict of symbol -> array of values
+        Tuple of (lstm_forecasts, patchtst_forecasts) where each is Dict of symbol -> array
     """
     print("[PortfolioRL] Generating dual walk-forward forecasts (LSTM + PatchTST)...")
 
-    lstm_forecasts, lstm_volatilities = build_forecast_features(
+    lstm_forecasts = build_forecast_features(
         weekly_prices,
         weekly_dates,
         symbols,
@@ -862,7 +830,7 @@ def build_dual_forecast_features(
         use_model_snapshots=use_lstm_snapshots,
     )
 
-    patchtst_forecasts, patchtst_volatilities = build_forecast_features(
+    patchtst_forecasts = build_forecast_features(
         weekly_prices,
         weekly_dates,
         symbols,
@@ -874,9 +842,4 @@ def build_dual_forecast_features(
         f"[PortfolioRL] Generated dual forecasts for {len(lstm_forecasts)} symbols "
         f"(LSTM: {use_lstm_snapshots}, PatchTST: {use_patchtst_snapshots})"
     )
-    return (
-        lstm_forecasts,
-        lstm_volatilities,
-        patchtst_forecasts,
-        patchtst_volatilities,
-    )
+    return (lstm_forecasts, patchtst_forecasts)

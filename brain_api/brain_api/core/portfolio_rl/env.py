@@ -20,8 +20,9 @@ from brain_api.core.portfolio_rl.constraints import (
     enforce_constraints,
 )
 from brain_api.core.portfolio_rl.rewards import (
+    DifferentialSharpe,
+    compute_blended_reward,
     compute_portfolio_log_return,
-    compute_reward_from_log_return,
 )
 from brain_api.core.portfolio_rl.state import (
     StateSchema,
@@ -62,8 +63,6 @@ class PortfolioEnv:
         patchtst_forecasts: np.ndarray,
         symbol_order: list[str],
         config: PPOBaseConfig | None = None,
-        lstm_volatilities: np.ndarray | None = None,
-        patchtst_volatilities: np.ndarray | None = None,
     ):
         """Initialize environment.
 
@@ -78,10 +77,6 @@ class PortfolioEnv:
                                Shape: (n_weeks, n_stocks).
             symbol_order: Ordered list of stock symbols.
             config: PPO configuration.
-            lstm_volatilities: LSTM forecast volatility for each stock each week.
-                              Shape: (n_weeks, n_stocks).
-            patchtst_volatilities: PatchTST forecast volatility for each stock each week.
-                                  Shape: (n_weeks, n_stocks).
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
@@ -93,19 +88,11 @@ class PortfolioEnv:
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
 
-        # Handle volatility arrays (default to zeros if not provided)
-        if lstm_volatilities is not None:
-            self.lstm_volatilities = lstm_volatilities
-        else:
-            self.lstm_volatilities = np.zeros((self.n_weeks, self.n_stocks))
-
-        if patchtst_volatilities is not None:
-            self.patchtst_volatilities = patchtst_volatilities
-        else:
-            self.patchtst_volatilities = np.zeros((self.n_weeks, self.n_stocks))
-
         # State schema
         self.schema = StateSchema(n_stocks=self.n_stocks)
+
+        # Differential Sharpe ratio for reward shaping
+        self.differential_sharpe = DifferentialSharpe(eta=self.config.sharpe_eta)
 
         # Episode state
         self.current_week_idx: int = 0
@@ -115,6 +102,8 @@ class PortfolioEnv:
         # For tracking
         self.episode_returns: list[float] = []
         self.episode_turnovers: list[float] = []
+        # Cache of last completed episode metrics (survives reset)
+        self._last_episode_metrics: dict[str, float] | None = None
 
     @property
     def state_dim(self) -> int:
@@ -159,24 +148,10 @@ class PortfolioEnv:
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
 
-        # Get LSTM volatility features for this week
-        week_lstm_vol = self.lstm_volatilities[week_idx]  # (n_stocks,)
-        lstm_vol_dict = {
-            symbol: float(week_lstm_vol[stock_idx])
-            for stock_idx, symbol in enumerate(self.symbol_order)
-        }
-
         # Get PatchTST forecast features for this week
         week_patchtst = self.patchtst_forecasts[week_idx]  # (n_stocks,)
         patchtst_dict = {
             symbol: float(week_patchtst[stock_idx])
-            for stock_idx, symbol in enumerate(self.symbol_order)
-        }
-
-        # Get PatchTST volatility features for this week
-        week_patchtst_vol = self.patchtst_volatilities[week_idx]  # (n_stocks,)
-        patchtst_vol_dict = {
-            symbol: float(week_patchtst_vol[stock_idx])
             for stock_idx, symbol in enumerate(self.symbol_order)
         }
 
@@ -187,8 +162,6 @@ class PortfolioEnv:
             portfolio_weights=self.current_weights,
             symbol_order=self.symbol_order,
             schema=self.schema,
-            lstm_volatilities=lstm_vol_dict,
-            patchtst_volatilities=patchtst_vol_dict,
         )
 
     def reset(self, start_week: int | None = None) -> np.ndarray:
@@ -211,10 +184,15 @@ class PortfolioEnv:
             else:
                 self.episode_start_week = 0
 
+        # Snapshot completed episode metrics before clearing
+        if len(self.episode_returns) > 0:
+            self._last_episode_metrics = self._compute_episode_metrics()
+
         self.current_week_idx = self.episode_start_week
         self.current_weights = self._initial_weights()
         self.episode_returns = []
         self.episode_turnovers = []
+        self.differential_sharpe.reset()
 
         return self._build_state(self.current_week_idx)
 
@@ -255,9 +233,13 @@ class PortfolioEnv:
         # For tracking, also compute simple return
         portfolio_return = float(np.dot(target_weights, asset_returns))
 
-        # Compute reward using log return
-        reward = compute_reward_from_log_return(
-            portfolio_log_return, turnover, self.config
+        # Compute blended reward (return + differential Sharpe)
+        reward = compute_blended_reward(
+            portfolio_log_return=portfolio_log_return,
+            portfolio_simple_return=portfolio_return,
+            turnover=turnover,
+            differential_sharpe=self.differential_sharpe,
+            config=self.config,
         )
 
         # Track for episode statistics
@@ -296,12 +278,8 @@ class PortfolioEnv:
             info=info,
         )
 
-    def get_episode_metrics(self) -> dict[str, float]:
-        """Get metrics for the current episode.
-
-        Returns:
-            Dict with episode statistics.
-        """
+    def _compute_episode_metrics(self) -> dict[str, float]:
+        """Compute metrics from current episode_returns/episode_turnovers."""
         returns = np.array(self.episode_returns)
         turnovers = np.array(self.episode_turnovers)
 
@@ -313,10 +291,7 @@ class PortfolioEnv:
                 "n_weeks": 0,
             }
 
-        # Cumulative return
         cumulative_return = float(np.prod(1 + returns) - 1)
-
-        # Sharpe (not annualized for episode)
         mean_return = np.mean(returns)
         std_return = np.std(returns, ddof=1) if len(returns) > 1 else 1e-10
         episode_sharpe = mean_return / max(std_return, 1e-10)
@@ -328,6 +303,31 @@ class PortfolioEnv:
             "n_weeks": len(returns),
         }
 
+    def get_episode_metrics(self) -> dict[str, float]:
+        """Get metrics for the most recently completed episode.
+
+        If the current episode has data, returns its metrics.
+        If the current episode is empty (just after reset()), returns
+        the cached metrics from the last completed episode.
+
+        Returns:
+            Dict with episode statistics.
+        """
+        if len(self.episode_returns) > 0:
+            return self._compute_episode_metrics()
+
+        # Current episode is empty (reset() just cleared it) --
+        # return cached metrics from the last completed episode
+        if self._last_episode_metrics is not None:
+            return self._last_episode_metrics
+
+        return {
+            "episode_return": 0.0,
+            "episode_sharpe": 0.0,
+            "avg_turnover": 0.0,
+            "n_weeks": 0,
+        }
+
 
 def create_env_from_data(
     prices: dict[str, np.ndarray],
@@ -336,8 +336,6 @@ def create_env_from_data(
     patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
     config: PPOBaseConfig | None = None,
-    lstm_volatilities: dict[str, np.ndarray] | None = None,
-    patchtst_volatilities: dict[str, np.ndarray] | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
 
@@ -350,17 +348,10 @@ def create_env_from_data(
         patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
         config: PPO configuration.
-        lstm_volatilities: Dict of symbol -> array of LSTM volatility values.
-        patchtst_volatilities: Dict of symbol -> array of PatchTST volatility values.
 
     Returns:
         PortfolioEnv instance.
     """
-    if lstm_volatilities is None:
-        lstm_volatilities = {}
-    if patchtst_volatilities is None:
-        patchtst_volatilities = {}
-
     # Determine number of weeks from the first symbol
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because we compute returns
@@ -398,23 +389,11 @@ def create_env_from_data(
         forecast_values = lstm_forecasts.get(symbol, np.zeros(n_weeks))
         lstm_array[:, stock_idx] = forecast_values[:n_weeks]
 
-    # Build LSTM volatilities array
-    lstm_vol_array = np.zeros((n_weeks, n_stocks))
-    for stock_idx, symbol in enumerate(symbol_order):
-        vol_values = lstm_volatilities.get(symbol, np.zeros(n_weeks))
-        lstm_vol_array[:, stock_idx] = vol_values[:n_weeks]
-
     # Build PatchTST forecasts array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         forecast_values = patchtst_forecasts.get(symbol, np.zeros(n_weeks))
         patchtst_array[:, stock_idx] = forecast_values[:n_weeks]
-
-    # Build PatchTST volatilities array
-    patchtst_vol_array = np.zeros((n_weeks, n_stocks))
-    for stock_idx, symbol in enumerate(symbol_order):
-        vol_values = patchtst_volatilities.get(symbol, np.zeros(n_weeks))
-        patchtst_vol_array[:, stock_idx] = vol_values[:n_weeks]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
@@ -423,6 +402,4 @@ def create_env_from_data(
         patchtst_forecasts=patchtst_array,
         symbol_order=symbol_order,
         config=config,
-        lstm_volatilities=lstm_vol_array,
-        patchtst_volatilities=patchtst_vol_array,
     )

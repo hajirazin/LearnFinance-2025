@@ -21,7 +21,10 @@ class PPOBaseConfig:
     clip_epsilon: float = 0.2
     gae_lambda: float = 0.95
     gamma: float = 0.97  # Weekly steps: 1/(1-0.97) ≈ 33 weeks (~8-month horizon)
-    entropy_coef: float = 0.01  # entropy bonus for exploration
+    entropy_coef: float = 0.05  # 16-dim action space needs meaningful exploration.
+    # At 0.01 entropy bonus is ~0.2 (negligible vs policy_loss ~0.5-1.0).
+    # At 0.05 entropy bonus is ~1.1 (comparable -- meaningful regularization).
+    # Still 4x less aggressive than SAC's init_alpha=0.2.
     value_coef: float = 0.5  # value function loss coefficient
     max_grad_norm: float = 0.5  # gradient clipping
 
@@ -40,6 +43,12 @@ class PPOBaseConfig:
     # === Universe ===
     n_stocks: int = 15  # Top-15 stocks by liquidity
     # Action space = n_stocks + 1 (for CASH)
+
+    # === Reward shaping ===
+    sharpe_weight: float = (
+        0.5  # Blend: sharpe_weight * DSR + (1-sharpe_weight) * return_reward
+    )
+    sharpe_eta: float = 0.01  # EMA decay for differential Sharpe (~100-week window)
 
     # === Reproducibility ===
     seed: int = 42
@@ -82,6 +91,8 @@ class PPOBaseConfig:
             "seed": self.seed,
             "validation_years": self.validation_years,
             "min_sharpe_improvement": self.min_sharpe_improvement,
+            "sharpe_weight": self.sharpe_weight,
+            "sharpe_eta": self.sharpe_eta,
         }
 
     @classmethod

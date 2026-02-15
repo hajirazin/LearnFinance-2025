@@ -68,8 +68,6 @@ def run_ppo_inference(
     target_week_start: date,
     target_week_end: date,
     model_version: str,
-    lstm_volatilities: dict[str, float] | None = None,
-    patchtst_volatilities: dict[str, float] | None = None,
 ) -> PPOInferenceResult:
     """Run PPO inference to get target portfolio weights.
 
@@ -86,8 +84,6 @@ def run_ppo_inference(
         target_week_start: Start of target week.
         target_week_end: End of target week.
         model_version: Model version string.
-        lstm_volatilities: LSTM forecast volatilities for each symbol.
-        patchtst_volatilities: PatchTST forecast volatilities for each symbol.
 
     Returns:
         PPOInferenceResult with target weights and metadata.
@@ -99,15 +95,13 @@ def run_ppo_inference(
         symbol_order=symbol_order,
     )
 
-    # Build state vector with dual forecasts and volatilities
+    # Build state vector with dual forecasts
     state = build_state_vector(
         signals=signals,
         lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         portfolio_weights=current_weights_array,
         symbol_order=symbol_order,
-        lstm_volatilities=lstm_volatilities,
-        patchtst_volatilities=patchtst_volatilities,
     )
 
     # Scale state
