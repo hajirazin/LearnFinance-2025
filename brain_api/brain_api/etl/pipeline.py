@@ -73,7 +73,7 @@ def run_pipeline(
             "dataset": config.dataset_name,
             "batch_size": config.batch_size,
             "sentiment_threshold": config.sentiment_threshold,
-            "filter_to_halal": config.filter_to_halal,
+            "universe": config.universe.value,
             "max_articles": config.max_articles,
         },
     }
@@ -96,18 +96,15 @@ def run_pipeline(
     console.print()
 
     # Universe filter
-    if config.filter_to_halal:
-        console.print("  Fetching halal universe from ETFs...")
-        universe = UniverseFilter.from_halal_universe()
-        console.print(f"  Found [green]{universe.symbol_count}[/] halal symbols")
-        stats["universe"] = {
-            "type": "halal",
-            "symbol_count": universe.symbol_count,
-            "fetched_at": universe.fetched_at,
-        }
-    else:
-        universe = UniverseFilter.allow_all()
-        stats["universe"] = {"type": "all"}
+    universe_name = config.universe.value
+    console.print(f"  Fetching [cyan]{universe_name}[/] universe...")
+    universe = UniverseFilter.from_universe_type(config.universe)
+    console.print(f"  Found [green]{universe.symbol_count}[/] {universe_name} symbols")
+    stats["universe"] = {
+        "type": universe_name,
+        "symbol_count": universe.symbol_count,
+        "fetched_at": universe.fetched_at,
+    }
 
     # Sentiment cache
     cache = SentimentCache(config.cache_dir)
@@ -152,15 +149,15 @@ def run_pipeline(
 
     # Stream and process articles with DuckDB pre-filtering
     try:
-        # Pass halal symbols to DuckDB for SQL-level filtering
-        halal_symbols = universe.symbols if config.filter_to_halal else None
+        # Pass universe symbols to DuckDB for SQL-level filtering
+        universe_symbols = universe.symbols
 
         # Get cached hashes to skip already-processed articles
         cached_hashes = cache.get_all_cached_hashes()
 
         article_stream = stream_articles(
             config,
-            halal_symbols=halal_symbols,
+            halal_symbols=universe_symbols,
             cached_hashes=cached_hashes,
         )
 
@@ -193,7 +190,7 @@ def run_pipeline(
                 if not model_loaded:
                     console.print(
                         "\n  [yellow]Loading FinBERT model"
-                        " (first halal match found)...[/]"
+                        " (first universe match found)...[/]"
                     )
                     # Trigger model load by accessing device
                     console.print(f"  Using device: [green]{scorer.device}[/]")
@@ -301,7 +298,7 @@ def run_pipeline(
                         f" (last interval: {interval_rate:.0f}/sec)"
                     )
                     console.print(
-                        f"  Matched halal: [green]{articles_after_filter:,}[/]"
+                        f"  Matched {universe_name}: [green]{articles_after_filter:,}[/]"
                         f" ({100 * articles_after_filter / articles_with_symbols:.1f}%)"
                     )
                     console.print(

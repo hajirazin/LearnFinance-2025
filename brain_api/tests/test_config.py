@@ -8,6 +8,7 @@ import pytest
 
 from brain_api.core.config import (
     UniverseType,
+    get_etl_universe,
     get_forecaster_train_universe,
     resolve_cutoff_date,
     resolve_training_window,
@@ -224,6 +225,57 @@ class TestGetForecasterTrainUniverse:
         ):
             with pytest.raises(ValueError) as exc_info:
                 get_forecaster_train_universe()
+            assert "invalid" in str(exc_info.value).lower()
+            assert "halal" in str(exc_info.value).lower()
+            assert "sp500" in str(exc_info.value).lower()
+
+
+class TestGetEtlUniverse:
+    """Tests for get_etl_universe function."""
+
+    def test_default_returns_halal(self) -> None:
+        """Default should be HALAL when no env var set."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL
+
+    def test_halal_from_env(self) -> None:
+        """ETL_UNIVERSE=halal returns HALAL."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL
+
+    def test_sp500_from_env(self) -> None:
+        """ETL_UNIVERSE=sp500 returns SP500."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "sp500"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.SP500
+
+    def test_halal_new_from_env(self) -> None:
+        """ETL_UNIVERSE=halal_new returns HALAL_NEW."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal_new"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL_NEW
+
+    def test_case_insensitive(self) -> None:
+        """Environment variable is case-insensitive."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL
+
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "SP500"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.SP500
+
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL_NEW"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL_NEW
+
+    def test_invalid_value_raises_error(self) -> None:
+        """Invalid ETL_UNIVERSE value raises ValueError."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "invalid"}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                get_etl_universe()
             assert "invalid" in str(exc_info.value).lower()
             assert "halal" in str(exc_info.value).lower()
             assert "sp500" in str(exc_info.value).lower()

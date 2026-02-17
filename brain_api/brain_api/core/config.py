@@ -8,6 +8,7 @@ from enum import Enum
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
 ENV_FORECASTER_TRAIN_UNIVERSE = "FORECASTER_TRAIN_UNIVERSE"
+ENV_ETL_UNIVERSE = "ETL_UNIVERSE"
 ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
@@ -42,6 +43,7 @@ class UniverseType(str, Enum):
 
 
 DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL
+DEFAULT_ETL_UNIVERSE = UniverseType.HALAL
 
 
 def get_hf_token() -> str | None:
@@ -108,6 +110,31 @@ def get_forecaster_train_universe() -> UniverseType:
         raise ValueError(
             f"Invalid FORECASTER_TRAIN_UNIVERSE='{env_value}'. "
             f"Valid options: {valid_options}"
+        ) from err
+
+
+def get_etl_universe() -> UniverseType:
+    """Get ETL pipeline universe from environment.
+
+    Controls which stock universe the news-sentiment ETL and
+    sentiment-gaps pipelines filter to.
+
+    Returns:
+        UniverseType enum value.
+
+    Raises:
+        ValueError: If ETL_UNIVERSE env var has an invalid value.
+    """
+    env_value = os.environ.get(ENV_ETL_UNIVERSE, "")
+    if not env_value:
+        return DEFAULT_ETL_UNIVERSE
+
+    try:
+        return UniverseType(env_value.lower())
+    except ValueError as err:
+        valid_options = [e.value for e in UniverseType]
+        raise ValueError(
+            f"Invalid ETL_UNIVERSE='{env_value}'. Valid options: {valid_options}"
         ) from err
 
 

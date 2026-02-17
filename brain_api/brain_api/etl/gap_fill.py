@@ -17,11 +17,16 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from brain_api.core.config import UniverseType, get_etl_universe
 from brain_api.core.finbert import FinBERTScorer, SentimentScore
 from brain_api.core.news_api.alpaca import ALPACA_EARLIEST_DATE, AlpacaNewsClient
 from brain_api.etl.gap_detection import categorize_gaps, find_gaps, get_gap_statistics
 from brain_api.etl.parquet_writer import OUTPUT_SCHEMA
-from brain_api.universe.halal import get_halal_symbols
+from brain_api.universe import (
+    get_halal_new_symbols,
+    get_halal_symbols,
+    get_sp500_symbols,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -238,19 +243,33 @@ def fill_sentiment_gaps(
             progress_callback(progress)
 
     try:
-        # Phase 1: Get halal symbols
-        logger.info("Phase 1: Getting halal symbols")
+        # Phase 1: Get universe symbols
+        universe_type = get_etl_universe()
+        logger.info("Phase 1: Getting %s symbols", universe_type.value)
         progress.current_phase = "getting_symbols"
         update_progress()
 
-        symbols = get_halal_symbols()
+        if universe_type == UniverseType.HALAL:
+            symbols = get_halal_symbols()
+        elif universe_type == UniverseType.HALAL_NEW:
+            symbols = get_halal_new_symbols()
+        elif universe_type == UniverseType.SP500:
+            symbols = get_sp500_symbols()
+        else:
+            raise ValueError(f"Unknown universe type: {universe_type}")
+
         if not symbols:
-            logger.error("No halal symbols found")
-            progress.error = "No halal symbols found"
+            logger.error("No %s symbols found", universe_type.value)
+            progress.error = f"No {universe_type.value} symbols found"
             progress.status = "failed"
             return GapFillResult(success=False, progress=progress)
 
-        logger.info(f"Found {len(symbols)} halal symbols: {symbols[:5]}...")
+        logger.info(
+            "Found %d %s symbols: %s...",
+            len(symbols),
+            universe_type.value,
+            symbols[:5],
+        )
 
         # Phase 2: Detect gaps
         logger.info("Phase 2: Detecting gaps in parquet")

@@ -116,10 +116,6 @@ class ETLJobRequest(BaseModel):
         le=1.0,
         description="Minimum |p_pos - p_neg| to include article (0.0-1.0)",
     )
-    filter_to_halal: bool = Field(
-        True,
-        description="Filter to halal universe only",
-    )
     local_only: bool = Field(
         True,
         description="Skip HuggingFace upload (local files only)",
@@ -176,7 +172,7 @@ def start_news_sentiment_etl(
 
     This endpoint starts a long-running ETL pipeline that:
     1. Downloads the HuggingFace financial news dataset (if not cached)
-    2. Filters to halal universe stocks
+    2. Filters to the configured universe (ETL_UNIVERSE env var)
     3. Scores articles with FinBERT (with caching)
     4. Aggregates daily sentiment per symbol
     5. Outputs to parquet file
@@ -193,12 +189,11 @@ def start_news_sentiment_etl(
     # Generate job ID
     job_id = str(uuid.uuid4())[:8]
 
-    # Create config from request
+    # Create config from request (universe comes from ETL_UNIVERSE env var)
     config = ETLConfig(
         batch_size=request.batch_size,
         max_articles=request.max_articles,
         sentiment_threshold=request.sentiment_threshold,
-        filter_to_halal=request.filter_to_halal,
         local_only=request.local_only,
         output_dir=Path(request.output_dir),
         cache_dir=Path(request.cache_dir),
@@ -213,7 +208,7 @@ def start_news_sentiment_etl(
             "batch_size": config.batch_size,
             "max_articles": config.max_articles,
             "sentiment_threshold": config.sentiment_threshold,
-            "filter_to_halal": config.filter_to_halal,
+            "universe": config.universe.value,
             "local_only": config.local_only,
             "output_dir": str(config.output_dir),
             "cache_dir": str(config.cache_dir),
@@ -408,7 +403,7 @@ def start_sentiment_gaps_fill(
 
     The job:
     1. Reads data/output/daily_sentiment.parquet
-    2. Identifies missing (date, symbol) pairs for halal symbols
+    2. Identifies missing (date, symbol) pairs for the configured universe (ETL_UNIVERSE env var)
     3. Fetches news from Alpaca API (2015+ only, rate-limited to 200/min)
     4. Scores articles with FinBERT
     5. Appends new sentiment data to parquet

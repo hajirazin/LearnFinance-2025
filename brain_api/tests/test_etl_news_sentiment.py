@@ -99,7 +99,6 @@ class TestETLNewsEndpoints:
                     "batch_size": 128,
                     "max_articles": 50,
                     "sentiment_threshold": 0.2,
-                    "filter_to_halal": True,
                     "local_only": True,
                 },
             )
@@ -111,7 +110,7 @@ class TestETLNewsEndpoints:
         assert data["config"]["batch_size"] == 128
         assert data["config"]["max_articles"] == 50
         assert data["config"]["sentiment_threshold"] == 0.2
-        assert data["config"]["filter_to_halal"] is True
+        assert "universe" in data["config"]
         assert data["config"]["local_only"] is True
 
     def test_invalid_batch_size(self):
@@ -338,7 +337,13 @@ class TestGapFillUnmatchedSymbols:
         parquet_path = tmp_path / "test_sentiment.parquet"
 
         # Mock dependencies
+        from brain_api.core.config import UniverseType
+
         with (
+            patch(
+                "brain_api.etl.gap_fill.get_etl_universe",
+                return_value=UniverseType.HALAL,
+            ),
             patch("brain_api.etl.gap_fill.get_halal_symbols") as mock_symbols,
             patch("brain_api.etl.gap_fill.find_gaps") as mock_find_gaps,
             patch("brain_api.etl.gap_fill.categorize_gaps") as mock_categorize,

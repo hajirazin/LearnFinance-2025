@@ -5,9 +5,12 @@ Simplified version that uses brain_api.universe directly.
 
 from datetime import UTC, datetime
 
+from brain_api.core.config import UniverseType
 from brain_api.universe import (
     HALAL_ETFS,
+    get_halal_new_symbols,
     get_halal_symbols,
+    get_sp500_symbols,
 )
 
 
@@ -30,21 +33,44 @@ class UniverseFilter:
         self._fetched_at: str | None = None
 
     @classmethod
+    def from_universe_type(cls, universe_type: UniverseType) -> "UniverseFilter":
+        """Create filter from a UniverseType enum value.
+
+        Dispatches to the appropriate symbol source:
+        - HALAL -> ~45 stocks from SPUS/HLAL/SPTE ETFs
+        - HALAL_NEW -> ~410 stocks from 5 ETFs + Alpaca filter
+        - SP500 -> ~500 stocks from datahub.io
+
+        Args:
+            universe_type: Which universe to filter to
+
+        Returns:
+            UniverseFilter with the universe's symbols
+        """
+        if universe_type == UniverseType.HALAL:
+            symbols = get_halal_symbols()
+        elif universe_type == UniverseType.HALAL_NEW:
+            symbols = get_halal_new_symbols()
+        elif universe_type == UniverseType.SP500:
+            symbols = get_sp500_symbols()
+        else:
+            raise ValueError(f"Unknown universe type: {universe_type}")
+
+        all_symbols = {s.upper() for s in symbols}
+        instance = cls(all_symbols)
+        instance._fetched_at = datetime.now(UTC).isoformat()
+        return instance
+
+    @classmethod
     def from_halal_universe(cls) -> "UniverseFilter":
         """Create filter from halal ETF holdings.
 
-        Uses brain_api.universe to fetch holdings from SPUS, HLAL, SPTE ETFs,
-        filtered to US-listed stocks only.
+        Convenience method; delegates to from_universe_type(HALAL).
 
         Returns:
             UniverseFilter with halal symbols
         """
-        symbols = get_halal_symbols()
-        all_symbols = {s.upper() for s in symbols}
-
-        instance = cls(all_symbols)
-        instance._fetched_at = datetime.now(UTC).isoformat()
-        return instance
+        return cls.from_universe_type(UniverseType.HALAL)
 
     @classmethod
     def from_symbol_list(cls, symbols: list[str]) -> "UniverseFilter":

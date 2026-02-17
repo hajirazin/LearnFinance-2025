@@ -7,6 +7,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from brain_api.core.config import UniverseType, get_etl_universe
+
 # Environment variable for HF news sentiment dataset repo
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 
@@ -34,7 +36,7 @@ class ETLConfig:
         sentiment_threshold: Min |p_pos - p_neg| to include article (bounded filter)
         use_gpu: Whether to use GPU for FinBERT (auto-detect if None)
         max_articles: Maximum NEW articles to score (None = all, useful for testing)
-        filter_to_halal: Whether to filter output to halal universe only
+        universe: Which stock universe to filter to (from ETL_UNIVERSE env var)
         hf_token: HuggingFace token for gated datasets (optional)
         local_only: If True, skip HF upload even if HF_NEWS_SENTIMENT_REPO is set
     """
@@ -58,8 +60,8 @@ class ETLConfig:
     use_gpu: bool | None = None  # Auto-detect if None
     max_articles: int | None = None  # Limit for testing
 
-    # Universe filtering
-    filter_to_halal: bool = True
+    # Universe filtering (from ETL_UNIVERSE env var, default: halal)
+    universe: UniverseType = field(default_factory=get_etl_universe)
 
     # Authentication
     hf_token: str | None = None
