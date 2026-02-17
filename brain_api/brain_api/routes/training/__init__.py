@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from .dependencies import (
     get_config,
     get_dataset_builder,
-    get_lstm_training_symbols,
+    get_forecaster_training_symbols,
     get_patchtst_config,
     get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
@@ -28,7 +28,6 @@ from .dependencies import (
     get_sac_config,
     get_sac_storage,
     get_storage,
-    get_symbols,
     get_top15_symbols,
     get_trainer,
     snapshots_available,
@@ -78,7 +77,7 @@ __all__ = [
     # Dependencies
     "get_config",
     "get_dataset_builder",
-    "get_lstm_training_symbols",
+    "get_forecaster_training_symbols",
     "get_patchtst_config",
     "get_patchtst_data_aligner",
     "get_patchtst_dataset_builder",
@@ -93,7 +92,6 @@ __all__ = [
     "get_sac_config",
     "get_sac_storage",
     "get_storage",
-    "get_symbols",
     "get_top15_symbols",
     "get_trainer",
     "router",

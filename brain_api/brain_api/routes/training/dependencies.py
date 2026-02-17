@@ -70,29 +70,27 @@ PatchTSTTrainer = Callable[[Any, Any, Any, PatchTSTConfig], PatchTSTTrainingResu
 # ============================================================================
 
 
-def get_symbols() -> list[str]:
-    """Get symbols for training from halal universe."""
-    universe = get_halal_universe()
-    return [stock["symbol"] for stock in universe["stocks"]]
+def get_forecaster_training_symbols() -> list[str]:
+    """Get symbols for forecaster training (LSTM + PatchTST) based on config.
 
-
-def get_lstm_training_symbols() -> list[str]:
-    """Get symbols for LSTM training based on config.
-
-    Reads LSTM_TRAIN_UNIVERSE env var to determine which universe to use.
-    Default is UniverseType.HALAL for backward compatibility.
+    Reads FORECASTER_TRAIN_UNIVERSE env var to determine which universe to use.
+    Default is UniverseType.HALAL.
 
     Returns:
-        List of symbols for LSTM training
+        List of symbols for forecaster training.
     """
-    from brain_api.core.config import UniverseType, get_lstm_train_universe
+    from brain_api.core.config import UniverseType, get_forecaster_train_universe
 
-    universe_type = get_lstm_train_universe()
+    universe_type = get_forecaster_train_universe()
 
     if universe_type == UniverseType.SP500:
         from brain_api.universe.sp500 import get_sp500_symbols
 
         return get_sp500_symbols()
+    elif universe_type == UniverseType.HALAL_NEW:
+        from brain_api.universe.halal_new import get_halal_new_symbols
+
+        return get_halal_new_symbols()
     else:  # Default: HALAL
         universe = get_halal_universe()
         return [stock["symbol"] for stock in universe["stocks"]]

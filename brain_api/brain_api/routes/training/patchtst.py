@@ -46,6 +46,7 @@ from .dependencies import (
     PatchTSTNewsLoader,
     PatchTSTPriceLoader,
     PatchTSTTrainer,
+    get_forecaster_training_symbols,
     get_patchtst_config,
     get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
@@ -54,7 +55,6 @@ from .dependencies import (
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
-    get_symbols,
 )
 from .helpers import get_prior_version_info
 from .models import PatchTSTTrainResponse
@@ -70,7 +70,7 @@ def train_patchtst(
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
-    symbols: list[str] = Depends(get_symbols),
+    symbols: list[str] = Depends(get_forecaster_training_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     news_loader: PatchTSTNewsLoader = Depends(get_patchtst_news_loader),

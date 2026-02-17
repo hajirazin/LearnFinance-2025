@@ -152,3 +152,86 @@ def test_get_sp500_universe_contains_known_stocks():
     known_stocks = ["AAPL", "MSFT", "AMZN", "GOOGL", "JPM"]
     for stock in known_stocks:
         assert stock in symbols, f"Expected {stock} in S&P 500"
+
+
+# ============================================================================
+# Halal_New Universe Tests
+# ============================================================================
+
+
+def test_get_halal_new_stocks_returns_expected_structure():
+    """Test that /universe/halal_new returns the expected response structure."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "stocks" in data
+    assert "etfs_used" in data
+    assert "total_stocks" in data
+    assert "fetched_at" in data
+
+
+def test_get_halal_new_stocks_returns_stocks():
+    """Test that /universe/halal_new returns at least some stocks."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_stocks"] > 0
+    assert len(data["stocks"]) > 0
+    assert len(data["stocks"]) == data["total_stocks"]
+
+
+def test_get_halal_new_stocks_no_duplicates():
+    """Test that /universe/halal_new returns unique symbols only."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    symbols = [stock["symbol"] for stock in data["stocks"]]
+    assert len(symbols) == len(set(symbols)), "Duplicate symbols found"
+
+
+def test_get_halal_new_stocks_stock_structure():
+    """Test that each Halal_New stock has required fields."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for stock in data["stocks"][:10]:  # Check first 10 stocks
+        assert "symbol" in stock
+        assert "name" in stock
+        assert "max_weight" in stock
+        assert "sources" in stock
+
+        assert isinstance(stock["symbol"], str)
+        assert isinstance(stock["name"], str)
+        assert isinstance(stock["max_weight"], int | float)
+        assert isinstance(stock["sources"], list)
+        assert len(stock["sources"]) > 0
+
+
+def test_get_halal_new_stocks_sorted_by_weight():
+    """Test that Halal_New stocks are sorted by max_weight descending."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    weights = [stock["max_weight"] for stock in data["stocks"]]
+    assert weights == sorted(weights, reverse=True), "Stocks not sorted by weight"
+
+
+def test_get_halal_new_etfs_used():
+    """Test that /universe/halal_new uses all 5 halal ETFs."""
+    response = client.get("/universe/halal_new")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    expected_etfs = {"SPUS", "SPTE", "SPWO", "HLAL", "UMMA"}
+    assert set(data["etfs_used"]) == expected_etfs

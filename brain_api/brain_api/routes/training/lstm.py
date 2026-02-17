@@ -34,7 +34,7 @@ from .dependencies import (
     Trainer,
     get_config,
     get_dataset_builder,
-    get_lstm_training_symbols,
+    get_forecaster_training_symbols,
     get_price_loader,
     get_storage,
     get_trainer,
@@ -53,7 +53,7 @@ def train_lstm(
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
     storage: LocalModelStorage = Depends(get_storage),
-    symbols: list[str] = Depends(get_lstm_training_symbols),
+    symbols: list[str] = Depends(get_forecaster_training_symbols),
     config: LSTMConfig = Depends(get_config),
     price_loader: PriceLoader = Depends(get_price_loader),
     dataset_builder: DatasetBuilder = Depends(get_dataset_builder),
@@ -67,7 +67,7 @@ def train_lstm(
 
     Uses API config for data window (default: last 15 years).
     Fetches price data from yfinance for the configured training universe.
-    Universe is controlled by LSTM_TRAIN_UNIVERSE env var (default: "halal").
+    Universe is controlled by FORECASTER_TRAIN_UNIVERSE env var (default: "halal").
     Writes versioned artifacts and promotes if evaluation passes.
 
     By default, also saves snapshots for all historical years (for walk-forward

@@ -12,6 +12,7 @@ from transformers import PatchTSTForPrediction
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
+    get_forecaster_training_symbols,
     get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
     get_patchtst_fundamentals_loader,
@@ -19,7 +20,6 @@ from brain_api.routes.training import (
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
-    get_symbols,
 )
 from brain_api.storage.local import PatchTSTModelStorage
 
@@ -135,7 +135,7 @@ def client_with_mocks(temp_storage):
     """Create test client with mocked dependencies."""
     # Override dependencies
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
     app.dependency_overrides[get_patchtst_fundamentals_loader] = (
@@ -279,7 +279,7 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
 
         # First, create a good model that gets promoted
         app.dependency_overrides[get_patchtst_storage] = lambda: fresh_storage
-        app.dependency_overrides[get_symbols] = mock_symbols
+        app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
         app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
         app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
         app.dependency_overrides[get_patchtst_fundamentals_loader] = (
@@ -335,7 +335,7 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
 
     # First, create a good model that gets promoted
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_symbols] = mock_symbols
+    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
     app.dependency_overrides[get_patchtst_fundamentals_loader] = (
