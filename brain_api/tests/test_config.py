@@ -233,8 +233,8 @@ class TestGetForecasterTrainUniverse:
 class TestGetEtlUniverse:
     """Tests for get_etl_universe function."""
 
-    def test_default_returns_halal(self) -> None:
-        """Default should be HALAL when no env var set."""
+    def test_default_returns_halal_new(self) -> None:
+        """Default should be HALAL_NEW when no env var set."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_etl_universe()
         assert result == UniverseType.HALAL

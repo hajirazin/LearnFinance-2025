@@ -12,6 +12,7 @@ from brain_api.universe import (
     get_halal_symbols,
     get_sp500_symbols,
 )
+from brain_api.universe.halal_new import ALL_ETFS
 
 
 class UniverseFilter:
@@ -23,13 +24,19 @@ class UniverseFilter:
     - No filtering (all symbols)
     """
 
-    def __init__(self, symbols: set[str] | None = None):
+    def __init__(
+        self,
+        symbols: set[str] | None = None,
+        universe_type: UniverseType | None = None,
+    ):
         """Initialize with a set of allowed symbols.
 
         Args:
             symbols: Set of uppercase symbols to allow. None = allow all.
+            universe_type: Which universe this filter was built from.
         """
         self._symbols = symbols
+        self._universe_type = universe_type
         self._fetched_at: str | None = None
 
     @classmethod
@@ -57,7 +64,7 @@ class UniverseFilter:
             raise ValueError(f"Unknown universe type: {universe_type}")
 
         all_symbols = {s.upper() for s in symbols}
-        instance = cls(all_symbols)
+        instance = cls(all_symbols, universe_type=universe_type)
         instance._fetched_at = datetime.now(UTC).isoformat()
         return instance
 
@@ -136,5 +143,14 @@ class UniverseFilter:
 
     @property
     def etfs_used(self) -> list[str]:
-        """List of ETF tickers used for halal universe."""
+        """List of ETF tickers used for the halal universe.
+
+        Returns the correct ETF list based on which universe this filter
+        was built from:
+        - HALAL: 3 ETFs (SPUS, HLAL, SPTE)
+        - HALAL_NEW: 5 ETFs (SPUS, SPTE, SPWO, HLAL, UMMA)
+        - Others / unknown: falls back to HALAL ETFs
+        """
+        if self._universe_type == UniverseType.HALAL_NEW:
+            return [s.upper() for s in ALL_ETFS]
         return list(HALAL_ETFS)

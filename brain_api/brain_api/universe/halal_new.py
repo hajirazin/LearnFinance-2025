@@ -24,6 +24,15 @@ SP_FUNDS_ETFS = ["spus", "spte", "spwo"]
 WAHED_ETFS = ["hlal", "umma"]
 ALL_ETFS = SP_FUNDS_ETFS + WAHED_ETFS
 
+# ETF names for display (used when adding ETFs themselves as tradeable symbols)
+HALAL_NEW_ETF_NAMES: dict[str, str] = {
+    "SPUS": "SP Funds S&P 500 Sharia Industry Exclusions ETF",
+    "SPTE": "SP Funds S&P Global Technology ETF",
+    "SPWO": "SP Funds S&P World ETF",
+    "HLAL": "Wahed FTSE USA Shariah ETF",
+    "UMMA": "Wahed Dow Jones Islamic World ETF",
+}
+
 
 def _merge_and_dedup(
     etf_holdings: dict[str, list[dict]],
@@ -100,9 +109,24 @@ def get_halal_new_universe() -> dict:
         f"{len(merged)} total scraped"
     )
 
+    # 6: Add the source ETFs themselves as tradeable symbols
+    existing_symbols = {h["symbol"] for h in tradable}
+    etf_tickers_upper = [s.upper() for s in ALL_ETFS]
+    for etf_ticker in etf_tickers_upper:
+        if etf_ticker not in existing_symbols and etf_ticker in alpaca_symbols:
+            tradable.append(
+                {
+                    "symbol": etf_ticker,
+                    "name": HALAL_NEW_ETF_NAMES.get(etf_ticker, etf_ticker),
+                    "max_weight": 0.0,
+                    "sources": ["etf-self"],
+                }
+            )
+            logger.info(f"Added ETF {etf_ticker} itself as tradeable symbol")
+
     return {
         "stocks": tradable,
-        "etfs_used": [s.upper() for s in ALL_ETFS],
+        "etfs_used": etf_tickers_upper,
         "total_stocks": len(tradable),
         "fetched_at": datetime.now(UTC).isoformat(),
     }
