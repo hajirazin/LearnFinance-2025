@@ -214,3 +214,5 @@ __marimo__/
 # These can be large and are generated/downloaded, not source code
 data/
 .devbox/
+
+scripts/output
