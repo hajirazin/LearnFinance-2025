@@ -7,9 +7,11 @@ from unittest.mock import patch
 import pytest
 
 from brain_api.core.config import (
+    RL_ALLOWED_UNIVERSES,
     UniverseType,
     get_etl_universe,
     get_forecaster_train_universe,
+    get_rl_train_universe,
     resolve_cutoff_date,
     resolve_training_window,
 )
@@ -154,18 +156,21 @@ class TestUniverseType:
         assert UniverseType.HALAL.value == "halal"
         assert UniverseType.SP500.value == "sp500"
         assert UniverseType.HALAL_NEW.value == "halal_new"
+        assert UniverseType.HALAL_FILTERED.value == "halal_filtered"
 
     def test_universe_type_is_string_compatible(self) -> None:
         """UniverseType can be compared with strings."""
         assert UniverseType.HALAL == "halal"
         assert UniverseType.SP500 == "sp500"
         assert UniverseType.HALAL_NEW == "halal_new"
+        assert UniverseType.HALAL_FILTERED == "halal_filtered"
 
     def test_universe_type_from_string(self) -> None:
         """UniverseType can be created from string."""
         assert UniverseType("halal") == UniverseType.HALAL
         assert UniverseType("sp500") == UniverseType.SP500
         assert UniverseType("halal_new") == UniverseType.HALAL_NEW
+        assert UniverseType("halal_filtered") == UniverseType.HALAL_FILTERED
 
     def test_universe_type_invalid_raises(self) -> None:
         """Invalid UniverseType value raises ValueError."""
@@ -180,7 +185,7 @@ class TestGetForecasterTrainUniverse:
         """Default should be HALAL when no env var set."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL
+        assert result == UniverseType.HALAL_FILTERED
 
     def test_halal_from_env(self) -> None:
         """FORECASTER_TRAIN_UNIVERSE=halal returns HALAL."""
@@ -202,6 +207,14 @@ class TestGetForecasterTrainUniverse:
             result = get_forecaster_train_universe()
         assert result == UniverseType.HALAL_NEW
 
+    def test_halal_filtered_from_env(self) -> None:
+        """FORECASTER_TRAIN_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
+        with patch.dict(
+            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "halal_filtered"}, clear=True
+        ):
+            result = get_forecaster_train_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
     def test_case_insensitive(self) -> None:
         """Environment variable is case-insensitive."""
         with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL"}, clear=True):
@@ -218,6 +231,12 @@ class TestGetForecasterTrainUniverse:
             result = get_forecaster_train_universe()
         assert result == UniverseType.HALAL_NEW
 
+        with patch.dict(
+            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL_FILTERED"}, clear=True
+        ):
+            result = get_forecaster_train_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
     def test_invalid_value_raises_error(self) -> None:
         """Invalid FORECASTER_TRAIN_UNIVERSE value raises ValueError."""
         with patch.dict(
@@ -232,12 +251,6 @@ class TestGetForecasterTrainUniverse:
 
 class TestGetEtlUniverse:
     """Tests for get_etl_universe function."""
-
-    def test_default_returns_halal_new(self) -> None:
-        """Default should be HALAL_NEW when no env var set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL
 
     def test_halal_from_env(self) -> None:
         """ETL_UNIVERSE=halal returns HALAL."""
@@ -257,6 +270,12 @@ class TestGetEtlUniverse:
             result = get_etl_universe()
         assert result == UniverseType.HALAL_NEW
 
+    def test_halal_filtered_from_env(self) -> None:
+        """ETL_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal_filtered"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
     def test_case_insensitive(self) -> None:
         """Environment variable is case-insensitive."""
         with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL"}, clear=True):
@@ -271,6 +290,10 @@ class TestGetEtlUniverse:
             result = get_etl_universe()
         assert result == UniverseType.HALAL_NEW
 
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL_FILTERED"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
     def test_invalid_value_raises_error(self) -> None:
         """Invalid ETL_UNIVERSE value raises ValueError."""
         with patch.dict(os.environ, {"ETL_UNIVERSE": "invalid"}, clear=True):
@@ -279,3 +302,71 @@ class TestGetEtlUniverse:
             assert "invalid" in str(exc_info.value).lower()
             assert "halal" in str(exc_info.value).lower()
             assert "sp500" in str(exc_info.value).lower()
+
+
+class TestGetRlTrainUniverse:
+    """Tests for get_rl_train_universe function."""
+
+    def test_default_returns_halal_filtered(self) -> None:
+        """Default should be HALAL_FILTERED when no env var set."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = get_rl_train_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
+    def test_halal_from_env(self) -> None:
+        """RL_TRAIN_UNIVERSE=halal returns HALAL."""
+        with patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "halal"}, clear=True):
+            result = get_rl_train_universe()
+        assert result == UniverseType.HALAL
+
+    def test_halal_filtered_from_env(self) -> None:
+        """RL_TRAIN_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
+        with patch.dict(
+            os.environ, {"RL_TRAIN_UNIVERSE": "halal_filtered"}, clear=True
+        ):
+            result = get_rl_train_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
+    def test_sp500_raises_not_allowed(self) -> None:
+        """RL_TRAIN_UNIVERSE=sp500 raises ValueError (not in allowlist)."""
+        with (
+            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "sp500"}, clear=True),
+            pytest.raises(ValueError, match="not allowed for RL"),
+        ):
+            get_rl_train_universe()
+
+    def test_halal_new_raises_not_allowed(self) -> None:
+        """RL_TRAIN_UNIVERSE=halal_new raises ValueError (not in allowlist)."""
+        with (
+            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "halal_new"}, clear=True),
+            pytest.raises(ValueError, match="not allowed for RL"),
+        ):
+            get_rl_train_universe()
+
+    def test_invalid_value_raises_error(self) -> None:
+        """Invalid RL_TRAIN_UNIVERSE value raises ValueError."""
+        with (
+            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "invalid"}, clear=True),
+            pytest.raises(ValueError, match="Invalid RL_TRAIN_UNIVERSE"),
+        ):
+            get_rl_train_universe()
+
+    def test_case_insensitive(self) -> None:
+        """Environment variable is case-insensitive."""
+        with patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "HALAL"}, clear=True):
+            result = get_rl_train_universe()
+        assert result == UniverseType.HALAL
+
+        with patch.dict(
+            os.environ, {"RL_TRAIN_UNIVERSE": "HALAL_FILTERED"}, clear=True
+        ):
+            result = get_rl_train_universe()
+        assert result == UniverseType.HALAL_FILTERED
+
+    def test_allowed_universes_contains_halal_and_filtered(self) -> None:
+        """RL_ALLOWED_UNIVERSES should contain exactly halal and halal_filtered."""
+        assert UniverseType.HALAL in RL_ALLOWED_UNIVERSES
+        assert UniverseType.HALAL_FILTERED in RL_ALLOWED_UNIVERSES
+        assert UniverseType.SP500 not in RL_ALLOWED_UNIVERSES
+        assert UniverseType.HALAL_NEW not in RL_ALLOWED_UNIVERSES
+        assert len(RL_ALLOWED_UNIVERSES) == 2

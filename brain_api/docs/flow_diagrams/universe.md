@@ -93,7 +93,7 @@ flowchart TB
         
         D --> E[Deduplicate by Symbol]
         E --> F[Calculate Max Weight]
-        F --> G[~45 Unique Stocks]
+        F --> G[~14 Unique Stocks]
     end
     
     subgraph "Usage"

@@ -5,7 +5,7 @@ HLAL, UMMA from Wahed), merges and deduplicates, then filters to only
 symbols tradable on Alpaca.
 
 This produces a much larger universe (~410 stocks) compared to the
-original halal universe (~45 stocks from yfinance top holdings).
+original halal universe (~14 stocks from yfinance top holdings).
 """
 
 import logging

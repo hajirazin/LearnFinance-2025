@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from brain_api.core.hrp import HRPResult, compute_hrp_allocation
 from brain_api.core.lstm import load_prices_yfinance
-from brain_api.universe import get_halal_universe
+from brain_api.routes.training.dependencies import get_rl_training_symbols
 
 router = APIRouter()
 
@@ -57,17 +57,6 @@ class HRPAllocationResponse(BaseModel):
     )
 
 
-# ============================================================================
-# Dependency injection for testability
-# ============================================================================
-
-
-def get_halal_symbols() -> list[str]:
-    """Get symbols from halal universe."""
-    universe = get_halal_universe()
-    return [stock["symbol"] for stock in universe["stocks"]]
-
-
 def get_as_of_date(request: HRPAllocationRequest) -> date:
     """Get the as-of date from request or default to today."""
     if request.as_of_date:
@@ -92,7 +81,7 @@ def get_price_loader() -> PriceLoader:
 @router.post("/hrp", response_model=HRPAllocationResponse)
 def allocate_hrp(
     request: HRPAllocationRequest = HRPAllocationRequest(),
-    symbols: list[str] = Depends(get_halal_symbols),
+    symbols: list[str] = Depends(get_rl_training_symbols),
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> HRPAllocationResponse:
     """Compute HRP portfolio allocation for the halal universe.

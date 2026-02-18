@@ -23,6 +23,7 @@ from brain_api.core.news_api.alpaca import ALPACA_EARLIEST_DATE, AlpacaNewsClien
 from brain_api.etl.gap_detection import categorize_gaps, find_gaps, get_gap_statistics
 from brain_api.etl.parquet_writer import OUTPUT_SCHEMA
 from brain_api.universe import (
+    get_halal_filtered_symbols,
     get_halal_new_symbols,
     get_halal_symbols,
     get_sp500_symbols,
@@ -253,6 +254,8 @@ def fill_sentiment_gaps(
             symbols = get_halal_symbols()
         elif universe_type == UniverseType.HALAL_NEW:
             symbols = get_halal_new_symbols()
+        elif universe_type == UniverseType.HALAL_FILTERED:
+            symbols = get_halal_filtered_symbols()
         elif universe_type == UniverseType.SP500:
             symbols = get_sp500_symbols()
         else:

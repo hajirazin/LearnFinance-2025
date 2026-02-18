@@ -9,6 +9,7 @@ ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
 ENV_FORECASTER_TRAIN_UNIVERSE = "FORECASTER_TRAIN_UNIVERSE"
 ENV_ETL_UNIVERSE = "ETL_UNIVERSE"
+ENV_RL_TRAIN_UNIVERSE = "RL_TRAIN_UNIVERSE"
 ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
@@ -31,19 +32,29 @@ DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
 
 
 class UniverseType(str, Enum):
-    """Stock universe types for training forecaster models (LSTM + PatchTST).
+    """Stock universe types for training models.
 
     Each universe represents a different set of stocks to train on.
     Using str as base class allows direct string comparison and serialization.
     """
 
-    HALAL = "halal"  # Halal ETF universe (~45 stocks from SPUS/HLAL/SPTE)
+    HALAL = "halal"  # Halal ETF universe (~14 stocks from SPUS/HLAL/SPTE)
     SP500 = "sp500"  # S&P 500 (~500 stocks from datahub.io)
     HALAL_NEW = "halal_new"  # Expanded halal (~410 stocks from 5 ETFs + Alpaca filter)
+    HALAL_FILTERED = "halal_filtered"  # Top 15 factor-scored from halal_new
 
 
-DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL
-DEFAULT_ETL_UNIVERSE = UniverseType.HALAL
+DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED
+DEFAULT_ETL_UNIVERSE = UniverseType.HALAL_FILTERED
+DEFAULT_RL_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED
+
+# RL allocators require exactly 15 stocks. Only these universes produce 15.
+RL_ALLOWED_UNIVERSES: frozenset[UniverseType] = frozenset(
+    {
+        UniverseType.HALAL,  # top 15 from halal ETF holdings
+        UniverseType.HALAL_FILTERED,  # top 15 from factor-scored halal_new
+    }
+)
 
 
 def get_hf_token() -> str | None:
@@ -136,6 +147,40 @@ def get_etl_universe() -> UniverseType:
         raise ValueError(
             f"Invalid ETL_UNIVERSE='{env_value}'. Valid options: {valid_options}"
         ) from err
+
+
+def get_rl_train_universe() -> UniverseType:
+    """Get RL/HRP training universe from environment.
+
+    Controls which stock universe PPO, SAC, and HRP are trained on.
+    Restricted to RL_ALLOWED_UNIVERSES (halal, halal_filtered) because
+    RL allocators require exactly 15 stocks.
+
+    Returns:
+        UniverseType enum value (always in RL_ALLOWED_UNIVERSES).
+
+    Raises:
+        ValueError: If RL_TRAIN_UNIVERSE env var is invalid or not in allowlist.
+    """
+    env_value = os.environ.get(ENV_RL_TRAIN_UNIVERSE, "")
+    if not env_value:
+        return DEFAULT_RL_TRAIN_UNIVERSE
+
+    try:
+        universe = UniverseType(env_value.lower())
+    except ValueError as err:
+        valid_options = sorted(e.value for e in RL_ALLOWED_UNIVERSES)
+        raise ValueError(
+            f"Invalid RL_TRAIN_UNIVERSE='{env_value}'. Valid options: {valid_options}"
+        ) from err
+
+    if universe not in RL_ALLOWED_UNIVERSES:
+        valid_options = sorted(e.value for e in RL_ALLOWED_UNIVERSES)
+        raise ValueError(
+            f"RL_TRAIN_UNIVERSE='{env_value}' is not allowed for RL. "
+            f"RL requires exactly 15 stocks. Valid options: {valid_options}"
+        )
+    return universe
 
 
 def resolve_cutoff_date(reference_date: date | None = None) -> date:

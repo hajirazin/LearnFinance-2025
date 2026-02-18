@@ -23,9 +23,9 @@ from brain_api.core.sac import (
 from brain_api.main import app
 from brain_api.routes.inference import get_sac_storage as get_inference_storage
 from brain_api.routes.training import (
+    get_rl_training_symbols,
     get_sac_config,
     get_sac_storage,
-    get_top15_symbols,
 )
 from brain_api.storage.sac import SACLocalStorage, create_sac_metadata
 
@@ -309,7 +309,7 @@ class TestSACLSTMFinetune:
         """Test that finetune without prior model returns 400."""
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
@@ -337,7 +337,7 @@ class TestSACLSTMFinetune:
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
@@ -373,7 +373,7 @@ class TestSACFullTraining:
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
@@ -402,7 +402,7 @@ class TestSACFullTraining:
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_top15_symbols] = mock_symbols
+        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)

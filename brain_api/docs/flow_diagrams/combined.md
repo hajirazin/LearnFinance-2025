@@ -43,7 +43,7 @@ graph TD
         
         EP_Uni -->|Fetch ETF Holdings| YF
         YF --> Logic_Uni
-        Logic_Uni -->|Returns List| SYMB(~45 Halal Symbols\nTop 15 for RL)
+        Logic_Uni -->|Returns List| SYMB(~14 Halal Symbols\nTop 15 for RL)
     end
     class EP_Uni endpoint;
 
@@ -228,7 +228,7 @@ graph LR
     end
 
     subgraph Monday [Monday Morning]
-        M1["Get Universe<br>~45 Symbols"]
+        M1["Get Universe<br>~14 Symbols"]
         M2["Fetch Signals<br>News + Fundamentals"]
         M3["Run Forecasters<br>LSTM / PatchTST"]
         M4["Run Allocators<br>PPO / SAC"]
@@ -283,7 +283,7 @@ graph LR
 |----------|--------|------|---------|
 | Health | GET | `/health`, `/health/live`, `/health/ready` | Service status |
 | Root | GET | `/` | API info |
-| Universe | GET | `/universe/halal` | Get ~45 halal symbols |
+| Universe | GET | `/universe/halal` | Get ~14 halal symbols |
 | ETL | POST | `/etl/news-sentiment` | Batch news processing |
 | ETL | POST | `/etl/sentiment-gaps` | Fill missing data |
 | Signals | POST | `/signals/news` | Live news sentiment |

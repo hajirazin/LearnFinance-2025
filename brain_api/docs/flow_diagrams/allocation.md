@@ -24,7 +24,7 @@ Computes portfolio weights using Hierarchical Risk Parity (López de Prado, 2016
 flowchart TD
     A[POST /allocation/hrp] --> B[Parse Request]
     
-    B --> C[Get Halal Universe<br/>~45 symbols]
+    B --> C[Get Halal Universe<br/>~14 symbols]
     B --> D[Determine as_of_date]
     
     C --> E[Fetch Price History<br/>from yfinance]

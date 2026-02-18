@@ -33,7 +33,7 @@ from brain_api.storage.ppo import PPOLocalStorage, create_ppo_metadata
 from .dependencies import (
     get_ppo_config,
     get_ppo_storage,
-    get_top15_symbols,
+    get_rl_training_symbols,
     snapshots_available,
 )
 from .helpers import get_prior_version_info
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 @router.post("/ppo/full", response_model=PPOTrainResponse)
 def train_ppo_endpoint(
     storage: PPOLocalStorage = Depends(get_ppo_storage),
-    symbols: list[str] = Depends(get_top15_symbols),
+    symbols: list[str] = Depends(get_rl_training_symbols),
     config: PPOConfig = Depends(get_ppo_config),
 ) -> PPOTrainResponse:
     """Train PPO portfolio allocator using dual forecasts (LSTM + PatchTST).
@@ -360,7 +360,7 @@ def train_ppo_endpoint(
 @router.post("/ppo/finetune", response_model=PPOTrainResponse)
 def finetune_ppo_endpoint(
     storage: PPOLocalStorage = Depends(get_ppo_storage),
-    symbols: list[str] = Depends(get_top15_symbols),
+    symbols: list[str] = Depends(get_rl_training_symbols),
 ) -> PPOTrainResponse:
     """Fine-tune PPO + LSTM on recent 26-week data.
 

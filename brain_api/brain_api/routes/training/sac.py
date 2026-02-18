@@ -32,9 +32,9 @@ from brain_api.core.sac import (
 from brain_api.storage.sac import SACLocalStorage, create_sac_metadata
 
 from .dependencies import (
+    get_rl_training_symbols,
     get_sac_config,
     get_sac_storage,
-    get_top15_symbols,
     snapshots_available,
 )
 from .helpers import get_prior_version_info
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 @router.post("/sac/full", response_model=SACTrainResponse)
 def train_sac_endpoint(
     storage: SACLocalStorage = Depends(get_sac_storage),
-    symbols: list[str] = Depends(get_top15_symbols),
+    symbols: list[str] = Depends(get_rl_training_symbols),
     config: SACConfig = Depends(get_sac_config),
 ) -> SACTrainResponse:
     """Train SAC portfolio allocator using LSTM forecasts."""
@@ -312,7 +312,7 @@ def train_sac_endpoint(
 @router.post("/sac/finetune", response_model=SACTrainResponse)
 def finetune_sac_endpoint(
     storage: SACLocalStorage = Depends(get_sac_storage),
-    symbols: list[str] = Depends(get_top15_symbols),
+    symbols: list[str] = Depends(get_rl_training_symbols),
 ) -> SACTrainResponse:
     """Fine-tune SAC + LSTM on recent data. Requires prior trained model."""
     prior_version = storage.read_current_version()

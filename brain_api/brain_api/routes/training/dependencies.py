@@ -74,7 +74,7 @@ def get_forecaster_training_symbols() -> list[str]:
     """Get symbols for forecaster training (LSTM + PatchTST) based on config.
 
     Reads FORECASTER_TRAIN_UNIVERSE env var to determine which universe to use.
-    Default is UniverseType.HALAL.
+    Default is UniverseType.HALAL. Accepts all universe types.
 
     Returns:
         List of symbols for forecaster training.
@@ -91,13 +91,43 @@ def get_forecaster_training_symbols() -> list[str]:
         from brain_api.universe.halal_new import get_halal_new_symbols
 
         return get_halal_new_symbols()
+    elif universe_type == UniverseType.HALAL_FILTERED:
+        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
+
+        return get_halal_filtered_symbols()
     else:  # Default: HALAL
         universe = get_halal_universe()
         return [stock["symbol"] for stock in universe["stocks"]]
 
 
+def get_rl_training_symbols() -> list[str]:
+    """Get symbols for RL training (PPO, SAC) and HRP allocation based on config.
+
+    Reads RL_TRAIN_UNIVERSE env var (restricted to halal and halal_filtered).
+    Both produce exactly 15 stocks, matching n_stocks=15 in PPO/SAC config.
+
+    Returns:
+        List of 15 symbols for RL training / HRP allocation.
+    """
+    from brain_api.core.config import UniverseType, get_rl_train_universe
+
+    universe_type = get_rl_train_universe()
+
+    if universe_type == UniverseType.HALAL_FILTERED:
+        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
+
+        return get_halal_filtered_symbols()
+    else:  # HALAL: top 15 by ETF weight
+        universe = get_halal_universe()
+        stocks = universe["stocks"][:15]
+        return [stock["symbol"] for stock in stocks]
+
+
 def get_top15_symbols() -> list[str]:
-    """Get top 15 symbols by liquidity from halal universe."""
+    """Get top 15 symbols by liquidity from halal universe.
+
+    Kept for backward compatibility. New code should use get_rl_training_symbols().
+    """
     universe = get_halal_universe()
     stocks = universe["stocks"][:15]
     return [stock["symbol"] for stock in stocks]

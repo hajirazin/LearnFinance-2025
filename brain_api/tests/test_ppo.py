@@ -26,7 +26,7 @@ from brain_api.routes.inference import (
 from brain_api.routes.training import (
     get_ppo_config,
     get_ppo_storage,
-    get_top15_symbols,
+    get_rl_training_symbols,
 )
 from brain_api.storage.ppo import PPOLocalStorage
 
@@ -126,7 +126,7 @@ def client_with_mocks(temp_storage):
 
     # Override dependencies for training
     app.dependency_overrides[get_ppo_storage] = lambda: temp_storage
-    app.dependency_overrides[get_top15_symbols] = mock_symbols
+    app.dependency_overrides[get_rl_training_symbols] = mock_symbols
     app.dependency_overrides[get_ppo_config] = mock_config
 
     # Override dependencies for inference
@@ -190,7 +190,7 @@ def client_for_inference(trained_model_storage):
     # Override both inference and training storage with same pre-trained storage
     app.dependency_overrides[get_inference_storage] = lambda: trained_model_storage
     app.dependency_overrides[get_ppo_storage] = lambda: trained_model_storage
-    app.dependency_overrides[get_top15_symbols] = mock_symbols
+    app.dependency_overrides[get_rl_training_symbols] = mock_symbols
 
     client = TestClient(app)
     yield client

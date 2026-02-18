@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from brain_api.core.config import UniverseType
 from brain_api.universe import (
     HALAL_ETFS,
+    get_halal_filtered_symbols,
     get_halal_new_symbols,
     get_halal_symbols,
     get_sp500_symbols,
@@ -44,7 +45,7 @@ class UniverseFilter:
         """Create filter from a UniverseType enum value.
 
         Dispatches to the appropriate symbol source:
-        - HALAL -> ~45 stocks from SPUS/HLAL/SPTE ETFs
+        - HALAL -> ~14 stocks from SPUS/HLAL/SPTE ETFs
         - HALAL_NEW -> ~410 stocks from 5 ETFs + Alpaca filter
         - SP500 -> ~500 stocks from datahub.io
 
@@ -58,6 +59,8 @@ class UniverseFilter:
             symbols = get_halal_symbols()
         elif universe_type == UniverseType.HALAL_NEW:
             symbols = get_halal_new_symbols()
+        elif universe_type == UniverseType.HALAL_FILTERED:
+            symbols = get_halal_filtered_symbols()
         elif universe_type == UniverseType.SP500:
             symbols = get_sp500_symbols()
         else:
@@ -151,6 +154,6 @@ class UniverseFilter:
         - HALAL_NEW: 5 ETFs (SPUS, SPTE, SPWO, HLAL, UMMA)
         - Others / unknown: falls back to HALAL ETFs
         """
-        if self._universe_type == UniverseType.HALAL_NEW:
+        if self._universe_type in (UniverseType.HALAL_NEW, UniverseType.HALAL_FILTERED):
             return [s.upper() for s in ALL_ETFS]
         return list(HALAL_ETFS)
