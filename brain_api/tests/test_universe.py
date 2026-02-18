@@ -2,11 +2,104 @@
 
 from unittest.mock import patch
 
+import pandas as pd
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
 
 client = TestClient(app)
+
+# ---------------------------------------------------------------------------
+# Mock data for S&P 500 (replaces live pd.read_csv from datahub.io)
+# ---------------------------------------------------------------------------
+MOCK_SP500_DF = pd.DataFrame(
+    [
+        {"Symbol": "AAPL", "Name": "Apple Inc.", "Sector": "Information Technology"},
+        {
+            "Symbol": "MSFT",
+            "Name": "Microsoft Corp",
+            "Sector": "Information Technology",
+        },
+        {
+            "Symbol": "AMZN",
+            "Name": "Amazon.com Inc",
+            "Sector": "Consumer Discretionary",
+        },
+        {"Symbol": "GOOGL", "Name": "Alphabet Inc", "Sector": "Communication Services"},
+        {"Symbol": "JPM", "Name": "JPMorgan Chase", "Sector": "Financials"},
+        {"Symbol": "NVDA", "Name": "NVIDIA Corp", "Sector": "Information Technology"},
+        {
+            "Symbol": "META",
+            "Name": "Meta Platforms",
+            "Sector": "Communication Services",
+        },
+    ]
+)
+
+
+def _patch_sp500_csv():
+    return patch("brain_api.universe.sp500.pd.read_csv", return_value=MOCK_SP500_DF)
+
+
+# ---------------------------------------------------------------------------
+# Mock data for Halal_New scrapers (replaces live HTTP to sp-funds / wahed / alpaca)
+# ---------------------------------------------------------------------------
+_MOCK_SP_FUNDS = {
+    "spus": [
+        {"symbol": "AAPL", "name": "Apple Inc", "weight": 10.0},
+        {"symbol": "MSFT", "name": "Microsoft Corp", "weight": 9.5},
+    ],
+    "spte": [
+        {"symbol": "NVDA", "name": "NVIDIA Corp", "weight": 8.0},
+        {"symbol": "AAPL", "name": "Apple Inc", "weight": 7.0},
+    ],
+    "spwo": [
+        {"symbol": "AMZN", "name": "Amazon.com Inc", "weight": 6.0},
+    ],
+}
+
+_MOCK_WAHED = {
+    "hlal": [
+        {"symbol": "GOOGL", "name": "Alphabet Inc", "weight": 5.5},
+        {"symbol": "MSFT", "name": "Microsoft Corp", "weight": 5.0},
+    ],
+    "umma": [
+        {"symbol": "META", "name": "Meta Platforms", "weight": 4.0},
+    ],
+}
+
+_MOCK_ALPACA_TRADABLE: set[str] = {
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "SPUS",
+    "SPTE",
+    "SPWO",
+    "HLAL",
+    "UMMA",
+}
+
+
+def _patch_halal_new_scrapers():
+    """Context-manager stack that mocks the 3 external scraper calls."""
+    return (
+        patch(
+            "brain_api.universe.halal_new.scrape_sp_funds",
+            side_effect=lambda slug: _MOCK_SP_FUNDS[slug],
+        ),
+        patch(
+            "brain_api.universe.halal_new.scrape_wahed",
+            side_effect=lambda slug: _MOCK_WAHED[slug],
+        ),
+        patch(
+            "brain_api.universe.halal_new.fetch_alpaca_tradable_symbols",
+            return_value=_MOCK_ALPACA_TRADABLE,
+        ),
+    )
+
 
 MOCK_HALAL_UNIVERSE = {
     "stocks": [
@@ -136,15 +229,14 @@ def test_get_sp500_universe_returns_expected_structure():
     """Test that get_sp500_universe returns the expected structure."""
     from brain_api.universe.sp500 import get_sp500_universe
 
-    data = get_sp500_universe()
+    with _patch_sp500_csv():
+        data = get_sp500_universe()
 
-    # Check required fields exist
     assert "stocks" in data
     assert "source" in data
     assert "total_stocks" in data
     assert "fetched_at" in data
 
-    # Check source is datahub.io
     assert data["source"] == "datahub.io"
 
 
@@ -152,11 +244,11 @@ def test_get_sp500_universe_returns_stocks():
     """Test that get_sp500_universe returns stocks."""
     from brain_api.universe.sp500 import get_sp500_universe
 
-    data = get_sp500_universe()
+    with _patch_sp500_csv():
+        data = get_sp500_universe()
 
-    # Should have ~500 stocks
-    assert data["total_stocks"] > 400
-    assert len(data["stocks"]) > 400
+    assert data["total_stocks"] > 0
+    assert len(data["stocks"]) > 0
     assert len(data["stocks"]) == data["total_stocks"]
 
 
@@ -164,14 +256,14 @@ def test_get_sp500_universe_stock_structure():
     """Test that each S&P 500 stock has required fields."""
     from brain_api.universe.sp500 import get_sp500_universe
 
-    data = get_sp500_universe()
+    with _patch_sp500_csv():
+        data = get_sp500_universe()
 
-    for stock in data["stocks"][:10]:  # Check first 10 stocks
+    for stock in data["stocks"]:
         assert "symbol" in stock
         assert "name" in stock
         assert "sector" in stock
 
-        # Validate types
         assert isinstance(stock["symbol"], str)
         assert isinstance(stock["name"], str)
         assert isinstance(stock["sector"], str)
@@ -182,10 +274,11 @@ def test_get_sp500_symbols_returns_list():
     """Test that get_sp500_symbols returns a list of symbols."""
     from brain_api.universe.sp500 import get_sp500_symbols
 
-    symbols = get_sp500_symbols()
+    with _patch_sp500_csv():
+        symbols = get_sp500_symbols()
 
     assert isinstance(symbols, list)
-    assert len(symbols) > 400
+    assert len(symbols) > 0
     assert all(isinstance(s, str) for s in symbols)
 
 
@@ -193,9 +286,9 @@ def test_get_sp500_universe_contains_known_stocks():
     """Test that S&P 500 contains well-known stocks."""
     from brain_api.universe.sp500 import get_sp500_symbols
 
-    symbols = get_sp500_symbols()
+    with _patch_sp500_csv():
+        symbols = get_sp500_symbols()
 
-    # These are long-standing S&P 500 members
     known_stocks = ["AAPL", "MSFT", "AMZN", "GOOGL", "JPM"]
     for stock in known_stocks:
         assert stock in symbols, f"Expected {stock} in S&P 500"
@@ -208,7 +301,9 @@ def test_get_sp500_universe_contains_known_stocks():
 
 def test_get_halal_new_stocks_returns_expected_structure():
     """Test that /universe/halal_new returns the expected response structure."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()
@@ -221,7 +316,9 @@ def test_get_halal_new_stocks_returns_expected_structure():
 
 def test_get_halal_new_stocks_returns_stocks():
     """Test that /universe/halal_new returns at least some stocks."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()
@@ -233,7 +330,9 @@ def test_get_halal_new_stocks_returns_stocks():
 
 def test_get_halal_new_stocks_no_duplicates():
     """Test that /universe/halal_new returns unique symbols only."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()
@@ -244,12 +343,14 @@ def test_get_halal_new_stocks_no_duplicates():
 
 def test_get_halal_new_stocks_stock_structure():
     """Test that each Halal_New stock has required fields."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()
 
-    for stock in data["stocks"][:10]:  # Check first 10 stocks
+    for stock in data["stocks"]:
         assert "symbol" in stock
         assert "name" in stock
         assert "max_weight" in stock
@@ -264,7 +365,9 @@ def test_get_halal_new_stocks_stock_structure():
 
 def test_get_halal_new_stocks_sorted_by_weight():
     """Test that Halal_New stocks are sorted by max_weight descending."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()
@@ -275,7 +378,9 @@ def test_get_halal_new_stocks_sorted_by_weight():
 
 def test_get_halal_new_etfs_used():
     """Test that /universe/halal_new uses all 5 halal ETFs."""
-    response = client.get("/universe/halal_new")
+    p1, p2, p3 = _patch_halal_new_scrapers()
+    with p1, p2, p3:
+        response = client.get("/universe/halal_new")
 
     assert response.status_code == 200
     data = response.json()

@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
+from brain_api.universe.cache import load_cached_universe, save_universe_cache
+
 logger = logging.getLogger(__name__)
 
 # Datahub.io maintains an updated S&P 500 constituents CSV
@@ -31,6 +33,10 @@ def get_sp500_universe() -> dict:
     Raises:
         Exception: If CSV fetch fails (network error, bad URL, etc.)
     """
+    cached = load_cached_universe("sp500")
+    if cached is not None:
+        return cached
+
     logger.info(f"Fetching S&P 500 constituents from {SP500_CSV_URL}")
 
     df = pd.read_csv(SP500_CSV_URL)
@@ -49,12 +55,14 @@ def get_sp500_universe() -> dict:
 
     logger.info(f"Fetched {len(stocks)} S&P 500 constituents")
 
-    return {
+    result = {
         "stocks": stocks,
         "source": "datahub.io",
         "total_stocks": len(stocks),
         "fetched_at": datetime.now(UTC).isoformat(),
     }
+    save_universe_cache("sp500", result)
+    return result
 
 
 def get_sp500_symbols() -> list[str]:

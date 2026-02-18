@@ -40,3 +40,11 @@ def isolate_from_env():
     # Restore original values after test
     for var, value in original_values.items():
         os.environ[var] = value
+
+
+@pytest.fixture(autouse=True)
+def isolate_universe_cache(tmp_path, monkeypatch):
+    """Route universe cache to a temp directory so tests never read/write production cache."""
+    monkeypatch.setattr(
+        "brain_api.universe.cache.UNIVERSE_CACHE_DIR", tmp_path / "universe_cache"
+    )

@@ -32,7 +32,7 @@ from brain_api.universe import (
 logger = logging.getLogger(__name__)
 
 # Checkpoint interval: save to parquet every N API calls
-CHECKPOINT_INTERVAL = 1000
+CHECKPOINT_INTERVAL = 100
 
 
 @dataclass

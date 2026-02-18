@@ -14,6 +14,7 @@ making it safe for RL allocators that require exactly 15 stocks.
 import logging
 from datetime import UTC, datetime
 
+from brain_api.universe.cache import load_cached_universe, save_universe_cache
 from brain_api.universe.halal_new import get_halal_new_universe
 from brain_api.universe.stock_filter import (
     apply_junk_filter,
@@ -38,6 +39,10 @@ def get_halal_filtered_universe() -> dict:
         - top_n: how many stocks were selected
         - fetched_at: ISO timestamp
     """
+    cached = load_cached_universe("halal_filtered")
+    if cached is not None:
+        return cached
+
     halal_new = get_halal_new_universe()
     stocks = halal_new["stocks"]
     symbols = [s["symbol"] for s in stocks]
@@ -58,7 +63,7 @@ def get_halal_filtered_universe() -> dict:
         f"Halal_Filtered: returning top {len(top_n)} of {len(scored)} scored stocks"
     )
 
-    return {
+    result = {
         "stocks": top_n,
         "total_before_filter": len(stocks),
         "total_after_filter": len(passed),
@@ -66,6 +71,8 @@ def get_halal_filtered_universe() -> dict:
         "top_n": HALAL_FILTERED_TOP_N,
         "fetched_at": datetime.now(UTC).isoformat(),
     }
+    save_universe_cache("halal_filtered", result)
+    return result
 
 
 def get_halal_filtered_symbols() -> list[str]:

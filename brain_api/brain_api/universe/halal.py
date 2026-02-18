@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 
 import yfinance as yf
 
+from brain_api.universe.cache import load_cached_universe, save_universe_cache
+
 logger = logging.getLogger(__name__)
 
 # Halal ETFs to source holdings from
@@ -89,6 +91,10 @@ def get_halal_universe() -> dict:
         - total_stocks: count of unique stocks
         - fetched_at: ISO timestamp
     """
+    cached = load_cached_universe("halal")
+    if cached is not None:
+        return cached
+
     # Collect holdings from all ETFs
     all_holdings: dict[str, dict] = {}
 
@@ -126,12 +132,14 @@ def get_halal_universe() -> dict:
         f"Final US universe: {len(stocks)} stocks: {[s['symbol'] for s in stocks]}"
     )
 
-    return {
+    result = {
         "stocks": stocks,
         "etfs_used": HALAL_ETFS,
         "total_stocks": len(stocks),
         "fetched_at": datetime.now(UTC).isoformat(),
     }
+    save_universe_cache("halal", result)
+    return result
 
 
 def get_halal_symbols() -> list[str]:

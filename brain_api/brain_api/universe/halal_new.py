@@ -11,6 +11,7 @@ original halal universe (~14 stocks from yfinance top holdings).
 import logging
 from datetime import UTC, datetime
 
+from brain_api.universe.cache import load_cached_universe, save_universe_cache
 from brain_api.universe.scrapers import (
     fetch_alpaca_tradable_symbols,
     scrape_sp_funds,
@@ -86,6 +87,10 @@ def get_halal_new_universe() -> dict:
         - total_stocks: count of tradable unique stocks
         - fetched_at: ISO timestamp
     """
+    cached = load_cached_universe("halal_new")
+    if cached is not None:
+        return cached
+
     # 1 & 2: Scrape all ETFs
     etf_data: dict[str, list[dict]] = {}
 
@@ -124,12 +129,14 @@ def get_halal_new_universe() -> dict:
             )
             logger.info(f"Added ETF {etf_ticker} itself as tradeable symbol")
 
-    return {
+    result = {
         "stocks": tradable,
         "etfs_used": etf_tickers_upper,
         "total_stocks": len(tradable),
         "fetched_at": datetime.now(UTC).isoformat(),
     }
+    save_universe_cache("halal_new", result)
+    return result
 
 
 def get_halal_new_symbols() -> list[str]:

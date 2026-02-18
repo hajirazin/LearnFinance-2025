@@ -7,6 +7,10 @@ description: Generate conventional commit messages by analyzing staged git diffs
 
 ## Critical Rules
 
+### Never ask for confirmation
+
+When this skill is invoked, the user wants to commit **now**. Do NOT ask "shall I commit?" or "ready to proceed?" -- analyze, generate the message, and commit immediately.
+
 ### Never bypass pre-commit hooks
 
 - **FORBIDDEN:** `--no-verify`, `-n`, `noqa`, skip-test, skip-ruff
@@ -91,7 +95,9 @@ Files Modified:
 - Be specific about what changed, not just where
 - Highlight breaking changes prominently
 
-### Step 4: Commit
+### Step 4: Commit immediately (no confirmation)
+
+**Do NOT ask the user for confirmation. Execute the commit directly.**
 
 Only signed commits:
 
