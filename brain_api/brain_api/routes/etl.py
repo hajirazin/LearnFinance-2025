@@ -1,8 +1,11 @@
 """ETL endpoints for triggering batch pipelines.
 
 Provides async job-based API for long-running ETL operations.
+Background jobs respect the app-level shutdown_event so they stop
+promptly when the server receives Ctrl+C / SIGINT.
 """
 
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -15,6 +18,14 @@ from pydantic import BaseModel, Field
 from brain_api.etl.config import ETLConfig
 from brain_api.etl.gap_fill import GapFillProgress, fill_sentiment_gaps
 from brain_api.etl.pipeline import run_pipeline
+
+
+def _get_shutdown_event() -> threading.Event:
+    """Get the app-level shutdown event (late import to avoid circular deps)."""
+    from brain_api.main import shutdown_event
+
+    return shutdown_event
+
 
 router = APIRouter()
 
@@ -81,6 +92,7 @@ def _run_etl_job(job_id: str, config: ETLConfig) -> None:
         result = run_pipeline(
             config=config,
             progress_callback=lambda p: _update_job_progress(job_id, p),
+            shutdown_event=_get_shutdown_event(),
         )
         job.status = "completed"
         job.completed_at = datetime.now(UTC)
@@ -334,6 +346,10 @@ def _update_gap_fill_progress(job_id: str, progress: GapFillProgress) -> None:
         if progress.status == "completed":
             job.status = "completed"
             job.completed_at = datetime.now(UTC)
+        elif progress.status == "cancelled":
+            job.status = "failed"
+            job.completed_at = datetime.now(UTC)
+            job.error = "Cancelled by server shutdown"
         elif progress.status == "failed":
             job.status = "failed"
             job.completed_at = datetime.now(UTC)
@@ -361,6 +377,7 @@ def _run_gap_fill_job(
             parquet_path=parquet_path,
             progress_callback=lambda p: _update_gap_fill_progress(job_id, p),
             local_only=local_only,
+            shutdown_event=_get_shutdown_event(),
         )
 
         job.status = "completed" if result.success else "failed"

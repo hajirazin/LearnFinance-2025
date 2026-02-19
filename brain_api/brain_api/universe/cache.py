@@ -1,7 +1,7 @@
-"""File-based daily cache for universe results.
+"""File-based monthly cache for universe results.
 
-Cache key: {universe_name}_{YYYY-MM-DD}.json
-Staleness policy: next day = automatic cache miss.
+Cache key: {universe_name}_{YYYY-MM}.json
+Staleness policy: new calendar month = automatic cache miss.
 Write-time cleanup: saving a new entry deletes older files for the same universe.
 """
 
@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 UNIVERSE_CACHE_DIR = Path("data/cache/universe")
 
 
+def _month_key(cache_date: date) -> str:
+    """Format date as YYYY-MM for monthly cache granularity."""
+    return f"{cache_date.year}-{cache_date.month:02d}"
+
+
 def _cache_path(universe_name: str, cache_date: date) -> Path:
-    return UNIVERSE_CACHE_DIR / f"{universe_name}_{cache_date.isoformat()}.json"
+    return UNIVERSE_CACHE_DIR / f"{universe_name}_{_month_key(cache_date)}.json"
 
 
 def load_cached_universe(
@@ -24,9 +29,11 @@ def load_cached_universe(
 ) -> dict | None:
     """Return cached universe dict, or None on miss.
 
+    Uses monthly granularity: all dates in the same month share one cache file.
+
     Args:
         universe_name: Identifier like "halal", "halal_filtered", etc.
-        cache_date: Date key (defaults to today).
+        cache_date: Date key (defaults to today). Only year+month are used.
 
     Returns:
         Cached dict if file exists and is valid JSON, else None.
@@ -47,14 +54,14 @@ def load_cached_universe(
 def save_universe_cache(
     universe_name: str, data: dict, cache_date: date | None = None
 ) -> None:
-    """Write universe dict to a date-keyed JSON file.
+    """Write universe dict to a month-keyed JSON file.
 
     After writing, deletes older cache files for the same universe name.
 
     Args:
         universe_name: Identifier like "halal", "halal_filtered", etc.
         data: Universe dict to cache.
-        cache_date: Date key (defaults to today).
+        cache_date: Date key (defaults to today). Only year+month are used.
     """
     cache_date = cache_date or date.today()
     UNIVERSE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -65,7 +72,7 @@ def save_universe_cache(
 
 
 def _cleanup_old_cache(universe_name: str, keep_date: date) -> None:
-    """Delete cache files for this universe whose date differs from keep_date."""
+    """Delete cache files for this universe whose month differs from keep_date's month."""
     keep_name = _cache_path(universe_name, keep_date).name
     for old in UNIVERSE_CACHE_DIR.glob(f"{universe_name}_*.json"):
         if old.name != keep_name:

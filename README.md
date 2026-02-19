@@ -369,7 +369,7 @@ The system supports three universe tiers, each building on the previous:
 
 Factor scoring: 0.4 x Momentum + 0.3 x Quality + 0.3 x Value. RL allocators require exactly 15 stocks, so `halal` and `halal_filtered` are the only valid RL universes.
 
-Results are cached daily to avoid redundant external API calls.
+Results are cached monthly (one fetch per calendar month) to avoid redundant external API calls.
 
 ### RL reward design
 

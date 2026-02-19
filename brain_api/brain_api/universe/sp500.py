@@ -2,6 +2,7 @@
 
 Fetches the current S&P 500 constituents from datahub.io's maintained dataset.
 This provides a larger training universe (~500 stocks) for forecasting models.
+Results are cached monthly (see cache.py).
 """
 
 import logging

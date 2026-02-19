@@ -7,6 +7,7 @@ Orchestrates filling missing sentiment data by:
 """
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -224,6 +225,7 @@ def fill_sentiment_gaps(
     parquet_path: Path,
     progress_callback: Callable[[GapFillProgress], None] | None = None,
     local_only: bool = False,
+    shutdown_event: threading.Event | None = None,
 ) -> GapFillResult:
     """Fill missing sentiment data in the parquet file.
 
@@ -233,6 +235,7 @@ def fill_sentiment_gaps(
         parquet_path: Path to daily_sentiment.parquet
         progress_callback: Optional callback for progress updates
         local_only: If True, skip HuggingFace upload
+        shutdown_event: If set, the function saves a checkpoint and stops early.
 
     Returns:
         GapFillResult with statistics, success status, and optional HF URL
@@ -334,6 +337,12 @@ def fill_sentiment_gaps(
         last_checkpoint_calls = 0
 
         for gap_date in sorted_dates:
+            if shutdown_event and shutdown_event.is_set():
+                logger.warning("Shutdown requested, saving checkpoint and stopping")
+                progress.current_phase = "shutdown_checkpoint"
+                update_progress()
+                break
+
             gap_symbols = date_to_symbols[gap_date]
 
             # Fetch news for this date and symbols
@@ -419,12 +428,17 @@ def fill_sentiment_gaps(
                 progress.current_phase = "fetching_and_scoring"
                 update_progress()
 
+        # Detect if we were interrupted by shutdown
+        was_cancelled = shutdown_event is not None and shutdown_event.is_set()
+
         # Phase 4: Aggregate and write remaining data to parquet
-        logger.info("Phase 4: Writing remaining data to parquet")
-        progress.current_phase = "writing_parquet"
+        phase_label = "shutdown_checkpoint" if was_cancelled else "writing_parquet"
+        logger.info(f"Phase 4: Writing remaining data to parquet ({phase_label})")
+        progress.current_phase = phase_label
         update_progress()
 
         # Write any remaining data not yet checkpointed
+        rows_added = 0
         if articles_with_scores or checked_gaps_no_articles:
             logger.info(
                 f"Aggregating {len(articles_with_scores)} remaining "
@@ -442,23 +456,28 @@ def fill_sentiment_gaps(
             progress.rows_added += rows_added
         else:
             logger.info("No remaining data to write (all saved in checkpoints)")
-            all_new_rows = []
 
         # Calculate remaining gaps by re-checking the parquet file
-        # (includes all checkpointed data plus final write)
         updated_gaps = find_gaps(symbols, start_date, end_date, parquet_path)
         updated_fillable, _ = categorize_gaps(updated_gaps, ALPACA_EARLIEST_DATE)
         progress.remaining_gaps = len(updated_fillable)
 
-        progress.status = "completed"
-        progress.current_phase = "done"
+        if was_cancelled:
+            progress.status = "cancelled"
+            progress.current_phase = "cancelled"
+            logger.warning(
+                f"Gap fill cancelled by shutdown: {progress.rows_added} rows saved, "
+                f"{progress.remaining_gaps:,} gaps still remaining"
+            )
+        else:
+            progress.status = "completed"
+            progress.current_phase = "done"
+            logger.info(
+                f"Gap fill completed: {rows_added} rows added, "
+                f"{progress.api_calls_made} API calls made, "
+                f"{progress.remaining_gaps:,} gaps remaining"
+            )
         update_progress()
-
-        logger.info(
-            f"Gap fill completed: {rows_added} rows added, "
-            f"{progress.api_calls_made} API calls made, "
-            f"{progress.remaining_gaps:,} gaps remaining"
-        )
 
         statistics = get_gap_statistics(
             symbols, start_date, end_date, parquet_path, ALPACA_EARLIEST_DATE

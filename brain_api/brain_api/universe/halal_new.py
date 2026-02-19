@@ -2,7 +2,7 @@
 
 Scrapes all holdings from 5 halal ETFs (SPUS, SPTE, SPWO from SP Funds;
 HLAL, UMMA from Wahed), merges and deduplicates, then filters to only
-symbols tradable on Alpaca.
+symbols tradable on Alpaca. Results are cached monthly (see cache.py).
 
 This produces a much larger universe (~410 stocks) compared to the
 original halal universe (~14 stocks from yfinance top holdings).

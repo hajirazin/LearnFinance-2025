@@ -1,4 +1,4 @@
-"""Tests for universe date-based file cache."""
+"""Tests for universe month-based file cache."""
 
 import json
 from datetime import date
@@ -49,18 +49,27 @@ def test_save_then_load_roundtrip():
     assert loaded["stocks"][0]["symbol"] == "AAPL"
 
 
-def test_different_dates_are_independent():
-    day1 = date(2026, 2, 17)
-    day2 = date(2026, 2, 18)
+def test_same_month_different_days_share_cache():
+    """Feb 5 and Feb 28 should share the same cache file (monthly granularity)."""
+    save_universe_cache("halal", SAMPLE_UNIVERSE, cache_date=date(2026, 2, 5))
 
-    data_day1 = {**SAMPLE_UNIVERSE, "total_stocks": 10}
-    data_day2 = {**SAMPLE_UNIVERSE, "total_stocks": 20}
+    loaded_same_day = load_cached_universe("halal", date(2026, 2, 5))
+    loaded_later_day = load_cached_universe("halal", date(2026, 2, 28))
 
-    save_universe_cache("halal", data_day1, cache_date=day1)
-    save_universe_cache("halal", data_day2, cache_date=day2)
+    assert loaded_same_day is not None
+    assert loaded_later_day is not None
+    assert loaded_same_day["total_stocks"] == loaded_later_day["total_stocks"]
 
-    assert load_cached_universe("halal", day1) is None  # cleaned up by day2 save
-    loaded = load_cached_universe("halal", day2)
+
+def test_different_months_are_independent():
+    jan_data = {**SAMPLE_UNIVERSE, "total_stocks": 10}
+    feb_data = {**SAMPLE_UNIVERSE, "total_stocks": 20}
+
+    save_universe_cache("halal", jan_data, cache_date=date(2026, 1, 15))
+    save_universe_cache("halal", feb_data, cache_date=date(2026, 2, 10))
+
+    assert load_cached_universe("halal", date(2026, 1, 15)) is None  # cleaned up
+    loaded = load_cached_universe("halal", date(2026, 2, 10))
     assert loaded is not None
     assert loaded["total_stocks"] == 20
 
@@ -104,11 +113,11 @@ def test_save_creates_cache_dir():
 # ============================================================================
 
 
-def test_cleanup_deletes_older_files_for_same_universe():
+def test_cleanup_deletes_older_month_files_for_same_universe():
     cache_dir = cache_mod.UNIVERSE_CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    old_path = _cache_path("halal_filtered", date(2026, 2, 16))
+    old_path = _cache_path("halal_filtered", date(2026, 1, 10))
     old_path.write_text(json.dumps(SAMPLE_UNIVERSE))
 
     save_universe_cache("halal_filtered", SAMPLE_UNIVERSE, cache_date=date(2026, 2, 18))
@@ -121,7 +130,7 @@ def test_cleanup_does_not_delete_other_universes():
     cache_dir = cache_mod.UNIVERSE_CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    halal_path = _cache_path("halal", date(2026, 2, 16))
+    halal_path = _cache_path("halal", date(2026, 1, 16))
     halal_path.write_text(json.dumps(SAMPLE_UNIVERSE))
 
     save_universe_cache("halal_filtered", SAMPLE_UNIVERSE, cache_date=date(2026, 2, 18))
@@ -133,8 +142,8 @@ def test_cleanup_called_via_internal_helper():
     cache_dir = cache_mod.UNIVERSE_CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    old1 = _cache_path("sp500", date(2026, 1, 1))
-    old2 = _cache_path("sp500", date(2026, 1, 15))
+    old1 = _cache_path("sp500", date(2025, 11, 1))
+    old2 = _cache_path("sp500", date(2025, 12, 15))
     keep = _cache_path("sp500", date(2026, 2, 1))
 
     for p in (old1, old2, keep):
@@ -145,6 +154,28 @@ def test_cleanup_called_via_internal_helper():
     assert not old1.exists()
     assert not old2.exists()
     assert keep.exists()
+
+
+# ============================================================================
+# Cache path format
+# ============================================================================
+
+
+def test_cache_path_uses_monthly_format():
+    path = _cache_path("halal_filtered", date(2026, 2, 19))
+    assert path.name == "halal_filtered_2026-02.json"
+
+
+def test_cache_path_same_month_same_file():
+    path_early = _cache_path("halal", date(2026, 3, 1))
+    path_late = _cache_path("halal", date(2026, 3, 31))
+    assert path_early == path_late
+
+
+def test_cache_path_different_months_different_files():
+    path_feb = _cache_path("halal", date(2026, 2, 15))
+    path_mar = _cache_path("halal", date(2026, 3, 15))
+    assert path_feb != path_mar
 
 
 # ============================================================================

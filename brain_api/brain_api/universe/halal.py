@@ -2,6 +2,7 @@
 
 Fetches top holdings from halal ETFs (SPUS, HLAL, SPTE) and filters to
 US-listed stocks with Alpha Vantage fundamentals data available.
+Results are cached monthly (see cache.py).
 """
 
 import logging

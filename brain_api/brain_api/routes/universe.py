@@ -1,12 +1,17 @@
 """Universe endpoints for stock universe data."""
 
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, HTTPException
 
 from brain_api.universe import (
     get_halal_filtered_universe,
     get_halal_new_universe,
     get_halal_universe,
 )
+from brain_api.universe.stock_filter import YFinanceFetchError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,6 +22,9 @@ def get_halal_stocks() -> dict:
 
     Returns deduplicated union of top holdings from halal ETFs (SPUS, HLAL, SPTE).
     Each stock includes symbol, name, max weight across ETFs, and which ETFs hold it.
+
+    First call of each month fetches live ETF holdings via yfinance.
+    Subsequent calls in the same month are served from cache.
     """
     return get_halal_universe()
 
@@ -28,6 +36,9 @@ def get_halal_new_stocks() -> dict:
     Scrapes all holdings from 5 halal ETFs (SPUS, SPTE, SPWO, HLAL, UMMA),
     merges and deduplicates, then filters to only Alpaca-tradable symbols.
     Returns ~410 stocks (larger than the original halal universe of ~14).
+
+    First call of each month scrapes live data from SP Funds, Wahed, and Alpaca.
+    Subsequent calls in the same month are served from cache.
     """
     return get_halal_new_universe()
 
@@ -40,6 +51,11 @@ def get_halal_filtered_stocks() -> dict:
     (ROE > 0, Price > SMA200, Beta < 2) and factor scoring
     (0.4*Momentum + 0.3*Quality + 0.3*Value), returns top 15.
 
-    Note: This endpoint fetches live yfinance data and may take 2-5 minutes.
+    First call of each month fetches live yfinance data (~7 minutes).
+    Subsequent calls in the same month are served from cache.
     """
-    return get_halal_filtered_universe()
+    try:
+        return get_halal_filtered_universe()
+    except YFinanceFetchError as e:
+        logger.error(f"Halal filtered universe build failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e)) from e

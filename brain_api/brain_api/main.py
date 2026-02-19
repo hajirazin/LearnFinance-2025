@@ -1,6 +1,9 @@
 """FastAPI application entrypoint."""
 
 import logging
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
@@ -35,10 +38,22 @@ from brain_api.routes import (
     universe,
 )
 
+shutdown_event = threading.Event()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Manage app lifecycle: signal background tasks on shutdown."""
+    yield
+    logger.info("Shutdown requested, signalling background tasks to stop...")
+    shutdown_event.set()
+
+
 app = FastAPI(
     title="Brain API",
     description="FastAPI brain service for LearnFinance-2025",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 

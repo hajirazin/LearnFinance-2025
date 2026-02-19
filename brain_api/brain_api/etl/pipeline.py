@@ -6,6 +6,7 @@ from the API endpoint or CLI.
 """
 
 import json
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -56,12 +57,14 @@ def format_number(n: int) -> str:
 def run_pipeline(
     config: ETLConfig,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    shutdown_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """Run the full ETL pipeline.
 
     Args:
         config: ETL configuration
         progress_callback: Optional callback for progress updates (for API jobs)
+        shutdown_event: If set, the pipeline saves progress and stops early.
 
     Returns:
         Dict with pipeline results and statistics
@@ -171,6 +174,10 @@ def run_pipeline(
             smoothing=0.1,
         ) as pbar:
             for batch in batch_articles(article_stream, config.batch_size):
+                if shutdown_event and shutdown_event.is_set():
+                    console.print("\n[yellow]Shutdown requested, saving progress...[/]")
+                    break
+
                 # DuckDB already filtered to halal symbols, just track stats
                 for article in batch:
                     articles_with_symbols += 1

@@ -6,6 +6,7 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
+from brain_api.universe.stock_filter import YFinanceFetchError
 
 client = TestClient(app)
 
@@ -510,3 +511,24 @@ def test_get_halal_filtered_stocks_have_factor_scores():
         assert "factor_components" in stock
         assert "metrics" in stock
         assert stock["factor_score"] is not None
+
+
+def test_get_halal_filtered_returns_503_on_yfinance_failure():
+    """Test that /universe/halal_filtered returns 503 when yfinance rate-limits us."""
+    mock_universe = _make_mock_halal_new_universe()
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.fetch_stock_metrics",
+            side_effect=YFinanceFetchError("18/20 failed (90.0%)"),
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    assert response.status_code == 503
+    data = response.json()
+    assert "18/20" in data["detail"]
