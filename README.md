@@ -7,11 +7,11 @@ A **learning-focused** weekly paper-trading portfolio system for **halal Nasdaq-
 Every Monday **6:00 PM IST** (pre US open), the system orchestrates:
 
 1. **Universe & Signals**: Fetch halal universe, collect signals (news sentiment, fundamentals)
-2. **Price Forecasting**: Run LSTM (price-only) and PatchTST (OHLCV 5-channel)
+2. **Price Forecasting**: Run LSTM (pure price) and PatchTST (OHLCV 5-channel) — both produce direct 5-day daily return forecasts
 3. **Portfolio Allocation**: Run multiple allocators for comparison:
    - **HRP** (Hierarchical Risk Parity) — math baseline
-   - **PPO + LSTM** / **PPO + PatchTST** — on-policy RL agents
-   - **SAC + LSTM** / **SAC + PatchTST** — off-policy RL agents
+   - **PPO** — on-policy RL agent (dual LSTM + PatchTST forecasts)
+   - **SAC** — off-policy RL agent (dual LSTM + PatchTST forecasts)
 4. **LLM Summary**: OpenAI/GPT synthesizes all signals into market insights
 5. **Email**: Send comparison tables with all approaches for learning
 
@@ -54,22 +54,20 @@ flowchart LR
 
 This repo compares multiple approaches at each stage:
 
-### Price Forecasters (predict weekly returns)
+### Price Forecasters (direct 5-day daily returns)
 
-| Model | Input | Status |
-|-------|-------|--------|
-| LSTM | OHLCV only (pure price) | ✅ Active |
-| PatchTST | OHLCV + All signals | ✅ Active |
+| Model | Input | Output | Status |
+|-------|-------|--------|--------|
+| LSTM | OHLCV only (pure price) | 5 daily close log returns | ✅ Active |
+| PatchTST | OHLCV 5-channel (open, high, low, close, volume) | 5 daily close log returns | ✅ Active |
 
 ### Portfolio Allocators (decide weights)
 
 | Model | Input | Status |
 |-------|-------|--------|
 | HRP | Covariance matrix | ✅ Active |
-| PPO + LSTM | State vector + LSTM forecasts | ✅ Active |
-| PPO + PatchTST | State vector + PatchTST forecasts | ✅ Active |
-| SAC + LSTM | State vector + LSTM forecasts | ✅ Active |
-| SAC + PatchTST | State vector + PatchTST forecasts | ✅ Active |
+| PPO | State vector + dual forecasts (LSTM + PatchTST) | ✅ Active |
+| SAC | State vector + dual forecasts (LSTM + PatchTST) | ✅ Active |
 
 ### Signals
 
@@ -81,24 +79,33 @@ This repo compares multiple approaches at each stage:
 | Fundamentals (historical) | ✅ Active | `/signals/fundamentals/historical` |
 | Twitter/Social sentiment | 🔜 To build | — |
 
-### Signal state vector (for RL and PatchTST)
+### Signal state vector (for RL allocators)
+
+Per stock (x15 stocks):
 
 | Feature | Source |
 |---------|--------|
 | LSTM predicted return | `/inference/lstm` |
+| PatchTST predicted return | `/inference/patchtst` |
 | News sentiment score | `/signals/news` |
 | Gross margin | `/signals/fundamentals` |
 | Operating margin | `/signals/fundamentals` |
 | Net margin | `/signals/fundamentals` |
 | Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
-| Current portfolio weight | Portfolio state |
+| Fundamental data age | Days since last update |
+
+Portfolio-level:
+
+| Feature | Source |
+|---------|--------|
+| Current weight per stock | Portfolio state |
 | Cash available | Portfolio state |
 
 **Key distinction:**
-- **LSTM** = pure price forecaster (close returns only)
-- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
-- **PPO/SAC** = RL allocators (receive signals + dual forecaster output)
+- **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
+- **PatchTST** = OHLCV forecaster (5-channel log returns, direct 5-day prediction)
+- **PPO/SAC** = RL allocators (receive signals + both LSTM and PatchTST return forecasts)
 
 ## Prerequisites
 
@@ -169,8 +176,8 @@ Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API
 
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
-| PPO | PPO + LSTM | On-policy RL with pure price forecasts |
-| SAC | SAC + PatchTST | Off-policy RL with OHLCV forecasts |
+| PPO | PPO | On-policy RL with dual forecasts (LSTM + PatchTST) |
+| SAC | SAC | Off-policy RL with dual forecasts (LSTM + PatchTST) |
 | HRP | HRP | Risk parity baseline |
 
 **OpenAI (for LLM summaries):**
@@ -314,6 +321,11 @@ BRAIN_API_URL=http://localhost:8000
 
 # Timezone (IST for Monday 6 PM runs)
 TZ=Asia/Kolkata
+
+# Universe overrides (default: halal_filtered)
+ETL_UNIVERSE=halal_filtered
+FORECASTER_TRAIN_UNIVERSE=halal_filtered
+RL_TRAIN_UNIVERSE=halal_filtered
 ```
 
 ## Key design decisions
@@ -345,14 +357,27 @@ On submit:
 - If an order with the same `client_order_id` was already submitted, reruns **do not** submit again.
 - We also query Alpaca by `client_order_id` as a secondary guardrail.
 
-### Screening stage (runtime control)
+### Universe types
 
-We start from all Nasdaq-500 stocks and apply the **halal filter across the full set**. From the resulting halal universe, we only run expensive pipelines for:
+The system supports three universe tiers, each building on the previous:
 
-- **Always**: your current holdings
-- **Plus**: a Top-15 candidate set chosen via cheap deterministic filters + ranking
+| Universe | Size | Source | Purpose |
+|----------|------|--------|---------|
+| `halal` | ~14 stocks | SPUS, HLAL, SPTE intersection | Original small universe |
+| `halal_new` | ~410 stocks | 5 halal ETFs (SPUS, SPTE, SPWO, HLAL, UMMA), Alpaca-tradable | Expanded universe |
+| `halal_filtered` | 15 stocks | Factor-scored from halal_new (ROE>0, Price>SMA200, Beta<2) | Default for training and inference |
 
-This keeps the system reliable and cost-bounded.
+Factor scoring: 0.4 x Momentum + 0.3 x Quality + 0.3 x Value. RL allocators require exactly 15 stocks, so `halal` and `halal_filtered` are the only valid RL universes.
+
+Results are cached daily to avoid redundant external API calls.
+
+### RL reward design
+
+PPO and SAC use a **blended reward** combining portfolio return with a DifferentialSharpe ratio (Moody & Saffell 2001):
+
+`reward = sharpe_weight * DSR + (1 - sharpe_weight) * return_reward`
+
+Transaction costs are computed in log space. This encourages risk-adjusted returns over raw performance.
 
 ### Limit orders + fractional sizing
 
@@ -391,12 +416,10 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /inference/lstm` | LSTM price predictions (OHLCV only) |
-| `POST /inference/patchtst` | PatchTST price predictions (OHLCV) |
-| `POST /inference/ppo_lstm` | PPO allocation using LSTM forecasts |
-| `POST /inference/ppo_patchtst` | PPO allocation using PatchTST forecasts |
-| `POST /inference/sac_lstm` | SAC allocation using LSTM forecasts |
-| `POST /inference/sac_patchtst` | SAC allocation using PatchTST forecasts |
+| `POST /inference/lstm` | LSTM 5-day return predictions (pure price) |
+| `POST /inference/patchtst` | PatchTST 5-day return predictions (OHLCV) |
+| `POST /inference/ppo` | PPO allocation (dual LSTM + PatchTST forecasts) |
+| `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts) |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
 
 ### Order generation endpoints
@@ -420,14 +443,10 @@ We store three kinds of data:
 |----------|---------|---------|
 | `POST /train/lstm` | Full LSTM retrain | Monthly (manual) |
 | `POST /train/patchtst` | Full PatchTST retrain | Monthly (manual) |
-| `POST /train/ppo_lstm/full` | Full PPO+LSTM retrain | Monthly (manual) |
-| `POST /train/ppo_lstm/finetune` | PPO+LSTM fine-tune | Weekly (cron) |
-| `POST /train/ppo_patchtst/full` | Full PPO+PatchTST retrain | Monthly (manual) |
-| `POST /train/ppo_patchtst/finetune` | PPO+PatchTST fine-tune | Weekly (cron) |
-| `POST /train/sac_lstm/full` | Full SAC+LSTM retrain | Monthly (manual) |
-| `POST /train/sac_lstm/finetune` | SAC+LSTM fine-tune | Weekly (cron) |
-| `POST /train/sac_patchtst/full` | Full SAC+PatchTST retrain | Monthly (manual) |
-| `POST /train/sac_patchtst/finetune` | SAC+PatchTST fine-tune | Weekly (cron) |
+| `POST /train/ppo/full` | Full PPO retrain (dual forecasts) | Monthly (manual) |
+| `POST /train/ppo/finetune` | PPO fine-tune on experience buffer | Weekly (cron) |
+| `POST /train/sac/full` | Full SAC retrain (dual forecasts) | Monthly (manual) |
+| `POST /train/sac/finetune` | SAC fine-tune on experience buffer | Weekly (cron) |
 
 ### LLM endpoints
 
@@ -451,22 +470,45 @@ We store three kinds of data:
 | `POST /alpaca/submit-orders` | Submit orders to Alpaca paper trading |
 | `GET /alpaca/order-history` | Get order execution history |
 
+### Universe endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /universe/halal` | Original halal universe (~14 stocks from SPUS/HLAL/SPTE) |
+| `GET /universe/halal_new` | Expanded universe (~410 stocks from 5 halal ETFs) |
+| `GET /universe/halal_filtered` | Top 15 factor-scored stocks from halal_new (ROE>0, Price>SMA200, Beta<2) |
+
+### ETL endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
+| `GET /etl/news-sentiment/jobs` | List ETL jobs |
+| `GET /etl/news-sentiment/{job_id}` | Get ETL job status |
+| `POST /etl/sentiment-gaps` | Gap detection and backfill |
+| `GET /etl/sentiment-gaps/{job_id}` | Get gap-fill job status |
+| `POST /etl/refresh-training-data` | Refresh training data (sentiment gaps + fundamentals) |
+
+### Experience endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /experience/store` | Store RL experience |
+| `POST /experience/update-execution` | Update experience with execution results |
+| `POST /experience/label` | Label experience with rewards |
+| `POST /experience/label/ppo` | Label PPO experience with rewards |
+| `POST /experience/label/sac` | Label SAC experience with rewards |
+| `GET /experience/list` | List stored experiences |
+
 ### Other endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /universe/halal` | Get halal stock universe |
-| `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
-| `POST /etl/sentiment-gaps` | Gap detection and backfill |
-| `POST /etl/refresh-training-data` | Refresh training data (sentiment gaps + fundamentals) |
-| `POST /experience/store` | Store RL experience |
-| `POST /experience/label` | Label experience with rewards |
-| `GET /experience/list` | List stored experiences |
 | `GET /health`, `/health/live`, `/health/ready` | Health checks |
 
 ### Request/response examples
 
-**LSTM inference:**
+**LSTM inference (5-day direct prediction):**
 
 ```json
 // POST /inference/lstm
@@ -478,25 +520,43 @@ We store three kinds of data:
   "predictions": [
     {
       "symbol": "AAPL",
-      "predicted_weekly_return_pct": 2.5,
+      "daily_returns": [0.003, 0.005, -0.001, 0.004, 0.002],
       "direction": "UP",
-      "has_enough_history": true
+      "has_enough_history": true,
+      "history_days_used": 252,
+      "data_end_date": "2025-12-26",
+      "target_week_start": "2025-12-29",
+      "target_week_end": "2026-01-02"
     }
   ],
   "model_version": "v2026-01-09-a4fecab1bdcc",
-  "as_of_date": "2025-12-29"
+  "as_of_date": "2025-12-29",
+  "target_week_start": "2025-12-29",
+  "target_week_end": "2026-01-02"
 }
 ```
 
-**PPO+LSTM inference:**
+**PPO inference (dual forecasts):**
 
 ```json
-// POST /inference/ppo_lstm
+// POST /inference/ppo
 // Request
-{ "portfolio": { "positions": [...], "cash": 10000 }, "as_of_date": "2025-12-29" }
+{
+  "portfolio": { "cash": 10000, "positions": [{"symbol": "AAPL", "market_value": 5000}] },
+  "as_of_date": "2025-12-29"
+}
 
 // Response
-{ "allocation": { "AAPL": 0.15, "MSFT": 0.10, "CASH": 0.05 }, "turnover": 0.12 }
+{
+  "target_weights": { "AAPL": 0.15, "MSFT": 0.10, "CASH": 0.75 },
+  "turnover": 0.12,
+  "model_version": "v2026-01-09-ppo-abc123",
+  "target_week_start": "2025-12-29",
+  "target_week_end": "2026-01-02",
+  "weight_changes": [
+    { "symbol": "AAPL", "current_weight": 0.33, "target_weight": 0.15, "change": -0.18 }
+  ]
+}
 ```
 
 ## Model lifecycle
@@ -617,41 +677,48 @@ The API is designed so each endpoint can become a standalone **Google Cloud Func
 ## Code structure
 
 ```
-brain_api/
+brain_api/brain_api/
+├── main.py
 ├── routes/
-│   ├── inference/
-│   │   ├── lstm.py
-│   │   ├── patchtst.py
-│   │   ├── ppo_lstm.py
-│   │   ├── ppo_patchtst.py
-│   │   ├── sac_lstm.py
-│   │   └── sac_patchtst.py
-│   ├── training/
-│   │   └── (same pattern)
-│   ├── signals/
-│   │   └── endpoints.py
-│   ├── pipelines/
-│   ├── allocation.py
+│   ├── inference/            # lstm.py, patchtst.py, ppo.py, sac.py
+│   ├── training/             # lstm.py, patchtst.py, ppo.py, sac.py
+│   ├── signals/              # endpoints.py
+│   ├── email/                # weekly_report.py, training_summary.py
+│   ├── llm/                  # weekly_summary.py, training_summary.py
+│   ├── pipelines/            # inference.py, training.py
+│   ├── allocation.py         # HRP
+│   ├── alpaca.py
 │   ├── experience.py
 │   ├── etl.py
-│   └── universe.py
+│   ├── orders.py
+│   ├── universe.py
+│   └── health.py
 ├── core/
-│   ├── lstm/
-│   ├── patchtst/
-│   ├── ppo_lstm/
-│   ├── ppo_patchtst/
-│   ├── sac_lstm/
-│   ├── sac_patchtst/
+│   ├── lstm/                 # model, dataset, inference, training
+│   ├── patchtst/             # dataset, data_loaders, inference, training
+│   ├── ppo/                  # model, data, trainer, inference
+│   ├── sac/                  # training, inference
+│   ├── portfolio_rl/         # env, rewards, state, constraints, scaler, sac_networks
+│   ├── fundamentals/         # fetcher, parser, storage, loader
+│   ├── news_sentiment/       # processor, fetcher, aggregation, persistence
 │   ├── hrp.py
+│   ├── orders.py
+│   ├── alpaca_client.py
+│   ├── config.py
 │   └── ...
 ├── storage/
-│   ├── base.py              # abstract Storage class
-│   ├── local.py             # LocalStorage(base_path="data/")
-│   ├── huggingface.py       # HuggingFaceStorage (swap via env var)
-│   ├── lstm/
+│   ├── base.py               # abstract Storage class
+│   ├── local.py              # LocalStorage
+│   ├── huggingface.py        # HuggingFaceStorage (swap via env var)
+│   ├── lstm/                 # local.py, huggingface.py
 │   ├── patchtst/
-│   └── ...
-└── ...
+│   ├── ppo/
+│   ├── sac/
+│   ├── datasets/
+│   └── forecaster_snapshots/
+├── universe/                  # halal.py, halal_new.py, halal_filtered.py, scrapers/
+├── etl/                       # pipeline.py, gap_detection.py, gap_fill.py, dataset.py
+└── templates/                 # Jinja2 templates for LLM prompts and emails
 ```
 
 ## Repo docs
