@@ -36,7 +36,6 @@ class SymbolPrediction:
 
     symbol: str
     predicted_weekly_return_pct: float | None  # Percentage (e.g., 2.5 for +2.5%)
-    predicted_volatility: float | None  # Std dev of 5 daily return predictions
     direction: str  # "UP", "DOWN", or "FLAT"
     has_enough_history: bool
     history_days_used: int
@@ -139,7 +138,6 @@ def run_inference(
 
     Single forward pass predicts 5 daily close log returns directly.
     Weekly return = exp(sum(5 log returns)) - 1.
-    Volatility = std of the 5 daily predictions.
 
     NO inverse transform is applied -- targets are never scaled during training
     (dataset.py keeps returns in original scale), so the model's linear layer
@@ -166,7 +164,6 @@ def run_inference(
             SymbolPrediction(
                 symbol=feat.symbol,
                 predicted_weekly_return_pct=None,
-                predicted_volatility=None,
                 direction="FLAT",
                 has_enough_history=False,
                 history_days_used=feat.history_days_used,
@@ -209,9 +206,6 @@ def run_inference(
         # Weekly return by compounding log returns: exp(sum) - 1
         weekly_return = float(np.exp(np.sum(symbol_daily)) - 1)
 
-        # Volatility as std dev of daily log return predictions
-        volatility = float(np.std(symbol_daily))
-
         weekly_return_pct = weekly_return * 100  # Convert to percentage
         direction = classify_direction(weekly_return)
 
@@ -219,7 +213,6 @@ def run_inference(
             SymbolPrediction(
                 symbol=symbol,
                 predicted_weekly_return_pct=round(weekly_return_pct, 4),
-                predicted_volatility=round(volatility, 6),
                 direction=direction,
                 has_enough_history=True,
                 history_days_used=feat.history_days_used,

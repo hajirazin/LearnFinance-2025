@@ -69,7 +69,6 @@ class LSTMPrediction(BaseModel):
 
     symbol: str
     predicted_weekly_return_pct: float | None = None
-    predicted_volatility: float | None = None
     daily_returns: list[float] | None = None  # 5 predicted daily close log returns
     direction: str
     has_enough_history: bool
@@ -94,7 +93,6 @@ class PatchTSTPrediction(BaseModel):
 
     symbol: str
     predicted_weekly_return_pct: float | None = None
-    predicted_volatility: float | None = None
     daily_returns: list[float] | None = None  # 5 predicted daily close log returns
     direction: str
     has_enough_history: bool

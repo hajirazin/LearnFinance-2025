@@ -420,7 +420,6 @@ def mock_weekly_summary_request():
                 {
                     "symbol": "AAPL",
                     "predicted_weekly_return_pct": 2.5,
-                    "predicted_volatility": 0.03,
                     "direction": "UP",
                     "has_enough_history": True,
                     "history_days_used": 252,
@@ -431,7 +430,6 @@ def mock_weekly_summary_request():
                 {
                     "symbol": "MSFT",
                     "predicted_weekly_return_pct": 1.8,
-                    "predicted_volatility": 0.025,
                     "direction": "UP",
                     "has_enough_history": True,
                     "history_days_used": 252,
@@ -450,7 +448,6 @@ def mock_weekly_summary_request():
                 {
                     "symbol": "AAPL",
                     "predicted_weekly_return_pct": 2.1,
-                    "predicted_volatility": 0.028,
                     "direction": "UP",
                     "has_enough_history": True,
                     "history_days_used": 252,

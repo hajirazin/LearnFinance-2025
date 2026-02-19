@@ -11,7 +11,7 @@
 > - Holiday handling: **no calendar logic**. Targets are always the next 5 rows in `features_df` (trading days by definition). No zero-padding, no position mapping.
 > - 3 additional bugs fixed: inverse-transform (Bug #1), off-by-one alignment (Bug #2), no gradient clipping (Bug #3).
 > - Early stopping added to training loop.
-> - `predicted_volatility` kept (for RL interface compat), computed as `std(5 daily predictions)`.
+> - `predicted_volatility` was removed from both forecasters (no longer in SymbolPrediction or API response).
 > - `daily_returns` field added to inference response (5 close log returns per symbol).
 
 ---
@@ -183,7 +183,7 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 ### 7.1 LSTM Changes -- **IMPLEMENTED (close-only)**
 
-> **Deviation from original plan:** LSTM uses close-only targets (5 outputs), NOT multi-channel OHLCV (25 outputs). Research shows close-only is more proven for stock forecasting; multi-channel risks negative transfer without complex loss balancing. `predicted_volatility` kept for RL interface compat.
+> **Deviation from original plan:** LSTM uses close-only targets (5 outputs), NOT multi-channel OHLCV (25 outputs). Research shows close-only is more proven for stock forecasting; multi-channel risks negative transfer without complex loss balancing. `predicted_volatility` was later removed from both forecasters.
 
 #### 7.1.1 Config (`brain_api/core/lstm/config.py`) -- DONE
 
@@ -219,7 +219,7 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 #### 7.1.5 Inference (`brain_api/core/lstm/inference.py`) -- DONE
 
-- `SymbolPrediction`: Added `daily_returns: list[float] | None = None`. Kept `predicted_volatility`.
+- `SymbolPrediction`: Added `daily_returns: list[float] | None = None`. `predicted_volatility` was later removed.
 - `InferenceFeatures` and `build_inference_features()`: No changes needed.
 - `run_inference()`: Deleted autoregressive loop. Single forward pass -> `(batch, 5)`.
   - **NO inverse transform** (Bug #1 fix). Model outputs raw log returns.
@@ -376,7 +376,7 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 
 **`forecasters.py` (`brain_api/core/realtime_signals/forecasters.py`):**
 
-- `LSTMForecaster.build_forecasts()`: No interface change. Internally calls `run_inference()` which now returns updated `SymbolPrediction` (with `daily_returns`, without `predicted_volatility`). Still extracts `predicted_weekly_return_pct / 100.0`.
+- `LSTMForecaster.build_forecasts()`: No interface change. Internally calls `run_inference()` which returns `SymbolPrediction` (with `daily_returns`; `predicted_volatility` removed). Still extracts `predicted_weekly_return_pct / 100.0`.
 - `PatchTSTForecaster.build_forecasts()`: Same -- no interface change.
 
 ---
@@ -470,10 +470,9 @@ patchtst_forecasts = {p.symbol: p.predicted_weekly_return_pct / 100.0 for p in p
 
 **`test_inference_lstm.py`:**
 
-- `test_inference_lstm_returns_required_fields` (line 179): Change `assert "predicted_volatility" in pred` to `assert "daily_returns" in pred`
-- `test_inference_lstm_returns_volatility_field` (line 206): DELETE entirely
-- `test_inference_lstm_volatility_is_non_negative` (line 224): DELETE entirely
-- Mock setup: Update any mock that returns `SymbolPrediction` to include `daily_returns` and omit `predicted_volatility`
+- `test_inference_lstm_returns_required_fields`: Assert required fields (no `predicted_volatility`).
+- Volatility-specific tests removed; optional test that response does not contain `predicted_volatility`.
+- Mock setup: Mocks omit `predicted_volatility` and include `daily_returns` where needed.
 
 **`test_inference_patchtst.py`:**
 
@@ -503,7 +502,7 @@ patchtst_forecasts = {p.symbol: p.predicted_weekly_return_pct / 100.0 for p in p
 
 **`test_llm.py` and `test_email.py`:**
 
-- Update mock `SymbolPrediction` objects if they include `predicted_volatility` -- replace with `daily_returns`
+- Mocks should omit `predicted_volatility` (field removed); use `daily_returns` for daily predictions.
 
 ### 8.2 New Tests to Add
 
@@ -598,7 +597,7 @@ Ordered by dependency (implement top-to-bottom):
 | 2 | `lstm-model` | **DONE.** `model.py`: No code changes. fc layer already uses config.forecast_horizon. Docstrings updated. |
 | 3 | `lstm-dataset` | **DONE.** `dataset.py`: Week-aligned sampling, close-only targets, y shape (n, 5). Bug #5 fix (off-by-one). No holiday logic. |
 | 4 | `lstm-training` | **DONE.** `training.py`: Gradient clipping (Bug #8). Early stopping (patience=10). Docstrings for y=(n,5). |
-| 5 | `lstm-inference` | **DONE.** `inference.py`: Added daily_returns to SymbolPrediction. Kept predicted_volatility. Deleted autoregressive loop. Single forward pass. NO inverse-transform (Bug #1). weekly_return = exp(sum(log_rets)) - 1. |
+| 5 | `lstm-inference` | **DONE.** `inference.py`: Added daily_returns to SymbolPrediction. predicted_volatility later removed. Single forward pass. NO inverse-transform (Bug #1). weekly_return = exp(sum(log_rets)) - 1. |
 | 6 | `lstm-walkforward` | **DONE.** `walkforward.py`: Rewrote _predict_single_week_lstm. Single forward pass. NO inverse-transform. Bug #1 + #5 fixed. |
 | 7 | `prefect-model` | **DONE.** `forecast_email.py`: Added daily_returns to LSTMPrediction for email/LLM flow-through. |
 | 8 | `lstm-tests` | **DONE.** Updated test_inference_lstm.py (daily_returns), test_training_lstm.py (y shape), test_forecaster_snapshots.py. |
@@ -610,7 +609,7 @@ Ordered by dependency (implement top-to-bottom):
 | 9 | `patchtst-config` | **DONE.** (PatchTST plan) `config.py`: 5 channels OHLCV, prediction_length=5, RevIN enabled. |
 | 10 | `patchtst-dataset` | **DONE.** (PatchTST plan) `dataset.py`: 5-channel OHLCV x 5 days. RevIN handles normalization. X and y unscaled. |
 | 11 | `patchtst-training` | **DONE.** (PatchTST plan) `training.py`: HuggingFace built-in loss on (batch, 5, 5). RevIN normalized space. |
-| 12 | `patchtst-inference-prediction` | **DONE.** (PatchTST plan) `inference.py`: Added daily_returns. Kept predicted_volatility for RL compat. |
+| 12 | `patchtst-inference-prediction` | **DONE.** (PatchTST plan) `inference.py`: Added daily_returns. predicted_volatility later removed. |
 | 13 | `patchtst-inference-run` | **DONE.** (PatchTST plan) `inference.py`: Single forward pass. RevIN denormalizes. No inverse-transform needed. |
 | 14 | `patchtst-inference-build-features` | **DONE.** (PatchTST plan) `inference.py`: 5 OHLCV columns as model features. |
 
@@ -636,7 +635,7 @@ Ordered by dependency (implement top-to-bottom):
 
 | # | ID | Task |
 |---|---|---|
-| 23 | `forecasters-update` | **DONE.** `forecasters.py`: No code changes needed. predicted_volatility kept in SymbolPrediction (used by inference API). Interface unchanged. |
+| 23 | `forecasters-update` | **DONE.** `forecasters.py`: No code changes needed. predicted_volatility was later removed from SymbolPrediction and inference API. Interface unchanged. |
 | 24 | `sac-remove-10x-scaling` | **DONE.** `sac_networks.py`: Code already has no `* 10.0`. Lines 119, 127 read `torch.tanh(mean)` / `torch.tanh(raw_action)`. Line 133 uses `action.pow(2)`. |
 | 25 | `sac-target-entropy-fix` | **DONE.** `sac_config.py`: Comment already reflects `[-1, 1]` range. target_entropy = -16.0 is correct. |
 | 26 | `gamma-reduce-weekly` | **DONE.** `config.py` + `sac_config.py`: Both already have `gamma: float = 0.97`. |

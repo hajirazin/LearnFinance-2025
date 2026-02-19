@@ -45,7 +45,6 @@ class SymbolPrediction:
 
     symbol: str
     predicted_weekly_return_pct: float | None
-    predicted_volatility: float | None  # Std dev of 5 daily return predictions
     direction: str  # "UP", "DOWN", or "FLAT"
     has_enough_history: bool
     history_days_used: int
@@ -210,7 +209,6 @@ def run_inference(
             SymbolPrediction(
                 symbol=feat.symbol,
                 predicted_weekly_return_pct=None,
-                predicted_volatility=None,
                 direction="FLAT",
                 has_enough_history=False,
                 history_days_used=feat.history_days_used,
@@ -257,9 +255,6 @@ def run_inference(
         # Compound log returns: weekly_return = exp(sum(5 log returns)) - 1
         weekly_return = float(np.exp(np.sum(symbol_daily)) - 1)
 
-        # Compute volatility as std dev of daily log returns
-        volatility = float(np.std(symbol_daily))
-
         # Daily returns list for response
         daily_returns_list = symbol_daily.tolist()
 
@@ -270,7 +265,6 @@ def run_inference(
             SymbolPrediction(
                 symbol=symbol,
                 predicted_weekly_return_pct=round(weekly_return_pct, 4),
-                predicted_volatility=round(volatility, 6),
                 direction=direction,
                 has_enough_history=True,
                 history_days_used=feat.history_days_used,
