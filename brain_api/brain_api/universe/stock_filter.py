@@ -10,6 +10,7 @@ Monthly universe caching (see cache.py) means this only runs once per month.
 """
 
 import logging
+import threading
 import time
 
 import yfinance as yf
@@ -25,7 +26,10 @@ class YFinanceFetchError(Exception):
     """Raised when too many yfinance API calls fail, indicating rate limiting."""
 
 
-def fetch_stock_metrics(symbols: list[str]) -> dict[str, dict]:
+def fetch_stock_metrics(
+    symbols: list[str],
+    shutdown_event: threading.Event | None = None,
+) -> dict[str, dict]:
     """Fetch fundamental metrics for each symbol using yfinance.
 
     Uses a single batch yf.download() for 6-month price history (momentum),
@@ -36,6 +40,7 @@ def fetch_stock_metrics(symbols: list[str]) -> dict[str, dict]:
 
     Args:
         symbols: List of stock ticker symbols.
+        shutdown_event: If set, the loop stops early and returns partial results.
 
     Returns:
         Mapping of symbol -> metrics dict with keys:
@@ -57,6 +62,12 @@ def fetch_stock_metrics(symbols: list[str]) -> dict[str, dict]:
     total = len(symbols)
 
     for i, sym in enumerate(symbols, 1):
+        if shutdown_event and shutdown_event.is_set():
+            logger.warning(f"Shutdown requested after {i - 1}/{total} stocks, aborting")
+            raise YFinanceFetchError(
+                f"Shutdown requested after {i - 1}/{total} stocks fetched."
+            )
+
         data, was_api_error = _fetch_one_with_retry(sym, six_month_returns)
         metrics[sym] = data
         if was_api_error:

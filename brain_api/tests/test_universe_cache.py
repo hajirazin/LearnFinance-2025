@@ -138,6 +138,26 @@ def test_cleanup_does_not_delete_other_universes():
     assert halal_path.exists(), "Cleanup should not touch other universes"
 
 
+def test_cleanup_halal_does_not_nuke_halal_filtered_or_halal_new():
+    """Saving 'halal' must not delete 'halal_filtered' or 'halal_new' caches.
+
+    Regression: glob('halal_*.json') matched halal_new_* and halal_filtered_*.
+    """
+    cache_dir = cache_mod.UNIVERSE_CACHE_DIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    d = date(2026, 2, 18)
+    filtered_path = _cache_path("halal_filtered", d)
+    new_path = _cache_path("halal_new", d)
+    filtered_path.write_text(json.dumps(SAMPLE_UNIVERSE))
+    new_path.write_text(json.dumps(SAMPLE_UNIVERSE))
+
+    save_universe_cache("halal", SAMPLE_UNIVERSE, cache_date=d)
+
+    assert filtered_path.exists(), "halal save must not delete halal_filtered cache"
+    assert new_path.exists(), "halal save must not delete halal_new cache"
+
+
 def test_cleanup_called_via_internal_helper():
     cache_dir = cache_mod.UNIVERSE_CACHE_DIR
     cache_dir.mkdir(parents=True, exist_ok=True)

@@ -5,13 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.portfolio_rl.walkforward import (
     build_forecast_features,
-    compute_momentum_proxy,
-    generate_walkforward_forecasts_simple,
 )
 from brain_api.storage.forecaster_snapshots import (
     LSTMSnapshotArtifacts,
@@ -210,106 +209,59 @@ class TestCreateSnapshotMetadata:
 class TestWalkForwardForecasts:
     """Tests for walk-forward forecast generation."""
 
-    def test_compute_momentum_proxy(self):
-        """Test momentum proxy computation."""
-        prices = np.array([100, 102, 104, 106, 108, 110, 112])
-        momentum = compute_momentum_proxy(prices, lookback_weeks=4)
+    def test_build_forecast_features_raises_on_missing_snapshots(self, tmp_path):
+        """Test build_forecast_features raises when snapshots are missing."""
+        from brain_api.core.portfolio_rl.walkforward import SnapshotUnavailableError
 
-        # First 4 values should be 0 (not enough history)
-        assert all(momentum[:4] == 0)
-        # After that, momentum should be computed
-        assert momentum[4] > 0  # 108 vs 100
-        assert momentum[5] > 0  # 110 vs 102
-
-    def test_compute_momentum_proxy_short_array(self):
-        """Test momentum with short price array."""
-        prices = np.array([100, 102, 104])
-        momentum = compute_momentum_proxy(prices, lookback_weeks=4)
-        assert len(momentum) == 3
-        assert all(momentum == 0)
-
-    def test_generate_simple_forecasts(self):
-        """Test simple momentum-based forecast generation."""
-        # Create weekly prices (2 years of data)
-        n_weeks = 104  # ~2 years
-        weekly_prices = {
-            "AAPL": np.linspace(100, 200, n_weeks),  # Uptrend
-            "MSFT": np.linspace(150, 120, n_weeks),  # Downtrend
-        }
-        weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
-        symbols = ["AAPL", "MSFT"]
-
-        forecasts = generate_walkforward_forecasts_simple(
-            weekly_prices, weekly_dates, symbols, bootstrap_years=1
-        )
-
-        assert "AAPL" in forecasts
-        assert "MSFT" in forecasts
-        assert len(forecasts["AAPL"]) == n_weeks - 1
-
-    def test_generate_simple_forecasts_bootstrap(self):
-        """Test bootstrap period uses zeros."""
-        n_weeks = 52  # 1 year
-        weekly_prices = {
-            "AAPL": np.linspace(100, 150, n_weeks),
-        }
-        weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
-
-        # With 4 year bootstrap, all of 2020 should be zeros
-        forecasts = generate_walkforward_forecasts_simple(
-            weekly_prices, weekly_dates, ["AAPL"], bootstrap_years=4
-        )
-
-        # All forecasts should be 0 since we're in bootstrap period
-        assert all(forecasts["AAPL"] == 0)
-
-    def test_build_forecast_features_simple(self):
-        """Test build_forecast_features with momentum proxy."""
         n_weeks = 52
         weekly_prices = {
             "AAPL": np.linspace(100, 150, n_weeks),
         }
         weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
 
-        forecasts = build_forecast_features(
-            weekly_prices,
-            weekly_dates,
-            ["AAPL"],
-            forecaster_type="lstm",
-            use_model_snapshots=False,
-        )
-
-        assert "AAPL" in forecasts
-        assert len(forecasts["AAPL"]) == n_weeks - 1
-
-    def test_build_forecast_features_with_missing_snapshots(self, tmp_path):
-        """Test build_forecast_features falls back when no snapshots."""
-        n_weeks = 52
-        weekly_prices = {
-            "AAPL": np.linspace(100, 150, n_weeks),
-        }
-        weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
-
-        # Use model snapshots but they don't exist
-        with patch(
-            "brain_api.core.portfolio_rl.walkforward.generate_walkforward_forecasts_with_model"
-        ) as mock:
-            mock.return_value = generate_walkforward_forecasts_simple(
-                weekly_prices, weekly_dates, ["AAPL"]
+        with (
+            patch(
+                "brain_api.storage.forecaster_snapshots.local.DEFAULT_DATA_PATH",
+                tmp_path,
+            ),
+            pytest.raises(SnapshotUnavailableError),
+        ):
+            build_forecast_features(
+                weekly_prices,
+                weekly_dates,
+                ["AAPL"],
+                forecaster_type="lstm",
             )
+
+    def test_build_forecast_features_delegates_to_generate(self):
+        """Test build_forecast_features calls generate_walkforward_forecasts."""
+        n_weeks = 52
+        weekly_prices = {
+            "AAPL": np.linspace(100, 150, n_weeks),
+        }
+        weekly_dates = pd.date_range("2020-01-06", periods=n_weeks, freq="W-MON")
+
+        with patch(
+            "brain_api.core.portfolio_rl.walkforward.generate_walkforward_forecasts"
+        ) as mock:
+            mock.return_value = {"AAPL": np.zeros(n_weeks - 1)}
             forecasts = build_forecast_features(
                 weekly_prices,
                 weekly_dates,
                 ["AAPL"],
                 forecaster_type="lstm",
-                use_model_snapshots=True,
             )
 
+        mock.assert_called_once()
         assert "AAPL" in forecasts
 
     def test_generate_forecasts_empty_prices(self):
-        """Test forecast generation with empty prices."""
-        forecasts = generate_walkforward_forecasts_simple({}, pd.DatetimeIndex([]), [])
+        """Test forecast generation with empty data returns empty."""
+        from brain_api.core.portfolio_rl.walkforward import (
+            generate_walkforward_forecasts,
+        )
+
+        forecasts = generate_walkforward_forecasts({}, pd.DatetimeIndex([]), [], "lstm")
         assert forecasts == {}
 
 
@@ -373,64 +325,57 @@ class TestPatchTSTSnapshots:
 class TestSnapshotInferenceHelpers:
     """Tests for snapshot inference helper functions."""
 
-    def test_lstm_inference_fallback_short_history(self):
-        """Test LSTM inference falls back with short history."""
-        from brain_api.core.portfolio_rl.walkforward import _run_lstm_snapshot_inference
+    def test_lstm_inference_raises_without_weekly_dates(self):
+        """Test LSTM inference raises when weekly_dates is missing."""
+        from brain_api.core.portfolio_rl.walkforward import (
+            SnapshotInferenceError,
+            _run_lstm_snapshot_inference,
+        )
 
-        # Create mock artifacts
         mock_config = MagicMock()
         mock_config.sequence_length = 20
         mock_config.use_returns = True
 
-        mock_model = MagicMock()
-        mock_scaler = StandardScaler()
-
         artifacts = LSTMSnapshotArtifacts(
             config=mock_config,
-            feature_scaler=mock_scaler,
-            model=mock_model,
+            feature_scaler=StandardScaler(),
+            model=MagicMock(),
             cutoff_date=date(2019, 12, 31),
         )
 
-        prices = np.linspace(100, 110, 10)  # Only 10 weeks
-        year_indices = [5, 6, 7]  # Indices to predict
+        year_indices = [5, 6, 7]
 
-        # Create weekly dates for the test
-        weekly_dates = pd.date_range(start="2019-01-01", periods=10, freq="W-FRI")
+        with pytest.raises(SnapshotInferenceError):
+            _run_lstm_snapshot_inference(
+                artifacts,
+                year_indices,
+                weekly_dates=None,
+                symbol="TEST",
+            )
 
-        # Should fall back to momentum since no daily OHLCV available
-        predictions = _run_lstm_snapshot_inference(
-            artifacts,
-            prices,
-            year_indices,
-            weekly_dates=weekly_dates,
-            symbol="TEST",
-        )
-        assert len(predictions) == 3
-
-    def test_patchtst_inference_fallback_short_history(self):
-        """Test PatchTST inference falls back with short history."""
+    def test_patchtst_inference_raises_without_weekly_dates(self):
+        """Test PatchTST inference raises when weekly_dates is missing."""
         from brain_api.core.portfolio_rl.walkforward import (
+            SnapshotInferenceError,
             _run_patchtst_snapshot_inference,
         )
 
-        # Create mock artifacts
         mock_config = MagicMock()
         mock_config.context_length = 20
 
-        mock_model = MagicMock()
-        mock_scaler = StandardScaler()
-
         artifacts = PatchTSTSnapshotArtifacts(
             config=mock_config,
-            feature_scaler=mock_scaler,
-            model=mock_model,
+            feature_scaler=StandardScaler(),
+            model=MagicMock(),
             cutoff_date=date(2019, 12, 31),
         )
 
-        prices = np.linspace(100, 110, 10)  # Only 10 weeks
-        year_indices = [5, 6, 7]  # Indices to predict
+        year_indices = [5, 6, 7]
 
-        # Should fall back to momentum since context_length=20 > len(prices)
-        predictions = _run_patchtst_snapshot_inference(artifacts, prices, year_indices)
-        assert len(predictions) == 3
+        with pytest.raises(SnapshotInferenceError):
+            _run_patchtst_snapshot_inference(
+                artifacts,
+                year_indices,
+                weekly_dates=None,
+                symbol="TEST",
+            )

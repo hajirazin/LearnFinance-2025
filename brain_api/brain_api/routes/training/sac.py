@@ -35,7 +35,6 @@ from .dependencies import (
     get_rl_training_symbols,
     get_sac_config,
     get_sac_storage,
-    snapshots_available,
 )
 from .helpers import get_prior_version_info
 from .models import SACTrainResponse
@@ -136,14 +135,13 @@ def train_sac_endpoint(
             }
 
     # Generate walk-forward forecast features for both LSTM and PatchTST
-    use_lstm_snapshots = snapshots_available("lstm")
-    use_patchtst_snapshots = snapshots_available("patchtst")
+    from brain_api.main import shutdown_event
+
     lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
-        use_lstm_snapshots=use_lstm_snapshots,
-        use_patchtst_snapshots=use_patchtst_snapshots,
+        shutdown_event=shutdown_event,
     )
 
     # Align LSTM forecast features to common week count
@@ -412,14 +410,13 @@ def finetune_sac_endpoint(
             }
 
     # Generate walk-forward forecast features for both LSTM and PatchTST
-    use_lstm_snapshots = snapshots_available("lstm")
-    use_patchtst_snapshots = snapshots_available("patchtst")
+    from brain_api.main import shutdown_event
+
     lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
-        use_lstm_snapshots=use_lstm_snapshots,
-        use_patchtst_snapshots=use_patchtst_snapshots,
+        shutdown_event=shutdown_event,
     )
 
     # Align LSTM forecast features to common week count

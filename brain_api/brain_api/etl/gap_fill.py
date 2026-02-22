@@ -258,7 +258,7 @@ def fill_sentiment_gaps(
         elif universe_type == UniverseType.HALAL_NEW:
             symbols = get_halal_new_symbols()
         elif universe_type == UniverseType.HALAL_FILTERED:
-            symbols = get_halal_filtered_symbols()
+            symbols = get_halal_filtered_symbols(shutdown_event=shutdown_event)
         elif universe_type == UniverseType.SP500:
             symbols = get_sp500_symbols()
         else:

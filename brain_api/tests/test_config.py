@@ -93,8 +93,8 @@ class TestResolveTrainingWindow:
         assert end_date.weekday() == 4, (
             f"Expected Friday, got {end_date.strftime('%A')}"
         )
-        # Start date should be Jan 1 of (end_date.year - 15)
-        expected_start = date(end_date.year - 15, 1, 1)
+        # Start date should be Jan 1 of (end_date.year - DEFAULT_LOOKBACK_YEARS)
+        expected_start = date(end_date.year - 10, 1, 1)
         assert start_date == expected_start
 
     def test_custom_lookback_years_friday_anchored(self) -> None:
@@ -116,8 +116,8 @@ class TestResolveTrainingWindow:
             start_date, end_date = resolve_training_window()
 
         assert end_date == date(2025, 6, 13)  # Friday before June 15
-        # Start should be Jan 1 of 2025-15 = 2010
-        assert start_date == date(2010, 1, 1)
+        # Start should be Jan 1 of 2025-10 = 2015
+        assert start_date == date(2015, 1, 1)
 
     def test_custom_end_date_on_friday_goes_to_previous_friday(self) -> None:
         """Custom end date on Friday should go to PREVIOUS Friday."""
@@ -128,7 +128,7 @@ class TestResolveTrainingWindow:
             start_date, end_date = resolve_training_window()
 
         assert end_date == date(2026, 1, 2)  # Previous Friday
-        assert start_date == date(2011, 1, 1)
+        assert start_date == date(2016, 1, 1)
 
     def test_both_overrides_friday_anchored(self) -> None:
         """Both lookback and end date overrides should work with Friday anchoring."""

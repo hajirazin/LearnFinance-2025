@@ -112,6 +112,7 @@ class SnapshotLocalStorage:
         self._hf_token = hf_token
         # Models directory where both main versions and snapshots live as siblings
         self._models_path = self.base_path / "models" / forecaster_type
+        self._hf_missing: set[date] = set()
 
     def _get_hf_repo(self) -> str | None:
         """Get the HuggingFace repo ID for this forecaster type."""
@@ -464,6 +465,7 @@ class SnapshotLocalStorage:
 
         except Exception as e:
             logger.warning(f"Failed to download snapshot {cutoff_date} from HF: {e}")
+            self._hf_missing.add(cutoff_date)
             return False
 
     def ensure_snapshot_available(self, cutoff_date: date) -> bool:
@@ -471,8 +473,9 @@ class SnapshotLocalStorage:
 
         This is the main method to use when loading snapshots - it will:
         1. Return True immediately if snapshot exists locally
-        2. Try to download from HF if not available locally
-        3. Return False if neither local nor HF has the snapshot
+        2. Skip HF download if a previous attempt already returned 404
+        3. Try to download from HF if not available locally
+        4. Return False if neither local nor HF has the snapshot
 
         Args:
             cutoff_date: The snapshot cutoff date
@@ -483,6 +486,9 @@ class SnapshotLocalStorage:
         """
         if self.snapshot_exists(cutoff_date):
             return True
+
+        if cutoff_date in self._hf_missing:
+            return False
 
         # Try downloading from HF
         return self.download_snapshot_from_hf(cutoff_date)

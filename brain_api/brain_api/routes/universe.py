@@ -54,8 +54,10 @@ def get_halal_filtered_stocks() -> dict:
     First call of each month fetches live yfinance data (~7 minutes).
     Subsequent calls in the same month are served from cache.
     """
+    from brain_api.main import shutdown_event
+
     try:
-        return get_halal_filtered_universe()
+        return get_halal_filtered_universe(shutdown_event=shutdown_event)
     except YFinanceFetchError as e:
         logger.error(f"Halal filtered universe build failed: {e}")
         raise HTTPException(status_code=503, detail=str(e)) from e

@@ -48,9 +48,10 @@ from brain_api.core.portfolio_rl.state import (
     build_state_vector,
 )
 from brain_api.core.portfolio_rl.walkforward import (
+    SnapshotInferenceError,
+    SnapshotUnavailableError,
     build_dual_forecast_features,
     build_forecast_features,
-    generate_walkforward_forecasts_simple,
 )
 
 __all__ = [
@@ -63,6 +64,9 @@ __all__ = [
     # Scaler
     "PortfolioScaler",
     "PortfolioState",
+    # Walk-forward errors
+    "SnapshotInferenceError",
+    "SnapshotUnavailableError",
     "StateSchema",
     "align_signals_to_weekly",
     "apply_softmax_to_weights",
@@ -88,7 +92,6 @@ __all__ = [
     "enforce_constraints",
     "evaluate_policy",
     "evaluate_ppo_for_promotion",
-    "generate_walkforward_forecasts_simple",
     "load_historical_fundamentals",
     # Data loading
     "load_historical_news_sentiment",

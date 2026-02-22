@@ -34,7 +34,6 @@ from .dependencies import (
     get_ppo_config,
     get_ppo_storage,
     get_rl_training_symbols,
-    snapshots_available,
 )
 from .helpers import get_prior_version_info
 from .models import PPOTrainResponse
@@ -166,18 +165,14 @@ def train_ppo_endpoint(
             }
 
     # Generate walk-forward forecast features for both LSTM and PatchTST
-    use_lstm_snapshots = snapshots_available("lstm")
-    use_patchtst_snapshots = snapshots_available("patchtst")
-    logger.info(
-        f"[PPO] Generating dual walk-forward forecast features "
-        f"(lstm_snapshots={use_lstm_snapshots}, patchtst_snapshots={use_patchtst_snapshots})..."
-    )
+    logger.info("[PPO] Generating dual walk-forward forecast features...")
+    from brain_api.main import shutdown_event
+
     lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
-        use_lstm_snapshots=use_lstm_snapshots,
-        use_patchtst_snapshots=use_patchtst_snapshots,
+        shutdown_event=shutdown_event,
     )
 
     # Align LSTM forecast features to common week count
@@ -489,15 +484,14 @@ def finetune_ppo_endpoint(
                 "fundamental_age": np.ones(min_weeks - 1),
             }
 
-    # Generate walk-forward forecast features (use snapshots if available)
-    use_lstm_snapshots = snapshots_available("lstm")
-    use_patchtst_snapshots = snapshots_available("patchtst")
+    # Generate walk-forward forecast features
+    from brain_api.main import shutdown_event
+
     lstm_predictions, patchtst_predictions = build_dual_forecast_features(
         weekly_prices=weekly_prices,
         weekly_dates=weekly_dates,
         symbols=available_symbols,
-        use_lstm_snapshots=use_lstm_snapshots,
-        use_patchtst_snapshots=use_patchtst_snapshots,
+        shutdown_event=shutdown_event,
     )
 
     # Align LSTM forecast features

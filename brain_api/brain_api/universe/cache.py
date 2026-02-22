@@ -74,7 +74,9 @@ def save_universe_cache(
 def _cleanup_old_cache(universe_name: str, keep_date: date) -> None:
     """Delete cache files for this universe whose month differs from keep_date's month."""
     keep_name = _cache_path(universe_name, keep_date).name
-    for old in UNIVERSE_CACHE_DIR.glob(f"{universe_name}_*.json"):
+    for old in UNIVERSE_CACHE_DIR.glob(
+        f"{universe_name}_[0-9][0-9][0-9][0-9]-[0-9][0-9].json"
+    ):
         if old.name != keep_name:
             old.unlink(missing_ok=True)
             logger.info(f"Universe cache cleaned up: {old.name}")

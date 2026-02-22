@@ -12,6 +12,7 @@ making it safe for RL allocators that require exactly 15 stocks.
 """
 
 import logging
+import threading
 from datetime import UTC, datetime
 
 from brain_api.universe.cache import load_cached_universe, save_universe_cache
@@ -27,8 +28,13 @@ logger = logging.getLogger(__name__)
 HALAL_FILTERED_TOP_N = 15
 
 
-def get_halal_filtered_universe() -> dict:
+def get_halal_filtered_universe(
+    shutdown_event: threading.Event | None = None,
+) -> dict:
     """Build filtered + scored halal universe (top 15).
+
+    Args:
+        shutdown_event: If set, aborts the yfinance fetch early.
 
     Returns:
         Dict with:
@@ -49,7 +55,7 @@ def get_halal_filtered_universe() -> dict:
 
     logger.info(f"Halal_Filtered: starting with {len(symbols)} stocks from halal_new")
 
-    metrics = fetch_stock_metrics(symbols)
+    metrics = fetch_stock_metrics(symbols, shutdown_event=shutdown_event)
 
     passed, failed = apply_junk_filter(stocks, metrics)
     logger.info(
@@ -75,13 +81,18 @@ def get_halal_filtered_universe() -> dict:
     return result
 
 
-def get_halal_filtered_symbols() -> list[str]:
+def get_halal_filtered_symbols(
+    shutdown_event: threading.Event | None = None,
+) -> list[str]:
     """Get just the list of Halal_Filtered stock symbols (top 15).
 
     Convenience function for use by training pipelines.
 
+    Args:
+        shutdown_event: If set, aborts the yfinance fetch early.
+
     Returns:
         List of top 15 factor-scored halal stock symbols.
     """
-    universe = get_halal_filtered_universe()
+    universe = get_halal_filtered_universe(shutdown_event=shutdown_event)
     return [s["symbol"] for s in universe["stocks"]]

@@ -378,6 +378,12 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm LSTM remains pure-price (no signals in input)
 - [ ] Confirm PatchTST/PPO/SAC receive correct signal state vector
 
+## AI assistant behavioral rules
+
+1. **Never add silent fallbacks without asking first.** Fallbacks mask real bugs and break correctness. For example, falling back to momentum when a snapshot fails to load means the system silently produces garbage instead of surfacing the error. Always raise exceptions for unexpected failures; ask the user before adding any degraded-mode fallback.
+
+2. **Never break math for clean code or code reuse.** PPO and SAC (or any two models) can have different research and can use different math. Do not assume their math is the same just because it looks similar today -- do not copy one model's math into another for DRY or simplicity. Each model must be free to evolve its math independently based on research. If the math genuinely is identical (e.g., a standard formula like Sharpe ratio), sharing is fine. The rule is: research correctness comes first; never sacrifice it for code cleanliness.
+
 ## AI assistant planning rules
 
 When operating in **plan mode**, the AI assistant must:

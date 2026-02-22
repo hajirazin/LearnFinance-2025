@@ -179,13 +179,12 @@ def test_hrp_returns_400_when_no_valid_symbols():
     assert "No symbols have sufficient data" in response.json()["detail"]
 
 
-def test_hrp_lookback_days_validation():
+def test_hrp_lookback_days_validation(hrp_client):
     """Test that lookback_days is validated (min 60, max 504)."""
-    client = TestClient(app)
-    response = client.post("/allocation/hrp", json={"lookback_days": 30})
+    response = hrp_client.post("/allocation/hrp", json={"lookback_days": 30})
     assert response.status_code == 422
 
-    response = client.post("/allocation/hrp", json={"lookback_days": 600})
+    response = hrp_client.post("/allocation/hrp", json={"lookback_days": 600})
     assert response.status_code == 422
 
 
