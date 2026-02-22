@@ -1,8 +1,8 @@
 """Weekly forecast email workflow for LearnFinance-2025.
 
 This flow runs every Monday at 18:00 IST and executes the full inference pipeline:
-1. Fetch halal universe and Alpaca portfolios (Phase 0)
-2. Get signals and forecasts (Phase 1)
+1. Fetch active symbols (from SAC model) and Alpaca portfolios (Phase 0)
+2. Get signals and forecasts (Phase 1) -- forecasters resolve symbols from own metadata
 3. Run allocators: PPO, SAC, HRP (Phase 2)
 4. Generate orders and store experience (Phase 3)
 5. Submit orders to Alpaca (Phase 4)
@@ -25,8 +25,8 @@ from flows.tasks import (
     generate_orders_ppo,
     generate_orders_sac,
     generate_summary,
+    get_active_symbols,
     get_fundamentals,
-    get_halal_universe,
     get_hrp_portfolio,
     get_lstm_forecast,
     get_news_sentiment,
@@ -79,20 +79,23 @@ def weekly_forecast_email_flow() -> dict:
     run_id = f"paper:{as_of_date}"
     attempt = 1
 
-    # Phase 0: Get universe + portfolios (parallel)
-    universe_future = get_halal_universe.submit()
+    # Phase 0: Get active symbols (from SAC model) + portfolios (parallel)
+    active_symbols_future = get_active_symbols.submit()
     ppo_portfolio_future = get_ppo_portfolio.submit()
     sac_portfolio_future = get_sac_portfolio.submit()
     hrp_portfolio_future = get_hrp_portfolio.submit()
 
-    universe = universe_future.result()
+    active_symbols = active_symbols_future.result()
     ppo_portfolio = ppo_portfolio_future.result()
     sac_portfolio = sac_portfolio_future.result()
     hrp_portfolio = hrp_portfolio_future.result()
 
-    # Get top 20 symbols
-    symbols = universe.symbols[:20]
-    logger.info(f"Using {len(symbols)} symbols for analysis")
+    # Use SAC model's symbols for signals
+    symbols = active_symbols.symbols
+    logger.info(
+        f"Using {len(symbols)} symbols for signals "
+        f"(from SAC {active_symbols.model_version})"
+    )
 
     # Determine skip flags based on open orders
     run_ppo = ppo_portfolio.open_orders_count == 0
@@ -111,10 +114,11 @@ def weekly_forecast_email_flow() -> dict:
         logger.warning(f"Skipping HRP: {hrp_portfolio.open_orders_count} open orders")
 
     # Phase 1: Get signals + forecasts (parallel)
+    # Signals use SAC model's symbols; forecasters resolve from their own model metadata
     fundamentals_future = get_fundamentals.submit(symbols)
     news_future = get_news_sentiment.submit(symbols, as_of_date, run_id)
-    lstm_future = get_lstm_forecast.submit(symbols, as_of_date)
-    patchtst_future = get_patchtst_forecast.submit(symbols, as_of_date)
+    lstm_future = get_lstm_forecast.submit(as_of_date)
+    patchtst_future = get_patchtst_forecast.submit(as_of_date)
 
     fundamentals = fundamentals_future.result()
     news = news_future.result()

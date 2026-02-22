@@ -123,6 +123,36 @@ def get_rl_training_symbols() -> list[str]:
         return [stock["symbol"] for stock in stocks]
 
 
+def get_etl_symbols() -> list[str]:
+    """Get symbols for ETL pipelines based on config.
+
+    Reads ETL_UNIVERSE env var to determine which universe to use.
+    Default is UniverseType.HALAL_FILTERED.
+
+    Returns:
+        List of symbols for ETL data refresh.
+    """
+    from brain_api.core.config import UniverseType, get_etl_universe
+
+    universe_type = get_etl_universe()
+
+    if universe_type == UniverseType.SP500:
+        from brain_api.universe.sp500 import get_sp500_symbols
+
+        return get_sp500_symbols()
+    elif universe_type == UniverseType.HALAL_NEW:
+        from brain_api.universe.halal_new import get_halal_new_symbols
+
+        return get_halal_new_symbols()
+    elif universe_type == UniverseType.HALAL_FILTERED:
+        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
+
+        return get_halal_filtered_symbols()
+    else:  # Default: HALAL
+        universe = get_halal_universe()
+        return [stock["symbol"] for stock in universe["stocks"]]
+
+
 def get_top15_symbols() -> list[str]:
     """Get top 15 symbols by liquidity from halal universe.
 

@@ -27,11 +27,11 @@ from flows.models.forecast_email import (
 )
 from flows.models.llm import TrainingSummaryResponse
 from flows.models.training import TrainingResponse
-from flows.models.universe import HalalUniverseResponse
+from flows.models.universe import ActiveSymbolsResponse
 
 __all__ = [
-    # Universe
-    "HalalUniverseResponse",
+    # Models
+    "ActiveSymbolsResponse",
     # ETL
     "RefreshTrainingDataRequest",
     "RefreshTrainingDataResponse",

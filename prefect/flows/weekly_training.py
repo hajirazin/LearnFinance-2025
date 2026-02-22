@@ -1,14 +1,13 @@
 """Weekly training workflow for LearnFinance-2025.
 
 This flow runs every Sunday at 11 AM UTC and executes the full training pipeline:
-1. Get halal universe (symbols list)
-2. Refresh training data (sentiment gaps + fundamentals)
-3. Train LSTM (pure price forecaster)
-4. Train PatchTST (OHLCV forecaster)
-5. Train PPO (RL allocator)
-6. Train SAC (RL allocator)
-7. Generate training summary (LLM-powered analysis)
-8. Send training summary email
+1. Refresh training data (brain_api resolves symbols from ETL_UNIVERSE config)
+2. Train LSTM (pure price forecaster)
+3. Train PatchTST (OHLCV forecaster)
+4. Train PPO (RL allocator)
+5. Train SAC (RL allocator)
+6. Generate training summary (LLM-powered analysis)
+7. Send training summary email
 """
 
 import os
@@ -18,7 +17,6 @@ from prefect import flow, task
 from prefect.logging import get_run_logger
 
 from flows.models import (
-    HalalUniverseResponse,
     RefreshTrainingDataRequest,
     RefreshTrainingDataResponse,
     TrainingResponse,
@@ -48,29 +46,16 @@ def get_client() -> httpx.Client:
 # =============================================================================
 
 
-@task(name="Get Halal Universe", retries=2, retry_delay_seconds=30)
-def get_halal_universe() -> HalalUniverseResponse:
-    """Fetch the list of halal stock symbols from brain_api."""
-    logger = get_run_logger()
-    logger.info("Fetching halal universe from brain_api...")
-
-    with get_client() as client:
-        response = client.get("/universe/halal")
-        response.raise_for_status()
-        data = response.json()
-
-    result = HalalUniverseResponse(**data)
-    logger.info(f"Got {result.total_stocks} halal symbols")
-    return result
-
-
 @task(name="Refresh Training Data", retries=1, retry_delay_seconds=60)
-def refresh_training_data(symbols: list[str]) -> RefreshTrainingDataResponse:
-    """Refresh sentiment gaps and stale fundamentals for training."""
-    logger = get_run_logger()
-    logger.info(f"Refreshing training data for {len(symbols)} symbols...")
+def refresh_training_data() -> RefreshTrainingDataResponse:
+    """Refresh sentiment gaps and stale fundamentals.
 
-    request = RefreshTrainingDataRequest(symbols=symbols)
+    brain_api resolves symbols from its ETL_UNIVERSE config.
+    """
+    logger = get_run_logger()
+    logger.info("Refreshing training data (symbols resolved by brain_api)...")
+
+    request = RefreshTrainingDataRequest()
 
     with get_client() as client:
         response = client.post(
@@ -334,11 +319,13 @@ def send_training_summary_email(
 def weekly_training_flow() -> dict:
     """Execute the full weekly training pipeline.
 
+    Each brain_api endpoint resolves its own symbols internally:
+    - ETL refresh: from ETL_UNIVERSE config
+    - LSTM/PatchTST training: from FORECASTER_TRAIN_UNIVERSE config
+    - PPO/SAC training: from RL_TRAIN_UNIVERSE config
+
     Flow diagram (dependencies):
     ```
-    get_halal_universe
-           │
-           ▼
     refresh_training_data
            │
            ├──────────────┐
@@ -366,11 +353,8 @@ def weekly_training_flow() -> dict:
     logger = get_run_logger()
     logger.info("Starting weekly training pipeline...")
 
-    # Step 1: Get symbols
-    universe = get_halal_universe()
-
-    # Step 2: Refresh training data (uses universe.symbols)
-    refresh_result = refresh_training_data(universe.symbols)
+    # Step 1: Refresh training data (brain_api resolves symbols from ETL_UNIVERSE)
+    refresh_result = refresh_training_data()
 
     # Step 3 & 4: Train forecasters (can run in parallel after refresh)
     # Using .submit() for concurrent execution and dependency tracking
@@ -409,7 +393,6 @@ def weekly_training_flow() -> dict:
     logger.info("Weekly training pipeline complete!")
 
     return {
-        "universe_count": universe.total_stocks,
         "refresh": {
             "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
             "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),

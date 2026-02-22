@@ -5,6 +5,7 @@ Background jobs respect the app-level shutdown_event so they stop
 promptly when the server receives Ctrl+C / SIGINT.
 """
 
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ def _get_shutdown_event() -> threading.Event:
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -533,16 +535,10 @@ def get_sentiment_gaps_job_status(job_id: str) -> ETLJobStatusResponse:
 class RefreshTrainingDataRequest(BaseModel):
     """Request model for refreshing training data."""
 
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        description="List of stock symbols to refresh data for",
-        examples=[["AAPL", "MSFT", "GOOGL"]],
-    )
     start_date: str | None = Field(
         None,
-        description="Training window start date (YYYY-MM-DD). Defaults to Jan 1st, 15 years ago.",
-        examples=["2011-01-01"],
+        description="Training window start date (YYYY-MM-DD). Defaults to Jan 1st, 10 years ago.",
+        examples=["2016-01-01"],
     )
     end_date: str | None = Field(
         None,
@@ -576,31 +572,25 @@ class RefreshTrainingDataResponse(BaseModel):
 def refresh_training_data(
     request: RefreshTrainingDataRequest,
 ) -> RefreshTrainingDataResponse:
-    """Refresh training data (sentiment gaps + fundamentals) for given symbols.
+    """Refresh training data (sentiment gaps + fundamentals).
+
+    Symbols are resolved from the ETL_UNIVERSE config, ensuring this endpoint
+    is self-sufficient and does not require the caller to specify symbols.
 
     This endpoint ensures training data is fresh before training by:
     1. Filling news sentiment gaps (2015+ via Alpaca API)
     2. Refreshing fundamentals not fetched today (via Alpha Vantage API)
 
-    Call this before training endpoints (PatchTST, PPO, SAC) to ensure
-    up-to-date signals and fundamentals.
-
-    Note: This is a synchronous endpoint that may take several seconds
-    depending on how many symbols need refreshing.
-
-    Requires:
-    - ALPHA_VANTAGE_API_KEY for fundamentals refresh
-    - ALPACA_API_KEY and ALPACA_API_SECRET for news sentiment gaps
-
-    Args:
-        symbols: List of stock symbols to refresh data for (required)
-        start_date: Training window start (defaults to Jan 1st, 15 years ago)
-        end_date: Training window end (defaults to today)
-
     Returns:
         RefreshTrainingDataResponse with statistics on what was refreshed
     """
     from brain_api.core.data_freshness import ensure_fresh_training_data
+    from brain_api.routes.training.dependencies import get_etl_symbols
+
+    symbols = get_etl_symbols()
+    logger.info(
+        f"[ETL Refresh] Resolved {len(symbols)} symbols from ETL_UNIVERSE config"
+    )
 
     # Parse end_date (default: today)
     if request.end_date:
@@ -624,7 +614,9 @@ def refresh_training_data(
                 detail=f"Invalid start_date format: {e}. Use YYYY-MM-DD.",
             ) from e
     else:
-        start_date = date(end_date.year - 15, 1, 1)
+        from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
+
+        start_date = date(end_date.year - DEFAULT_LOOKBACK_YEARS, 1, 1)
 
     if start_date > end_date:
         raise HTTPException(
@@ -634,7 +626,7 @@ def refresh_training_data(
 
     # Call the shared data freshness function
     result = ensure_fresh_training_data(
-        symbols=request.symbols,
+        symbols=symbols,
         start_date=start_date,
         end_date=end_date,
     )

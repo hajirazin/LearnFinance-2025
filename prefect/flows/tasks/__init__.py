@@ -19,7 +19,7 @@ from flows.tasks.inference import (
     infer_sac,
 )
 from flows.tasks.portfolio import (
-    get_halal_universe,
+    get_active_symbols,
     get_hrp_portfolio,
     get_order_history_ppo,
     get_order_history_sac,
@@ -36,7 +36,7 @@ from flows.tasks.reporting import (
 
 __all__ = [
     # Portfolio
-    "get_halal_universe",
+    "get_active_symbols",
     "get_ppo_portfolio",
     "get_sac_portfolio",
     "get_hrp_portfolio",

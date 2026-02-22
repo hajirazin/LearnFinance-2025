@@ -118,8 +118,12 @@ class TestOrderGeneration:
             )
 
         assert len(result.orders) == 1
-        assert result.orders[0].side == "buy"
-        assert result.orders[0].symbol == "AAPL"
+        order = result.orders[0]
+        assert order.side == "buy"
+        assert order.symbol == "AAPL"
+        # qty sized using limit price (102.0), not market price (100.0)
+        expected_qty = round(5000.0 / 102.0, 4)
+        assert order.qty == expected_qty
 
     def test_generate_sell_orders_to_cash(self):
         """Test generating sell orders when reducing positions."""
@@ -144,12 +148,108 @@ class TestOrderGeneration:
             )
 
         assert len(result.orders) == 1
-        assert result.orders[0].side == "sell"
-        assert result.orders[0].symbol == "AAPL"
+        order = result.orders[0]
+        assert order.side == "sell"
+        assert order.symbol == "AAPL"
+        # qty sized using limit price (98.0), not market price (100.0)
+        expected_qty = round(10000.0 / 98.0, 4)
+        assert order.qty == expected_qty
+
+    def test_buy_qty_sized_for_limit_price(self):
+        """Buy qty = trade_value / limit_price, not trade_value / market_price."""
+        target_weights = {"AAPL": 0.8, "CASH": 0.2}
+        portfolio = PortfolioInput(
+            cash=10000.0,
+            positions=[],
+        )
+        mock_prices = {"AAPL": 100.0}
+
+        with patch(
+            "brain_api.core.orders.fetch_current_prices", return_value=mock_prices
+        ):
+            result = generate_orders(
+                target_weights=target_weights,
+                portfolio=portfolio,
+                run_id="paper:2026-01-20",
+                attempt=1,
+                algorithm="ppo",
+            )
+
+        order = result.orders[0]
+        trade_value = 0.8 * 10000.0  # $8000
+        buy_limit = round(100.0 * 1.02, 2)  # 102.0
+        expected_qty = round(trade_value / buy_limit, 4)
+        assert order.qty == expected_qty
+        # Buying power cost = qty * limit_price <= trade_value
+        assert order.qty * order.limit_price <= trade_value + 0.01
+
+    def test_sell_qty_sized_for_limit_price(self):
+        """Sell qty = trade_value / limit_price, not trade_value / market_price."""
+        target_weights = {"AAPL": 0.2, "CASH": 0.8}
+        portfolio = PortfolioInput(
+            cash=2000.0,
+            positions=[
+                PositionInput(symbol="AAPL", qty=80, market_value=8000.0),
+            ],
+        )
+        mock_prices = {"AAPL": 100.0}
+
+        with patch(
+            "brain_api.core.orders.fetch_current_prices", return_value=mock_prices
+        ):
+            result = generate_orders(
+                target_weights=target_weights,
+                portfolio=portfolio,
+                run_id="paper:2026-01-20",
+                attempt=1,
+                algorithm="ppo",
+            )
+
+        order = result.orders[0]
+        assert order.side == "sell"
+        trade_value = 0.6 * 10000.0  # $6000 (80% -> 20%)
+        sell_limit = round(100.0 * 0.98, 2)  # 98.0
+        expected_qty = round(trade_value / sell_limit, 4)
+        assert order.qty == expected_qty
+
+    def test_total_buy_cost_within_buying_power(self):
+        """Full rebalance: all buy orders fit within available buying power."""
+        # 98% stocks / 2% cash, 100% turnover (sell everything, buy new)
+        target_weights = {"MSFT": 0.49, "GOOGL": 0.49, "CASH": 0.02}
+        portfolio = PortfolioInput(
+            cash=200.0,  # 2% of $10k
+            positions=[
+                PositionInput(symbol="AAPL", qty=49, market_value=4900.0),
+                PositionInput(symbol="TSLA", qty=49, market_value=4900.0),
+            ],
+        )
+        mock_prices = {"AAPL": 100.0, "TSLA": 100.0, "MSFT": 100.0, "GOOGL": 100.0}
+
+        with patch(
+            "brain_api.core.orders.fetch_current_prices", return_value=mock_prices
+        ):
+            result = generate_orders(
+                target_weights=target_weights,
+                portfolio=portfolio,
+                run_id="paper:2026-01-20",
+                attempt=1,
+                algorithm="ppo",
+            )
+
+        buy_orders = [o for o in result.orders if o.side == "buy"]
+        sell_orders = [o for o in result.orders if o.side == "sell"]
+
+        total_buy_cost = sum(o.qty * o.limit_price for o in buy_orders)
+        total_sell_credit = sum(o.qty * o.limit_price for o in sell_orders)
+        cash = 200.0
+
+        assert total_buy_cost <= total_sell_credit + cash + 0.01, (
+            f"Buy cost ${total_buy_cost:.2f} exceeds "
+            f"sell credit ${total_sell_credit:.2f} + cash ${cash:.2f}"
+        )
 
     def test_skip_small_orders(self):
         """Test that orders below minimum value are skipped."""
-        # Very small weight change
         target_weights = {"AAPL": 0.501, "CASH": 0.499}
         portfolio = PortfolioInput(
             cash=5000.0,
@@ -170,8 +270,6 @@ class TestOrderGeneration:
                 algorithm="ppo",
             )
 
-        # 0.1% change on $10k = $10, which is at the minimum threshold
-        # Verify the skipped count
         assert result.summary.skipped_small_orders >= 0
 
 

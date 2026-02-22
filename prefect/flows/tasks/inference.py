@@ -64,15 +64,15 @@ def get_news_sentiment(
 
 
 @task(name="Get LSTM Forecast", retries=2, retry_delay_seconds=60)
-def get_lstm_forecast(symbols: list[str], as_of_date: str) -> LSTMInferenceResponse:
-    """Get LSTM price predictions."""
+def get_lstm_forecast(as_of_date: str) -> LSTMInferenceResponse:
+    """Get LSTM price predictions. Symbols resolved by brain_api from model metadata."""
     logger = get_run_logger()
-    logger.info(f"Getting LSTM forecast for {len(symbols)} symbols...")
+    logger.info("Getting LSTM forecast (symbols from model metadata)...")
 
     with get_client() as client:
         response = client.post(
             "/inference/lstm",
-            json={"symbols": symbols, "as_of_date": as_of_date},
+            json={"as_of_date": as_of_date},
         )
         response.raise_for_status()
         data = response.json()
@@ -86,17 +86,18 @@ def get_lstm_forecast(symbols: list[str], as_of_date: str) -> LSTMInferenceRespo
 
 
 @task(name="Get PatchTST Forecast", retries=2, retry_delay_seconds=60)
-def get_patchtst_forecast(
-    symbols: list[str], as_of_date: str
-) -> PatchTSTInferenceResponse:
-    """Get PatchTST price predictions."""
+def get_patchtst_forecast(as_of_date: str) -> PatchTSTInferenceResponse:
+    """Get PatchTST price predictions.
+
+    Symbols resolved by brain_api from model metadata.
+    """
     logger = get_run_logger()
-    logger.info(f"Getting PatchTST forecast for {len(symbols)} symbols...")
+    logger.info("Getting PatchTST forecast (symbols from model metadata)...")
 
     with get_client() as client:
         response = client.post(
             "/inference/patchtst",
-            json={"symbols": symbols, "as_of_date": as_of_date},
+            json={"as_of_date": as_of_date},
         )
         response.raise_for_status()
         data = response.json()

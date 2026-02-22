@@ -310,15 +310,27 @@ def train_sac_endpoint(
 @router.post("/sac/finetune", response_model=SACTrainResponse)
 def finetune_sac_endpoint(
     storage: SACLocalStorage = Depends(get_sac_storage),
-    symbols: list[str] = Depends(get_rl_training_symbols),
 ) -> SACTrainResponse:
-    """Fine-tune SAC + LSTM on recent data. Requires prior trained model."""
+    """Fine-tune SAC on recent data.
+
+    Symbols are read from the current model's metadata to ensure
+    continuity -- fine-tuning always uses the same symbols as the
+    model being fine-tuned, even if the universe has shifted.
+
+    Requires a prior trained model to exist.
+    """
     prior_version = storage.read_current_version()
     if prior_version is None:
         raise HTTPException(
             status_code=400,
             detail="No prior SAC model. Train with POST /train/sac/full first",
         )
+
+    # Resolve symbols from the model being fine-tuned
+    symbols = storage.load_symbol_order(prior_version)
+    logger.info(
+        f"[SAC Finetune] Using {len(symbols)} symbols from model {prior_version}"
+    )
 
     prior_artifacts = storage.load_current_artifacts()
     prior_config = prior_artifacts.config

@@ -166,41 +166,40 @@ def client_with_mocks(temp_storage, monkeypatch):
 
 
 def test_inference_patchtst_returns_200(client_with_mocks):
-    """POST /inference/patchtst with valid symbols returns 200."""
+    """POST /inference/patchtst returns 200 (symbols from model metadata)."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL", "MSFT"]},
+        json={},
     )
     assert response.status_code == 200
 
 
-def test_inference_patchtst_returns_predictions_for_all_symbols(client_with_mocks):
-    """POST /inference/patchtst returns predictions for all requested symbols."""
+def test_inference_patchtst_returns_predictions_for_model_symbols(client_with_mocks):
+    """POST /inference/patchtst returns predictions for symbols in model metadata."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL", "MSFT", "GOOGL"]},
+        json={},
     )
     assert response.status_code == 200
 
     data = response.json()
     assert "predictions" in data
-    assert len(data["predictions"]) == 3
+    assert len(data["predictions"]) == 2
 
     symbols_returned = {p["symbol"] for p in data["predictions"]}
-    assert symbols_returned == {"AAPL", "MSFT", "GOOGL"}
+    assert symbols_returned == {"AAPL", "MSFT"}
 
 
 def test_inference_patchtst_returns_required_fields(client_with_mocks):
     """POST /inference/patchtst returns all required response fields."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
     data = response.json()
 
-    # Top-level fields
     assert "predictions" in data
     assert "model_version" in data
     assert "as_of_date" in data
@@ -208,8 +207,7 @@ def test_inference_patchtst_returns_required_fields(client_with_mocks):
     assert "target_week_end" in data
     assert "signals_used" in data
 
-    # Prediction fields
-    assert len(data["predictions"]) == 1
+    assert len(data["predictions"]) >= 1
     pred = data["predictions"][0]
     assert "symbol" in pred
     assert "predicted_weekly_return_pct" in pred
@@ -220,7 +218,6 @@ def test_inference_patchtst_returns_required_fields(client_with_mocks):
     assert "target_week_end" in pred
     assert "has_news_data" in pred
     assert "has_fundamentals_data" in pred
-    # daily_returns field (5 daily close_ret predictions)
     assert "daily_returns" in pred
 
 
@@ -228,7 +225,7 @@ def test_inference_patchtst_returns_numeric_prediction(client_with_mocks):
     """POST /inference/patchtst returns numeric predicted weekly return percentage."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -246,7 +243,7 @@ def test_inference_patchtst_response_does_not_include_predicted_volatility(
     """Response predictions do not include predicted_volatility (field removed)."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
     pred = response.json()["predictions"][0]
@@ -257,13 +254,12 @@ def test_inference_patchtst_returns_signals_used(client_with_mocks):
     """POST /inference/patchtst returns list of signals that were available."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
     data = response.json()
     assert "signals_used" in data
-    # Model only uses OHLCV channels (news/fundamentals loaded for metadata flags only)
     assert data["signals_used"] == ["ohlcv"]
 
 
@@ -272,8 +268,8 @@ def test_inference_patchtst_returns_signals_used(client_with_mocks):
 # ============================================================================
 
 
-def test_inference_patchtst_no_model_returns_503():
-    """POST /inference/patchtst returns 503 when no model is trained."""
+def test_inference_patchtst_no_model_returns_400():
+    """POST /inference/patchtst returns 400 when no model is trained."""
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_storage = PatchTSTModelStorage(base_path=tmpdir)
 
@@ -285,10 +281,10 @@ def test_inference_patchtst_no_model_returns_503():
         try:
             response = client.post(
                 "/inference/patchtst",
-                json={"symbols": ["AAPL"]},
+                json={},
             )
-            assert response.status_code == 503
-            assert "No trained PatchTST model available" in response.json()["detail"]
+            assert response.status_code == 400
+            assert "No current PatchTST model" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 
@@ -298,22 +294,13 @@ def test_inference_patchtst_no_model_returns_503():
 # ============================================================================
 
 
-def test_inference_patchtst_empty_symbols_returns_422(client_with_mocks):
-    """POST /inference/patchtst with empty symbols list returns 422."""
-    response = client_with_mocks.post(
-        "/inference/patchtst",
-        json={"symbols": []},
-    )
-    assert response.status_code == 422
-
-
-def test_inference_patchtst_no_symbols_returns_422(client_with_mocks):
-    """POST /inference/patchtst without symbols field returns 422."""
+def test_inference_patchtst_empty_body_accepted(client_with_mocks):
+    """POST /inference/patchtst with empty body returns 200 (symbols from metadata)."""
     response = client_with_mocks.post(
         "/inference/patchtst",
         json={},
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
 
 
 def test_inference_patchtst_custom_as_of_date(client_with_mocks):
@@ -321,7 +308,7 @@ def test_inference_patchtst_custom_as_of_date(client_with_mocks):
     # 2025-01-06 is Monday -> cutoff should be 2025-01-03 (Friday)
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"], "as_of_date": "2025-01-06"},
+        json={"as_of_date": "2025-01-06"},
     )
     assert response.status_code == 200
 
@@ -344,7 +331,7 @@ def test_inference_patchtst_cutoff_always_friday(client_with_mocks):
     for input_date, expected_cutoff in test_cases:
         response = client_with_mocks.post(
             "/inference/patchtst",
-            json={"symbols": ["AAPL"], "as_of_date": input_date},
+            json={"as_of_date": input_date},
         )
         assert response.status_code == 200, f"Failed for input {input_date}"
 
@@ -366,7 +353,7 @@ def test_inference_patchtst_predictions_sorted_by_return_desc(client_with_mocks)
     """POST /inference/patchtst returns predictions sorted by predicted_weekly_return_pct descending."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -393,7 +380,7 @@ def test_inference_patchtst_signal_flags_in_predictions(client_with_mocks):
     """Each prediction includes flags for news and fundamentals data availability."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -418,7 +405,7 @@ def test_inference_patchtst_returns_daily_returns_field(client_with_mocks):
     """POST /inference/patchtst returns daily_returns list in each prediction."""
     response = client_with_mocks.post(
         "/inference/patchtst",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 

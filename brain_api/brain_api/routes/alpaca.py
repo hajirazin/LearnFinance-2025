@@ -283,7 +283,10 @@ def submit_orders(request: SubmitOrdersRequest) -> SubmitOrdersResponse:
     with httpx.Client(
         base_url=ALPACA_BASE_URL, headers=headers, timeout=ALPACA_TIMEOUT
     ) as client:
-        for order in request.orders:
+        sorted_orders = sorted(
+            request.orders, key=lambda o: (o.side != "sell", o.symbol)
+        )
+        for order in sorted_orders:
             try:
                 response = client.post(
                     "/v2/orders",

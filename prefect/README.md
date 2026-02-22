@@ -10,25 +10,24 @@ This package contains Prefect flows that orchestrate:
 
 Runs every Sunday at 11:00 AM UTC to train all models:
 
-1. **Get Halal Universe** - Fetch the list of halal stock symbols
-2. **Refresh Training Data** - Fill sentiment gaps and refresh stale fundamentals
-3. **Train LSTM** - Pure price forecaster model
-4. **Train PatchTST** - OHLCV forecaster model
-5. **Train PPO** - Reinforcement learning allocator
-6. **Train SAC** - Reinforcement learning allocator
-7. **Generate Training Summary** - LLM-powered analysis of training results (OpenAI/OLLAMA)
+1. **Refresh Training Data** - Fill sentiment gaps and refresh stale fundamentals (brain_api resolves symbols from `ETL_UNIVERSE` config)
+2. **Train LSTM** - Pure price forecaster model (symbols from `FORECASTER_TRAIN_UNIVERSE` config)
+3. **Train PatchTST** - OHLCV forecaster model (symbols from `FORECASTER_TRAIN_UNIVERSE` config)
+4. **Train PPO** - Reinforcement learning allocator (symbols from `RL_TRAIN_UNIVERSE` config)
+5. **Train SAC** - Reinforcement learning allocator (symbols from `RL_TRAIN_UNIVERSE` config)
+6. **Generate Training Summary** - LLM-powered analysis of training results (OpenAI/OLLAMA)
 
 ### Weekly Forecast Email Flow (`weekly_forecast_email.py`)
 
 Runs every Monday at 18:00 IST (12:30 UTC) to execute the inference pipeline:
 
-1. **Phase 0: Get Universe + Portfolios** (parallel)
-   - Fetch halal stock universe
+1. **Phase 0: Get Active Symbols + Portfolios** (parallel)
+   - Fetch active symbols from current SAC model (`GET /models/active-symbols`)
    - Get PPO, SAC, HRP Alpaca portfolio states
 
 2. **Phase 1: Get Signals + Forecasts** (parallel)
-   - Fetch fundamentals and news sentiment
-   - Run LSTM and PatchTST inference
+   - Fetch fundamentals and news sentiment (using SAC model's symbols)
+   - Run LSTM and PatchTST inference (symbols resolved from model metadata by brain_api)
 
 3. **Phase 2: Run Allocators** (parallel, conditional)
    - Run PPO and SAC inference
@@ -193,7 +192,6 @@ prefect worker start --pool default-agent-pool
 
 | Task | Retries | Retry Delay |
 |------|---------|-------------|
-| Get Halal Universe | 2 | 30s |
 | Refresh Training Data | 1 | 60s |
 | Train LSTM | 1 | 120s |
 | Train PatchTST | 1 | 120s |
@@ -220,7 +218,7 @@ prefect worker start --pool default-agent-pool
 
 | Task | Retries | Retry Delay |
 |------|---------|-------------|
-| Get Halal Universe | 2 | 30s |
+| Get Active Symbols | 2 | 30s |
 | Get Portfolio (PPO/SAC/HRP) | 2 | 30s |
 | Get Fundamentals | 1 | 30s |
 | Get News Sentiment | 1 | 30s |
@@ -256,12 +254,12 @@ The email is always sent, indicating which algorithms were skipped.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /universe/halal` | Fetch halal stock universe |
+| `GET /models/active-symbols` | Get active symbols from SAC model |
 | `GET /alpaca/portfolio?account=ppo\|sac\|hrp` | Get portfolio state |
 | `POST /signals/fundamentals` | Get fundamental ratios |
 | `POST /signals/news` | Get news sentiment |
-| `POST /inference/lstm` | LSTM price forecasts |
-| `POST /inference/patchtst` | PatchTST OHLCV forecasts |
+| `POST /inference/lstm` | LSTM price forecasts (symbols from model metadata) |
+| `POST /inference/patchtst` | PatchTST OHLCV forecasts (symbols from model metadata) |
 | `POST /inference/ppo` | PPO target weights |
 | `POST /inference/sac` | SAC target weights |
 | `POST /allocation/hrp` | HRP percentage weights |

@@ -355,16 +355,12 @@ def train_ppo_endpoint(
 @router.post("/ppo/finetune", response_model=PPOTrainResponse)
 def finetune_ppo_endpoint(
     storage: PPOLocalStorage = Depends(get_ppo_storage),
-    symbols: list[str] = Depends(get_rl_training_symbols),
 ) -> PPOTrainResponse:
-    """Fine-tune PPO + LSTM on recent 26-week data.
+    """Fine-tune PPO on recent 26-week data.
 
-    This endpoint is called weekly (Sunday cron) to adapt the model to
-    recent market conditions. It:
-    1. Loads the current promoted model
-    2. Fine-tunes on the last 26 weeks of data
-    3. Uses lower learning rate and fewer timesteps
-    4. Promotes if it beats the prior model
+    Symbols are read from the current model's metadata to ensure
+    continuity -- fine-tuning always uses the same symbols as the
+    model being fine-tuned, even if the universe has shifted.
 
     Requires a prior trained model to exist.
 
@@ -380,6 +376,12 @@ def finetune_ppo_endpoint(
             status_code=400,
             detail="No prior PPO model to fine-tune. Train a full model first with POST /train/ppo/full",
         )
+
+    # Resolve symbols from the model being fine-tuned
+    symbols = storage.load_symbol_order(prior_version)
+    logger.info(
+        f"[PPO Finetune] Using {len(symbols)} symbols from model {prior_version}"
+    )
 
     logger.info(f"[PPO Finetune] Loading prior model: {prior_version}")
     prior_artifacts = storage.load_current_artifacts()

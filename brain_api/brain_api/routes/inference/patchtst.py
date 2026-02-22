@@ -4,7 +4,7 @@ import logging
 import time
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.patchtst import (
@@ -35,27 +35,33 @@ def infer_patchtst(
     request: PatchTSTInferenceRequest,
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
 ) -> PatchTSTInferenceResponse:
-    """Predict weekly returns using OHLCV PatchTST model.
+    """Predict weekly returns using the current PatchTST model's symbols.
 
-    This endpoint uses 5-channel OHLCV log returns to predict weekly returns.
-    Channel-independent shared Transformer weights learn temporal patterns
-    from all 5 related OHLCV signals.
-
-    Input channels (5 total):
-    - OHLCV log returns: open_ret, high_ret, low_ret, close_ret, volume_ret
-
-    Args:
-        request: PatchTSTInferenceRequest with symbols list
+    Symbols are resolved from the current model's training metadata,
+    ensuring inference always runs on exactly the symbols the model was trained on.
 
     Returns:
         PatchTSTInferenceResponse with per-symbol predictions and metadata
 
     Raises:
-        HTTPException 503: if no trained model is available
+        HTTPException 400: if no current model version is available
+        HTTPException 503: if model artifacts cannot be loaded
     """
     t_start = time.time()
-    logger.info(f"[PatchTST] Starting inference for {len(request.symbols)} symbols")
-    logger.info(f"[PatchTST] Symbols: {request.symbols}")
+
+    # Resolve symbols from current model metadata
+    version = storage.read_current_version()
+    if not version:
+        raise HTTPException(400, "No current PatchTST model version available")
+    metadata = storage.read_metadata(version)
+    if not metadata or "symbols" not in metadata:
+        raise HTTPException(400, f"PatchTST model {version} has no symbols in metadata")
+    symbols: list[str] = metadata["symbols"]
+
+    logger.info(
+        f"[PatchTST] Starting inference for {len(symbols)} symbols (model {version})"
+    )
+    logger.info(f"[PatchTST] Symbols: {symbols}")
 
     # Get cutoff date (always a Friday)
     cutoff_date = get_patchtst_as_of_date(request)
@@ -84,35 +90,33 @@ def infer_patchtst(
     logger.info(f"[PatchTST] Data window: {data_start} to {data_end}")
 
     # Fetch price data for all symbols
-    logger.info(f"[PatchTST] Fetching prices for {len(request.symbols)} symbols...")
+    logger.info(f"[PatchTST] Fetching prices for {len(symbols)} symbols...")
     t0 = time.time()
-    prices = patchtst_load_prices(request.symbols, data_start, data_end)
+    prices = patchtst_load_prices(symbols, data_start, data_end)
     t_prices = time.time() - t0
     logger.info(
-        f"[PatchTST] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s"
+        f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
     )
 
     # Fetch news sentiment (real-time from yfinance + FinBERT)
     logger.info("[PatchTST] Fetching real-time news sentiment...")
     t0 = time.time()
     signal_builder = RealTimeSignalBuilder()
-    news_sentiment = signal_builder.build_news_dataframes(
-        request.symbols, data_start, data_end
-    )
+    news_sentiment = signal_builder.build_news_dataframes(symbols, data_start, data_end)
     t_news = time.time() - t0
     logger.info(
-        f"[PatchTST] Fetched news for {len(news_sentiment)}/{len(request.symbols)} symbols in {t_news:.1f}s"
+        f"[PatchTST] Fetched news for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s"
     )
 
     # Fetch fundamentals (real-time from yfinance)
     logger.info("[PatchTST] Fetching real-time fundamentals...")
     t0 = time.time()
     fundamentals = signal_builder.build_fundamentals_dataframes(
-        request.symbols, data_start, data_end
+        symbols, data_start, data_end
     )
     t_fund = time.time() - t0
     logger.info(
-        f"[PatchTST] Fetched fundamentals for {len(fundamentals)}/{len(request.symbols)} symbols in {t_fund:.1f}s"
+        f"[PatchTST] Fetched fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s"
     )
 
     # Build features for each symbol
@@ -121,7 +125,7 @@ def infer_patchtst(
     features_list = []
     symbols_with_data = 0
     symbols_missing_data = []
-    for symbol in request.symbols:
+    for symbol in symbols:
         prices_df = prices.get(symbol)
         news_df = news_sentiment.get(symbol)
         fund_df = fundamentals.get(symbol)
@@ -187,7 +191,7 @@ def infer_patchtst(
     ]
     t_total = time.time() - t_start
     logger.info(
-        f"[PatchTST] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s"
+        f"[PatchTST] Request complete: {len(valid_predictions)}/{len(symbols)} predictions in {t_total:.2f}s"
     )
     logger.info(f"[PatchTST] Signals used: {signals_used}")
     if valid_predictions:

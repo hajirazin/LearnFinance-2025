@@ -4,9 +4,9 @@ from prefect import task
 from prefect.logging import get_run_logger
 
 from flows.models import (
+    ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
-    HalalUniverseResponse,
     OrderHistoryItem,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
@@ -19,19 +19,22 @@ from flows.tasks.client import get_client
 # =============================================================================
 
 
-@task(name="Get Halal Universe", retries=2, retry_delay_seconds=30)
-def get_halal_universe() -> HalalUniverseResponse:
-    """Fetch the halal universe from brain_api."""
+@task(name="Get Active Symbols", retries=2, retry_delay_seconds=30)
+def get_active_symbols() -> ActiveSymbolsResponse:
+    """Fetch the active symbols from the current SAC model via brain_api."""
     logger = get_run_logger()
-    logger.info("Fetching halal universe...")
+    logger.info("Fetching active symbols from SAC model...")
 
     with get_client() as client:
-        response = client.get("/universe/halal")
+        response = client.get("/models/active-symbols")
         response.raise_for_status()
         data = response.json()
 
-    result = HalalUniverseResponse(**data)
-    logger.info(f"Got {result.total_stocks} halal symbols")
+    result = ActiveSymbolsResponse(**data)
+    logger.info(
+        f"Got {len(result.symbols)} active symbols "
+        f"(source={result.source_model}, version={result.model_version})"
+    )
     return result
 
 

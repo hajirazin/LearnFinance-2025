@@ -417,13 +417,23 @@ class TestGapFillUnmatchedSymbols:
 
 
 class TestRefreshTrainingDataEndpoint:
-    """Tests for /etl/refresh-training-data endpoint."""
+    """Tests for /etl/refresh-training-data endpoint.
+
+    Symbols are resolved internally from ETL_UNIVERSE config,
+    so we mock get_etl_symbols to avoid real API calls.
+    """
 
     def test_refresh_training_data_returns_200(self):
-        """POST /etl/refresh-training-data should return 200 with valid request."""
-        with patch(
-            "brain_api.core.data_freshness.ensure_fresh_training_data"
-        ) as mock_refresh:
+        """POST /etl/refresh-training-data should return 200."""
+        with (
+            patch(
+                "brain_api.routes.training.dependencies.get_etl_symbols",
+                return_value=["AAPL", "MSFT"],
+            ),
+            patch(
+                "brain_api.core.data_freshness.ensure_fresh_training_data"
+            ) as mock_refresh,
+        ):
             from brain_api.core.data_freshness import DataFreshnessResult
 
             mock_refresh.return_value = DataFreshnessResult(
@@ -438,7 +448,6 @@ class TestRefreshTrainingDataEndpoint:
             response = client.post(
                 "/etl/refresh-training-data",
                 json={
-                    "symbols": ["AAPL", "MSFT"],
                     "start_date": "2020-01-01",
                     "end_date": "2025-01-01",
                 },
@@ -454,10 +463,18 @@ class TestRefreshTrainingDataEndpoint:
         assert "duration_seconds" in data
 
     def test_refresh_training_data_with_defaults(self):
-        """POST /etl/refresh-training-data with only symbols uses default dates."""
-        with patch(
-            "brain_api.core.data_freshness.ensure_fresh_training_data"
-        ) as mock_refresh:
+        """POST /etl/refresh-training-data with no dates uses defaults."""
+        from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
+
+        with (
+            patch(
+                "brain_api.routes.training.dependencies.get_etl_symbols",
+                return_value=["AAPL"],
+            ),
+            patch(
+                "brain_api.core.data_freshness.ensure_fresh_training_data"
+            ) as mock_refresh,
+        ):
             from brain_api.core.data_freshness import DataFreshnessResult
 
             mock_refresh.return_value = DataFreshnessResult(
@@ -471,65 +488,82 @@ class TestRefreshTrainingDataEndpoint:
 
             response = client.post(
                 "/etl/refresh-training-data",
-                json={"symbols": ["AAPL"]},
+                json={},
             )
 
         assert response.status_code == 200
-        # Verify the function was called with default dates
         mock_refresh.assert_called_once()
         call_args = mock_refresh.call_args
-        # end_date should be today, start_date should be Jan 1, 15 years ago
         assert call_args.kwargs["end_date"] == date.today()
-        assert call_args.kwargs["start_date"] == date(date.today().year - 15, 1, 1)
-
-    def test_refresh_training_data_missing_symbols(self):
-        """POST without symbols should return 422."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={},
+        assert call_args.kwargs["start_date"] == date(
+            date.today().year - DEFAULT_LOOKBACK_YEARS, 1, 1
         )
-        assert response.status_code == 422
 
-    def test_refresh_training_data_empty_symbols(self):
-        """POST with empty symbols list should return 422."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={"symbols": []},
-        )
-        assert response.status_code == 422
+    def test_refresh_training_data_empty_body_accepted(self):
+        """POST with empty body should be accepted (symbols resolved internally)."""
+        with (
+            patch(
+                "brain_api.routes.training.dependencies.get_etl_symbols",
+                return_value=["AAPL"],
+            ),
+            patch(
+                "brain_api.core.data_freshness.ensure_fresh_training_data"
+            ) as mock_refresh,
+        ):
+            from brain_api.core.data_freshness import DataFreshnessResult
+
+            mock_refresh.return_value = DataFreshnessResult(
+                sentiment_gaps_filled=0,
+                sentiment_gaps_remaining=0,
+                fundamentals_refreshed=[],
+                fundamentals_skipped_today=[],
+                fundamentals_failed=[],
+                duration_seconds=0.1,
+            )
+
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={},
+            )
+        assert response.status_code == 200
 
     def test_refresh_training_data_invalid_start_date(self):
         """POST with invalid start_date should return 400."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={
-                "symbols": ["AAPL"],
-                "start_date": "not-a-date",
-            },
-        )
+        with patch(
+            "brain_api.routes.training.dependencies.get_etl_symbols",
+            return_value=["AAPL"],
+        ):
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={"start_date": "not-a-date"},
+            )
         assert response.status_code == 400
 
     def test_refresh_training_data_invalid_end_date(self):
         """POST with invalid end_date should return 400."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={
-                "symbols": ["AAPL"],
-                "end_date": "not-a-date",
-            },
-        )
+        with patch(
+            "brain_api.routes.training.dependencies.get_etl_symbols",
+            return_value=["AAPL"],
+        ):
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={"end_date": "not-a-date"},
+            )
         assert response.status_code == 400
 
     def test_refresh_training_data_start_after_end(self):
         """POST with start_date after end_date should return 400."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={
-                "symbols": ["AAPL"],
-                "start_date": "2025-01-01",
-                "end_date": "2020-01-01",
-            },
-        )
+        with patch(
+            "brain_api.routes.training.dependencies.get_etl_symbols",
+            return_value=["AAPL"],
+        ):
+            response = client.post(
+                "/etl/refresh-training-data",
+                json={
+                    "start_date": "2025-01-01",
+                    "end_date": "2020-01-01",
+                },
+            )
         assert response.status_code == 400
 
 

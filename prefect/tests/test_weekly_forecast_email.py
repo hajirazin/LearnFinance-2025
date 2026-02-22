@@ -13,10 +13,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from flows.models import (
+    ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
     FundamentalsResponse,
     GenerateOrdersResponse,
-    HalalUniverseResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
     NewsSignalResponse,
@@ -41,21 +41,12 @@ from flows.weekly_forecast_email import weekly_forecast_email_flow
 
 
 @pytest.fixture
-def mock_universe_response():
-    """Mock response for halal universe endpoint."""
-    return HalalUniverseResponse(
-        stocks=[
-            {
-                "symbol": f"SYM{i}",
-                "name": f"Stock {i}",
-                "max_weight": 5.0,
-                "sources": ["SPUS"],
-            }
-            for i in range(25)  # More than 20 to test slicing
-        ],
-        etfs_used=["SPUS", "HLAL"],
-        total_stocks=25,
-        fetched_at="2026-02-05T12:00:00+00:00",
+def mock_active_symbols_response():
+    """Mock response for active symbols endpoint (SAC model's symbols)."""
+    return ActiveSymbolsResponse(
+        symbols=[f"SYM{i}" for i in range(15)],
+        source_model="sac",
+        model_version="v2026-02-20_be7972dc",
     )
 
 
@@ -357,10 +348,10 @@ class TestFullFlow:
     @patch("flows.weekly_forecast_email.get_hrp_portfolio")
     @patch("flows.weekly_forecast_email.get_sac_portfolio")
     @patch("flows.weekly_forecast_email.get_ppo_portfolio")
-    @patch("flows.weekly_forecast_email.get_halal_universe")
+    @patch("flows.weekly_forecast_email.get_active_symbols")
     def test_full_flow_all_algorithms_run(
         self,
-        mock_universe,
+        mock_active_symbols,
         mock_ppo_portfolio,
         mock_sac_portfolio,
         mock_hrp_portfolio,
@@ -385,7 +376,7 @@ class TestFullFlow:
         mock_update_sac,
         mock_summary,
         mock_email,
-        mock_universe_response,
+        mock_active_symbols_response,
         mock_portfolio_no_open_orders,
         mock_lstm_response,
         mock_patchtst_response,
@@ -401,7 +392,9 @@ class TestFullFlow:
     ):
         """Test full flow execution when all algorithms can run (no open orders)."""
         # Setup Phase 0 mocks
-        mock_universe.submit.return_value.result.return_value = mock_universe_response
+        mock_active_symbols.submit.return_value.result.return_value = (
+            mock_active_symbols_response
+        )
         mock_ppo_portfolio.submit.return_value.result.return_value = (
             mock_portfolio_no_open_orders
         )
@@ -459,7 +452,7 @@ class TestFullFlow:
         result = weekly_forecast_email_flow()
 
         # Verify result structure
-        assert result["symbols_count"] == 20  # Top 20 from universe
+        assert result["symbols_count"] == 15  # From SAC model metadata
         assert result["skipped_algorithms"] == []  # None skipped
         assert result["ppo"]["skipped"] is False
         assert result["sac"]["skipped"] is False
@@ -508,10 +501,10 @@ class TestSkipLogic:
     @patch("flows.weekly_forecast_email.get_hrp_portfolio")
     @patch("flows.weekly_forecast_email.get_sac_portfolio")
     @patch("flows.weekly_forecast_email.get_ppo_portfolio")
-    @patch("flows.weekly_forecast_email.get_halal_universe")
+    @patch("flows.weekly_forecast_email.get_active_symbols")
     def test_skip_ppo_when_open_orders(
         self,
-        mock_universe,
+        mock_active_symbols,
         mock_ppo_portfolio,
         mock_sac_portfolio,
         mock_hrp_portfolio,
@@ -536,7 +529,7 @@ class TestSkipLogic:
         mock_update_sac,
         mock_summary,
         mock_email,
-        mock_universe_response,
+        mock_active_symbols_response,
         mock_portfolio_no_open_orders,
         mock_portfolio_with_open_orders,
         mock_lstm_response,
@@ -550,7 +543,9 @@ class TestSkipLogic:
     ):
         """Test that PPO is skipped when it has open orders."""
         # PPO has open orders, SAC and HRP don't
-        mock_universe.submit.return_value.result.return_value = mock_universe_response
+        mock_active_symbols.submit.return_value.result.return_value = (
+            mock_active_symbols_response
+        )
         mock_ppo_portfolio.submit.return_value.result.return_value = (
             mock_portfolio_with_open_orders
         )
@@ -640,10 +635,10 @@ class TestSkipLogic:
     @patch("flows.weekly_forecast_email.get_hrp_portfolio")
     @patch("flows.weekly_forecast_email.get_sac_portfolio")
     @patch("flows.weekly_forecast_email.get_ppo_portfolio")
-    @patch("flows.weekly_forecast_email.get_halal_universe")
+    @patch("flows.weekly_forecast_email.get_active_symbols")
     def test_skip_all_algorithms_when_all_have_open_orders(
         self,
-        mock_universe,
+        mock_active_symbols,
         mock_ppo_portfolio,
         mock_sac_portfolio,
         mock_hrp_portfolio,
@@ -668,7 +663,7 @@ class TestSkipLogic:
         mock_update_sac,
         mock_summary,
         mock_email,
-        mock_universe_response,
+        mock_active_symbols_response,
         mock_portfolio_with_open_orders,
         mock_lstm_response,
         mock_patchtst_response,
@@ -677,7 +672,9 @@ class TestSkipLogic:
     ):
         """Test that all algorithms are skipped when all have open orders."""
         # All have open orders
-        mock_universe.submit.return_value.result.return_value = mock_universe_response
+        mock_active_symbols.submit.return_value.result.return_value = (
+            mock_active_symbols_response
+        )
         mock_ppo_portfolio.submit.return_value.result.return_value = (
             mock_portfolio_with_open_orders
         )
@@ -852,10 +849,10 @@ class TestParallelExecution:
     @patch("flows.weekly_forecast_email.get_hrp_portfolio")
     @patch("flows.weekly_forecast_email.get_sac_portfolio")
     @patch("flows.weekly_forecast_email.get_ppo_portfolio")
-    @patch("flows.weekly_forecast_email.get_halal_universe")
+    @patch("flows.weekly_forecast_email.get_active_symbols")
     def test_phase0_tasks_submitted_in_parallel(
         self,
-        mock_universe,
+        mock_active_symbols,
         mock_ppo_portfolio,
         mock_sac_portfolio,
         mock_hrp_portfolio,
@@ -880,7 +877,7 @@ class TestParallelExecution:
         mock_update_sac,
         mock_summary,
         mock_email,
-        mock_universe_response,
+        mock_active_symbols_response,
         mock_portfolio_no_open_orders,
         mock_lstm_response,
         mock_patchtst_response,
@@ -896,7 +893,9 @@ class TestParallelExecution:
     ):
         """Test Phase 0 tasks are submitted (not called directly)."""
         # Setup all mocks (same as full flow test)
-        mock_universe.submit.return_value.result.return_value = mock_universe_response
+        mock_active_symbols.submit.return_value.result.return_value = (
+            mock_active_symbols_response
+        )
         mock_ppo_portfolio.submit.return_value.result.return_value = (
             mock_portfolio_no_open_orders
         )
@@ -942,7 +941,7 @@ class TestParallelExecution:
         weekly_forecast_email_flow()
 
         # Verify Phase 0 tasks were submitted (parallel execution)
-        mock_universe.submit.assert_called_once()
+        mock_active_symbols.submit.assert_called_once()
         mock_ppo_portfolio.submit.assert_called_once()
         mock_sac_portfolio.submit.assert_called_once()
         mock_hrp_portfolio.submit.assert_called_once()
@@ -953,10 +952,10 @@ class TestParallelExecution:
         mock_lstm.submit.assert_called_once()
         mock_patchtst.submit.assert_called_once()
 
-    def test_universe_symbols_sliced_to_top_20(self, mock_universe_response):
-        """Test that only top 20 symbols are used from universe."""
-        symbols = mock_universe_response.symbols[:20]
-        assert len(symbols) == 20
-        # First 20 symbols should be SYM0 through SYM19
+    def test_active_symbols_response(self, mock_active_symbols_response):
+        """Test that active symbols from SAC model are used directly (no slicing)."""
+        symbols = mock_active_symbols_response.symbols
+        assert len(symbols) == 15
         assert symbols[0] == "SYM0"
-        assert symbols[19] == "SYM19"
+        assert symbols[14] == "SYM14"
+        assert mock_active_symbols_response.source_model == "sac"

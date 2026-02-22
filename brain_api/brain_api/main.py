@@ -31,6 +31,7 @@ from brain_api.routes import (
     health,
     inference,
     llm,
+    models_meta,
     orders,
     root,
     signals,
@@ -84,3 +85,4 @@ app.include_router(experience.router, prefix="/experience", tags=["experience"])
 app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(llm.router, prefix="/llm", tags=["llm"])
 app.include_router(email.router, prefix="/email", tags=["email"])
+app.include_router(models_meta.router, prefix="/models", tags=["models"])

@@ -133,35 +133,35 @@ def client_with_mocks(temp_storage):
 
 
 def test_inference_lstm_returns_200(client_with_mocks):
-    """POST /inference/lstm with valid symbols returns 200."""
+    """POST /inference/lstm returns 200 (symbols from model metadata)."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL", "MSFT"]},
+        json={},
     )
     assert response.status_code == 200
 
 
-def test_inference_lstm_returns_predictions_for_all_symbols(client_with_mocks):
-    """POST /inference/lstm returns predictions for all requested symbols."""
+def test_inference_lstm_returns_predictions_for_model_symbols(client_with_mocks):
+    """POST /inference/lstm returns predictions for all symbols in model metadata."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL", "MSFT", "GOOGL"]},
+        json={},
     )
     assert response.status_code == 200
 
     data = response.json()
     assert "predictions" in data
-    assert len(data["predictions"]) == 3
+    assert len(data["predictions"]) == 2
 
     symbols_returned = {p["symbol"] for p in data["predictions"]}
-    assert symbols_returned == {"AAPL", "MSFT", "GOOGL"}
+    assert symbols_returned == {"AAPL", "MSFT"}
 
 
 def test_inference_lstm_returns_required_fields(client_with_mocks):
     """POST /inference/lstm returns all required response fields."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -175,7 +175,7 @@ def test_inference_lstm_returns_required_fields(client_with_mocks):
     assert "target_week_end" in data
 
     # Prediction fields
-    assert len(data["predictions"]) == 1
+    assert len(data["predictions"]) >= 1
     pred = data["predictions"][0]
     assert "symbol" in pred
     assert "predicted_weekly_return_pct" in pred
@@ -191,7 +191,7 @@ def test_inference_lstm_returns_numeric_prediction(client_with_mocks):
     """POST /inference/lstm returns numeric predicted weekly return percentage."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -209,7 +209,7 @@ def test_inference_lstm_response_does_not_include_predicted_volatility(
     """Response predictions do not include predicted_volatility (field removed)."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
     pred = response.json()["predictions"][0]
@@ -220,7 +220,7 @@ def test_inference_lstm_returns_daily_returns_field(client_with_mocks):
     """POST /inference/lstm returns daily_returns as a list of 5 floats."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL"]},
+        json={},
     )
     assert response.status_code == 200
 
@@ -236,8 +236,8 @@ def test_inference_lstm_returns_daily_returns_field(client_with_mocks):
         assert isinstance(r, int | float)
 
 
-def test_inference_lstm_daily_returns_null_for_insufficient_history(temp_storage):
-    """daily_returns should be null for symbols without enough history."""
+def test_inference_lstm_no_data_returns_insufficient_history(temp_storage):
+    """Symbols in model metadata with no price data get has_enough_history=False."""
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
@@ -247,15 +247,14 @@ def test_inference_lstm_daily_returns_null_for_insufficient_history(temp_storage
     try:
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["UNKNOWNSYMBOL"]},
+            json={},
         )
         assert response.status_code == 200
 
         data = response.json()
-        pred = data["predictions"][0]
-
-        assert pred["has_enough_history"] is False
-        assert pred["daily_returns"] is None
+        for pred in data["predictions"]:
+            assert pred["has_enough_history"] is False
+            assert pred["daily_returns"] is None
     finally:
         app.dependency_overrides.clear()
 
@@ -286,7 +285,7 @@ def test_inference_lstm_cutoff_always_friday(temp_storage):
         for input_date, expected_cutoff in test_cases:
             response = client.post(
                 "/inference/lstm",
-                json={"symbols": ["AAPL"], "as_of_date": input_date},
+                json={"as_of_date": input_date},
             )
             assert response.status_code == 200, f"Failed for input {input_date}"
 
@@ -313,7 +312,7 @@ def test_inference_lstm_target_week_is_after_cutoff(temp_storage):
         # Saturday Jan 10 -> cutoff = Jan 9 (Fri) -> target week = Jan 12-16
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["AAPL"], "as_of_date": "2026-01-10"},
+            json={"as_of_date": "2026-01-10"},
         )
         assert response.status_code == 200
 
@@ -338,7 +337,7 @@ def test_inference_lstm_real_good_friday_holiday(temp_storage):
         # But Good Friday (Apr 18) is closed, so target_week_end should be Apr 17 (Thu)
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["AAPL"], "as_of_date": "2025-04-12"},
+            json={"as_of_date": "2025-04-12"},
         )
         assert response.status_code == 200
 
@@ -355,11 +354,10 @@ def test_inference_lstm_real_good_friday_holiday(temp_storage):
 # ============================================================================
 
 
-def test_inference_lstm_no_model_returns_503():
-    """POST /inference/lstm returns 503 when no model is trained."""
+def test_inference_lstm_no_model_returns_400():
+    """POST /inference/lstm returns 400 when no model is trained."""
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_storage = LocalModelStorage(base_path=tmpdir)
-        # Don't create any model artifacts
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_storage] = lambda: empty_storage
@@ -370,10 +368,10 @@ def test_inference_lstm_no_model_returns_503():
         try:
             response = client.post(
                 "/inference/lstm",
-                json={"symbols": ["AAPL"]},
+                json={},
             )
-            assert response.status_code == 503
-            assert "No trained LSTM model available" in response.json()["detail"]
+            assert response.status_code == 400
+            assert "No current LSTM model" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 
@@ -383,8 +381,8 @@ def test_inference_lstm_no_model_returns_503():
 # ============================================================================
 
 
-def test_inference_lstm_missing_symbol_data(temp_storage):
-    """Symbols with no price data should return has_enough_history=False."""
+def test_inference_lstm_no_price_data(temp_storage):
+    """Symbols from model metadata with no price data return has_enough_history=False."""
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
@@ -394,16 +392,14 @@ def test_inference_lstm_missing_symbol_data(temp_storage):
     try:
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["UNKNOWNSYMBOL"]},
+            json={},
         )
         assert response.status_code == 200
 
         data = response.json()
-        pred = data["predictions"][0]
-
-        assert pred["symbol"] == "UNKNOWNSYMBOL"
-        assert pred["has_enough_history"] is False
-        assert pred["predicted_weekly_return_pct"] is None
+        for pred in data["predictions"]:
+            assert pred["has_enough_history"] is False
+            assert pred["predicted_weekly_return_pct"] is None
     finally:
         app.dependency_overrides.clear()
 
@@ -413,22 +409,13 @@ def test_inference_lstm_missing_symbol_data(temp_storage):
 # ============================================================================
 
 
-def test_inference_lstm_empty_symbols_returns_422(client_with_mocks):
-    """POST /inference/lstm with empty symbols list returns 422."""
-    response = client_with_mocks.post(
-        "/inference/lstm",
-        json={"symbols": []},
-    )
-    assert response.status_code == 422
-
-
-def test_inference_lstm_no_symbols_returns_422(client_with_mocks):
-    """POST /inference/lstm without symbols field returns 422."""
+def test_inference_lstm_empty_body_accepted(client_with_mocks):
+    """POST /inference/lstm with empty body returns 200 (symbols from metadata)."""
     response = client_with_mocks.post(
         "/inference/lstm",
         json={},
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
 
 
 def test_inference_lstm_custom_as_of_date(client_with_mocks):
@@ -436,7 +423,7 @@ def test_inference_lstm_custom_as_of_date(client_with_mocks):
     # 2025-01-06 is Monday -> cutoff should be 2025-01-03 (Friday)
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL"], "as_of_date": "2025-01-06"},
+        json={"as_of_date": "2025-01-06"},
     )
     assert response.status_code == 200
 
@@ -454,35 +441,32 @@ def test_inference_lstm_predictions_sorted_by_return_desc(client_with_mocks):
     """POST /inference/lstm returns predictions sorted by predicted_weekly_return_pct descending."""
     response = client_with_mocks.post(
         "/inference/lstm",
-        json={"symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]},
+        json={},
     )
     assert response.status_code == 200
 
     data = response.json()
     predictions = data["predictions"]
 
-    # Extract returns for symbols with valid predictions
     valid_returns = [
         p["predicted_weekly_return_pct"]
         for p in predictions
         if p["predicted_weekly_return_pct"] is not None
     ]
 
-    # Check that valid returns are sorted descending (highest first)
     assert valid_returns == sorted(valid_returns, reverse=True)
 
 
-def test_inference_lstm_insufficient_history_at_end(temp_storage):
-    """Symbols with insufficient history should appear at the end of predictions."""
+def test_inference_lstm_partial_data_sorted(temp_storage):
+    """Symbols with data appear first, insufficient history at the end."""
 
-    def mock_price_loader_partial(symbols, start_date, end_date):
-        """Return data only for some symbols."""
+    def mock_price_loader_aapl_only(symbols, start_date, end_date):
+        """Return data only for AAPL, not MSFT."""
         prices = {}
         date_range = pd.bdate_range(start=start_date, end=end_date)
 
-        # Only return data for AAPL and MSFT, not UNKNOWNSYMBOL
         for symbol in symbols:
-            if symbol in ["AAPL", "MSFT"] and len(date_range) >= 10:
+            if symbol == "AAPL" and len(date_range) >= 10:
                 np.random.seed(hash(symbol) % 2**32)
                 base_price = 100.0
                 returns = np.random.randn(len(date_range)) * 0.02
@@ -507,29 +491,26 @@ def test_inference_lstm_insufficient_history_at_end(temp_storage):
 
     app.dependency_overrides.clear()
     app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_partial
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_aapl_only
 
     client = TestClient(app)
 
     try:
         response = client.post(
             "/inference/lstm",
-            json={"symbols": ["UNKNOWNSYMBOL", "AAPL", "MSFT"]},
+            json={},
         )
         assert response.status_code == 200
 
         data = response.json()
         predictions = data["predictions"]
 
-        # Should have 3 predictions
-        assert len(predictions) == 3
+        assert len(predictions) == 2
 
-        # UNKNOWNSYMBOL should be at the end (has_enough_history=False)
-        assert predictions[-1]["symbol"] == "UNKNOWNSYMBOL"
-        assert predictions[-1]["has_enough_history"] is False
-
-        # AAPL and MSFT should be first two, sorted by return
+        # AAPL should be first (has data), MSFT at end (no data)
+        assert predictions[0]["symbol"] == "AAPL"
         assert predictions[0]["has_enough_history"] is True
-        assert predictions[1]["has_enough_history"] is True
+        assert predictions[1]["symbol"] == "MSFT"
+        assert predictions[1]["has_enough_history"] is False
     finally:
         app.dependency_overrides.clear()

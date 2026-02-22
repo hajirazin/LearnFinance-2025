@@ -78,8 +78,8 @@ brain_api/
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /inference/lstm` | Price predictions (OHLCV only) |
-| `POST /inference/patchtst` | Price predictions (OHLCV) |
+| `POST /inference/lstm` | Price predictions (symbols from model metadata) |
+| `POST /inference/patchtst` | Price predictions (symbols from model metadata) |
 | `POST /inference/ppo` | PPO allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /allocation/hrp` | HRP risk-parity allocation |
@@ -130,9 +130,10 @@ brain_api/
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /universe/halal` | Halal stock universe |
+| `GET /models/active-symbols` | Active symbols from SAC model metadata |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill |
-| `POST /etl/refresh-training-data` | Refresh training data (sentiment gaps + fundamentals) |
+| `POST /etl/refresh-training-data` | Refresh training data (symbols from ETL_UNIVERSE config) |
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |

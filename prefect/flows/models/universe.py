@@ -1,26 +1,11 @@
-"""Models for universe endpoints."""
+"""Models for model metadata endpoints."""
 
 from pydantic import BaseModel
 
 
-class HalalStock(BaseModel):
-    """A single stock in the halal universe."""
+class ActiveSymbolsResponse(BaseModel):
+    """Response from GET /models/active-symbols endpoint."""
 
-    symbol: str
-    name: str
-    max_weight: float
-    sources: list[str]
-
-
-class HalalUniverseResponse(BaseModel):
-    """Response from GET /universe/halal endpoint."""
-
-    stocks: list[HalalStock]
-    etfs_used: list[str]
-    total_stocks: int
-    fetched_at: str
-
-    @property
-    def symbols(self) -> list[str]:
-        """Get just the list of symbols."""
-        return [stock.symbol for stock in self.stocks]
+    symbols: list[str]
+    source_model: str
+    model_version: str

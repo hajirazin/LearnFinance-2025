@@ -313,9 +313,6 @@ def generate_orders(
             skipped_small_orders += 1
             continue
 
-        # Calculate quantity
-        qty = trade_value / current_price
-
         # Determine side
         if weight_diff > 0:
             side = "buy"
@@ -324,8 +321,12 @@ def generate_orders(
             side = "sell"
             total_sell_value += trade_value
 
-        # Calculate limit price
+        # Calculate limit price first -- qty must be sized to fit buying power at limit price
         limit_price = calculate_limit_price(current_price, side)
+
+        # Alpaca reserves buying power as qty * limit_price, so sizing with limit_price
+        # ensures orders stay within the cash buffer
+        qty = trade_value / limit_price
 
         # Generate client order ID
         client_order_id = generate_client_order_id(run_id, attempt, symbol, side)

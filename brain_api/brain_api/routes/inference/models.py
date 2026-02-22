@@ -17,11 +17,6 @@ SymbolPrediction = LSTMSymbolPrediction
 class LSTMInferenceRequest(BaseModel):
     """Request model for LSTM inference endpoint."""
 
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        description="List of ticker symbols to predict weekly returns for",
-    )
     as_of_date: str | None = Field(
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
@@ -46,11 +41,6 @@ class LSTMInferenceResponse(BaseModel):
 class PatchTSTInferenceRequest(BaseModel):
     """Request model for PatchTST inference endpoint."""
 
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        description="List of ticker symbols to predict weekly returns for",
-    )
     as_of_date: str | None = Field(
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",

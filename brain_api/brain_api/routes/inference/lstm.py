@@ -4,7 +4,7 @@ import logging
 import time
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.lstm import (
@@ -33,30 +33,33 @@ def infer_lstm(
     storage: LocalModelStorage = Depends(get_storage),
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> LSTMInferenceResponse:
-    """Predict weekly returns for the given symbols.
+    """Predict weekly returns using the current LSTM model's symbols.
 
-    This endpoint is designed for Monday runs. It:
-    1. Loads the current promoted LSTM model
-    2. Computes the target week boundaries (holiday-aware)
-    3. Fetches price history from yfinance
-    4. Builds feature sequences (60 trading days before target week start)
-    5. Runs inference and returns predicted weekly returns
-
-    The prediction is for the weekly return = (week_end_close - week_start_open) / week_start_open,
-    expressed as a percentage.
-
-    Args:
-        request: LSTMInferenceRequest with symbols list
+    Symbols are resolved from the current model's training metadata,
+    ensuring inference always runs on exactly the symbols the model was trained on.
 
     Returns:
         LSTMInferenceResponse with per-symbol predictions and metadata
 
     Raises:
-        HTTPException 503: if no trained model is available
+        HTTPException 400: if no current model version is available
+        HTTPException 503: if model artifacts cannot be loaded
     """
     t_start = time.time()
-    logger.info(f"[LSTM] Starting inference for {len(request.symbols)} symbols")
-    logger.info(f"[LSTM] Symbols: {request.symbols}")
+
+    # Resolve symbols from current model metadata
+    version = storage.read_current_version()
+    if not version:
+        raise HTTPException(400, "No current LSTM model version available")
+    metadata = storage.read_metadata(version)
+    if not metadata or "symbols" not in metadata:
+        raise HTTPException(400, f"LSTM model {version} has no symbols in metadata")
+    symbols: list[str] = metadata["symbols"]
+
+    logger.info(
+        f"[LSTM] Starting inference for {len(symbols)} symbols (model {version})"
+    )
+    logger.info(f"[LSTM] Symbols: {symbols}")
 
     # Get cutoff date (always a Friday)
     cutoff_date = get_as_of_date(request)
@@ -88,13 +91,13 @@ def infer_lstm(
 
     # Fetch price data for all symbols
     logger.info(
-        f"[LSTM] Fetching prices for {len(request.symbols)} symbols ({data_start} to {data_end})..."
+        f"[LSTM] Fetching prices for {len(symbols)} symbols ({data_start} to {data_end})..."
     )
     t0 = time.time()
-    prices = price_loader(request.symbols, data_start, data_end)
+    prices = price_loader(symbols, data_start, data_end)
     t_prices = time.time() - t0
     logger.info(
-        f"[LSTM] Loaded prices for {len(prices)}/{len(request.symbols)} symbols in {t_prices:.1f}s"
+        f"[LSTM] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
     )
 
     # Build features for each symbol
@@ -103,7 +106,7 @@ def infer_lstm(
     features_list = []
     symbols_with_data = 0
     symbols_missing_data = []
-    for symbol in request.symbols:
+    for symbol in symbols:
         prices_df = prices.get(symbol)
         if prices_df is None or prices_df.empty:
             # Symbol not found or no data
@@ -157,7 +160,7 @@ def infer_lstm(
     ]
     t_total = time.time() - t_start
     logger.info(
-        f"[LSTM] Request complete: {len(valid_predictions)}/{len(request.symbols)} predictions in {t_total:.2f}s"
+        f"[LSTM] Request complete: {len(valid_predictions)}/{len(symbols)} predictions in {t_total:.2f}s"
     )
     if valid_predictions:
         top = valid_predictions[0]
