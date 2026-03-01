@@ -72,3 +72,18 @@ class WeeklySummaryResponse(BaseModel):
     provider: str  # "openai" or "ollama"
     model_used: str  # e.g., "gpt-4o-mini" or "llama3.2"
     tokens_used: int | None  # Total tokens (None for OLLAMA)
+
+
+# =============================================================================
+# India Weekly Summary Models
+# =============================================================================
+
+
+class IndiaWeeklySummaryRequest(BaseModel):
+    """Request model for POST /llm/india-weekly-summary.
+
+    India pipeline is HRP-only (no PPO/SAC/news/fundamentals).
+    The LLM analyzes HRP concentration and diversification.
+    """
+
+    hrp: HRPAllocationResponse  # from POST /allocation/hrp (universe=halal_india)

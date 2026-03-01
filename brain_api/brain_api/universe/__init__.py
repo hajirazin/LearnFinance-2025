@@ -11,6 +11,10 @@ from brain_api.universe.halal_filtered import (
     get_halal_filtered_symbols,
     get_halal_filtered_universe,
 )
+from brain_api.universe.halal_india import (
+    get_halal_india_symbols,
+    get_halal_india_universe,
+)
 from brain_api.universe.halal_new import (
     get_halal_new_symbols,
     get_halal_new_universe,
@@ -27,6 +31,8 @@ __all__ = [
     "SP500_CSV_URL",
     "get_halal_filtered_symbols",
     "get_halal_filtered_universe",
+    "get_halal_india_symbols",
+    "get_halal_india_universe",
     "get_halal_new_symbols",
     "get_halal_new_universe",
     "get_halal_symbols",

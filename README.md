@@ -366,6 +366,7 @@ The system supports three universe tiers, each building on the previous:
 | `halal` | ~14 stocks | SPUS, HLAL, SPTE intersection | Original small universe |
 | `halal_new` | ~410 stocks | 5 halal ETFs (SPUS, SPTE, SPWO, HLAL, UMMA), Alpaca-tradable | Expanded universe |
 | `halal_filtered` | 15 stocks | Factor-scored from halal_new (ROE>0, Price>SMA200, Beta<2) | Default for training and inference |
+| `halal_india` | 15 stocks | Factor-scored from Nifty 500 Shariah (NSE India, no junk filter) | India market universe |
 
 Factor scoring: 0.4 x Momentum + 0.3 x Quality + 0.3 x Value. RL allocators require exactly 15 stocks, so `halal` and `halal_filtered` are the only valid RL universes.
 
@@ -420,7 +421,7 @@ We store three kinds of data:
 | `POST /inference/patchtst` | PatchTST 5-day return predictions (OHLCV) |
 | `POST /inference/ppo` | PPO allocation (dual LSTM + PatchTST forecasts) |
 | `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts) |
-| `POST /allocation/hrp` | HRP risk-parity allocation |
+| `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
 ### Order generation endpoints
 
@@ -452,14 +453,16 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /llm/weekly-summary` | Generate AI summary of weekly forecasts and allocations |
+| `POST /llm/weekly-summary` | Generate AI summary of weekly forecasts and allocations (US) |
+| `POST /llm/india-weekly-summary` | Generate AI summary of HRP concentration/diversification (India) |
 | `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
 
 ### Email endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP |
+| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP (US) |
+| `POST /email/india-weekly-report` | Send India weekly portfolio email (HRP + AI summary) via Gmail SMTP |
 | `POST /email/training-summary` | Send training summary email |
 
 ### Alpaca endpoints
@@ -477,6 +480,7 @@ We store three kinds of data:
 | `GET /universe/halal` | Original halal universe (~14 stocks from SPUS/HLAL/SPTE) |
 | `GET /universe/halal_new` | Expanded universe (~410 stocks from 5 halal ETFs) |
 | `GET /universe/halal_filtered` | Top 15 factor-scored stocks from halal_new (ROE>0, Price>SMA200, Beta<2) |
+| `GET /universe/halal_india` | Top 15 factor-scored stocks from Nifty 500 Shariah (NSE India) |
 
 ### ETL endpoints
 

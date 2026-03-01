@@ -499,6 +499,7 @@ def mock_weekly_summary_request():
             ],
         },
         "hrp": {
+            "universe": "halal_filtered",
             "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
             "symbols_used": 15,
             "symbols_excluded": [],
@@ -537,6 +538,183 @@ def mock_weekly_llm_json_response():
         "para_7_news_sentiment": "News sentiment is generally positive for holdings.",
         "para_8_fundamentals": "Fundamentals remain strong with solid margins.",
     }
+
+
+# =============================================================================
+# India Weekly Summary Endpoint Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_india_weekly_summary_request():
+    """Valid request payload for India weekly summary endpoint (HRP only)."""
+    return {
+        "hrp": {
+            "universe": "halal_india",
+            "percentage_weights": {
+                "RELIANCE.NS": 12.3,
+                "TCS.NS": 10.1,
+                "INFY.NS": 9.5,
+                "HDFCBANK.NS": 8.7,
+                "BAJFINANCE.NS": 7.2,
+                "WIPRO.NS": 6.8,
+                "MARUTI.NS": 6.4,
+                "NESTLEIND.NS": 5.9,
+                "TITAN.NS": 5.5,
+                "DABUR.NS": 5.1,
+                "COLPAL.NS": 4.8,
+                "HINDUNILVR.NS": 4.5,
+                "GODREJCP.NS": 4.3,
+                "MARICO.NS": 4.6,
+                "PIDILITIND.NS": 4.3,
+            },
+            "symbols_used": 15,
+            "symbols_excluded": ["ADANIENT.NS"],
+            "lookback_days": 252,
+            "as_of_date": "2026-03-02",
+        },
+    }
+
+
+@pytest.fixture
+def mock_india_llm_json_response():
+    """Mock JSON response from LLM for India summary."""
+    return {
+        "para_1_portfolio_overview": "HRP allocated across 15 NSE stocks with moderate concentration.",
+        "para_2_concentration_analysis": "Top 3 holdings (RELIANCE, TCS, INFY) hold 31.9% combined.",
+        "para_3_risk_observations": "IT sector is overweight; watch for INR/USD currency risk.",
+    }
+
+
+class TestIndiaWeeklySummaryEndpoint:
+    """Tests for POST /llm/india-weekly-summary endpoint."""
+
+    def test_successful_india_summary_generation(
+        self,
+        mock_india_weekly_summary_request,
+        mock_india_llm_json_response,
+    ):
+        """Successful India weekly summary generation with HRP data."""
+        import json
+
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_india_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=350,
+            ),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/india-weekly-summary",
+                json=mock_india_weekly_summary_request,
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "summary" in data
+            assert data["provider"] == "openai"
+            assert data["model_used"] == "gpt-4o-mini"
+            assert data["tokens_used"] == 350
+            assert "para_1_portfolio_overview" in data["summary"]
+            assert "para_2_concentration_analysis" in data["summary"]
+            assert "para_3_risk_observations" in data["summary"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_india_summary_llm_failure(
+        self,
+        mock_india_weekly_summary_request,
+    ):
+        """LLM service failure returns 503."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="", model="", tokens_used=None),
+            error=Exception("API connection failed"),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/india-weekly-summary",
+                json=mock_india_weekly_summary_request,
+            )
+
+            assert response.status_code == 503
+            assert "LLM service unavailable" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_india_summary_json_parse_error(
+        self,
+        mock_india_weekly_summary_request,
+    ):
+        """Invalid JSON from LLM returns fallback summary."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content="This is not valid JSON at all",
+                model="gpt-4o-mini",
+                tokens_used=100,
+            ),
+        )
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/india-weekly-summary",
+                json=mock_india_weekly_summary_request,
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "para_1_portfolio_overview" in data["summary"]
+            assert (
+                "Unable to generate AI summary"
+                in data["summary"]["para_1_portfolio_overview"]
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_india_summary_missing_hrp_returns_422(self):
+        """Missing HRP field returns 422."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="{}", model="test", tokens_used=0),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/india-weekly-summary",
+                json={},
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_india_summary_invalid_hrp_returns_422(self):
+        """Invalid HRP structure returns 422."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="{}", model="test", tokens_used=0),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+
+        try:
+            response = client.post(
+                "/llm/india-weekly-summary",
+                json={"hrp": "invalid"},
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestWeeklySummaryEndpoint:

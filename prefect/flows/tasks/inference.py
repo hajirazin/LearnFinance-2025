@@ -111,6 +111,30 @@ def get_patchtst_forecast(as_of_date: str) -> PatchTSTInferenceResponse:
 
 
 # =============================================================================
+# Universe Tasks
+# =============================================================================
+
+
+@task(name="Get Halal India Universe", retries=2, retry_delay_seconds=30)
+def get_halal_india_universe() -> dict:
+    """Validate and fetch the halal_india universe from NSE Nifty 500 Shariah."""
+    logger = get_run_logger()
+    logger.info("Fetching halal_india universe...")
+
+    with get_client() as client:
+        response = client.get("/universe/halal_india")
+        response.raise_for_status()
+        data = response.json()
+
+    stock_count = len(data.get("stocks", []))
+    logger.info(
+        f"Halal India universe: {stock_count} stocks, "
+        f"source={data.get('source', 'unknown')}"
+    )
+    return data
+
+
+# =============================================================================
 # Allocator Tasks
 # =============================================================================
 
@@ -176,15 +200,17 @@ def infer_sac(
 
 
 @task(name="Allocate HRP", retries=1, retry_delay_seconds=60)
-def allocate_hrp(as_of_date: str) -> HRPAllocationResponse:
-    """Get HRP allocation."""
+def allocate_hrp(
+    as_of_date: str, universe: str = "halal_filtered"
+) -> HRPAllocationResponse:
+    """Get HRP allocation for the given universe."""
     logger = get_run_logger()
-    logger.info("Getting HRP allocation...")
+    logger.info(f"Getting HRP allocation (universe={universe})...")
 
     with get_client() as client:
         response = client.post(
             "/allocation/hrp",
-            json={"as_of_date": as_of_date},
+            json={"as_of_date": as_of_date, "universe": universe},
         )
         response.raise_for_status()
         data = response.json()
@@ -192,6 +218,6 @@ def allocate_hrp(as_of_date: str) -> HRPAllocationResponse:
     result = HRPAllocationResponse(**data)
     logger.info(
         f"HRP allocation: {result.symbols_used} symbols, "
-        f"excluded={len(result.symbols_excluded)}"
+        f"universe={result.universe}, excluded={len(result.symbols_excluded)}"
     )
     return result

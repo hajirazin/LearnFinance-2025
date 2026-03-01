@@ -42,6 +42,7 @@ class UniverseType(str, Enum):
     SP500 = "sp500"  # S&P 500 (~500 stocks from datahub.io)
     HALAL_NEW = "halal_new"  # Expanded halal (~410 stocks from 5 ETFs + Alpaca filter)
     HALAL_FILTERED = "halal_filtered"  # Top 15 factor-scored from halal_new
+    HALAL_INDIA = "halal_india"  # Top 15 factor-scored from Nifty 500 Shariah (NSE)
 
 
 DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED

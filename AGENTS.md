@@ -16,10 +16,11 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Prefect** is the outer orchestrator:
-  - schedule trigger (Monday 6 PM IST for inference, Sunday 11 AM UTC for training)
+  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Sunday 11 AM UTC for training)
   - calling brain_api endpoints in the correct order
   - handling parallel task execution and skip logic
   - status tracking + flow observability
+  - India flow (`india_weekly_email.py`): universe validation -> HRP -> AI summary -> email (sequential, no forecasters/orders yet)
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
@@ -82,7 +83,7 @@ brain_api/
 | `POST /inference/patchtst` | Price predictions (symbols from model metadata) |
 | `POST /inference/ppo` | PPO allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
-| `POST /allocation/hrp` | HRP risk-parity allocation |
+| `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
 **Orders** (called by Monday run via Prefect after allocations):
 
@@ -122,14 +123,17 @@ brain_api/
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /llm/weekly-summary` | Generate AI summary of forecasts and allocations |
-| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP |
+| `POST /llm/weekly-summary` | Generate AI summary of forecasts and allocations (US) |
+| `POST /llm/india-weekly-summary` | Generate AI summary of HRP concentration/diversification (India) |
+| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP (US) |
+| `POST /email/india-weekly-report` | Send India weekly portfolio email (HRP + AI summary) via Gmail SMTP |
 
 **Other**:
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /universe/halal` | Halal stock universe |
+| `GET /universe/halal_india` | Top 15 factor-scored from Nifty 500 Shariah (NSE India) |
 | `GET /models/active-symbols` | Active symbols from SAC model metadata |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill |

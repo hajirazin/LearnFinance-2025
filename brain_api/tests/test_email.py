@@ -339,6 +339,7 @@ def mock_weekly_report_email_request():
             "weight_changes": [],
         },
         "hrp": {
+            "universe": "halal_filtered",
             "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
             "symbols_used": 15,
             "symbols_excluded": [],
@@ -395,6 +396,184 @@ def mock_weekly_report_email_request():
             "signals_used": ["ohlcv"],
         },
     }
+
+
+# =============================================================================
+# India Weekly Report Email Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_india_weekly_report_email_request():
+    """Valid request payload for India weekly report email endpoint."""
+    return {
+        "summary": {
+            "para_1_portfolio_overview": "HRP allocated across 15 NSE stocks with moderate concentration.",
+            "para_2_concentration_analysis": "Top 3 holdings hold 31.9% combined.",
+            "para_3_risk_observations": "IT sector is overweight; watch for currency risk.",
+        },
+        "hrp": {
+            "universe": "halal_india",
+            "percentage_weights": {
+                "RELIANCE.NS": 12.3,
+                "TCS.NS": 10.1,
+                "INFY.NS": 9.5,
+                "HDFCBANK.NS": 8.7,
+                "WIPRO.NS": 6.8,
+            },
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-03-02",
+        },
+        "target_week_start": "2026-03-02",
+        "target_week_end": "2026-03-06",
+        "as_of_date": "2026-03-02",
+    }
+
+
+class TestIndiaWeeklyReportEmailEndpoint:
+    """Tests for POST /email/india-weekly-report endpoint."""
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_successful_india_report_send(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """Successful India weekly report email send."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/india-weekly-report",
+            json=mock_india_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_success"] is True
+        assert "India Weekly Portfolio Analysis" in data["subject"]
+        assert "2026-03-02" in data["subject"]
+        assert "2026-03-06" in data["subject"]
+        assert len(data["body"]) > 0
+        mock_send_email.assert_called_once()
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_report_body_contains_expected_sections(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """India email body contains HRP + AI summary sections."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/india-weekly-report",
+            json=mock_india_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        body = response.json()["body"]
+
+        assert "India Weekly Portfolio Analysis (NSE)" in body
+        assert "Nifty 500 Shariah" in body
+        assert "AI Analysis Summary" in body
+        assert "HRP allocated across 15 NSE stocks" in body
+        assert "HRP Allocation" in body
+        assert "RELIANCE.NS" in body
+        assert "TCS.NS" in body
+        assert "LearnFinance-2025" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_report_body_does_not_contain_us_sections(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """India email body does NOT contain US-specific sections."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/india-weekly-report",
+            json=mock_india_weekly_report_email_request,
+        )
+
+        assert response.status_code == 200
+        body = response.json()["body"]
+
+        assert "SAC" not in body
+        assert "PPO" not in body
+        assert "News Sentiment" not in body
+        assert "Order Execution Summary" not in body
+        assert "RL Allocations" not in body
+        assert "Price Forecasts" not in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_report_smtp_failure(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """SMTP send error returns 503."""
+        mock_send_email.side_effect = Exception("SMTP connection failed")
+
+        response = client.post(
+            "/email/india-weekly-report",
+            json=mock_india_weekly_report_email_request,
+        )
+
+        assert response.status_code == 503
+        assert "Failed to send email" in response.json()["detail"]
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_report_gmail_config_error(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """Gmail configuration error returns 500."""
+        mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
+
+        response = client.post(
+            "/email/india-weekly-report",
+            json=mock_india_weekly_report_email_request,
+        )
+
+        assert response.status_code == 500
+        assert "Gmail configuration error" in response.json()["detail"]
+
+    def test_india_report_missing_hrp_returns_422(self):
+        """Missing HRP field returns 422."""
+        response = client.post(
+            "/email/india-weekly-report",
+            json={
+                "summary": {"para_1": "test"},
+                "target_week_start": "2026-03-02",
+                "target_week_end": "2026-03-06",
+                "as_of_date": "2026-03-02",
+            },
+        )
+        assert response.status_code == 422
+
+    def test_india_report_missing_summary_returns_422(self):
+        """Missing summary field returns 422."""
+        response = client.post(
+            "/email/india-weekly-report",
+            json={
+                "hrp": {
+                    "universe": "halal_india",
+                    "percentage_weights": {"RELIANCE.NS": 12.3},
+                    "symbols_used": 1,
+                    "symbols_excluded": [],
+                    "lookback_days": 252,
+                    "as_of_date": "2026-03-02",
+                },
+                "target_week_start": "2026-03-02",
+                "target_week_end": "2026-03-06",
+                "as_of_date": "2026-03-02",
+            },
+        )
+        assert response.status_code == 422
 
 
 class TestWeeklyReportEmailEndpoint:

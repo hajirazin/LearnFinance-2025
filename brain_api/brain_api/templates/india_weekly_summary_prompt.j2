@@ -1,0 +1,23 @@
+You are a financial analyst specializing in Indian equity markets.
+Analyze this week's HRP (Hierarchical Risk Parity) portfolio allocation for NSE India halal stocks from the Nifty 500 Shariah index.
+
+## HRP Allocation
+As-of Date: {{ hrp.as_of_date }}
+Universe: {{ hrp.universe }}
+Symbols Allocated: {{ hrp.symbols_used }}
+Symbols Excluded: {{ hrp.symbols_excluded | length }}
+
+All Allocations (sorted by weight):
+{% for sym, wt in hrp.percentage_weights.items() | sort(attribute='1', reverse=true) %}
+- {{ sym }}: {{ "%.1f" | format(wt) }}%
+{% endfor %}
+
+## Instructions
+
+Analyze the HRP allocation focusing on concentration and diversification.
+Respond with JSON only:
+{
+    "para_1_portfolio_overview": "<3 sentences: summary of how HRP distributed weights across the {{ hrp.symbols_used }} stocks, whether it is concentrated or well-diversified, and the top 3 holdings>",
+    "para_2_concentration_analysis": "<3 sentences: concentration risk assessment -- what percentage the top 3 and top 5 stocks hold together, whether any single stock dominates, and how this compares to equal-weight>",
+    "para_3_risk_observations": "<3 sentences: risk observations based on the allocation pattern -- sector concentration if recognizable from the stock names, any defensive positioning, and one key thing to watch this week>"
+}

@@ -102,3 +102,23 @@ class WeeklyReportEmailResponse(BaseModel):
     is_success: bool
     subject: str
     body: str  # Full HTML body (for debugging/logging)
+
+
+# =============================================================================
+# India Weekly Report Email Models
+# =============================================================================
+
+
+class IndiaWeeklyReportEmailRequest(BaseModel):
+    """Request model for POST /email/india-weekly-report.
+
+    India pipeline is HRP-only (no PPO/SAC/news/fundamentals/orders).
+    Contains the AI summary and HRP allocation data.
+    Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
+    """
+
+    summary: dict[str, str]  # from POST /llm/india-weekly-summary (3 paragraphs)
+    hrp: HRPAllocationResponse
+    target_week_start: str
+    target_week_end: str
+    as_of_date: str

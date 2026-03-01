@@ -154,6 +154,7 @@ def mock_sac_allocation():
 def mock_hrp_allocation():
     """Mock HRP allocation response with percentage weights."""
     return HRPAllocationResponse(
+        universe="halal_filtered",
         percentage_weights={"AAPL": 20.0, "MSFT": 15.0, "GOOGL": 10.0},  # percentages!
         symbols_used=3,
         symbols_excluded=[],
@@ -794,6 +795,7 @@ class TestHRPPercentageConversion:
         }
 
         hrp_alloc = HRPAllocationResponse(
+            universe="halal_filtered",
             percentage_weights={"AAPL": 50.0, "MSFT": 30.0},  # 50% and 30%
             symbols_used=2,
             symbols_excluded=[],

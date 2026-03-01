@@ -50,6 +50,17 @@ Runs every Monday at 18:00 IST (12:30 UTC) to execute the inference pipeline:
    - Generate LLM summary of allocations and forecasts
    - Send weekly report email
 
+### India Weekly Email Flow (`india_weekly_email.py`)
+
+Runs every Monday at 09:00 IST (03:30 UTC) to execute the India HRP pipeline:
+
+1. **Phase 0: Validate Universe** - Fetch halal_india universe (`GET /universe/halal_india`)
+2. **Phase 1: HRP Allocation** - Run HRP with `universe=halal_india` (`POST /allocation/hrp`)
+3. **Phase 2: AI Summary** - Generate India-specific LLM summary (`POST /llm/india-weekly-summary`)
+4. **Phase 3: Send Email** - Send India weekly report (`POST /email/india-weekly-report`)
+
+All phases are sequential. No forecasters, no RL allocators, no order execution (deferred to future plan with Angel One integration).
+
 ## Prerequisites
 
 - Python 3.11+
@@ -105,6 +116,18 @@ cd prefect
 python flows/weekly_forecast_email.py --test
 ```
 
+### Test the India weekly email flow manually
+
+```bash
+# Make sure brain_api is running first
+cd brain_api
+uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
+
+# In another terminal, run the India flow once
+cd prefect
+python flows/india_weekly_email.py --test
+```
+
 ### Run with Prefect UI
 
 ```bash
@@ -115,6 +138,7 @@ prefect server start
 cd prefect
 python -m flows.weekly_training          # Training flow
 python flows/weekly_forecast_email.py    # Forecast email flow (runs with cron)
+python flows/india_weekly_email.py       # India email flow (runs with cron)
 ```
 
 ## Deployment
@@ -137,6 +161,12 @@ prefect deploy flows/weekly_forecast_email.py:weekly_forecast_email_flow \
     --name "weekly-forecast-email" \
     --cron "0 18 * * 1" \
     --timezone "Asia/Kolkata"
+
+# Deploy India weekly email flow (Every Monday 09:00 IST)
+prefect deploy flows/india_weekly_email.py:india_weekly_email_flow \
+    --name "india-weekly-email" \
+    --cron "0 9 * * 1" \
+    --timezone "Asia/Kolkata"
 ```
 
 Or create a `prefect.yaml` for declarative deployment:
@@ -155,6 +185,13 @@ deployments:
     entrypoint: flows/weekly_forecast_email.py:weekly_forecast_email_flow
     schedule:
       cron: "0 18 * * 1"
+      timezone: "Asia/Kolkata"
+    parameters: {}
+
+  - name: india-weekly-email
+    entrypoint: flows/india_weekly_email.py:india_weekly_email_flow
+    schedule:
+      cron: "0 9 * * 1"
       timezone: "Asia/Kolkata"
     parameters: {}
 ```
@@ -262,7 +299,7 @@ The email is always sent, indicating which algorithms were skipped.
 | `POST /inference/patchtst` | PatchTST OHLCV forecasts (symbols from model metadata) |
 | `POST /inference/ppo` | PPO target weights |
 | `POST /inference/sac` | SAC target weights |
-| `POST /allocation/hrp` | HRP percentage weights |
+| `POST /allocation/hrp` | HRP percentage weights (passes `universe=halal_filtered`) |
 | `POST /orders/generate` | Generate orders from weights |
 | `POST /alpaca/submit-orders` | Submit orders to Alpaca |
 | `GET /alpaca/order-history` | Fetch executed orders |
@@ -273,7 +310,40 @@ The email is always sent, indicating which algorithms were skipped.
 
 #### HRP Weight Conversion
 
-HRP returns `percentage_weights` (e.g., `{"AAPL": 20.0}` for 20%), which are converted to decimal `target_weights` (e.g., `{"AAPL": 0.20}`) before calling `/orders/generate`.
+HRP returns `percentage_weights` (e.g., `{"AAPL": 20.0}` for 20%), which are converted to decimal `target_weights` (e.g., `{"AAPL": 0.20}`) before calling `/orders/generate`. The `universe` parameter is passed explicitly in the request body (currently `"halal_filtered"`).
+
+### India Weekly Email Flow
+
+#### Schedule
+
+- **Cron**: `0 9 * * 1` (Every Monday at 09:00 IST)
+- **Timezone**: Asia/Kolkata
+
+#### Timeouts
+
+| Component | Timeout |
+|-----------|---------|
+| Flow total | 1 hour |
+| HTTP read | 5 minutes |
+| HTTP connect | 30 seconds |
+
+#### Retries
+
+| Task | Retries | Retry Delay |
+|------|---------|-------------|
+| Get Halal India Universe | 2 | 30s |
+| Allocate HRP | 1 | 60s |
+| Generate India Summary | 1 | 30s |
+| Send India Weekly Email | 1 | 30s |
+
+#### brain_api Endpoints Called
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /universe/halal_india` | Validate India universe (Nifty 500 Shariah top 15) |
+| `POST /allocation/hrp` | HRP allocation (passes `universe=halal_india`) |
+| `POST /llm/india-weekly-summary` | India-specific LLM summary (HRP concentration/diversification) |
+| `POST /email/india-weekly-report` | Send India weekly email (HRP + AI summary) |
 
 ## Monitoring
 

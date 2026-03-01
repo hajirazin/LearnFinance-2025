@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
@@ -532,3 +533,328 @@ def test_get_halal_filtered_returns_503_on_yfinance_failure():
     assert response.status_code == 503
     data = response.json()
     assert "18/20" in data["detail"]
+
+
+# ============================================================================
+# Halal_India Universe Tests
+# ============================================================================
+
+
+MOCK_NSE_CONSTITUENTS = [
+    {"symbol": "INFY", "name": "Infosys Ltd.", "industry": "IT - Software"},
+    {"symbol": "TCS", "name": "Tata Consultancy", "industry": "IT - Software"},
+    {"symbol": "RELIANCE", "name": "Reliance Industries", "industry": "Oil & Gas"},
+    {"symbol": "HDFCBANK", "name": "HDFC Bank", "industry": "Banking"},
+    {"symbol": "WIPRO", "name": "Wipro Ltd.", "industry": "IT - Software"},
+    {"symbol": "BAJFINANCE", "name": "Bajaj Finance", "industry": "Finance"},
+    {"symbol": "MARUTI", "name": "Maruti Suzuki", "industry": "Automobile"},
+    {"symbol": "NESTLEIND", "name": "Nestle India", "industry": "FMCG"},
+    {"symbol": "TITAN", "name": "Titan Company", "industry": "Consumer Goods"},
+    {"symbol": "ULTRACEMCO", "name": "UltraTech Cement", "industry": "Cement"},
+    {"symbol": "DRREDDY", "name": "Dr. Reddys Labs", "industry": "Pharma"},
+    {"symbol": "CIPLA", "name": "Cipla Ltd.", "industry": "Pharma"},
+    {"symbol": "EICHERMOT", "name": "Eicher Motors", "industry": "Automobile"},
+    {"symbol": "DIVISLAB", "name": "Divis Labs", "industry": "Pharma"},
+    {"symbol": "BRITANNIA", "name": "Britannia Industries", "industry": "FMCG"},
+    {"symbol": "TECHM", "name": "Tech Mahindra", "industry": "IT - Software"},
+    {"symbol": "HINDUNILVR", "name": "Hindustan Unilever", "industry": "FMCG"},
+    {"symbol": "HEROMOTOCO", "name": "Hero MotoCorp", "industry": "Automobile"},
+]
+
+
+def _make_mock_india_metrics(symbols: list[str]) -> dict[str, dict]:
+    """Create mock metrics for .NS suffixed symbols."""
+    metrics = {}
+    for i, sym in enumerate(symbols):
+        metrics[sym] = {
+            "roe": 0.15 + i * 0.01,
+            "price": 1500.0 + i * 100,
+            "sma200": 1400.0,
+            "beta": 0.8 + i * 0.05,
+            "gross_margin": 0.35 + i * 0.01,
+            "roic": 0.10 + i * 0.005,
+            "earnings_yield": 0.04 + i * 0.002,
+            "six_month_return": 0.06 + i * 0.01,
+        }
+    return metrics
+
+
+def test_get_halal_india_returns_expected_structure():
+    """Test that /universe/halal_india returns the expected response structure."""
+    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
+    mock_metrics = _make_mock_india_metrics(ns_symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.scrape_nifty500_shariah",
+            return_value=MOCK_NSE_CONSTITUENTS,
+        ),
+        patch(
+            "brain_api.universe.halal_india.fetch_stock_metrics",
+            return_value=mock_metrics,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "stocks" in data
+    assert "source" in data
+    assert "symbol_suffix" in data
+    assert "total_stocks" in data
+    assert "total_scored" in data
+    assert "top_n" in data
+    assert "fetched_at" in data
+
+    assert data["source"] == "nifty_500_shariah"
+    assert data["symbol_suffix"] == ".NS"
+
+
+def test_get_halal_india_returns_max_15_stocks():
+    """Test that /universe/halal_india returns at most 15 stocks."""
+    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
+    mock_metrics = _make_mock_india_metrics(ns_symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.scrape_nifty500_shariah",
+            return_value=MOCK_NSE_CONSTITUENTS,
+        ),
+        patch(
+            "brain_api.universe.halal_india.fetch_stock_metrics",
+            return_value=mock_metrics,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["stocks"]) == 15
+    assert data["top_n"] == 15
+
+
+def test_get_halal_india_stocks_have_factor_scores():
+    """Test that each halal_india stock has factor_score and factor_components."""
+    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
+    mock_metrics = _make_mock_india_metrics(ns_symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.scrape_nifty500_shariah",
+            return_value=MOCK_NSE_CONSTITUENTS,
+        ),
+        patch(
+            "brain_api.universe.halal_india.fetch_stock_metrics",
+            return_value=mock_metrics,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for stock in data["stocks"]:
+        assert "factor_score" in stock
+        assert "factor_components" in stock
+        assert "metrics" in stock
+        assert stock["factor_score"] is not None
+
+
+def test_get_halal_india_symbols_are_clean():
+    """Test that returned symbols do NOT have .NS suffix."""
+    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
+    mock_metrics = _make_mock_india_metrics(ns_symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.scrape_nifty500_shariah",
+            return_value=MOCK_NSE_CONSTITUENTS,
+        ),
+        patch(
+            "brain_api.universe.halal_india.fetch_stock_metrics",
+            return_value=mock_metrics,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for stock in data["stocks"]:
+        assert not stock["symbol"].endswith(".NS"), (
+            f"Symbol {stock['symbol']} should not have .NS suffix"
+        )
+
+
+def test_get_halal_india_returns_503_on_yfinance_failure():
+    """Test that /universe/halal_india returns 503 when yfinance rate-limits us."""
+    with (
+        patch(
+            "brain_api.universe.halal_india.scrape_nifty500_shariah",
+            return_value=MOCK_NSE_CONSTITUENTS,
+        ),
+        patch(
+            "brain_api.universe.halal_india.fetch_stock_metrics",
+            side_effect=YFinanceFetchError("90/100 failed (90.0%)"),
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 503
+    assert "90/100" in response.json()["detail"]
+
+
+def test_get_halal_india_returns_503_on_nse_failure():
+    """Test that /universe/halal_india returns 503 when NSE scraper fails."""
+    from brain_api.universe.scrapers.nse import NseFetchError
+
+    with patch(
+        "brain_api.universe.halal_india.scrape_nifty500_shariah",
+        side_effect=NseFetchError("NSE API returned empty data"),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 503
+    assert "NSE API" in response.json()["detail"]
+
+
+# ============================================================================
+# NSE Scraper Unit Tests
+# ============================================================================
+
+
+def test_scrape_nifty500_shariah_parses_response():
+    """Test that scrape_nifty500_shariah correctly parses NSE JSON API response."""
+    from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
+
+    mock_nse_json = {
+        "data": [
+            {
+                "symbol": "Nifty 500 Shariah",
+                "open": 5000.0,
+                "dayHigh": 5100.0,
+            },
+            {
+                "symbol": "INFY",
+                "meta": {"companyName": "Infosys Ltd.", "industry": "IT - Software"},
+                "lastPrice": 1500.0,
+            },
+            {
+                "symbol": "TCS",
+                "meta": {
+                    "companyName": "Tata Consultancy",
+                    "industry": "IT - Software",
+                },
+                "lastPrice": 3500.0,
+            },
+        ]
+    }
+
+    mock_session = patch(
+        "brain_api.universe.scrapers.nse.requests.Session",
+    )
+
+    with mock_session as mock_sess_cls:
+        session_instance = mock_sess_cls.return_value
+        homepage_resp = type(
+            "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
+        )()
+        api_resp = type(
+            "Resp",
+            (),
+            {
+                "status_code": 200,
+                "raise_for_status": lambda self: None,
+                "json": lambda self: mock_nse_json,
+            },
+        )()
+        session_instance.get.side_effect = [homepage_resp, api_resp]
+        session_instance.headers = {}
+
+        result = scrape_nifty500_shariah()
+
+    assert len(result) == 2
+    assert result[0]["symbol"] == "INFY"
+    assert result[0]["name"] == "Infosys Ltd."
+    assert result[1]["symbol"] == "TCS"
+
+
+def test_scrape_nifty500_shariah_filters_index_row():
+    """Test that the index summary row (with spaces in symbol) is filtered out."""
+    from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
+
+    mock_nse_json = {
+        "data": [
+            {"symbol": "Nifty 500 Shariah", "open": 5000.0},
+            {
+                "symbol": "RELIANCE",
+                "meta": {"companyName": "Reliance", "industry": "Oil"},
+            },
+        ]
+    }
+
+    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+        session_instance = mock_sess_cls.return_value
+        homepage_resp = type(
+            "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
+        )()
+        api_resp = type(
+            "Resp",
+            (),
+            {
+                "status_code": 200,
+                "raise_for_status": lambda self: None,
+                "json": lambda self: mock_nse_json,
+            },
+        )()
+        session_instance.get.side_effect = [homepage_resp, api_resp]
+        session_instance.headers = {}
+
+        result = scrape_nifty500_shariah()
+
+    assert len(result) == 1
+    assert result[0]["symbol"] == "RELIANCE"
+
+
+def test_scrape_nifty500_shariah_raises_on_empty_data():
+    """Test that NseFetchError is raised when data array is empty."""
+    from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah
+
+    mock_nse_json = {"data": []}
+
+    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+        session_instance = mock_sess_cls.return_value
+        homepage_resp = type(
+            "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
+        )()
+        api_resp = type(
+            "Resp",
+            (),
+            {
+                "status_code": 200,
+                "raise_for_status": lambda self: None,
+                "json": lambda self: mock_nse_json,
+            },
+        )()
+        session_instance.get.side_effect = [homepage_resp, api_resp]
+        session_instance.headers = {}
+
+        with pytest.raises(NseFetchError, match="empty data"):
+            scrape_nifty500_shariah()
+
+
+def test_scrape_nifty500_shariah_raises_on_http_error():
+    """Test that NseFetchError is raised on HTTP errors."""
+    import requests as req
+
+    from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah
+
+    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+        session_instance = mock_sess_cls.return_value
+        session_instance.get.side_effect = req.RequestException("Connection refused")
+        session_instance.headers = {}
+
+        with pytest.raises(NseFetchError, match="NSE session attempts failed"):
+            scrape_nifty500_shariah()

@@ -1,15 +1,29 @@
 """Portfolio allocation endpoints."""
 
-from datetime import date
+import logging
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from brain_api.core.config import UniverseType
 from brain_api.core.hrp import HRPResult, compute_hrp_allocation
 from brain_api.core.lstm import load_prices_yfinance
-from brain_api.routes.training.dependencies import get_rl_training_symbols
+from brain_api.universe import (
+    get_halal_filtered_symbols,
+    get_halal_india_symbols,
+    get_halal_new_symbols,
+    get_halal_symbols,
+    get_sp500_symbols,
+)
+from brain_api.universe.scrapers.nse import NseFetchError
+from brain_api.universe.stock_filter import YFinanceFetchError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+NS_SUFFIX = ".NS"
 
 
 # ============================================================================
@@ -20,6 +34,10 @@ router = APIRouter()
 class HRPAllocationRequest(BaseModel):
     """Request model for HRP allocation endpoint."""
 
+    universe: UniverseType = Field(
+        ...,
+        description="Stock universe to allocate (e.g. 'halal_filtered', 'halal_india')",
+    )
     lookback_days: int = Field(
         252,
         ge=60,
@@ -35,6 +53,10 @@ class HRPAllocationRequest(BaseModel):
 class HRPAllocationResponse(BaseModel):
     """Response model for HRP allocation endpoint."""
 
+    universe: str = Field(
+        ...,
+        description="Universe used for allocation",
+    )
     percentage_weights: dict[str, float] = Field(
         ...,
         description="Target portfolio weights as percentages (sum to 100)",
@@ -73,6 +95,35 @@ def get_price_loader() -> PriceLoader:
     return load_prices_yfinance
 
 
+def _resolve_universe_symbols(universe: UniverseType) -> list[str]:
+    """Resolve a UniverseType enum to a list of yfinance-compatible symbols.
+
+    For HALAL_INDIA, appends .NS suffix so yfinance fetches NSE prices
+    instead of US-listed ADRs.
+
+    Raises:
+        ValueError: If the universe type is not supported.
+    """
+    resolvers: dict[UniverseType, callable] = {
+        UniverseType.HALAL: get_halal_symbols,
+        UniverseType.HALAL_NEW: get_halal_new_symbols,
+        UniverseType.HALAL_FILTERED: get_halal_filtered_symbols,
+        UniverseType.HALAL_INDIA: get_halal_india_symbols,
+        UniverseType.SP500: get_sp500_symbols,
+    }
+
+    resolver = resolvers.get(universe)
+    if resolver is None:
+        raise ValueError(f"No symbol resolver for universe '{universe.value}'")
+
+    symbols = resolver()
+
+    if universe == UniverseType.HALAL_INDIA:
+        symbols = [s + NS_SUFFIX for s in symbols]
+
+    return symbols
+
+
 # ============================================================================
 # Endpoint
 # ============================================================================
@@ -80,49 +131,38 @@ def get_price_loader() -> PriceLoader:
 
 @router.post("/hrp", response_model=HRPAllocationResponse)
 def allocate_hrp(
-    request: HRPAllocationRequest = HRPAllocationRequest(),
-    symbols: list[str] = Depends(get_rl_training_symbols),
+    request: HRPAllocationRequest,
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> HRPAllocationResponse:
-    """Compute HRP portfolio allocation for the halal universe.
+    """Compute HRP portfolio allocation for a given universe.
 
     Hierarchical Risk Parity (HRP) allocates weights based on the
     covariance structure of asset returns, using hierarchical clustering
     to group similar assets and recursive bisection to assign weights.
 
-    The algorithm (López de Prado, 2016):
-    1. Fetch price history for all halal symbols
+    The algorithm (Lopez de Prado, 2016):
+    1. Fetch price history for all symbols in the requested universe
     2. Compute correlation matrix from daily returns
     3. Convert correlation to distance matrix
     4. Hierarchical clustering to group similar assets
     5. Recursive bisection to allocate weights by inverse variance
 
     Returns percentage weights that sum to 100 (e.g., AAPL: 8.2 means 8.2%).
-
-    Args:
-        request: HRPAllocationRequest with lookback_days and as_of_date
-
-    Returns:
-        HRPAllocationResponse with percentage weights and metadata
-
-    Raises:
-        HTTPException 400: if no symbols have sufficient data
     """
-    # Get as-of date
-    as_of = get_as_of_date(request)
+    try:
+        symbols = _resolve_universe_symbols(request.universe)
+    except (YFinanceFetchError, NseFetchError, ValueError) as e:
+        logger.error(f"HRP universe resolution failed for '{request.universe}': {e}")
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
-    # Calculate date range for price data
-    # Fetch extra buffer for weekends/holidays
-    from datetime import timedelta
+    as_of = get_as_of_date(request)
 
     buffer_days = request.lookback_days + 30
     start_date = as_of - timedelta(days=int(buffer_days * 1.5))
     end_date = as_of
 
-    # Fetch price data
     prices = price_loader(symbols, start_date, end_date)
 
-    # Compute HRP allocation
     result: HRPResult = compute_hrp_allocation(
         prices=prices,
         lookback_days=request.lookback_days,
@@ -130,14 +170,12 @@ def allocate_hrp(
         as_of_date=as_of,
     )
 
-    # Check if we have any valid allocations
     if not result.percentage_weights:
         raise HTTPException(
             status_code=400,
             detail=f"No symbols have sufficient data. Excluded: {result.symbols_excluded}",
         )
 
-    # Sort weights by percentage descending (highest allocation first)
     sorted_weights = dict(
         sorted(
             result.percentage_weights.items(),
@@ -147,6 +185,7 @@ def allocate_hrp(
     )
 
     return HRPAllocationResponse(
+        universe=request.universe.value,
         percentage_weights=sorted_weights,
         symbols_used=len(result.symbols_used),
         symbols_excluded=result.symbols_excluded,

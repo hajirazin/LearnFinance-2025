@@ -1,6 +1,7 @@
 """Tests for HRP allocation endpoint."""
 
 from datetime import date
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -9,9 +10,9 @@ from fastapi.testclient import TestClient
 
 from brain_api.main import app
 from brain_api.routes.allocation import get_price_loader
-from brain_api.routes.training.dependencies import get_rl_training_symbols
 
 MOCK_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+MOCK_INDIA_SYMBOLS = ["INFY", "TCS", "RELIANCE", "HDFCBANK", "WIPRO"]
 
 
 # ============================================================================
@@ -32,7 +33,7 @@ def _create_mock_prices(
     np.random.seed(seed)
 
     end_date = date.today()
-    dates = pd.date_range(end=end_date, periods=days, freq="B")  # Business days
+    dates = pd.date_range(end=end_date, periods=days, freq="B")
 
     prices = {}
     for i, symbol in enumerate(symbols):
@@ -62,10 +63,13 @@ def mock_prices():
 
 @pytest.fixture()
 def hrp_client(mock_prices):
-    """TestClient with RL symbols and price loader overridden."""
-    app.dependency_overrides[get_rl_training_symbols] = lambda: MOCK_SYMBOLS
+    """TestClient with price loader overridden and universe symbols mocked."""
     app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: mock_prices
-    yield TestClient(app)
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        return_value=MOCK_SYMBOLS,
+    ):
+        yield TestClient(app)
     app.dependency_overrides.clear()
 
 
@@ -76,11 +80,12 @@ def hrp_client(mock_prices):
 
 def test_hrp_allocation_returns_expected_structure(hrp_client):
     """Test that /allocation/hrp returns the expected response structure."""
-    response = hrp_client.post("/allocation/hrp")
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response.status_code == 200
     data = response.json()
 
+    assert "universe" in data
     assert "percentage_weights" in data
     assert "symbols_used" in data
     assert "symbols_excluded" in data
@@ -88,9 +93,17 @@ def test_hrp_allocation_returns_expected_structure(hrp_client):
     assert "as_of_date" in data
 
 
+def test_hrp_response_includes_universe(hrp_client):
+    """Test that HRP response includes the universe field matching request."""
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
+
+    assert response.status_code == 200
+    assert response.json()["universe"] == "halal_filtered"
+
+
 def test_hrp_weights_sum_to_100(hrp_client):
     """Test that HRP percentage weights sum to 100."""
-    response = hrp_client.post("/allocation/hrp")
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response.status_code == 200
     data = response.json()
@@ -103,7 +116,7 @@ def test_hrp_weights_sum_to_100(hrp_client):
 
 def test_hrp_all_symbols_present_or_excluded(hrp_client):
     """Test that all symbols are either allocated or excluded."""
-    response = hrp_client.post("/allocation/hrp")
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response.status_code == 200
     data = response.json()
@@ -117,7 +130,7 @@ def test_hrp_all_symbols_present_or_excluded(hrp_client):
 
 def test_hrp_all_weights_positive(hrp_client):
     """Test that all HRP weights are positive (no short positions)."""
-    response = hrp_client.post("/allocation/hrp")
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response.status_code == 200
     data = response.json()
@@ -128,7 +141,9 @@ def test_hrp_all_weights_positive(hrp_client):
 
 def test_hrp_custom_lookback_days(hrp_client):
     """Test that custom lookback_days parameter is respected."""
-    response = hrp_client.post("/allocation/hrp", json={"lookback_days": 126})
+    response = hrp_client.post(
+        "/allocation/hrp", json={"universe": "halal_filtered", "lookback_days": 126}
+    )
 
     assert response.status_code == 200
     data = response.json()
@@ -139,7 +154,10 @@ def test_hrp_custom_lookback_days(hrp_client):
 def test_hrp_custom_as_of_date(hrp_client):
     """Test that custom as_of_date parameter is respected."""
     test_date = "2025-01-01"
-    response = hrp_client.post("/allocation/hrp", json={"as_of_date": test_date})
+    response = hrp_client.post(
+        "/allocation/hrp",
+        json={"universe": "halal_filtered", "as_of_date": test_date},
+    )
 
     assert response.status_code == 200
     data = response.json()
@@ -152,11 +170,14 @@ def test_hrp_excludes_symbols_with_insufficient_data():
     mock_prices = _create_mock_prices(MOCK_SYMBOLS)
     mock_prices["NVDA"] = mock_prices["NVDA"].tail(30)
 
-    app.dependency_overrides[get_rl_training_symbols] = lambda: MOCK_SYMBOLS
     app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: mock_prices
 
-    client = TestClient(app)
-    response = client.post("/allocation/hrp")
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        return_value=MOCK_SYMBOLS,
+    ):
+        client = TestClient(app)
+        response = client.post("/allocation/hrp", json={"universe": "halal_filtered"})
     app.dependency_overrides.clear()
 
     assert response.status_code == 200
@@ -168,30 +189,41 @@ def test_hrp_excludes_symbols_with_insufficient_data():
 
 def test_hrp_returns_400_when_no_valid_symbols():
     """Test that 400 is returned when no symbols have sufficient data."""
-    app.dependency_overrides[get_rl_training_symbols] = lambda: MOCK_SYMBOLS
     app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: {}
 
-    client = TestClient(app)
-    response = client.post("/allocation/hrp")
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        return_value=MOCK_SYMBOLS,
+    ):
+        client = TestClient(app)
+        response = client.post("/allocation/hrp", json={"universe": "halal_filtered"})
     app.dependency_overrides.clear()
 
     assert response.status_code == 400
     assert "No symbols have sufficient data" in response.json()["detail"]
 
 
-def test_hrp_lookback_days_validation(hrp_client):
+def test_hrp_lookback_days_validation():
     """Test that lookback_days is validated (min 60, max 504)."""
-    response = hrp_client.post("/allocation/hrp", json={"lookback_days": 30})
+    client = TestClient(app)
+
+    response = client.post(
+        "/allocation/hrp",
+        json={"universe": "halal_filtered", "lookback_days": 30},
+    )
     assert response.status_code == 422
 
-    response = hrp_client.post("/allocation/hrp", json={"lookback_days": 600})
+    response = client.post(
+        "/allocation/hrp",
+        json={"universe": "halal_filtered", "lookback_days": 600},
+    )
     assert response.status_code == 422
 
 
 def test_hrp_deterministic_with_same_data(hrp_client):
     """Test that HRP produces the same weights for the same input data."""
-    response1 = hrp_client.post("/allocation/hrp")
-    response2 = hrp_client.post("/allocation/hrp")
+    response1 = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
+    response2 = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response1.status_code == 200
     assert response2.status_code == 200
@@ -204,7 +236,7 @@ def test_hrp_deterministic_with_same_data(hrp_client):
 
 def test_hrp_weights_sorted_by_percentage_descending(hrp_client):
     """Test that percentage_weights are sorted from highest to lowest."""
-    response = hrp_client.post("/allocation/hrp")
+    response = hrp_client.post("/allocation/hrp", json={"universe": "halal_filtered"})
 
     assert response.status_code == 200
     data = response.json()
@@ -213,3 +245,76 @@ def test_hrp_weights_sorted_by_percentage_descending(hrp_client):
     assert weights == sorted(weights, reverse=True), (
         "Weights should be sorted descending"
     )
+
+
+# ============================================================================
+# Universe parameter validation tests
+# ============================================================================
+
+
+def test_hrp_missing_universe_returns_422():
+    """Test that missing universe field returns 422."""
+    client = TestClient(app)
+    response = client.post("/allocation/hrp", json={"lookback_days": 252})
+    assert response.status_code == 422
+
+
+def test_hrp_invalid_universe_returns_422():
+    """Test that invalid universe string returns 422."""
+    client = TestClient(app)
+    response = client.post("/allocation/hrp", json={"universe": "nonexistent_universe"})
+    assert response.status_code == 422
+
+
+def test_hrp_halal_universe_works():
+    """Test that universe='halal' is accepted."""
+    mock_prices = _create_mock_prices(MOCK_SYMBOLS)
+    app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: mock_prices
+
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        return_value=MOCK_SYMBOLS,
+    ):
+        client = TestClient(app)
+        response = client.post("/allocation/hrp", json={"universe": "halal"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["universe"] == "halal"
+
+
+def test_hrp_halal_india_returns_ns_suffixed_keys():
+    """Test that universe='halal_india' returns .NS suffixed weight keys (GAP 3)."""
+    ns_symbols = [s + ".NS" for s in MOCK_INDIA_SYMBOLS]
+    mock_prices = _create_mock_prices(ns_symbols)
+    app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: mock_prices
+
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        return_value=ns_symbols,
+    ):
+        client = TestClient(app)
+        response = client.post("/allocation/hrp", json={"universe": "halal_india"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["universe"] == "halal_india"
+
+    for symbol in data["percentage_weights"]:
+        assert symbol.endswith(".NS"), f"Expected .NS suffix on {symbol}"
+
+
+def test_hrp_universe_resolution_failure_returns_503():
+    """Test that 503 is returned when universe resolution fails (GAP 2)."""
+    from brain_api.universe.stock_filter import YFinanceFetchError
+
+    with patch(
+        "brain_api.routes.allocation._resolve_universe_symbols",
+        side_effect=YFinanceFetchError("yfinance rate limited"),
+    ):
+        client = TestClient(app)
+        response = client.post("/allocation/hrp", json={"universe": "halal_filtered"})
+
+    assert response.status_code == 503
+    assert "rate limited" in response.json()["detail"]

@@ -12,6 +12,7 @@ from flows.tasks.execution import (
 from flows.tasks.inference import (
     allocate_hrp,
     get_fundamentals,
+    get_halal_india_universe,
     get_lstm_forecast,
     get_news_sentiment,
     get_patchtst_forecast,
@@ -30,7 +31,9 @@ from flows.tasks.portfolio import (
     submit_orders_sac,
 )
 from flows.tasks.reporting import (
+    generate_india_summary,
     generate_summary,
+    send_india_weekly_email,
     send_weekly_email,
 )
 
@@ -50,6 +53,7 @@ __all__ = [
     "get_news_sentiment",
     "get_lstm_forecast",
     "get_patchtst_forecast",
+    "get_halal_india_universe",
     "infer_ppo",
     "infer_sac",
     "allocate_hrp",
@@ -64,4 +68,7 @@ __all__ = [
     # Reporting
     "generate_summary",
     "send_weekly_email",
+    # India Reporting
+    "generate_india_summary",
+    "send_india_weekly_email",
 ]

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from .models import (
     AlgorithmOrderResult,
+    IndiaWeeklyReportEmailRequest,
     OrderResultsData,
     TrainingSummaryEmailRequest,
     TrainingSummaryEmailResponse,
@@ -22,6 +23,7 @@ router.include_router(weekly_report_router)
 
 __all__ = [
     "AlgorithmOrderResult",
+    "IndiaWeeklyReportEmailRequest",
     "OrderResultsData",
     "TrainingSummaryEmailRequest",
     "TrainingSummaryEmailResponse",

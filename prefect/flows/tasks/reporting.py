@@ -135,3 +135,60 @@ def send_weekly_email(
     result = WeeklyReportEmailResponse(**data)
     logger.info(f"Email sent: {result.subject}")
     return result
+
+
+# =============================================================================
+# India Reporting Tasks
+# =============================================================================
+
+
+@task(name="Generate India Summary", retries=1, retry_delay_seconds=30)
+def generate_india_summary(
+    hrp: HRPAllocationResponse,
+) -> WeeklySummaryResponse:
+    """Generate LLM summary of India HRP allocation (concentration/diversification)."""
+    logger = get_run_logger()
+    logger.info("Generating India LLM summary...")
+
+    with get_client() as client:
+        response = client.post(
+            "/llm/india-weekly-summary",
+            json={"hrp": hrp.model_dump()},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    result = WeeklySummaryResponse(**data)
+    logger.info(f"Generated India summary via {result.provider} ({result.model_used})")
+    return result
+
+
+@task(name="Send India Weekly Email", retries=1, retry_delay_seconds=30)
+def send_india_weekly_email(
+    summary: WeeklySummaryResponse,
+    hrp: HRPAllocationResponse,
+    target_week_start: str,
+    target_week_end: str,
+    as_of_date: str,
+) -> WeeklyReportEmailResponse:
+    """Send India weekly report email (HRP + AI summary)."""
+    logger = get_run_logger()
+    logger.info("Sending India weekly report email...")
+
+    with get_client() as client:
+        response = client.post(
+            "/email/india-weekly-report",
+            json={
+                "summary": summary.summary,
+                "hrp": hrp.model_dump(),
+                "target_week_start": target_week_start,
+                "target_week_end": target_week_end,
+                "as_of_date": as_of_date,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    result = WeeklyReportEmailResponse(**data)
+    logger.info(f"India email sent: {result.subject}")
+    return result
