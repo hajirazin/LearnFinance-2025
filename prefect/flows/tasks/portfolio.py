@@ -1,6 +1,9 @@
 """Portfolio, order submission, and order history tasks."""
 
+from datetime import timedelta
+
 from prefect import task
+from prefect.cache_policies import INPUTS
 from prefect.logging import get_run_logger
 
 from flows.models import (
@@ -14,12 +17,21 @@ from flows.models import (
 )
 from flows.tasks.client import get_client
 
+WEEKLY_CACHE_TTL = timedelta(days=7)
+
 # =============================================================================
 # Portfolio Tasks
 # =============================================================================
 
 
-@task(name="Get Active Symbols", retries=2, retry_delay_seconds=30)
+@task(
+    name="Get Active Symbols",
+    retries=2,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_active_symbols() -> ActiveSymbolsResponse:
     """Fetch the active symbols from the current SAC model via brain_api."""
     logger = get_run_logger()

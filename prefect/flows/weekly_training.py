@@ -11,9 +11,11 @@ This flow runs every Sunday at 11 AM UTC and executes the full training pipeline
 """
 
 import os
+from datetime import timedelta
 
 import httpx
 from prefect import flow, task
+from prefect.cache_policies import INPUTS
 from prefect.logging import get_run_logger
 
 from flows.models import (
@@ -41,12 +43,21 @@ def get_client() -> httpx.Client:
     return httpx.Client(base_url=BRAIN_API_URL, timeout=DEFAULT_TIMEOUT)
 
 
+WEEKLY_CACHE_TTL = timedelta(days=7)
+
 # =============================================================================
 # Tasks
 # =============================================================================
 
 
-@task(name="Refresh Training Data", retries=1, retry_delay_seconds=60)
+@task(
+    name="Refresh Training Data",
+    retries=1,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def refresh_training_data() -> RefreshTrainingDataResponse:
     """Refresh sentiment gaps and stale fundamentals.
 
@@ -74,7 +85,14 @@ def refresh_training_data() -> RefreshTrainingDataResponse:
     return result
 
 
-@task(name="Train LSTM", retries=1, retry_delay_seconds=120)
+@task(
+    name="Train LSTM",
+    retries=1,
+    retry_delay_seconds=120,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def train_lstm() -> TrainingResponse:
     """Train the LSTM pure-price forecaster model."""
     logger = get_run_logger()
@@ -92,7 +110,14 @@ def train_lstm() -> TrainingResponse:
     return result
 
 
-@task(name="Train PatchTST", retries=1, retry_delay_seconds=120)
+@task(
+    name="Train PatchTST",
+    retries=1,
+    retry_delay_seconds=120,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def train_patchtst() -> TrainingResponse:
     """Train the PatchTST OHLCV forecaster model."""
     logger = get_run_logger()
@@ -111,7 +136,14 @@ def train_patchtst() -> TrainingResponse:
     return result
 
 
-@task(name="Train PPO", retries=1, retry_delay_seconds=120)
+@task(
+    name="Train PPO",
+    retries=1,
+    retry_delay_seconds=120,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def train_ppo() -> TrainingResponse:
     """Train the PPO reinforcement learning allocator."""
     logger = get_run_logger()
@@ -129,7 +161,14 @@ def train_ppo() -> TrainingResponse:
     return result
 
 
-@task(name="Train SAC", retries=1, retry_delay_seconds=120)
+@task(
+    name="Train SAC",
+    retries=1,
+    retry_delay_seconds=120,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def train_sac() -> TrainingResponse:
     """Train the SAC reinforcement learning allocator."""
     logger = get_run_logger()
@@ -147,7 +186,14 @@ def train_sac() -> TrainingResponse:
     return result
 
 
-@task(name="Generate Training Summary", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate Training Summary",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_training_summary(
     lstm: TrainingResponse,
     patchtst: TrainingResponse,

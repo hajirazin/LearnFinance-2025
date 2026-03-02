@@ -1,6 +1,9 @@
 """Summary generation and email reporting tasks."""
 
+from datetime import timedelta
+
 from prefect import task
+from prefect.cache_policies import INPUTS
 from prefect.logging import get_run_logger
 
 from flows.models import (
@@ -18,6 +21,8 @@ from flows.models import (
     WeeklySummaryResponse,
 )
 from flows.tasks.client import get_client
+
+WEEKLY_CACHE_TTL = timedelta(days=7)
 
 
 def _alloc_to_dict(alloc, is_hrp: bool = False, as_of_date: str = "") -> dict:
@@ -53,7 +58,14 @@ def _submit_to_dict(submit) -> dict:
     }
 
 
-@task(name="Generate Summary", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate Summary",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_summary(
     lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
@@ -142,7 +154,14 @@ def send_weekly_email(
 # =============================================================================
 
 
-@task(name="Generate India Summary", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate India Summary",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_india_summary(
     hrp: HRPAllocationResponse,
 ) -> WeeklySummaryResponse:

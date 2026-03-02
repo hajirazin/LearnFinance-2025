@@ -356,14 +356,18 @@ Any implementation must include:
 
 All Prefect flows must include:
 
-- **`persist_result=True`** at the flow level: enables result persistence for all tasks, allowing flows to resume from failure point instead of restarting from scratch
+- **`persist_result=True`** at the flow level: enables result persistence for all tasks. By itself this does **not** skip already-completed tasks on re-run; results are scoped to the flow run ID unless a cache policy is set.
 - **Task-level retries**: critical tasks (especially external API calls) should have `retries` configured
 - **Retry delays**: use `retry_delay_seconds` to avoid hammering failing services
 
-Note: Prefect 3 does not have a "retry single task" button in the UI. To retry a failed task:
-1. Re-run the entire flow (fast if tasks are idempotent/cached)
-2. Call the underlying API endpoint directly
-3. Use `persist_result=True` to skip already-completed tasks on re-run
+**Cross-run caching (resume from failure):** To skip already-completed tasks when you re-run a failed flow, tasks must use `cache_policy=INPUTS` and `cache_expiration=timedelta(days=7)` (or similar). Cached results are stored on disk at `~/.prefect/storage/` and reused when inputs match within the expiration window.
+
+- **Cached tasks** (deterministic, no side effects): signals/forecasts (get_fundamentals, get_news_sentiment, get_lstm_forecast, get_patchtst_forecast), get_active_symbols, get_halal_india_universe, infer_ppo/sac, allocate_hrp, generate_orders_*, generate_summary, generate_india_summary, training tasks (refresh_training_data, train_*, generate_training_summary). These are given `persist_result=True`, `cache_policy=INPUTS`, `cache_expiration=WEEKLY_CACHE_TTL`.
+- **Not cached** (side effects or need fresh data): get_ppo/sac/hrp_portfolio (live state), submit_orders_*, get_order_history_*, store_experience_*, update_execution_*, send_*_email. Stale cache would break skip logic or duplicate side effects.
+
+Note: Prefect 3 does not have a "retry single task" button in the UI. To retry after failure:
+1. Re-run the entire flow; cached tasks skip automatically
+2. Call the underlying brain_api endpoint directly for a single step
 
 ## Change safety checklists
 

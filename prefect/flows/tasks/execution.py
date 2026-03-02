@@ -1,6 +1,9 @@
 """Order generation and experience management tasks."""
 
+from datetime import timedelta
+
 from prefect import task
+from prefect.cache_policies import INPUTS
 from prefect.logging import get_run_logger
 
 from flows.models import (
@@ -21,12 +24,21 @@ from flows.models import (
 )
 from flows.tasks.client import get_client
 
+WEEKLY_CACHE_TTL = timedelta(days=7)
+
 # =============================================================================
 # Order Generation Tasks
 # =============================================================================
 
 
-@task(name="Generate Orders PPO", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate Orders PPO",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_orders_ppo(
     allocation: PPOInferenceResponse | SkippedAllocation,
     portfolio: AlpacaPortfolioResponse,
@@ -66,7 +78,14 @@ def generate_orders_ppo(
     return result
 
 
-@task(name="Generate Orders SAC", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate Orders SAC",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_orders_sac(
     allocation: SACInferenceResponse | SkippedAllocation,
     portfolio: AlpacaPortfolioResponse,
@@ -106,7 +125,14 @@ def generate_orders_sac(
     return result
 
 
-@task(name="Generate Orders HRP", retries=1, retry_delay_seconds=30)
+@task(
+    name="Generate Orders HRP",
+    retries=1,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def generate_orders_hrp(
     allocation: HRPAllocationResponse | SkippedAllocation,
     portfolio: AlpacaPortfolioResponse,

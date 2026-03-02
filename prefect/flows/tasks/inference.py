@@ -1,6 +1,9 @@
 """Signals, forecasts, and allocator tasks."""
 
+from datetime import timedelta
+
 from prefect import task
+from prefect.cache_policies import INPUTS
 from prefect.logging import get_run_logger
 
 from flows.models import (
@@ -15,12 +18,21 @@ from flows.models import (
 )
 from flows.tasks.client import get_client
 
+WEEKLY_CACHE_TTL = timedelta(days=7)
+
 # =============================================================================
 # Signals + Forecasts Tasks
 # =============================================================================
 
 
-@task(name="Get Fundamentals", retries=2, retry_delay_seconds=30)
+@task(
+    name="Get Fundamentals",
+    retries=2,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_fundamentals(symbols: list[str]) -> FundamentalsResponse:
     """Fetch fundamental data for symbols."""
     logger = get_run_logger()
@@ -36,7 +48,14 @@ def get_fundamentals(symbols: list[str]) -> FundamentalsResponse:
     return result
 
 
-@task(name="Get News Sentiment", retries=2, retry_delay_seconds=60)
+@task(
+    name="Get News Sentiment",
+    retries=2,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_news_sentiment(
     symbols: list[str], as_of_date: str, run_id: str
 ) -> NewsSignalResponse:
@@ -63,7 +82,14 @@ def get_news_sentiment(
     return result
 
 
-@task(name="Get LSTM Forecast", retries=2, retry_delay_seconds=60)
+@task(
+    name="Get LSTM Forecast",
+    retries=2,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_lstm_forecast(as_of_date: str) -> LSTMInferenceResponse:
     """Get LSTM price predictions. Symbols resolved by brain_api from model metadata."""
     logger = get_run_logger()
@@ -85,7 +111,14 @@ def get_lstm_forecast(as_of_date: str) -> LSTMInferenceResponse:
     return result
 
 
-@task(name="Get PatchTST Forecast", retries=2, retry_delay_seconds=60)
+@task(
+    name="Get PatchTST Forecast",
+    retries=2,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_patchtst_forecast(as_of_date: str) -> PatchTSTInferenceResponse:
     """Get PatchTST price predictions.
 
@@ -115,7 +148,14 @@ def get_patchtst_forecast(as_of_date: str) -> PatchTSTInferenceResponse:
 # =============================================================================
 
 
-@task(name="Get Halal India Universe", retries=2, retry_delay_seconds=30)
+@task(
+    name="Get Halal India Universe",
+    retries=2,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def get_halal_india_universe() -> dict:
     """Validate and fetch the halal_india universe from NSE Nifty 500 Shariah."""
     logger = get_run_logger()
@@ -139,7 +179,14 @@ def get_halal_india_universe() -> dict:
 # =============================================================================
 
 
-@task(name="Infer PPO", retries=1, retry_delay_seconds=60)
+@task(
+    name="Infer PPO",
+    retries=1,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def infer_ppo(
     portfolio: AlpacaPortfolioResponse, as_of_date: str
 ) -> PPOInferenceResponse:
@@ -169,7 +216,14 @@ def infer_ppo(
     return result
 
 
-@task(name="Infer SAC", retries=1, retry_delay_seconds=60)
+@task(
+    name="Infer SAC",
+    retries=1,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def infer_sac(
     portfolio: AlpacaPortfolioResponse, as_of_date: str
 ) -> SACInferenceResponse:
@@ -199,7 +253,14 @@ def infer_sac(
     return result
 
 
-@task(name="Allocate HRP", retries=1, retry_delay_seconds=60)
+@task(
+    name="Allocate HRP",
+    retries=1,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
 def allocate_hrp(
     as_of_date: str, universe: str = "halal_filtered"
 ) -> HRPAllocationResponse:
