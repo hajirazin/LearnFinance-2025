@@ -47,20 +47,19 @@ def get_halal_new_stocks() -> dict:
 
 @router.get("/halal_filtered")
 def get_halal_filtered_stocks() -> dict:
-    """Get the Halal_Filtered stock universe (top 15 factor-scored).
+    """Get the Halal_Filtered stock universe (top 15 by PatchTST predicted return).
 
-    Takes the halal_new base (~410 stocks), applies junk filter
-    (ROE > 0, Price > SMA200, Beta < 2) and factor scoring
-    (0.4*Momentum + 0.3*Quality + 0.3*Value), returns top 15.
+    Takes the halal_new base (~410 stocks), runs PatchTST inference on all,
+    returns top 15 by predicted weekly return.
 
-    First call of each month fetches live yfinance data (~7 minutes).
+    First call of each month runs PatchTST inference (may take several minutes).
     Subsequent calls in the same month are served from cache.
     """
     from brain_api.main import shutdown_event
 
     try:
         return get_halal_filtered_universe(shutdown_event=shutdown_event)
-    except YFinanceFetchError as e:
+    except ValueError as e:
         logger.error(f"Halal filtered universe build failed: {e}")
         raise HTTPException(status_code=503, detail=str(e)) from e
 

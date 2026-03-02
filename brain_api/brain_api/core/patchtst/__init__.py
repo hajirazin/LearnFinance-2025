@@ -24,9 +24,11 @@ from brain_api.core.patchtst.dataset import DatasetResult, build_dataset
 
 # Inference
 from brain_api.core.patchtst.inference import (
+    BatchInferenceResult,
     InferenceFeatures,
     SymbolPrediction,
     build_inference_features,
+    run_batch_inference,
     run_inference,
 )
 
@@ -40,27 +42,23 @@ from brain_api.core.training_utils import evaluate_for_promotion, get_device
 
 __all__ = [
     "DEFAULT_CONFIG",
-    # Dataset
+    "BatchInferenceResult",
     "DatasetResult",
-    # Inference
     "InferenceFeatures",
-    # Config
     "PatchTSTConfig",
     "SymbolPrediction",
-    # Training
     "TrainingResult",
-    # Shared utilities (backward compat)
     "WeekBoundaries",
     "align_multivariate_data",
     "build_dataset",
     "build_inference_features",
-    # Version
     "compute_version",
     "compute_week_boundaries",
     "evaluate_for_promotion",
     "extract_trading_weeks",
     "get_device",
     "load_prices_yfinance",
+    "run_batch_inference",
     "run_inference",
     "train_model_pytorch",
 ]

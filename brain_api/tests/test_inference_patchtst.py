@@ -3,13 +3,13 @@
 import tempfile
 
 import numpy as np
-import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
 from brain_api.core.patchtst import DEFAULT_CONFIG, PatchTSTConfig
+from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
 from brain_api.main import app
 from brain_api.routes.inference import get_patchtst_storage
 from brain_api.storage.local import PatchTSTModelStorage
@@ -17,6 +17,8 @@ from brain_api.storage.local import PatchTSTModelStorage
 # ============================================================================
 # Test fixtures and mocks
 # ============================================================================
+
+MOCK_VERSION = "v2025-01-01-patchtest"
 
 
 def create_mock_patchtst_artifacts(
@@ -26,21 +28,16 @@ def create_mock_patchtst_artifacts(
 
     Returns the version string.
     """
-    version = "v2025-01-01-patchtest"
-
-    # Create a dummy model
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
 
-    # Create a fitted scaler (fit on dummy data -- diagnostic only, not used for model normalization)
     scaler = StandardScaler()
-    dummy_data = np.random.randn(100, 5)  # 5 OHLCV channels
+    dummy_data = np.random.randn(100, 5)
     scaler.fit(dummy_data)
 
-    # Create metadata
     metadata = {
         "model_type": "patchtst",
-        "version": version,
+        "version": MOCK_VERSION,
         "training_timestamp": "2025-01-01T00:00:00+00:00",
         "data_window": {"start": "2020-01-01", "end": "2025-01-01"},
         "symbols": ["AAPL", "MSFT"],
@@ -50,51 +47,38 @@ def create_mock_patchtst_artifacts(
         "prior_version": None,
     }
 
-    # Write artifacts
     storage.write_artifacts(
-        version=version,
+        version=MOCK_VERSION,
         model=model,
         feature_scaler=scaler,
         config=config,
         metadata=metadata,
     )
+    storage.promote_version(MOCK_VERSION)
 
-    # Promote to current
-    storage.promote_version(version)
-
-    return version
+    return MOCK_VERSION
 
 
-def mock_price_loader(symbols, start_date, end_date):
-    """Return mock price data for testing."""
-    prices = {}
-
-    date_range = pd.bdate_range(start=start_date, end=end_date)
-
-    for symbol in symbols:
-        if len(date_range) < 10:
-            continue
-
-        np.random.seed(hash(symbol) % 2**32)
-        base_price = 100.0
-        returns = np.random.randn(len(date_range)) * 0.02
-        prices_array = base_price * np.exp(np.cumsum(returns))
-
-        df = pd.DataFrame(
-            {
-                "open": prices_array * (1 + np.random.randn(len(date_range)) * 0.005),
-                "high": prices_array
-                * (1 + np.abs(np.random.randn(len(date_range)) * 0.01)),
-                "low": prices_array
-                * (1 - np.abs(np.random.randn(len(date_range)) * 0.01)),
-                "close": prices_array,
-                "volume": np.random.randint(1000000, 10000000, len(date_range)),
-            },
-            index=date_range,
+def _make_mock_batch_result(symbols: list[str]) -> BatchInferenceResult:
+    """Build a BatchInferenceResult with realistic predictions."""
+    predictions = []
+    for i, sym in enumerate(symbols):
+        weekly_ret = round(2.5 - i * 1.0, 4)
+        predictions.append(
+            SymbolPrediction(
+                symbol=sym,
+                predicted_weekly_return_pct=weekly_ret,
+                direction="UP" if weekly_ret > 0 else "DOWN",
+                has_enough_history=True,
+                history_days_used=120,
+                data_end_date="2025-01-03",
+                target_week_start="2025-01-06",
+                target_week_end="2025-01-10",
+                daily_returns=[0.004, 0.003, -0.001, 0.002, 0.001],
+            )
         )
-        prices[symbol] = df
-
-    return prices
+    predictions.sort(key=lambda p: p.predicted_weekly_return_pct or 0, reverse=True)
+    return BatchInferenceResult(predictions=predictions, model_version=MOCK_VERSION)
 
 
 @pytest.fixture
@@ -109,18 +93,18 @@ def temp_storage():
 @pytest.fixture
 def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies."""
-    # Override storage dependency
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
 
-    # Monkeypatch the data loaders in the inference module
     from brain_api.routes.inference import patchtst as inference_module
 
-    monkeypatch.setattr(inference_module, "patchtst_load_prices", mock_price_loader)
+    def mock_run_batch(symbols, cutoff_date, storage=None):
+        return _make_mock_batch_result(symbols)
+
+    monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
 
     client = TestClient(app)
     yield client
 
-    # Cleanup
     app.dependency_overrides.clear()
 
 

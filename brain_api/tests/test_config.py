@@ -181,11 +181,11 @@ class TestUniverseType:
 class TestGetForecasterTrainUniverse:
     """Tests for get_forecaster_train_universe function."""
 
-    def test_default_returns_halal(self) -> None:
-        """Default should be HALAL when no env var set."""
+    def test_default_returns_halal_new(self) -> None:
+        """Default should be HALAL_NEW when no env var set."""
         with patch.dict(os.environ, {}, clear=True):
             result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
+        assert result == UniverseType.HALAL_NEW
 
     def test_halal_from_env(self) -> None:
         """FORECASTER_TRAIN_UNIVERSE=halal returns HALAL."""

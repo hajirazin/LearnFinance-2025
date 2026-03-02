@@ -1,13 +1,15 @@
 """Weekly training workflow for LearnFinance-2025.
 
 This flow runs every Sunday at 11 AM UTC and executes the full training pipeline:
-1. Refresh training data (brain_api resolves symbols from ETL_UNIVERSE config)
-2. Train LSTM (pure price forecaster)
-3. Train PatchTST (OHLCV forecaster)
-4. Train PPO (RL allocator)
-5. Train SAC (RL allocator)
-6. Generate training summary (LLM-powered analysis)
-7. Send training summary email
+1. Fetch halal_new universe (~410 symbols, fail fast if scraping broken)
+2. Train LSTM (pure price forecaster on all ~410 halal_new)
+3. Train PatchTST (OHLCV forecaster on all ~410 halal_new)
+4. Fetch halal_filtered universe (PatchTST forecast -> top 15)
+5. Refresh training data (signals for filtered 15 only)
+6. Train PPO (RL allocator on filtered 15)
+7. Train SAC (RL allocator on filtered 15)
+8. Generate training summary (LLM-powered analysis)
+9. Send training summary email
 """
 
 import os
@@ -29,10 +31,10 @@ from flows.models import (
 # Configuration
 BRAIN_API_URL = os.environ.get("BRAIN_API_URL", "http://localhost:8000")
 
-# Timeout settings (training can take 30+ minutes)
+# Timeout settings (training on 400+ symbols can take several hours)
 DEFAULT_TIMEOUT = httpx.Timeout(
     connect=30.0,
-    read=3600.0,  # 1 hour read timeout for long-running training
+    read=28800.0,  # 8 hour read timeout for long-running training
     write=30.0,
     pool=30.0,
 )
@@ -83,6 +85,55 @@ def refresh_training_data() -> RefreshTrainingDataResponse:
         f"{len(result.fundamentals_refreshed)} fundamentals refreshed"
     )
     return result
+
+
+@task(
+    name="Fetch Halal New Universe",
+    retries=2,
+    retry_delay_seconds=30,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
+def fetch_halal_new_universe() -> dict:
+    """GET /universe/halal_new -- populate cache, fail fast if scraping broken."""
+    logger = get_run_logger()
+    logger.info("Fetching halal_new universe (all ~410 symbols)...")
+
+    with get_client() as client:
+        response = client.get("/universe/halal_new")
+        response.raise_for_status()
+        data = response.json()
+
+    total = data.get("total_stocks", len(data.get("stocks", [])))
+    logger.info(f"Halal_new universe fetched: {total} stocks")
+    return data
+
+
+@task(
+    name="Fetch Halal Filtered Universe",
+    retries=1,
+    retry_delay_seconds=60,
+    persist_result=True,
+    cache_policy=INPUTS,
+    cache_expiration=WEEKLY_CACHE_TTL,
+)
+def fetch_halal_filtered_universe() -> dict:
+    """GET /universe/halal_filtered -- triggers PatchTST inference on cache miss."""
+    logger = get_run_logger()
+    logger.info("Fetching halal_filtered universe (PatchTST forecast -> top 15)...")
+
+    with get_client() as client:
+        response = client.get("/universe/halal_filtered")
+        response.raise_for_status()
+        data = response.json()
+
+    stocks = data.get("stocks", [])
+    model_version = data.get("model_version", "unknown")
+    logger.info(
+        f"Halal_filtered universe fetched: {len(stocks)} stocks (model {model_version})"
+    )
+    return data
 
 
 @task(
@@ -359,31 +410,33 @@ def send_training_summary_email(
     name="Weekly Training Pipeline",
     description="Full training pipeline for all models (LSTM, PatchTST, PPO, SAC)",
     retries=0,
-    timeout_seconds=14400,  # 4 hours total timeout
+    timeout_seconds=115200,  # 32 hours total timeout
     persist_result=True,  # Persist task results to allow resume from failure
 )
 def weekly_training_flow() -> dict:
     """Execute the full weekly training pipeline.
 
-    Each brain_api endpoint resolves its own symbols internally:
-    - ETL refresh: from ETL_UNIVERSE config
-    - LSTM/PatchTST training: from FORECASTER_TRAIN_UNIVERSE config
-    - PPO/SAC training: from RL_TRAIN_UNIVERSE config
-
-    Training steps run serially (LSTM → PatchTST → PPO → SAC) to limit peak RAM.
-
-    Flow diagram (dependencies):
+    Flow diagram:
     ```
-    refresh_training_data
+    fetch_halal_new_universe
            │
            ▼
-      train_lstm → train_patchtst → train_ppo → train_sac
-                  │
-                  ▼
-    generate_training_summary
-                  │
-                  ▼
-    send_training_summary_email
+      train_lstm → train_patchtst
+                        │
+                        ▼
+              fetch_halal_filtered_universe (PatchTST forecast -> top 15)
+                        │
+                        ▼
+              refresh_training_data (signals for filtered 15)
+                        │
+                        ▼
+                  train_ppo → train_sac
+                        │
+                        ▼
+              generate_training_summary
+                        │
+                        ▼
+              send_training_summary_email
     ```
 
     Returns:
@@ -392,16 +445,24 @@ def weekly_training_flow() -> dict:
     logger = get_run_logger()
     logger.info("Starting weekly training pipeline...")
 
-    # Step 1: Refresh training data (brain_api resolves symbols from ETL_UNIVERSE)
-    refresh_result = refresh_training_data()
+    # Step 1: Fetch halal_new universe (ensure ~410 symbols cached, fail fast)
+    halal_new_result = fetch_halal_new_universe()
 
-    # Steps 2–5: Train models serially to limit peak RAM (LSTM → PatchTST → PPO → SAC)
+    # Steps 2-3: Train forecasters on all ~410 halal_new symbols
     lstm_result = train_lstm()
     patchtst_result = train_patchtst()
+
+    # Step 4: Fetch halal_filtered (PatchTST forecast -> top 15)
+    filtered_result = fetch_halal_filtered_universe()
+
+    # Step 5: Refresh training data (signals for filtered 15 only)
+    refresh_result = refresh_training_data()
+
+    # Steps 6-7: Train RL allocators on filtered 15
     ppo_result = train_ppo()
     sac_result = train_sac()
 
-    # Step 7: Generate training summary using LLM
+    # Step 8: Generate training summary using LLM
     summary_result = generate_training_summary(
         lstm=lstm_result,
         patchtst=patchtst_result,
@@ -409,7 +470,7 @@ def weekly_training_flow() -> dict:
         sac=sac_result,
     )
 
-    # Step 8: Send training summary email
+    # Step 9: Send training summary email
     email_result = send_training_summary_email(
         lstm=lstm_result,
         patchtst=patchtst_result,
@@ -421,14 +482,24 @@ def weekly_training_flow() -> dict:
     logger.info("Weekly training pipeline complete!")
 
     return {
-        "refresh": {
-            "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
-            "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),
+        "halal_new": {
+            "total_stocks": halal_new_result.get(
+                "total_stocks", len(halal_new_result.get("stocks", []))
+            ),
         },
         "lstm": {"version": lstm_result.version, "promoted": lstm_result.promoted},
         "patchtst": {
             "version": patchtst_result.version,
             "promoted": patchtst_result.promoted,
+        },
+        "filtered": {
+            "stocks": len(filtered_result.get("stocks", [])),
+            "model_version": filtered_result.get("model_version"),
+            "selection_method": filtered_result.get("selection_method"),
+        },
+        "refresh": {
+            "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
+            "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),
         },
         "ppo": {"version": ppo_result.version, "promoted": ppo_result.promoted},
         "sac": {"version": sac_result.version, "promoted": sac_result.promoted},

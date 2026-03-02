@@ -8,8 +8,12 @@ Extract close_ret channel for weekly return prediction. NO inverse-transform
 needed.
 """
 
+from __future__ import annotations
+
+import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -18,9 +22,14 @@ from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
 from brain_api.core.features import compute_ohlcv_log_returns
-from brain_api.core.inference_utils import WeekBoundaries
+from brain_api.core.inference_utils import WeekBoundaries, compute_week_from_cutoff
 from brain_api.core.model_types import classify_direction
 from brain_api.core.patchtst.config import PatchTSTConfig
+
+if TYPE_CHECKING:
+    from brain_api.storage.local import PatchTSTModelStorage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -251,3 +260,108 @@ def run_inference(
         )
 
     return predictions
+
+
+@dataclass
+class BatchInferenceResult:
+    """Result of batch PatchTST inference across multiple symbols."""
+
+    predictions: list[SymbolPrediction]
+    model_version: str
+
+
+def run_batch_inference(
+    symbols: list[str],
+    cutoff_date: date,
+    storage: PatchTSTModelStorage | None = None,
+) -> BatchInferenceResult:
+    """Run PatchTST inference on arbitrary symbols (OHLCV only).
+
+    End-to-end pipeline: load model -> fetch prices -> build features -> run model.
+    Predictions are sorted by predicted_weekly_return_pct descending.
+
+    Args:
+        symbols: Ticker symbols to run inference on.
+        cutoff_date: Friday cutoff date. Target week is the week AFTER this Friday.
+        storage: Optional PatchTST storage (defaults to PatchTSTModelStorage()).
+
+    Returns:
+        BatchInferenceResult with sorted predictions and model version.
+
+    Raises:
+        ValueError: If no current PatchTST model is promoted.
+    """
+    from brain_api.core.prices import load_prices_yfinance
+    from brain_api.storage.local import PatchTSTModelStorage as _DefaultStorage
+
+    if storage is None:
+        storage = _DefaultStorage()
+
+    version = storage.read_current_version()
+    if not version:
+        raise ValueError("No current PatchTST model version available")
+
+    artifacts = storage.load_current_artifacts()
+    config = artifacts.config
+
+    week_boundaries = compute_week_from_cutoff(cutoff_date)
+    logger.info(
+        f"[PatchTST batch] {len(symbols)} symbols, "
+        f"cutoff={cutoff_date}, target={week_boundaries.target_week_start}..{week_boundaries.target_week_end}"
+    )
+
+    buffer_days = config.context_length * 2 + 30
+    data_start = week_boundaries.target_week_start - timedelta(days=buffer_days)
+    data_end = week_boundaries.target_week_start - timedelta(days=1)
+
+    prices = load_prices_yfinance(symbols, data_start, data_end)
+
+    features_list: list[InferenceFeatures] = []
+    for symbol in symbols:
+        prices_df = prices.get(symbol)
+        if prices_df is None or prices_df.empty:
+            features_list.append(
+                InferenceFeatures(
+                    symbol=symbol,
+                    features=None,
+                    has_enough_history=False,
+                    history_days_used=0,
+                    data_end_date=None,
+                    starting_price=None,
+                )
+            )
+        else:
+            features_list.append(
+                build_inference_features(
+                    symbol=symbol,
+                    prices_df=prices_df,
+                    config=config,
+                    cutoff_date=week_boundaries.target_week_start,
+                )
+            )
+
+    predictions = run_inference(
+        model=artifacts.model,
+        feature_scaler=artifacts.feature_scaler,
+        features_list=features_list,
+        week_boundaries=week_boundaries,
+        config=config,
+    )
+
+    valid = [p for p in predictions if p.predicted_weekly_return_pct is not None]
+    invalid = [p for p in predictions if p.predicted_weekly_return_pct is None]
+    sorted_predictions = (
+        sorted(
+            valid,
+            key=lambda p: p.predicted_weekly_return_pct,  # type: ignore[arg-type]
+            reverse=True,
+        )
+        + invalid
+    )
+
+    logger.info(f"[PatchTST batch] Done: {len(valid)} valid / {len(symbols)} total")
+
+    return BatchInferenceResult(
+        predictions=sorted_predictions,
+        model_version=artifacts.version,
+    )

@@ -415,28 +415,35 @@ def _make_mock_halal_new_universe(count: int = 20) -> dict:
     }
 
 
-def _make_mock_metrics(symbols: list[str]) -> dict[str, dict]:
-    """Create mock metrics where all stocks pass the junk filter."""
-    metrics = {}
-    for i, sym in enumerate(symbols):
-        metrics[sym] = {
-            "roe": 0.15 + i * 0.01,
-            "price": 150.0 + i,
-            "sma200": 140.0,
-            "beta": 1.0 + i * 0.02,
-            "gross_margin": 0.4 + i * 0.005,
-            "roic": 0.12 + i * 0.005,
-            "earnings_yield": 0.05 + i * 0.002,
-            "six_month_return": 0.08 + i * 0.01,
-        }
-    return metrics
+def _make_mock_batch_inference_result(symbols: list[str]):
+    """Create a mock BatchInferenceResult for testing halal_filtered."""
+    from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
+
+    predictions = [
+        SymbolPrediction(
+            symbol=sym,
+            predicted_weekly_return_pct=round(5.0 - i * 0.3, 4),
+            direction="UP" if (5.0 - i * 0.3) > 0 else "DOWN",
+            has_enough_history=True,
+            history_days_used=120,
+            data_end_date="2026-02-27",
+            target_week_start="2026-03-02",
+            target_week_end="2026-03-06",
+        )
+        for i, sym in enumerate(symbols)
+    ]
+    # Sort desc (mimics run_batch_inference)
+    predictions.sort(key=lambda p: p.predicted_weekly_return_pct or 0, reverse=True)
+    return BatchInferenceResult(
+        predictions=predictions, model_version="v2026-03-01-abc123"
+    )
 
 
 def test_get_halal_filtered_returns_expected_structure():
     """Test that /universe/halal_filtered returns the expected structure."""
     mock_universe = _make_mock_halal_new_universe()
-    mock_symbols = [s["symbol"] for s in mock_universe["stocks"]]
-    mock_metrics = _make_mock_metrics(mock_symbols)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
 
     with (
         patch(
@@ -444,8 +451,8 @@ def test_get_halal_filtered_returns_expected_structure():
             return_value=mock_universe,
         ),
         patch(
-            "brain_api.universe.halal_filtered.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_filtered")
@@ -454,18 +461,20 @@ def test_get_halal_filtered_returns_expected_structure():
     data = response.json()
 
     assert "stocks" in data
-    assert "total_before_filter" in data
-    assert "total_after_filter" in data
-    assert "total_scored" in data
+    assert "total_candidates" in data
+    assert "total_universe" in data
     assert "top_n" in data
+    assert "selection_method" in data
+    assert data["selection_method"] == "patchtst_forecast"
+    assert "model_version" in data
     assert "fetched_at" in data
 
 
 def test_get_halal_filtered_returns_max_15_stocks():
     """Test that /universe/halal_filtered returns at most 15 stocks."""
     mock_universe = _make_mock_halal_new_universe(count=25)
-    mock_symbols = [s["symbol"] for s in mock_universe["stocks"]]
-    mock_metrics = _make_mock_metrics(mock_symbols)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
 
     with (
         patch(
@@ -473,8 +482,8 @@ def test_get_halal_filtered_returns_max_15_stocks():
             return_value=mock_universe,
         ),
         patch(
-            "brain_api.universe.halal_filtered.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_filtered")
@@ -486,11 +495,11 @@ def test_get_halal_filtered_returns_max_15_stocks():
     assert data["top_n"] == 15
 
 
-def test_get_halal_filtered_stocks_have_factor_scores():
-    """Test that each halal_filtered stock has factor_score and factor_components."""
+def test_get_halal_filtered_stocks_have_predicted_returns():
+    """Test that each halal_filtered stock has predicted_weekly_return_pct and rank."""
     mock_universe = _make_mock_halal_new_universe()
-    mock_symbols = [s["symbol"] for s in mock_universe["stocks"]]
-    mock_metrics = _make_mock_metrics(mock_symbols)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
 
     with (
         patch(
@@ -498,8 +507,8 @@ def test_get_halal_filtered_stocks_have_factor_scores():
             return_value=mock_universe,
         ),
         patch(
-            "brain_api.universe.halal_filtered.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_filtered")
@@ -508,14 +517,14 @@ def test_get_halal_filtered_stocks_have_factor_scores():
     data = response.json()
 
     for stock in data["stocks"]:
-        assert "factor_score" in stock
-        assert "factor_components" in stock
-        assert "metrics" in stock
-        assert stock["factor_score"] is not None
+        assert "predicted_weekly_return_pct" in stock
+        assert "rank" in stock
+        assert stock["predicted_weekly_return_pct"] is not None
+        assert stock["rank"] >= 1
 
 
-def test_get_halal_filtered_returns_503_on_yfinance_failure():
-    """Test that /universe/halal_filtered returns 503 when yfinance rate-limits us."""
+def test_get_halal_filtered_returns_503_when_no_model():
+    """Test that /universe/halal_filtered returns 503 when no PatchTST model."""
     mock_universe = _make_mock_halal_new_universe()
 
     with (
@@ -524,15 +533,122 @@ def test_get_halal_filtered_returns_503_on_yfinance_failure():
             return_value=mock_universe,
         ),
         patch(
-            "brain_api.universe.halal_filtered.fetch_stock_metrics",
-            side_effect=YFinanceFetchError("18/20 failed (90.0%)"),
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            side_effect=ValueError("No current PatchTST model version available"),
         ),
     ):
         response = client.get("/universe/halal_filtered")
 
     assert response.status_code == 503
     data = response.json()
-    assert "18/20" in data["detail"]
+    assert "PatchTST" in data["detail"]
+
+
+def test_get_halal_filtered_sorted_by_return_desc():
+    """Test that top N stocks are sorted by predicted return (highest first)."""
+    mock_universe = _make_mock_halal_new_universe()
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    data = response.json()
+    returns = [s["predicted_weekly_return_pct"] for s in data["stocks"]]
+    assert returns == sorted(returns, reverse=True)
+
+
+def test_get_halal_filtered_excludes_none_predictions():
+    """Test that predictions with None return are excluded from results."""
+    from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
+
+    mock_universe = _make_mock_halal_new_universe(count=5)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+
+    predictions = [
+        SymbolPrediction(
+            symbol=symbols[0],
+            predicted_weekly_return_pct=2.5,
+            direction="UP",
+            has_enough_history=True,
+            history_days_used=120,
+            data_end_date="2026-02-27",
+            target_week_start="2026-03-02",
+            target_week_end="2026-03-06",
+        ),
+        SymbolPrediction(
+            symbol=symbols[1],
+            predicted_weekly_return_pct=None,
+            direction="FLAT",
+            has_enough_history=False,
+            history_days_used=10,
+            data_end_date=None,
+            target_week_start="2026-03-02",
+            target_week_end="2026-03-06",
+        ),
+        SymbolPrediction(
+            symbol=symbols[2],
+            predicted_weekly_return_pct=1.0,
+            direction="UP",
+            has_enough_history=True,
+            history_days_used=120,
+            data_end_date="2026-02-27",
+            target_week_start="2026-03-02",
+            target_week_end="2026-03-06",
+        ),
+    ]
+    mock_result = BatchInferenceResult(
+        predictions=predictions, model_version="v2026-03-01-abc123"
+    )
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    data = response.json()
+    result_symbols = [s["symbol"] for s in data["stocks"]]
+    assert symbols[1] not in result_symbols
+    assert data["total_candidates"] == 2
+
+
+def test_get_halal_filtered_fewer_than_15_valid():
+    """Test that if fewer than 15 valid predictions, all valid are returned."""
+    mock_universe = _make_mock_halal_new_universe(count=5)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    data = response.json()
+    assert len(data["stocks"]) == 5
+    assert data["total_candidates"] == 5
 
 
 # ============================================================================

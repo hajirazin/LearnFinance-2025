@@ -147,73 +147,21 @@ class PatchTSTForecaster(BaseForecaster):
         Returns:
             Dict mapping symbol -> predicted weekly return (decimal)
         """
-        from brain_api.core.lstm import compute_week_boundaries
-        from brain_api.core.patchtst import (
-            InferenceFeatures,
-            build_inference_features,
-            load_prices_yfinance,
-            run_inference,
-        )
-        from brain_api.storage.local import PatchTSTModelStorage
+        from brain_api.core.config import resolve_cutoff_date
+        from brain_api.core.patchtst.inference import run_batch_inference
 
         logger.info(
             f"[PatchTSTForecaster] Building forecasts for {len(symbols)} symbols"
         )
 
-        # Initialize with zeros (fallback)
         forecasts: dict[str, float] = dict.fromkeys(symbols, 0.0)
 
         try:
-            # Load model
-            storage = PatchTSTModelStorage()
-            artifacts = storage.load_current_artifacts()
-            config = artifacts.config
+            cutoff_date = resolve_cutoff_date(as_of_date)
+            batch_result = run_batch_inference(symbols, cutoff_date)
 
-            # Compute week boundaries
-            week_boundaries = compute_week_boundaries(as_of_date)
-
-            # Fetch prices
-            buffer_days = config.context_length * 2 + 30
-            data_start = week_boundaries.target_week_start - timedelta(days=buffer_days)
-            data_end = week_boundaries.target_week_start - timedelta(days=1)
-            prices = load_prices_yfinance(symbols, data_start, data_end)
-
-            # Build features (5 OHLCV channels only)
-            features_list = []
-            for symbol in symbols:
-                prices_df = prices.get(symbol)
-                if prices_df is None or prices_df.empty:
-                    features_list.append(
-                        InferenceFeatures(
-                            symbol=symbol,
-                            features=None,
-                            has_enough_history=False,
-                            history_days_used=0,
-                            data_end_date=None,
-                            starting_price=None,
-                        )
-                    )
-                else:
-                    features = build_inference_features(
-                        symbol=symbol,
-                        prices_df=prices_df,
-                        config=config,
-                        cutoff_date=week_boundaries.target_week_start,
-                    )
-                    features_list.append(features)
-
-            # Run inference
-            predictions = run_inference(
-                model=artifacts.model,
-                feature_scaler=artifacts.feature_scaler,
-                features_list=features_list,
-                week_boundaries=week_boundaries,
-                config=config,
-            )
-
-            # Extract forecasts (convert from pct to decimal)
             valid_count = 0
-            for pred in predictions:
+            for pred in batch_result.predictions:
                 if pred.predicted_weekly_return_pct is not None:
                     forecasts[pred.symbol] = pred.predicted_weekly_return_pct / 100.0
                     valid_count += 1

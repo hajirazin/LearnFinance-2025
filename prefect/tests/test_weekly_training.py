@@ -113,22 +113,58 @@ class TestModels:
 class TestFlow:
     """Test the full flow with mocked tasks."""
 
+    @pytest.fixture
+    def mock_halal_new_response(self):
+        """Mock response for halal_new universe endpoint."""
+        return {
+            "stocks": [{"symbol": f"SYM{i}"} for i in range(410)],
+            "total_stocks": 410,
+            "etfs_used": ["SPUS", "SPTE", "SPWO", "HLAL", "UMMA"],
+            "fetched_at": "2026-03-01T00:00:00+00:00",
+        }
+
+    @pytest.fixture
+    def mock_halal_filtered_response(self):
+        """Mock response for halal_filtered universe endpoint."""
+        return {
+            "stocks": [
+                {
+                    "symbol": f"TOP{i}",
+                    "predicted_weekly_return_pct": 5.0 - i * 0.3,
+                    "rank": i + 1,
+                }
+                for i in range(15)
+            ],
+            "total_candidates": 380,
+            "total_universe": 410,
+            "top_n": 15,
+            "selection_method": "patchtst_forecast",
+            "model_version": "v2026-03-01-abc123",
+            "fetched_at": "2026-03-01T00:00:00+00:00",
+        }
+
     @patch("flows.weekly_training.send_training_summary_email")
     @patch("flows.weekly_training.generate_training_summary")
     @patch("flows.weekly_training.train_sac")
     @patch("flows.weekly_training.train_ppo")
+    @patch("flows.weekly_training.refresh_training_data")
+    @patch("flows.weekly_training.fetch_halal_filtered_universe")
     @patch("flows.weekly_training.train_patchtst")
     @patch("flows.weekly_training.train_lstm")
-    @patch("flows.weekly_training.refresh_training_data")
+    @patch("flows.weekly_training.fetch_halal_new_universe")
     def test_weekly_training_flow(
         self,
-        mock_refresh,
+        mock_halal_new,
         mock_lstm,
         mock_patchtst,
+        mock_filtered,
+        mock_refresh,
         mock_ppo,
         mock_sac,
         mock_summary,
         mock_email,
+        mock_halal_new_response,
+        mock_halal_filtered_response,
         mock_refresh_response,
         mock_training_response,
         mock_summary_response,
@@ -136,6 +172,8 @@ class TestFlow:
     ):
         """Test full weekly training flow execution."""
         # Setup mocks
+        mock_halal_new.return_value = mock_halal_new_response
+        mock_filtered.return_value = mock_halal_filtered_response
         mock_refresh.return_value = RefreshTrainingDataResponse(**mock_refresh_response)
 
         training_resp = TrainingResponse(**mock_training_response)
@@ -154,11 +192,14 @@ class TestFlow:
         result = weekly_training_flow()
 
         # Verify result structure
-        assert result["refresh"]["sentiment_gaps_filled"] == 10
-        assert result["refresh"]["fundamentals_refreshed"] == 2
+        assert result["halal_new"]["total_stocks"] == 410
         assert result["lstm"]["version"] == "v1.0.0"
         assert result["lstm"]["promoted"] is True
         assert result["patchtst"]["version"] == "v1.0.0"
+        assert result["filtered"]["stocks"] == 15
+        assert result["filtered"]["selection_method"] == "patchtst_forecast"
+        assert result["refresh"]["sentiment_gaps_filled"] == 10
+        assert result["refresh"]["fundamentals_refreshed"] == 2
         assert result["ppo"]["version"] == "v1.0.0"
         assert result["sac"]["version"] == "v1.0.0"
         assert result["summary"]["provider"] == "openai"
@@ -166,10 +207,12 @@ class TestFlow:
         assert result["email"]["is_success"] is True
         assert "Training Summary" in result["email"]["subject"]
 
-        # Verify task calls -- no universe call, refresh called without symbols
-        mock_refresh.assert_called_once_with()
+        # Verify task calls in correct order
+        mock_halal_new.assert_called_once()
         mock_lstm.assert_called_once()
         mock_patchtst.assert_called_once()
+        mock_filtered.assert_called_once()
+        mock_refresh.assert_called_once_with()
         mock_ppo.assert_called_once()
         mock_sac.assert_called_once()
         mock_summary.assert_called_once()

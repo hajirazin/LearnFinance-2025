@@ -2,27 +2,14 @@
 
 import logging
 import time
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
-from brain_api.core.patchtst import (
-    InferenceFeatures as PatchTSTInferenceFeatures,
-)
-from brain_api.core.patchtst import (
-    build_inference_features as patchtst_build_inference_features,
-)
-from brain_api.core.patchtst import (
-    load_prices_yfinance as patchtst_load_prices,
-)
-from brain_api.core.patchtst import (
-    run_inference as patchtst_run_inference,
-)
+from brain_api.core.patchtst.inference import run_batch_inference
 from brain_api.storage.local import PatchTSTModelStorage
 
 from .dependencies import get_patchtst_as_of_date, get_patchtst_storage
-from .helpers import _load_patchtst_model_artifacts, _sort_patchtst_predictions
 from .models import PatchTSTInferenceRequest, PatchTSTInferenceResponse
 
 router = APIRouter()
@@ -60,124 +47,39 @@ def infer_patchtst(
     logger.info(
         f"[PatchTST] Starting inference for {len(symbols)} symbols (model {version})"
     )
-    logger.info(f"[PatchTST] Symbols: {symbols}")
 
-    # Get cutoff date (always a Friday)
     cutoff_date = get_patchtst_as_of_date(request)
     logger.info(f"[PatchTST] Cutoff date: {cutoff_date}")
 
-    # Compute holiday-aware week boundaries for the week AFTER cutoff
     week_boundaries = compute_week_from_cutoff(cutoff_date)
-    logger.info(
-        f"[PatchTST] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
-    )
 
-    # Load current model artifacts
-    logger.info("[PatchTST] Loading model artifacts...")
-    t0 = time.time()
-    artifacts = _load_patchtst_model_artifacts(storage)
-    t_model = time.time() - t0
-    logger.info(
-        f"[PatchTST] Model loaded in {t_model:.2f}s: version={artifacts.version}"
-    )
+    try:
+        batch_result = run_batch_inference(symbols, cutoff_date, storage)
+    except ValueError as e:
+        raise HTTPException(503, str(e)) from e
 
-    # Calculate data fetch window
-    config = artifacts.config
-    buffer_days = config.context_length * 2 + 30
-    data_start = week_boundaries.target_week_start - timedelta(days=buffer_days)
-    data_end = week_boundaries.target_week_start - timedelta(days=1)
-    logger.info(f"[PatchTST] Data window: {data_start} to {data_end}")
-
-    # Fetch price data for all symbols
-    logger.info(f"[PatchTST] Fetching prices for {len(symbols)} symbols...")
-    t0 = time.time()
-    prices = patchtst_load_prices(symbols, data_start, data_end)
-    t_prices = time.time() - t0
-    logger.info(
-        f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
-    )
-
-    # Build features for each symbol (OHLCV only, no signals)
-    logger.info("[PatchTST] Building feature sequences (OHLCV only)...")
-    t0 = time.time()
-    features_list = []
-    symbols_with_data = 0
-    symbols_missing_data = []
-    for symbol in symbols:
-        prices_df = prices.get(symbol)
-
-        if prices_df is None or prices_df.empty:
-            features_list.append(
-                PatchTSTInferenceFeatures(
-                    symbol=symbol,
-                    features=None,
-                    has_enough_history=False,
-                    history_days_used=0,
-                    data_end_date=None,
-                    starting_price=None,
-                )
-            )
-            symbols_missing_data.append(symbol)
-        else:
-            features = patchtst_build_inference_features(
-                symbol=symbol,
-                prices_df=prices_df,
-                config=config,
-                cutoff_date=week_boundaries.target_week_start,
-            )
-            features_list.append(features)
-            if features.has_enough_history:
-                symbols_with_data += 1
-            else:
-                symbols_missing_data.append(symbol)
-    t_features = time.time() - t0
-    logger.info(
-        f"[PatchTST] Features built in {t_features:.2f}s: {symbols_with_data} symbols ready"
-    )
-    if symbols_missing_data:
-        logger.warning(
-            f"[PatchTST] Symbols with insufficient data: {symbols_missing_data}"
-        )
-
-    # Run inference
-    logger.info("[PatchTST] Running model inference...")
-    t0 = time.time()
-    predictions = patchtst_run_inference(
-        model=artifacts.model,
-        feature_scaler=artifacts.feature_scaler,
-        features_list=features_list,
-        week_boundaries=week_boundaries,
-        config=config,
-    )
-    t_infer = time.time() - t0
-    logger.info(f"[PatchTST] Inference complete in {t_infer:.2f}s")
-
-    # Sort predictions
-    predictions = _sort_patchtst_predictions(predictions)
-
-    signals_used = ["ohlcv"]
-
-    # Summary
+    predictions = batch_result.predictions
     valid_predictions = [
         p for p in predictions if p.predicted_weekly_return_pct is not None
     ]
+
     t_total = time.time() - t_start
     logger.info(
         f"[PatchTST] Request complete: {len(valid_predictions)}/{len(symbols)} predictions in {t_total:.2f}s"
     )
-    logger.info(f"[PatchTST] Signals used: {signals_used}")
     if valid_predictions:
         top = valid_predictions[0]
         bottom = valid_predictions[-1]
         logger.info(
-            f"[PatchTST] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)"
+            f"[PatchTST] Top: {top.symbol} ({top.predicted_weekly_return_pct:+.2f}%), "
+            f"Bottom: {bottom.symbol} ({bottom.predicted_weekly_return_pct:+.2f}%)"
         )
 
     return PatchTSTInferenceResponse(
         predictions=predictions,
-        model_version=artifacts.version,
+        model_version=batch_result.model_version,
         as_of_date=cutoff_date.isoformat(),
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
-        signals_used=signals_used,
+        signals_used=["ohlcv"],
     )

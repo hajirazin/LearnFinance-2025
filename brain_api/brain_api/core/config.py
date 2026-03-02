@@ -45,7 +45,7 @@ class UniverseType(str, Enum):
     HALAL_INDIA = "halal_india"  # Top 15 factor-scored from Nifty 500 Shariah (NSE)
 
 
-DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED
+DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_NEW
 DEFAULT_ETL_UNIVERSE = UniverseType.HALAL_FILTERED
 DEFAULT_RL_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED
 
