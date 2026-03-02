@@ -26,7 +26,7 @@ class LSTMConfig:
 
     # Training
     sequence_length: int = 60  # 60 trading days lookback
-    batch_size: int = 32
+    batch_size: int = 256
     learning_rate: float = 0.001
     epochs: int = 100
     validation_split: float = 0.2

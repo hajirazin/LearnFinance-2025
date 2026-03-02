@@ -38,7 +38,7 @@ class PatchTSTConfig:
     dropout: float = 0.2
 
     # Training
-    batch_size: int = 32
+    batch_size: int = 256
     learning_rate: float = 0.0003
     epochs: int = 100
     validation_split: float = 0.2

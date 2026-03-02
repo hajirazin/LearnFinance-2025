@@ -131,13 +131,19 @@ def train_lstm(
         logger.error("[LSTM] Dataset is empty - cannot train model")
         raise ValueError("No training samples could be built from price data")
 
+    # Extract dataset fields and free intermediate data before training
+    available_symbols = list(prices.keys())
+    X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
+    del dataset, prices
+    gc.collect()
+
     # Train model
     logger.info("[LSTM] Starting model training...")
     t0 = time.time()
     result = trainer(
-        dataset.X,
-        dataset.y,
-        dataset.feature_scaler,
+        X,
+        y,
+        feature_scaler,
         config,
     )
     t_train = time.time() - t0
@@ -252,7 +258,7 @@ def train_lstm(
                 cutoff_date=end_date,
                 data_window_start=start_date.isoformat(),
                 data_window_end=end_date.isoformat(),
-                symbols=list(prices.keys()),
+                symbols=available_symbols,
                 config=config,
                 train_loss=result.train_loss,
                 val_loss=result.val_loss,

@@ -127,16 +127,19 @@ def build_dataset(
 
     if not all_sequences:
         # Return empty arrays if no data
-        empty_X = np.array([]).reshape(0, config.sequence_length, config.input_size)
-        empty_y = np.array([]).reshape(0, 5)
+        empty_X = np.empty(
+            (0, config.sequence_length, config.input_size), dtype=np.float32
+        )
+        empty_y = np.empty((0, 5), dtype=np.float32)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
             feature_scaler=StandardScaler(),
         )
 
-    X = np.array(all_sequences)
-    y = np.array(all_targets)
+    X = np.array(all_sequences, dtype=np.float32)
+    y = np.array(all_targets, dtype=np.float32)
+    del all_sequences, all_targets
 
     # Fit feature scaler on input sequences
     original_shape = X.shape

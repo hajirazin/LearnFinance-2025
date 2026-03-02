@@ -149,16 +149,17 @@ def build_dataset(
     )
 
     if not all_sequences:
-        empty_X = np.array([]).reshape(0, config.context_length, 5)
-        empty_y = np.array([]).reshape(0, 5, 5)
+        empty_X = np.empty((0, config.context_length, 5), dtype=np.float32)
+        empty_y = np.empty((0, 5, 5), dtype=np.float32)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
             feature_scaler=StandardScaler(),
         )
 
-    X = np.array(all_sequences)  # (n_samples, context_length, 5)
-    y = np.array(all_targets)  # (n_samples, 5, 5)
+    X = np.array(all_sequences, dtype=np.float32)  # (n_samples, context_length, 5)
+    y = np.array(all_targets, dtype=np.float32)  # (n_samples, 5, 5)
+    del all_sequences, all_targets
 
     # CRITICAL VERIFICATION: Dataset shape and channel count
     assert X.shape[2] == 5, f"CRITICAL: Expected 5 channels in X, got {X.shape[2]}"

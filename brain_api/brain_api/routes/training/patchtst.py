@@ -1,5 +1,6 @@
 """PatchTST training endpoint."""
 
+import gc
 import logging
 import time
 from datetime import date
@@ -200,13 +201,18 @@ def train_patchtst(
         logger.error("[PatchTST] Dataset is empty - cannot train model")
         raise ValueError("No training samples could be built from aligned features")
 
+    # Extract dataset fields and free dataset object before training
+    X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
+    del dataset
+    gc.collect()
+
     # Train model
     logger.info("[PatchTST] Starting model training...")
     t0 = time.time()
     result = trainer(
-        dataset.X,
-        dataset.y,
-        dataset.feature_scaler,
+        X,
+        y,
+        feature_scaler,
         config,
     )
     t_train = time.time() - t0
