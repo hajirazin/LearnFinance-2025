@@ -19,7 +19,6 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     run_inference as patchtst_run_inference,
 )
-from brain_api.core.realtime_signals import RealTimeSignalBuilder
 from brain_api.storage.local import PatchTSTModelStorage
 
 from .dependencies import get_patchtst_as_of_date, get_patchtst_storage
@@ -98,37 +97,14 @@ def infer_patchtst(
         f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
     )
 
-    # Fetch news sentiment (real-time from yfinance + FinBERT)
-    logger.info("[PatchTST] Fetching real-time news sentiment...")
-    t0 = time.time()
-    signal_builder = RealTimeSignalBuilder()
-    news_sentiment = signal_builder.build_news_dataframes(symbols, data_start, data_end)
-    t_news = time.time() - t0
-    logger.info(
-        f"[PatchTST] Fetched news for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s"
-    )
-
-    # Fetch fundamentals (real-time from yfinance)
-    logger.info("[PatchTST] Fetching real-time fundamentals...")
-    t0 = time.time()
-    fundamentals = signal_builder.build_fundamentals_dataframes(
-        symbols, data_start, data_end
-    )
-    t_fund = time.time() - t0
-    logger.info(
-        f"[PatchTST] Fetched fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s"
-    )
-
-    # Build features for each symbol
-    logger.info("[PatchTST] Building feature sequences...")
+    # Build features for each symbol (OHLCV only, no signals)
+    logger.info("[PatchTST] Building feature sequences (OHLCV only)...")
     t0 = time.time()
     features_list = []
     symbols_with_data = 0
     symbols_missing_data = []
     for symbol in symbols:
         prices_df = prices.get(symbol)
-        news_df = news_sentiment.get(symbol)
-        fund_df = fundamentals.get(symbol)
 
         if prices_df is None or prices_df.empty:
             features_list.append(
@@ -138,8 +114,7 @@ def infer_patchtst(
                     has_enough_history=False,
                     history_days_used=0,
                     data_end_date=None,
-                    has_news_data=news_df is not None and len(news_df) > 0,
-                    has_fundamentals_data=fund_df is not None and len(fund_df) > 0,
+                    starting_price=None,
                 )
             )
             symbols_missing_data.append(symbol)
@@ -147,8 +122,6 @@ def infer_patchtst(
             features = patchtst_build_inference_features(
                 symbol=symbol,
                 prices_df=prices_df,
-                news_df=news_df,
-                fundamentals_df=fund_df,
                 config=config,
                 cutoff_date=week_boundaries.target_week_start,
             )
@@ -182,7 +155,6 @@ def infer_patchtst(
     # Sort predictions
     predictions = _sort_patchtst_predictions(predictions)
 
-    # Model only uses OHLCV channels (news/fundamentals loaded for metadata flags only)
     signals_used = ["ohlcv"]
 
     # Summary

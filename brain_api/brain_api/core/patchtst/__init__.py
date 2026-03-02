@@ -16,12 +16,8 @@ from brain_api.core.inference_utils import (
 )
 from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
 
-# Data loaders
-from brain_api.core.patchtst.data_loaders import (
-    align_multivariate_data,
-    load_historical_fundamentals,
-    load_historical_news_sentiment,
-)
+# Data loaders (OHLCV-only; load_historical_* remain in data_loaders for other consumers)
+from brain_api.core.patchtst.data_loaders import align_multivariate_data
 
 # Dataset
 from brain_api.core.patchtst.dataset import DatasetResult, build_dataset
@@ -64,9 +60,6 @@ __all__ = [
     "evaluate_for_promotion",
     "extract_trading_weeks",
     "get_device",
-    "load_historical_fundamentals",
-    # Data loaders
-    "load_historical_news_sentiment",
     "load_prices_yfinance",
     "run_inference",
     "train_model_pytorch",

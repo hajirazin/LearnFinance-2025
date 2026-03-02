@@ -385,8 +385,6 @@ def mock_weekly_report_email_request():
                     "data_end_date": "2026-02-03",
                     "target_week_start": "2026-02-03",
                     "target_week_end": "2026-02-07",
-                    "has_news_data": True,
-                    "has_fundamentals_data": True,
                 },
             ],
             "model_version": "v2026-01-15-patchtst001",

@@ -25,15 +25,13 @@ from brain_api.core.patchtst.config import PatchTSTConfig
 
 @dataclass
 class InferenceFeatures:
-    """Multi-channel features prepared for inference for a single symbol."""
+    """Multi-channel features prepared for inference for a single symbol (OHLCV only)."""
 
     symbol: str
     features: np.ndarray | None  # Shape: (context_length, 5) -- OHLCV only, or None
     has_enough_history: bool
     history_days_used: int
     data_end_date: date | None
-    has_news_data: bool
-    has_fundamentals_data: bool
     starting_price: (
         float | None
     )  # Starting price (last close before target week) for weekly return calculation
@@ -51,39 +49,26 @@ class SymbolPrediction:
     data_end_date: str | None
     target_week_start: str
     target_week_end: str
-    has_news_data: bool
-    has_fundamentals_data: bool
     daily_returns: list[float] | None = None  # 5 daily close_ret predictions
 
 
 def build_inference_features(
     symbol: str,
     prices_df: pd.DataFrame,
-    news_df: pd.DataFrame | None,
-    fundamentals_df: pd.DataFrame | None,
     config: PatchTSTConfig,
     cutoff_date: date,
 ) -> InferenceFeatures:
-    """Build 5-channel OHLCV feature sequence for inference.
-
-    Still loads news/fundamentals data to set has_news_data/has_fundamentals_data
-    flags in the response. But only OHLCV log returns (5 channels) are returned
-    as model features.
+    """Build 5-channel OHLCV feature sequence for inference (no signals).
 
     Args:
         symbol: Ticker symbol
         prices_df: DataFrame with OHLCV columns and DatetimeIndex
-        news_df: DataFrame with 'sentiment_score' column and DatetimeIndex (or None)
-        fundamentals_df: DataFrame with fundamental ratio columns and DatetimeIndex (or None)
         config: PatchTST config with context_length and feature settings
         cutoff_date: Features end before this date (typically target_week_start)
 
     Returns:
         InferenceFeatures with 5-channel OHLCV feature sequence (UNSCALED)
     """
-    has_news_data = news_df is not None and len(news_df) > 0
-    has_fundamentals_data = fundamentals_df is not None and len(fundamentals_df) > 0
-
     if prices_df.empty:
         return InferenceFeatures(
             symbol=symbol,
@@ -91,8 +76,6 @@ def build_inference_features(
             has_enough_history=False,
             history_days_used=0,
             data_end_date=None,
-            has_news_data=has_news_data,
-            has_fundamentals_data=has_fundamentals_data,
             starting_price=None,
         )
 
@@ -103,8 +86,6 @@ def build_inference_features(
             has_enough_history=False,
             history_days_used=0,
             data_end_date=None,
-            has_news_data=has_news_data,
-            has_fundamentals_data=has_fundamentals_data,
             starting_price=None,
         )
 
@@ -122,8 +103,6 @@ def build_inference_features(
             has_enough_history=False,
             history_days_used=len(df),
             data_end_date=df.index[-1].date() if len(df) > 0 else None,
-            has_news_data=has_news_data,
-            has_fundamentals_data=has_fundamentals_data,
             starting_price=None,
         )
 
@@ -143,8 +122,6 @@ def build_inference_features(
             data_end_date=features_df.index[-1].date()
             if len(features_df) > 0
             else None,
-            has_news_data=has_news_data,
-            has_fundamentals_data=has_fundamentals_data,
             starting_price=None,
         )
 
@@ -169,8 +146,6 @@ def build_inference_features(
         has_enough_history=True,
         history_days_used=len(features_df),
         data_end_date=data_end_date,
-        has_news_data=has_news_data,
-        has_fundamentals_data=has_fundamentals_data,
         starting_price=starting_price,
     )
 
@@ -217,8 +192,6 @@ def run_inference(
                 else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
-                has_news_data=feat.has_news_data,
-                has_fundamentals_data=feat.has_fundamentals_data,
                 daily_returns=None,
             )
         )
@@ -273,8 +246,6 @@ def run_inference(
                 else None,
                 target_week_start=week_boundaries.target_week_start.isoformat(),
                 target_week_end=week_boundaries.target_week_end.isoformat(),
-                has_news_data=feat.has_news_data,
-                has_fundamentals_data=feat.has_fundamentals_data,
                 daily_returns=daily_returns_list,
             )
         )

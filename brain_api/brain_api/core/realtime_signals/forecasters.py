@@ -138,10 +138,7 @@ class PatchTSTForecaster(BaseForecaster):
         symbols: list[str],
         as_of_date: date,
     ) -> dict[str, float]:
-        """Build PatchTST forecast features.
-
-        Loads prices (+ news/fundamentals for response flags). Model uses
-        5 OHLCV channels only. News/fundamentals still loaded for flags.
+        """Build PatchTST forecast features (OHLCV only).
 
         Args:
             symbols: List of stock ticker symbols
@@ -156,10 +153,6 @@ class PatchTSTForecaster(BaseForecaster):
             build_inference_features,
             load_prices_yfinance,
             run_inference,
-        )
-        from brain_api.core.patchtst.data_loaders import (
-            load_historical_fundamentals,
-            load_historical_news_sentiment,
         )
         from brain_api.storage.local import PatchTSTModelStorage
 
@@ -185,25 +178,7 @@ class PatchTSTForecaster(BaseForecaster):
             data_end = week_boundaries.target_week_start - timedelta(days=1)
             prices = load_prices_yfinance(symbols, data_start, data_end)
 
-            # Load news sentiment for all symbols
-            logger.debug("[PatchTSTForecaster] Loading news sentiment...")
-            news_data = load_historical_news_sentiment(
-                symbols, data_start.date(), data_end.date()
-            )
-            logger.debug(
-                f"[PatchTSTForecaster] Loaded news for {len(news_data)} symbols"
-            )
-
-            # Load fundamentals for all symbols
-            logger.debug("[PatchTSTForecaster] Loading fundamentals...")
-            fundamentals_data = load_historical_fundamentals(
-                symbols, data_start.date(), data_end.date()
-            )
-            logger.debug(
-                f"[PatchTSTForecaster] Loaded fundamentals for {len(fundamentals_data)} symbols"
-            )
-
-            # Build features (5 OHLCV channels for model, news/fundamentals for flags)
+            # Build features (5 OHLCV channels only)
             features_list = []
             for symbol in symbols:
                 prices_df = prices.get(symbol)
@@ -215,8 +190,6 @@ class PatchTSTForecaster(BaseForecaster):
                             has_enough_history=False,
                             history_days_used=0,
                             data_end_date=None,
-                            has_news_data=False,
-                            has_fundamentals_data=False,
                             starting_price=None,
                         )
                     )
@@ -224,8 +197,6 @@ class PatchTSTForecaster(BaseForecaster):
                     features = build_inference_features(
                         symbol=symbol,
                         prices_df=prices_df,
-                        news_df=news_data.get(symbol),
-                        fundamentals_df=fundamentals_data.get(symbol),
                         config=config,
                         cutoff_date=week_boundaries.target_week_start,
                     )

@@ -13,12 +13,7 @@ from brain_api.core.config import (
     get_storage_backend,
     resolve_training_window,
 )
-from brain_api.core.patchtst import (
-    PatchTSTConfig,
-    align_multivariate_data,
-    load_historical_fundamentals,
-    load_historical_news_sentiment,
-)
+from brain_api.core.patchtst import PatchTSTConfig, align_multivariate_data
 from brain_api.core.patchtst import (
     build_dataset as patchtst_build_dataset,
 )
@@ -41,18 +36,12 @@ from brain_api.storage.forecaster_snapshots import (
 from brain_api.storage.local import PatchTSTModelStorage, create_patchtst_metadata
 
 from .dependencies import (
-    PatchTSTDataAligner,
     PatchTSTDatasetBuilder,
-    PatchTSTFundamentalsLoader,
-    PatchTSTNewsLoader,
     PatchTSTPriceLoader,
     PatchTSTTrainer,
     get_forecaster_training_symbols,
     get_patchtst_config,
-    get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
-    get_patchtst_fundamentals_loader,
-    get_patchtst_news_loader,
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
@@ -74,11 +63,6 @@ def train_patchtst(
     symbols: list[str] = Depends(get_forecaster_training_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
-    news_loader: PatchTSTNewsLoader = Depends(get_patchtst_news_loader),
-    fundamentals_loader: PatchTSTFundamentalsLoader = Depends(
-        get_patchtst_fundamentals_loader
-    ),
-    data_aligner: PatchTSTDataAligner = Depends(get_patchtst_data_aligner),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
     trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
 ) -> PatchTSTTrainResponse:
@@ -148,35 +132,14 @@ def train_patchtst(
         logger.error("[PatchTST] No price data loaded - cannot train model")
         raise ValueError("No price data available for training")
 
-    # Load news sentiment
-    logger.info("[PatchTST] Loading historical news sentiment...")
+    # Align OHLCV data into 5-channel features
+    logger.info("[PatchTST] Aligning multivariate data (OHLCV only)...")
     t0 = time.time()
-    news_sentiment = news_loader(symbols, start_date, end_date)
-    t_news = time.time() - t0
-    logger.info(
-        f"[PatchTST] Loaded news sentiment for {len(news_sentiment)}/{len(symbols)} symbols in {t_news:.1f}s"
-    )
-
-    # Load fundamentals
-    logger.info("[PatchTST] Loading historical fundamentals...")
-    t0 = time.time()
-    fundamentals = fundamentals_loader(symbols, start_date, end_date)
-    t_fund = time.time() - t0
-    logger.info(
-        f"[PatchTST] Loaded fundamentals for {len(fundamentals)}/{len(symbols)} symbols in {t_fund:.1f}s"
-    )
-
-    # Align all data into multi-channel features
-    logger.info("[PatchTST] Aligning multivariate data...")
-    t0 = time.time()
-    aligned_features = data_aligner(prices, news_sentiment, fundamentals, config)
+    aligned_features = align_multivariate_data(prices, config)
     t_align = time.time() - t0
     logger.info(
         f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s"
     )
-
-    # Free intermediate data no longer needed (prices still needed for dataset_builder)
-    del news_sentiment, fundamentals
 
     if len(aligned_features) == 0:
         logger.error("[PatchTST] No aligned features - cannot train model")
@@ -448,9 +411,8 @@ def _backfill_patchtst_snapshots(
     For each year from (start_year + 4) to end_year-1, trains a snapshot
     on data up to Dec 31 of that year. Uses 4-year bootstrap period.
 
-    Optimization: Loads all data (prices, news sentiment, fundamentals) ONCE
-    for the full window and filters incrementally by year instead of
-    re-downloading for each snapshot.
+    Optimization: Loads prices ONCE for the full window and filters
+    incrementally by year instead of re-downloading for each snapshot.
 
     Args:
         symbols: List of stock symbols
@@ -499,32 +461,12 @@ def _backfill_patchtst_snapshots(
         )
         return
 
-    logger.info(
-        "[PatchTST Backfill] Loading news sentiment for full window (single download)..."
-    )
-    t0 = time.time()
-    news_full = load_historical_news_sentiment(symbols, start_date, end_date)
-    t_news = time.time() - t0
-    logger.info(
-        f"[PatchTST Backfill] Loaded news sentiment for {len(news_full)} symbols in {t_news:.1f}s"
-    )
-
-    logger.info(
-        "[PatchTST Backfill] Loading fundamentals for full window (single download)..."
-    )
-    t0 = time.time()
-    fundamentals_full = load_historical_fundamentals(symbols, start_date, end_date)
-    t_fund = time.time() - t0
-    logger.info(
-        f"[PatchTST Backfill] Loaded fundamentals for {len(fundamentals_full)} symbols in {t_fund:.1f}s"
-    )
-
     # Train each snapshot using filtered data
     for cutoff_date in snapshots_needed:
         logger.info(f"[PatchTST Backfill] Training snapshot for cutoff {cutoff_date}")
         t0 = time.time()
 
-        # Filter all data sources to cutoff (no re-download!)
+        # Filter prices to cutoff (no re-download!)
         prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
             logger.warning(
@@ -532,12 +474,7 @@ def _backfill_patchtst_snapshots(
             )
             continue
 
-        news_sentiment = _filter_signals_by_cutoff(news_full, cutoff_date)
-        fundamentals = _filter_signals_by_cutoff(fundamentals_full, cutoff_date)
-
-        aligned_features = align_multivariate_data(
-            prices, news_sentiment, fundamentals, config
-        )
+        aligned_features = align_multivariate_data(prices, config)
 
         if len(aligned_features) == 0:
             logger.warning(

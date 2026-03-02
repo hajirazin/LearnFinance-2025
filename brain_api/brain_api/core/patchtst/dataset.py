@@ -63,7 +63,7 @@ def build_dataset(
 
     Args:
         aligned_features: Dict of symbol -> aligned multi-channel DataFrame
-                         (output from align_multivariate_data, may have 12 cols)
+                         (output from align_multivariate_data, 5 OHLCV cols)
         prices: Dict of symbol -> raw OHLCV DataFrame (not used, kept for interface compatibility)
         config: PatchTST configuration
 

@@ -18,12 +18,7 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     DatasetResult as PatchTSTDatasetResult,
 )
-from brain_api.core.patchtst import (
-    PatchTSTConfig,
-    align_multivariate_data,
-    load_historical_fundamentals,
-    load_historical_news_sentiment,
-)
+from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import (
     TrainingResult as PatchTSTTrainingResult,
 )
@@ -58,9 +53,6 @@ Trainer = Callable[[Any, Any, Any, LSTMConfig], TrainingResult]
 
 # PatchTST types
 PatchTSTPriceLoader = Callable[[list[str], Any, Any], dict]
-PatchTSTNewsLoader = Callable[[list[str], Any, Any], dict]
-PatchTSTFundamentalsLoader = Callable[[list[str], Any, Any], dict]
-PatchTSTDataAligner = Callable[[dict, dict, dict, PatchTSTConfig], dict]
 PatchTSTDatasetBuilder = Callable[[dict, dict, PatchTSTConfig], PatchTSTDatasetResult]
 PatchTSTTrainer = Callable[[Any, Any, Any, PatchTSTConfig], PatchTSTTrainingResult]
 
@@ -225,21 +217,6 @@ def get_patchtst_config() -> PatchTSTConfig:
 def get_patchtst_price_loader() -> PatchTSTPriceLoader:
     """Get the price loading function for PatchTST."""
     return patchtst_load_prices
-
-
-def get_patchtst_news_loader() -> PatchTSTNewsLoader:
-    """Get the news sentiment loading function."""
-    return load_historical_news_sentiment
-
-
-def get_patchtst_fundamentals_loader() -> PatchTSTFundamentalsLoader:
-    """Get the fundamentals loading function."""
-    return load_historical_fundamentals
-
-
-def get_patchtst_data_aligner() -> PatchTSTDataAligner:
-    """Get the data alignment function."""
-    return align_multivariate_data
 
 
 def get_patchtst_dataset_builder() -> PatchTSTDatasetBuilder:

@@ -97,40 +97,6 @@ def mock_price_loader(symbols, start_date, end_date):
     return prices
 
 
-class MockSignalBuilder:
-    """Mock RealTimeSignalBuilder for testing."""
-
-    def build_news_dataframes(self, symbols, start_date, end_date):
-        """Return mock news sentiment DataFrames for testing."""
-        sentiment = {}
-        for symbol in symbols:
-            np.random.seed(hash(symbol + "news") % 2**32)
-            df = pd.DataFrame(
-                {"sentiment_score": [np.random.uniform(-0.5, 0.5)]},
-                index=pd.DatetimeIndex([pd.Timestamp(end_date)]),
-            )
-            sentiment[symbol] = df
-        return sentiment
-
-    def build_fundamentals_dataframes(self, symbols, start_date, end_date):
-        """Return mock fundamentals DataFrames for testing."""
-        fundamentals = {}
-        for symbol in symbols:
-            np.random.seed(hash(symbol + "fund") % 2**32)
-            df = pd.DataFrame(
-                {
-                    "gross_margin": [np.random.uniform(0.2, 0.6)],
-                    "operating_margin": [np.random.uniform(0.1, 0.4)],
-                    "net_margin": [np.random.uniform(0.05, 0.3)],
-                    "current_ratio": [np.random.uniform(1.0, 3.0)],
-                    "debt_to_equity": [np.random.uniform(0.1, 2.0)],
-                },
-                index=pd.DatetimeIndex([pd.Timestamp(end_date)]),
-            )
-            fundamentals[symbol] = df
-        return fundamentals
-
-
 @pytest.fixture
 def temp_storage():
     """Create a temporary storage directory for tests."""
@@ -150,8 +116,6 @@ def client_with_mocks(temp_storage, monkeypatch):
     from brain_api.routes.inference import patchtst as inference_module
 
     monkeypatch.setattr(inference_module, "patchtst_load_prices", mock_price_loader)
-    # Mock the RealTimeSignalBuilder class to return mock data
-    monkeypatch.setattr(inference_module, "RealTimeSignalBuilder", MockSignalBuilder)
 
     client = TestClient(app)
     yield client
@@ -216,8 +180,6 @@ def test_inference_patchtst_returns_required_fields(client_with_mocks):
     assert "history_days_used" in pred
     assert "target_week_start" in pred
     assert "target_week_end" in pred
-    assert "has_news_data" in pred
-    assert "has_fundamentals_data" in pred
     assert "daily_returns" in pred
 
 
@@ -372,32 +334,7 @@ def test_inference_patchtst_predictions_sorted_by_return_desc(client_with_mocks)
 
 
 # ============================================================================
-# Scenario 5: Signal availability flags
-# ============================================================================
-
-
-def test_inference_patchtst_signal_flags_in_predictions(client_with_mocks):
-    """Each prediction includes flags for news and fundamentals data availability."""
-    response = client_with_mocks.post(
-        "/inference/patchtst",
-        json={},
-    )
-    assert response.status_code == 200
-
-    data = response.json()
-    pred = data["predictions"][0]
-
-    # These flags should be present
-    assert "has_news_data" in pred
-    assert "has_fundamentals_data" in pred
-
-    # With mocks, both should be True
-    assert pred["has_news_data"] is True
-    assert pred["has_fundamentals_data"] is True
-
-
-# ============================================================================
-# Scenario 6: daily_returns field
+# Scenario 5: daily_returns field
 # ============================================================================
 
 

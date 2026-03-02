@@ -100,8 +100,6 @@ class PatchTSTPrediction(BaseModel):
     data_end_date: str | None = None
     target_week_start: str = ""
     target_week_end: str = ""
-    has_news_data: bool = False
-    has_fundamentals_data: bool = False
 
 
 class PatchTSTInferenceResponse(BaseModel):

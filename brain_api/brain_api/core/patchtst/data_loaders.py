@@ -71,20 +71,15 @@ def load_historical_news_sentiment(
 
 def align_multivariate_data(
     prices: dict[str, pd.DataFrame],
-    news_sentiment: dict[str, pd.DataFrame],
-    fundamentals: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> dict[str, pd.DataFrame]:
-    """Align OHLCV data into feature channels for PatchTST.
+    """Align OHLCV data into feature channels for PatchTST (5-channel OHLCV only).
 
-    Computes OHLCV log returns and filters to config.feature_names (5 OHLCV channels).
-    News sentiment and fundamentals are loaded for alignment but filtered out --
-    the model only uses the 5 OHLCV channels specified in config.feature_names.
+    Computes OHLCV log returns and filters to config.feature_names (5 channels:
+    open_ret, high_ret, low_ret, close_ret, volume_ret). The model uses no signals.
 
     Args:
         prices: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
-        news_sentiment: Dict of symbol -> sentiment DataFrame (loaded but not used by model)
-        fundamentals: Dict of symbol -> fundamentals DataFrame (loaded but not used by model)
         config: PatchTST configuration (num_input_channels=5, feature_names=OHLCV only)
 
     Returns:
@@ -96,72 +91,10 @@ def align_multivariate_data(
         if len(price_df) < config.context_length + 5:
             continue
 
-        # Start with OHLCV features using shared utility
+        # OHLCV log returns only (5 channels)
         features_df = compute_ohlcv_log_returns(
             price_df, use_returns=config.use_returns
         )
-
-        # Add news sentiment (forward-fill missing days)
-        if symbol in news_sentiment:
-            sentiment_df = news_sentiment[symbol]
-            # Reindex to match price dates and forward-fill
-            sentiment_aligned = sentiment_df.reindex(features_df.index, method="ffill")
-            features_df["news_sentiment"] = sentiment_aligned["sentiment_score"].fillna(
-                0.0
-            )
-        else:
-            features_df["news_sentiment"] = 0.0  # Neutral if no news data
-
-        # Add fundamentals (forward-fill quarterly data)
-        fundamental_cols = [
-            "gross_margin",
-            "operating_margin",
-            "net_margin",
-            "current_ratio",
-            "debt_to_equity",
-        ]
-        if symbol in fundamentals:
-            fund_df = fundamentals[symbol]
-            # Reindex to match price dates and forward-fill
-            fund_aligned = fund_df.reindex(features_df.index, method="ffill")
-
-            # Vectorized calculation of days since last fundamental update
-            # Use searchsorted to find the position of each date in the sorted fund_df index
-            fund_dates = fund_df.index.values
-            if len(fund_dates) > 0:
-                # searchsorted returns position where date would be inserted
-                # side='right' means we get the index after the last <= date
-                positions = np.searchsorted(
-                    fund_dates, features_df.index.values, side="right"
-                )
-                # Clip to valid indices (position - 1 gives us the last date <= current)
-                valid_positions = np.clip(positions - 1, 0, len(fund_dates) - 1)
-                # Get the last update dates
-                last_updates = fund_dates[valid_positions]
-                # Calculate days old (vectorized)
-                days_old = (
-                    (features_df.index.values - last_updates)
-                    .astype("timedelta64[D]")
-                    .astype(float)
-                )
-                # Handle cases where position is 0 and date is before first fundamental
-                days_old[positions == 0] = 999.0
-            else:
-                days_old = np.full(len(features_df), 999.0)
-
-            # Normalize age: 0.0 = fresh (0 days), 1.0 = 90 days old (quarterly)
-            features_df["fundamental_age"] = days_old / 90.0
-
-            for col in fundamental_cols:
-                if col in fund_aligned.columns:
-                    features_df[col] = fund_aligned[col].fillna(0.0)
-                else:
-                    features_df[col] = 0.0
-        else:
-            # No fundamentals - use zeros and max age
-            features_df["fundamental_age"] = 1.0  # Max age (90+ days)
-            for col in fundamental_cols:
-                features_df[col] = 0.0
 
         # Ensure column order matches config.feature_names
         features_df = features_df[config.feature_names]

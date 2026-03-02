@@ -13,10 +13,7 @@ from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
     get_forecaster_training_symbols,
-    get_patchtst_data_aligner,
     get_patchtst_dataset_builder,
-    get_patchtst_fundamentals_loader,
-    get_patchtst_news_loader,
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
@@ -54,32 +51,6 @@ def mock_price_loader(symbols, start_date, end_date):
             index=dates,
         )
     return prices
-
-
-def mock_news_loader(symbols, start_date, end_date, parquet_path=None):
-    """Return empty news sentiment dict."""
-    return {}
-
-
-def mock_fundamentals_loader(symbols, start_date, end_date, cache_path=None):
-    """Return empty fundamentals dict."""
-    return {}
-
-
-def mock_data_aligner(prices, news_sentiment, fundamentals, config):
-    """Return mock aligned features dict."""
-    import pandas as pd
-
-    # Return mock aligned features for each symbol in prices
-    aligned = {}
-    for symbol in prices:
-        dates = pd.date_range(start="2020-01-01", periods=100, freq="B")
-        aligned[symbol] = pd.DataFrame(
-            np.random.randn(100, config.num_input_channels),
-            index=dates,
-            columns=config.feature_names,
-        )
-    return aligned
 
 
 def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
@@ -137,11 +108,6 @@ def client_with_mocks(temp_storage):
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
     app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-    app.dependency_overrides[get_patchtst_fundamentals_loader] = (
-        lambda: mock_fundamentals_loader
-    )
-    app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: mock_dataset_builder
     )
@@ -281,11 +247,6 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
         app.dependency_overrides[get_patchtst_storage] = lambda: fresh_storage
         app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
         app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-        app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-        app.dependency_overrides[get_patchtst_fundamentals_loader] = (
-            lambda: mock_fundamentals_loader
-        )
-        app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
         app.dependency_overrides[get_patchtst_dataset_builder] = (
             lambda: mock_dataset_builder
         )
@@ -337,11 +298,6 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
     app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_news_loader] = lambda: mock_news_loader
-    app.dependency_overrides[get_patchtst_fundamentals_loader] = (
-        lambda: mock_fundamentals_loader
-    )
-    app.dependency_overrides[get_patchtst_data_aligner] = lambda: mock_data_aligner
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: mock_dataset_builder
     )
