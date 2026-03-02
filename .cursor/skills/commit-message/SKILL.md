@@ -1,9 +1,14 @@
 ---
 name: commit-message
 description: Generate conventional commit messages by analyzing staged git diffs. Use when the user asks to commit, write a commit message, or review staged changes for committing.
+model: auto
 ---
 
 # Commit Message Generator
+
+## Execution: Auto mode
+
+Run this skill in **Cursor Auto mode** (Cursor's free auto mode) when possible so the full workflow (analyze staged diff → generate message → commit) runs autonomously without interruption. Skills cannot force the IDE mode; if the user is not in Auto mode, still execute the workflow without asking for confirmation (see Critical Rules below).
 
 ## Critical Rules
 

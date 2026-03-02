@@ -324,21 +324,14 @@ def weekly_training_flow() -> dict:
     - LSTM/PatchTST training: from FORECASTER_TRAIN_UNIVERSE config
     - PPO/SAC training: from RL_TRAIN_UNIVERSE config
 
+    Training steps run serially (LSTM → PatchTST → PPO → SAC) to limit peak RAM.
+
     Flow diagram (dependencies):
     ```
     refresh_training_data
            │
-           ├──────────────┐
-           ▼              ▼
-      train_lstm    train_patchtst
-           │              │
-           └──────┬───────┘
-                  │
-           ┌──────┴───────┐
-           ▼              ▼
-       train_ppo      train_sac
-           │              │
-           └──────┬───────┘
+           ▼
+      train_lstm → train_patchtst → train_ppo → train_sac
                   │
                   ▼
     generate_training_summary
@@ -356,22 +349,11 @@ def weekly_training_flow() -> dict:
     # Step 1: Refresh training data (brain_api resolves symbols from ETL_UNIVERSE)
     refresh_result = refresh_training_data()
 
-    # Step 3 & 4: Train forecasters (can run in parallel after refresh)
-    # Using .submit() for concurrent execution and dependency tracking
-    lstm_future = train_lstm.submit()
-    patchtst_future = train_patchtst.submit()
-
-    # Wait for both forecasters to complete
-    lstm_result = lstm_future.result()
-    patchtst_result = patchtst_future.result()
-
-    # Step 5 & 6: Train RL allocators (can run in parallel after forecasters)
-    ppo_future = train_ppo.submit()
-    sac_future = train_sac.submit()
-
-    # Wait for both allocators to complete
-    ppo_result = ppo_future.result()
-    sac_result = sac_future.result()
+    # Steps 2–5: Train models serially to limit peak RAM (LSTM → PatchTST → PPO → SAC)
+    lstm_result = train_lstm()
+    patchtst_result = train_patchtst()
+    ppo_result = train_ppo()
+    sac_result = train_sac()
 
     # Step 7: Generate training summary using LLM
     summary_result = generate_training_summary(

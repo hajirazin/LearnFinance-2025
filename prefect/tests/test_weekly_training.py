@@ -139,10 +139,10 @@ class TestFlow:
         mock_refresh.return_value = RefreshTrainingDataResponse(**mock_refresh_response)
 
         training_resp = TrainingResponse(**mock_training_response)
-        mock_lstm.submit.return_value.result.return_value = training_resp
-        mock_patchtst.submit.return_value.result.return_value = training_resp
-        mock_ppo.submit.return_value.result.return_value = training_resp
-        mock_sac.submit.return_value.result.return_value = training_resp
+        mock_lstm.return_value = training_resp
+        mock_patchtst.return_value = training_resp
+        mock_ppo.return_value = training_resp
+        mock_sac.return_value = training_resp
 
         summary_resp = TrainingSummaryResponse(**mock_summary_response)
         mock_summary.return_value = summary_resp
@@ -168,9 +168,9 @@ class TestFlow:
 
         # Verify task calls -- no universe call, refresh called without symbols
         mock_refresh.assert_called_once_with()
-        mock_lstm.submit.assert_called_once()
-        mock_patchtst.submit.assert_called_once()
-        mock_ppo.submit.assert_called_once()
-        mock_sac.submit.assert_called_once()
+        mock_lstm.assert_called_once()
+        mock_patchtst.assert_called_once()
+        mock_ppo.assert_called_once()
+        mock_sac.assert_called_once()
         mock_summary.assert_called_once()
         mock_email.assert_called_once()

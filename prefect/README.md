@@ -17,6 +17,8 @@ Runs every Sunday at 11:00 AM UTC to train all models:
 5. **Train SAC** - Reinforcement learning allocator (symbols from `RL_TRAIN_UNIVERSE` config)
 6. **Generate Training Summary** - LLM-powered analysis of training results (OpenAI/OLLAMA)
 
+Steps 2–5 (LSTM, PatchTST, PPO, SAC) run serially to limit peak RAM; the rest of the flow is sequential.
+
 ### Weekly Forecast Email Flow (`weekly_forecast_email.py`)
 
 Runs every Monday at 18:00 IST (12:30 UTC) to execute the inference pipeline:
