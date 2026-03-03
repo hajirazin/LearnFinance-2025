@@ -302,6 +302,227 @@ class TestSnapshotIntegration:
         assert callable(_backfill_patchtst_snapshots)
 
 
+class TestBackfillSnapshotRange:
+    """Tests that backfill functions create snapshots for the full RL window."""
+
+    def test_lstm_backfill_creates_snapshots_for_full_rl_range(self):
+        """Verify _backfill_lstm_snapshots covers start_year-1 .. end_year-1.
+
+        With start_date=2016-01-01, end_date=2025-12-26 (a Friday), the
+        backfill must create snapshots 2015-12-31 through 2024-12-31
+        (10 snapshots), and download prices starting from 2011-01-01
+        (bootstrap_years=4 before 2015).
+        """
+        from brain_api.routes.training.lstm import _backfill_lstm_snapshots
+
+        mock_storage = MagicMock(spec=SnapshotLocalStorage)
+        mock_storage.snapshot_exists_anywhere.return_value = False
+
+        mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
+        mock_dataset = MagicMock()
+        mock_dataset.X = [1]  # non-empty
+        mock_result = MagicMock()
+        mock_result.train_loss = 0.01
+        mock_result.val_loss = 0.02
+
+        with (
+            patch(
+                "brain_api.routes.training.lstm.load_prices_yfinance",
+                return_value=mock_prices,
+            ) as mock_load,
+            patch(
+                "brain_api.routes.training.lstm.build_dataset",
+                return_value=mock_dataset,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.train_model_pytorch",
+                return_value=mock_result,
+            ),
+            patch(
+                "brain_api.routes.training.lstm._filter_prices_by_cutoff",
+                return_value=mock_prices,
+            ),
+            patch("brain_api.routes.training.lstm.gc"),
+            patch("brain_api.routes.training.lstm.torch"),
+        ):
+            _backfill_lstm_snapshots(
+                symbols=["AAPL", "MSFT"],
+                config=MagicMock(to_dict=dict),
+                start_date=date(2016, 1, 1),
+                end_date=date(2025, 12, 26),
+                snapshot_storage=mock_storage,
+            )
+
+        # Price data should start from 2011-01-01 (2016-1-4 = 2011)
+        load_call_args = mock_load.call_args
+        assert load_call_args[0][1] == date(2011, 1, 1)
+
+        # Should write snapshots for 2015-12-31 through 2024-12-31
+        write_calls = mock_storage.write_snapshot.call_args_list
+        written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
+        expected = [date(y, 12, 31) for y in range(2015, 2025)]
+        assert written_cutoffs == expected
+
+    def test_patchtst_backfill_creates_snapshots_for_full_rl_range(self):
+        """Verify _backfill_patchtst_snapshots covers start_year-1 .. end_year-1."""
+        from brain_api.routes.training.patchtst import _backfill_patchtst_snapshots
+
+        mock_storage = MagicMock(spec=SnapshotLocalStorage)
+        mock_storage.snapshot_exists_anywhere.return_value = False
+
+        mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
+        mock_dataset = MagicMock()
+        mock_dataset.X = [1]
+        mock_result = MagicMock()
+        mock_result.train_loss = 0.01
+        mock_result.val_loss = 0.02
+
+        with (
+            patch(
+                "brain_api.routes.training.patchtst.patchtst_load_prices",
+                return_value=mock_prices,
+            ) as mock_load,
+            patch(
+                "brain_api.routes.training.patchtst._filter_prices_by_cutoff",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.patchtst.align_multivariate_data",
+                return_value={"AAPL": MagicMock()},
+            ),
+            patch(
+                "brain_api.routes.training.patchtst.patchtst_build_dataset",
+                return_value=mock_dataset,
+            ),
+            patch(
+                "brain_api.routes.training.patchtst.patchtst_train_model",
+                return_value=mock_result,
+            ),
+        ):
+            _backfill_patchtst_snapshots(
+                symbols=["AAPL", "MSFT"],
+                config=MagicMock(to_dict=dict),
+                start_date=date(2016, 1, 1),
+                end_date=date(2025, 12, 26),
+                snapshot_storage=mock_storage,
+            )
+
+        # Price data should start from 2011-01-01
+        load_call_args = mock_load.call_args
+        assert load_call_args[0][1] == date(2011, 1, 1)
+
+        # Should write snapshots for 2015-12-31 through 2024-12-31
+        write_calls = mock_storage.write_snapshot.call_args_list
+        written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
+        expected = [date(y, 12, 31) for y in range(2015, 2025)]
+        assert written_cutoffs == expected
+
+    def test_lstm_backfill_skips_existing_snapshots(self):
+        """Verify backfill skips snapshots that already exist."""
+        from brain_api.routes.training.lstm import _backfill_lstm_snapshots
+
+        mock_storage = MagicMock(spec=SnapshotLocalStorage)
+
+        # Simulate: 2015-12-31 exists, all others don't
+        def exists_side_effect(cutoff_date, check_hf=False):
+            return cutoff_date == date(2015, 12, 31)
+
+        mock_storage.snapshot_exists_anywhere.side_effect = exists_side_effect
+
+        mock_prices = {"AAPL": MagicMock()}
+        mock_dataset = MagicMock()
+        mock_dataset.X = [1]
+        mock_result = MagicMock()
+        mock_result.train_loss = 0.01
+        mock_result.val_loss = 0.02
+
+        with (
+            patch(
+                "brain_api.routes.training.lstm.load_prices_yfinance",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.build_dataset",
+                return_value=mock_dataset,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.train_model_pytorch",
+                return_value=mock_result,
+            ),
+            patch(
+                "brain_api.routes.training.lstm._filter_prices_by_cutoff",
+                return_value=mock_prices,
+            ),
+            patch("brain_api.routes.training.lstm.gc"),
+            patch("brain_api.routes.training.lstm.torch"),
+        ):
+            _backfill_lstm_snapshots(
+                symbols=["AAPL"],
+                config=MagicMock(to_dict=dict),
+                start_date=date(2016, 1, 1),
+                end_date=date(2025, 12, 26),
+                snapshot_storage=mock_storage,
+            )
+
+        # 2015-12-31 should be skipped, so 9 snapshots written (not 10)
+        write_calls = mock_storage.write_snapshot.call_args_list
+        written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
+        assert date(2015, 12, 31) not in written_cutoffs
+        assert len(written_cutoffs) == 9
+
+    def test_lstm_backfill_metadata_uses_extended_start(self):
+        """Verify snapshot metadata records the extended data_window_start."""
+        from brain_api.routes.training.lstm import _backfill_lstm_snapshots
+
+        mock_storage = MagicMock(spec=SnapshotLocalStorage)
+        mock_storage.snapshot_exists_anywhere.return_value = False
+
+        mock_prices = {"AAPL": MagicMock()}
+        mock_dataset = MagicMock()
+        mock_dataset.X = [1]
+        mock_result = MagicMock()
+        mock_result.train_loss = 0.01
+        mock_result.val_loss = 0.02
+
+        captured_metadata = []
+
+        with (
+            patch(
+                "brain_api.routes.training.lstm.load_prices_yfinance",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.build_dataset",
+                return_value=mock_dataset,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.train_model_pytorch",
+                return_value=mock_result,
+            ),
+            patch(
+                "brain_api.routes.training.lstm._filter_prices_by_cutoff",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.lstm.create_snapshot_metadata",
+                side_effect=lambda **kw: (captured_metadata.append(kw) or {}),
+            ),
+            patch("brain_api.routes.training.lstm.gc"),
+            patch("brain_api.routes.training.lstm.torch"),
+        ):
+            _backfill_lstm_snapshots(
+                symbols=["AAPL"],
+                config=MagicMock(to_dict=dict),
+                start_date=date(2016, 1, 1),
+                end_date=date(2025, 12, 26),
+                snapshot_storage=mock_storage,
+            )
+
+        # All metadata entries should have data_window_start = 2011-01-01
+        for meta_kwargs in captured_metadata:
+            assert meta_kwargs["data_window_start"] == "2011-01-01"
+
+
 class TestPatchTSTSnapshots:
     """Tests specific to PatchTST snapshot handling."""
 

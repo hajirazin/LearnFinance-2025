@@ -335,6 +335,15 @@ class TestSACLSTMFinetune:
 
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
 
+        def _mock_dual_forecasts(
+            weekly_prices, weekly_dates, symbols, shutdown_event=None
+        ):
+            n = len(weekly_dates) - 1
+            zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
+            return zeros, zeros
+
+        monkeypatch.setattr(sac, "build_dual_forecast_features", _mock_dual_forecasts)
+
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
         app.dependency_overrides[get_rl_training_symbols] = mock_symbols

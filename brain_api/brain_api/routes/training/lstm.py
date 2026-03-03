@@ -331,18 +331,20 @@ def _backfill_lstm_snapshots(
     snapshot_storage: SnapshotLocalStorage,
     storage_backend: str = "local",
 ) -> None:
-    """Backfill LSTM snapshots for all historical years.
+    """Backfill LSTM snapshots for all years that RL walk-forward training needs.
 
-    For each year from (start_year + 4) to end_year-1, trains a snapshot
-    on data up to Dec 31 of that year. Uses 4-year bootstrap period.
+    RL training covering years start_year..end_year needs snapshot-(Y-1)-12-31
+    for each year Y.  The earliest snapshot is (start_year-1)-12-31.  To train
+    that snapshot we need ``bootstrap_years`` of price history before its cutoff,
+    so the price window is extended back to (start_year - 1 - bootstrap_years).
 
-    Optimization: Loads prices ONCE for the full window and filters incrementally
-    by year instead of re-downloading for each snapshot.
+    Optimization: Loads prices ONCE for the extended window and filters
+    incrementally by cutoff instead of re-downloading for each snapshot.
 
     Args:
         symbols: List of stock symbols
         config: LSTM configuration
-        start_date: Training data start date
+        start_date: RL training data start date (from resolve_training_window)
         end_date: Training data end date
         snapshot_storage: Storage instance
         storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
@@ -352,9 +354,12 @@ def _backfill_lstm_snapshots(
     bootstrap_years = 4
     check_hf = storage_backend == "hf"
 
-    # Check if any snapshots need to be created (check HF too if in HF mode)
+    # RL year Y needs snapshot-(Y-1)-12-31.  Create from (start_year-1) onward.
+    first_snapshot_year = start_year - 1
+    snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
+
     snapshots_needed = []
-    for year in range(start_year + bootstrap_years, end_year):
+    for year in range(first_snapshot_year, end_year):
         cutoff_date = date(year, 12, 31)
         if not snapshot_storage.snapshot_exists_anywhere(
             cutoff_date, check_hf=check_hf
@@ -369,10 +374,12 @@ def _backfill_lstm_snapshots(
         f"[LSTM Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
     )
 
-    # Load prices ONCE for full window
-    logger.info("[LSTM Backfill] Loading prices for full window (single download)...")
+    # Load prices ONCE for extended window (covers bootstrap for earliest snapshot)
+    logger.info(
+        f"[LSTM Backfill] Loading prices from {snapshot_data_start} to {end_date}..."
+    )
     t0 = time.time()
-    prices_full = load_prices_yfinance(symbols, start_date, end_date)
+    prices_full = load_prices_yfinance(symbols, snapshot_data_start, end_date)
     t_prices = time.time() - t0
     logger.info(
         f"[LSTM Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
@@ -409,7 +416,7 @@ def _backfill_lstm_snapshots(
         metadata = create_snapshot_metadata(
             forecaster_type="lstm",
             cutoff_date=cutoff_date,
-            data_window_start=start_date.isoformat(),
+            data_window_start=snapshot_data_start.isoformat(),
             data_window_end=cutoff_date.isoformat(),
             symbols=list(prices.keys()),
             config=config,

@@ -218,7 +218,7 @@ def resolve_training_window() -> tuple[date, date]:
     """Resolve the training data window from API config/environment.
 
     Reads:
-    - LSTM_TRAIN_LOOKBACK_YEARS: number of years to look back (default: 15)
+    - LSTM_TRAIN_LOOKBACK_YEARS: number of years to look back (default: 10)
     - LSTM_TRAIN_WINDOW_END_DATE: optional override for end date (YYYY-MM-DD)
 
     Returns:

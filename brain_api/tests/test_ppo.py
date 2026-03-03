@@ -443,22 +443,32 @@ def test_finetune_ppo_returns_400_without_prior_model(client_with_mocks):
     assert "No prior PPO model" in response.json()["detail"]
 
 
-def test_finetune_ppo_returns_200_with_prior_model(client_for_inference, monkeypatch):
-    """POST /train/ppo/finetune returns 200 when prior model exists."""
+def _mock_dual_forecasts(weekly_prices, weekly_dates, symbols, shutdown_event=None):
+    """Return zero-filled dual forecast predictions for testing."""
+    n = len(weekly_dates) - 1
+    zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
+    return zeros, zeros
+
+
+def _patch_ppo_finetune(monkeypatch):
+    """Apply all monkeypatches needed for PPO finetune tests."""
     from brain_api.routes.training import ppo
 
     monkeypatch.setattr(ppo, "load_prices_yfinance", mock_price_loader)
+    monkeypatch.setattr(ppo, "build_dual_forecast_features", _mock_dual_forecasts)
 
-    # Use the trained_model_storage fixture (which has a prior model)
+
+def test_finetune_ppo_returns_200_with_prior_model(client_for_inference, monkeypatch):
+    """POST /train/ppo/finetune returns 200 when prior model exists."""
+    _patch_ppo_finetune(monkeypatch)
+
     response = client_for_inference.post("/train/ppo/finetune", json={})
     assert response.status_code == 200
 
 
 def test_finetune_ppo_returns_required_fields(client_for_inference, monkeypatch):
     """POST /train/ppo/finetune returns all required response fields."""
-    from brain_api.routes.training import ppo
-
-    monkeypatch.setattr(ppo, "load_prices_yfinance", mock_price_loader)
+    _patch_ppo_finetune(monkeypatch)
 
     response = client_for_inference.post("/train/ppo/finetune", json={})
     assert response.status_code == 200
@@ -476,9 +486,7 @@ def test_finetune_ppo_returns_required_fields(client_for_inference, monkeypatch)
 
 def test_finetune_ppo_idempotent(client_for_inference, monkeypatch):
     """Calling POST /train/ppo/finetune twice returns the same version."""
-    from brain_api.routes.training import ppo
-
-    monkeypatch.setattr(ppo, "load_prices_yfinance", mock_price_loader)
+    _patch_ppo_finetune(monkeypatch)
 
     response1 = client_for_inference.post("/train/ppo/finetune", json={})
     assert response1.status_code == 200
@@ -495,9 +503,7 @@ def test_finetune_ppo_end_date_is_always_friday(client_for_inference, monkeypatc
     """Finetune endpoint always uses Friday-anchored end_date."""
     from datetime import date as dt_date
 
-    from brain_api.routes.training import ppo
-
-    monkeypatch.setattr(ppo, "load_prices_yfinance", mock_price_loader)
+    _patch_ppo_finetune(monkeypatch)
 
     response = client_for_inference.post("/train/ppo/finetune", json={})
     assert response.status_code == 200
