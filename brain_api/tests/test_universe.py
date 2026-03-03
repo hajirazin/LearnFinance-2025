@@ -392,6 +392,158 @@ def test_get_halal_new_etfs_used():
 
 
 # ============================================================================
+# filter_symbols_by_min_history Unit Tests
+# ============================================================================
+
+
+def test_filter_symbols_by_min_history_passes_qualifying():
+    """Test that symbols with enough history pass through."""
+    from datetime import date
+
+    symbols = ["AAPL", "MSFT", "SOLS"]
+    mock_prices = {
+        "AAPL": pd.DataFrame(
+            {"close": range(300)}, index=pd.date_range("2025-01-01", periods=300)
+        ),
+        "MSFT": pd.DataFrame(
+            {"close": range(252)}, index=pd.date_range("2025-03-01", periods=252)
+        ),
+        "SOLS": pd.DataFrame(
+            {"close": range(89)}, index=pd.date_range("2025-10-20", periods=89)
+        ),
+    }
+
+    with patch("brain_api.core.prices.load_prices_yfinance", return_value=mock_prices):
+        from brain_api.core.prices import filter_symbols_by_min_history
+
+        qualifying, excluded = filter_symbols_by_min_history(
+            symbols, min_trading_days=252, reference_date=date(2026, 3, 1)
+        )
+
+    assert qualifying == ["AAPL", "MSFT"]
+    assert len(excluded) == 1
+    assert excluded[0] == ("SOLS", 89)
+
+
+def test_filter_symbols_by_min_history_boundary_252():
+    """Test boundary: exactly 252 days passes, 251 excluded."""
+    from datetime import date
+
+    symbols = ["EXACT", "SHORT"]
+    mock_prices = {
+        "EXACT": pd.DataFrame(
+            {"close": range(252)}, index=pd.date_range("2025-01-01", periods=252)
+        ),
+        "SHORT": pd.DataFrame(
+            {"close": range(251)}, index=pd.date_range("2025-01-01", periods=251)
+        ),
+    }
+
+    with patch("brain_api.core.prices.load_prices_yfinance", return_value=mock_prices):
+        from brain_api.core.prices import filter_symbols_by_min_history
+
+        qualifying, excluded = filter_symbols_by_min_history(
+            symbols, min_trading_days=252, reference_date=date(2026, 3, 1)
+        )
+
+    assert qualifying == ["EXACT"]
+    assert excluded == [("SHORT", 251)]
+
+
+def test_filter_symbols_by_min_history_no_data():
+    """Test that symbols with no price data are excluded with 0 days."""
+    from datetime import date
+
+    symbols = ["GOOD", "MISSING"]
+    mock_prices = {
+        "GOOD": pd.DataFrame(
+            {"close": range(300)}, index=pd.date_range("2025-01-01", periods=300)
+        ),
+    }
+
+    with patch("brain_api.core.prices.load_prices_yfinance", return_value=mock_prices):
+        from brain_api.core.prices import filter_symbols_by_min_history
+
+        qualifying, excluded = filter_symbols_by_min_history(
+            symbols, min_trading_days=252, reference_date=date(2026, 3, 1)
+        )
+
+    assert qualifying == ["GOOD"]
+    assert excluded == [("MISSING", 0)]
+
+
+def test_filter_symbols_by_min_history_empty_input():
+    """Test that empty symbol list returns empty results."""
+    from datetime import date
+
+    from brain_api.core.prices import filter_symbols_by_min_history
+
+    qualifying, excluded = filter_symbols_by_min_history(
+        [], min_trading_days=252, reference_date=date(2026, 3, 1)
+    )
+
+    assert qualifying == []
+    assert excluded == []
+
+
+# ============================================================================
+# compute_min_walkforward_days Unit Tests
+# ============================================================================
+
+
+def test_compute_min_walkforward_days_default_10yr_window():
+    """Dynamic threshold for default 10-year training window is ~2600+ days."""
+    from datetime import date
+
+    from brain_api.core.prices import compute_min_walkforward_days
+
+    with patch(
+        "brain_api.core.config.resolve_training_window",
+        return_value=(date(2016, 1, 1), date(2026, 2, 27)),
+    ):
+        result = compute_min_walkforward_days(date(2026, 2, 28))
+
+    assert result > 2500
+    assert result < 3000
+
+
+def test_compute_min_walkforward_days_5yr_window():
+    """A 5-year training window produces a proportionally smaller threshold."""
+    from datetime import date
+
+    from brain_api.core.prices import compute_min_walkforward_days
+
+    with patch(
+        "brain_api.core.config.resolve_training_window",
+        return_value=(date(2021, 1, 1), date(2026, 2, 27)),
+    ):
+        result = compute_min_walkforward_days(date(2026, 2, 28))
+
+    assert result > 1200
+    assert result < 1600
+
+
+def test_compute_min_walkforward_days_includes_lstm_buffer():
+    """Threshold includes buffer beyond the raw training window span."""
+    from datetime import date
+
+    from brain_api.core.prices import compute_min_walkforward_days
+
+    training_start = date(2016, 1, 1)
+    cutoff = date(2026, 2, 28)
+    raw_span_days = (cutoff - training_start).days
+    raw_trading_days = int(raw_span_days * 252 / 365)
+
+    with patch(
+        "brain_api.core.config.resolve_training_window",
+        return_value=(training_start, date(2026, 2, 27)),
+    ):
+        result = compute_min_walkforward_days(cutoff)
+
+    assert result > raw_trading_days
+
+
+# ============================================================================
 # Halal_Filtered Universe Tests
 # ============================================================================
 
@@ -439,6 +591,19 @@ def _make_mock_batch_inference_result(symbols: list[str]):
     )
 
 
+def _mock_history_filter_pass_all(symbols: list[str]):
+    """Return a mock for filter_symbols_by_min_history that passes all symbols."""
+    return lambda syms, min_days, ref_date: (syms, [])
+
+
+def _patch_min_wf_days():
+    """Mock compute_min_walkforward_days to avoid resolve_training_window dependency."""
+    return patch(
+        "brain_api.universe.halal_filtered.compute_min_walkforward_days",
+        return_value=2660,
+    )
+
+
 def test_get_halal_filtered_returns_expected_structure():
     """Test that /universe/halal_filtered returns the expected structure."""
     mock_universe = _make_mock_halal_new_universe()
@@ -449,6 +614,11 @@ def test_get_halal_filtered_returns_expected_structure():
         patch(
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
         ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
@@ -463,6 +633,7 @@ def test_get_halal_filtered_returns_expected_structure():
     assert "stocks" in data
     assert "total_candidates" in data
     assert "total_universe" in data
+    assert "filtered_insufficient_history" in data
     assert "top_n" in data
     assert "selection_method" in data
     assert data["selection_method"] == "patchtst_forecast"
@@ -480,6 +651,11 @@ def test_get_halal_filtered_returns_max_15_stocks():
         patch(
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
         ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
@@ -506,6 +682,11 @@ def test_get_halal_filtered_stocks_have_predicted_returns():
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
         ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
+        ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
             return_value=mock_result,
@@ -526,11 +707,17 @@ def test_get_halal_filtered_stocks_have_predicted_returns():
 def test_get_halal_filtered_returns_503_when_no_model():
     """Test that /universe/halal_filtered returns 503 when no PatchTST model."""
     mock_universe = _make_mock_halal_new_universe()
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
 
     with (
         patch(
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
         ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
@@ -554,6 +741,11 @@ def test_get_halal_filtered_sorted_by_return_desc():
         patch(
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
         ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
@@ -615,6 +807,11 @@ def test_get_halal_filtered_excludes_none_predictions():
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
         ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
+        ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
             return_value=mock_result,
@@ -639,6 +836,11 @@ def test_get_halal_filtered_fewer_than_15_valid():
             "brain_api.universe.halal_filtered.get_halal_new_universe",
             return_value=mock_universe,
         ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
+        ),
         patch(
             "brain_api.universe.halal_filtered.run_batch_inference",
             return_value=mock_result,
@@ -649,6 +851,108 @@ def test_get_halal_filtered_fewer_than_15_valid():
     data = response.json()
     assert len(data["stocks"]) == 5
     assert data["total_candidates"] == 5
+
+
+def test_get_halal_filtered_excludes_short_history_symbols():
+    """Test that symbols with insufficient history are excluded before PatchTST."""
+    mock_universe = _make_mock_halal_new_universe(count=20)
+    all_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    short_history = [("SYM0", 89), ("SYM1", 200)]
+    qualifying = [s for s in all_symbols if s not in {"SYM0", "SYM1"}]
+    mock_result = _make_mock_batch_inference_result(qualifying)
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            return_value=(qualifying, short_history),
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ) as mock_inference,
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    result_symbols = [s["symbol"] for s in data["stocks"]]
+    assert "SYM0" not in result_symbols
+    assert "SYM1" not in result_symbols
+    assert data["filtered_insufficient_history"] == 2
+
+    passed_to_inference = mock_inference.call_args[0][0]
+    assert "SYM0" not in passed_to_inference
+    assert "SYM1" not in passed_to_inference
+
+
+def test_get_halal_filtered_short_history_count_in_response():
+    """Test that filtered_insufficient_history count is correct."""
+    mock_universe = _make_mock_halal_new_universe(count=10)
+    all_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    excluded = [("SYM0", 50), ("SYM3", 100), ("SYM7", 0)]
+    qualifying = [s for s in all_symbols if s not in {"SYM0", "SYM3", "SYM7"}]
+    mock_result = _make_mock_batch_inference_result(qualifying)
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            return_value=(qualifying, excluded),
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    data = response.json()
+    assert data["filtered_insufficient_history"] == 3
+    assert data["total_universe"] == 10
+
+
+def test_get_halal_filtered_all_short_history_returns_empty():
+    """Test that if all symbols are excluded, result has 0 stocks."""
+    from brain_api.core.patchtst.inference import BatchInferenceResult
+
+    mock_universe = _make_mock_halal_new_universe(count=5)
+    all_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    excluded = [(s, 50) for s in all_symbols]
+    mock_result = BatchInferenceResult(
+        predictions=[], model_version="v2026-03-01-abc123"
+    )
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            return_value=([], excluded),
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    data = response.json()
+    assert len(data["stocks"]) == 0
+    assert data["total_candidates"] == 0
+    assert data["filtered_insufficient_history"] == 5
 
 
 # ============================================================================

@@ -4,10 +4,13 @@ This module provides common price fetching functionality used by
 both LSTM and PatchTST models.
 """
 
-from datetime import date
+import logging
+from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 
 def load_prices_yfinance(
@@ -131,3 +134,76 @@ def load_prices_yfinance(
         print(f"{log_prefix} Missing symbols: {missing}")
 
     return prices
+
+
+def compute_min_walkforward_days(cutoff_date: date) -> int:
+    """Minimum trading days a symbol needs for walk-forward feasibility.
+
+    Derived from the training window: the symbol must have price data
+    going back to before training_start minus an LSTM lookback buffer
+    (61 trading days ≈ 200 calendar days with margin).
+
+    Args:
+        cutoff_date: The reference/end date (typically the current cutoff).
+
+    Returns:
+        Minimum number of trading days required.
+    """
+    from brain_api.core.config import resolve_training_window
+
+    start_date, _ = resolve_training_window()
+    calendar_span = (cutoff_date - start_date).days + 200
+    return int(calendar_span * 252 / 365)
+
+
+def filter_symbols_by_min_history(
+    symbols: list[str],
+    min_trading_days: int,
+    reference_date: date,
+) -> tuple[list[str], list[tuple[str, int]]]:
+    """Filter symbols to those with sufficient price history.
+
+    Downloads close prices going back far enough to cover min_trading_days
+    of trading data, then checks each symbol's actual row count.
+
+    Args:
+        symbols: Candidate ticker symbols.
+        min_trading_days: Minimum number of trading days required.
+        reference_date: End date for the history check (typically cutoff_date).
+
+    Returns:
+        Tuple of (qualifying_symbols, excluded_with_day_counts) where
+        excluded_with_day_counts is a list of (symbol, actual_days) tuples.
+    """
+    if not symbols:
+        return [], []
+
+    # ~2x calendar days covers weekends/holidays with margin
+    start_date = reference_date - timedelta(days=min_trading_days * 2)
+
+    logger.info(
+        f"[HistoryFilter] Checking price history for {len(symbols)} symbols "
+        f"(min {min_trading_days} trading days, window {start_date} to {reference_date})"
+    )
+
+    prices = load_prices_yfinance(
+        symbols, start_date, reference_date, log_prefix="[HistoryFilter]"
+    )
+
+    qualifying: list[str] = []
+    excluded: list[tuple[str, int]] = []
+
+    for symbol in symbols:
+        df = prices.get(symbol)
+        actual_days = len(df) if df is not None else 0
+        if actual_days >= min_trading_days:
+            qualifying.append(symbol)
+        else:
+            excluded.append((symbol, actual_days))
+
+    logger.info(
+        f"[HistoryFilter] {len(qualifying)} symbols qualify, "
+        f"{len(excluded)} excluded for insufficient history"
+    )
+
+    return qualifying, excluded

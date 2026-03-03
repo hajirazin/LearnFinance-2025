@@ -237,6 +237,7 @@ def _run_lstm_snapshot_inference(
                 weekly_idx=i,
                 weekly_dates=weekly_dates,
                 daily_ohlcv=daily_ohlcv,
+                symbol=symbol,
             )
             predictions.append(ret)
 
@@ -250,6 +251,7 @@ def _predict_single_week_lstm(
     weekly_idx: int,
     weekly_dates: pd.DatetimeIndex,
     daily_ohlcv: pd.DataFrame,
+    symbol: str = "",
 ) -> float:
     """Generate LSTM weekly prediction using direct 5-day forward pass.
 
@@ -286,7 +288,7 @@ def _predict_single_week_lstm(
 
     if len(ohlcv_subset) < seq_len + 1:
         raise SnapshotInferenceError(
-            f"Insufficient daily data for LSTM: need {seq_len + 1}, "
+            f"Insufficient daily data for LSTM [{symbol}]: need {seq_len + 1}, "
             f"got {len(ohlcv_subset)} (cutoff={cutoff})"
         )
 
@@ -296,7 +298,7 @@ def _predict_single_week_lstm(
 
     if len(features_df) < seq_len:
         raise SnapshotInferenceError(
-            f"Insufficient features after log-return computation: "
+            f"Insufficient features after log-return computation [{symbol}]: "
             f"need {seq_len}, got {len(features_df)} (cutoff={cutoff})"
         )
 
@@ -305,7 +307,8 @@ def _predict_single_week_lstm(
 
     if features.shape[1] != 5:
         raise SnapshotInferenceError(
-            f"Expected 5 OHLCV features, got {features.shape[1]} (cutoff={cutoff})"
+            f"Expected 5 OHLCV features for [{symbol}], "
+            f"got {features.shape[1]} (cutoff={cutoff})"
         )
 
     features_scaled = scaler.transform(features) if scaler is not None else features
@@ -386,6 +389,7 @@ def _run_patchtst_snapshot_inference(
                 weekly_idx=i,
                 weekly_dates=weekly_dates,
                 daily_ohlcv=daily_ohlcv,
+                symbol=symbol,
             )
             predictions.append(ret)
 
@@ -399,6 +403,7 @@ def _predict_single_week_patchtst(
     weekly_idx: int,
     weekly_dates: pd.DatetimeIndex,
     daily_ohlcv: pd.DataFrame,
+    symbol: str = "",
 ) -> float:
     """Generate PatchTST weekly prediction using direct 5-day forecasting.
 
@@ -434,7 +439,7 @@ def _predict_single_week_patchtst(
 
     if len(ohlcv_subset) < context_length:
         raise SnapshotInferenceError(
-            f"Insufficient daily data for PatchTST: need {context_length}, "
+            f"Insufficient daily data for PatchTST [{symbol}]: need {context_length}, "
             f"got {len(ohlcv_subset)} (cutoff={cutoff})"
         )
 
@@ -446,7 +451,7 @@ def _predict_single_week_patchtst(
 
     if len(features_df) < context_length:
         raise SnapshotInferenceError(
-            f"Insufficient features after log-return computation for PatchTST: "
+            f"Insufficient features after log-return computation for PatchTST [{symbol}]: "
             f"need {context_length}, got {len(features_df)} (cutoff={cutoff})"
         )
 
