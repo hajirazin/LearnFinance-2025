@@ -19,6 +19,10 @@ from brain_api.universe.halal_new import (
     get_halal_new_symbols,
     get_halal_new_universe,
 )
+from brain_api.universe.nifty_shariah_500 import (
+    get_nifty_shariah_500_symbols,
+    get_nifty_shariah_500_universe,
+)
 from brain_api.universe.sp500 import (
     SP500_CSV_URL,
     get_sp500_symbols,
@@ -37,6 +41,8 @@ __all__ = [
     "get_halal_new_universe",
     "get_halal_symbols",
     "get_halal_universe",
+    "get_nifty_shariah_500_symbols",
+    "get_nifty_shariah_500_universe",
     "get_sp500_symbols",
     "get_sp500_universe",
     "is_us_ticker",

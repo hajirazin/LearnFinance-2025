@@ -284,7 +284,11 @@ def test_hrp_halal_universe_works():
 
 
 def test_hrp_halal_india_returns_ns_suffixed_keys():
-    """Test that universe='halal_india' returns .NS suffixed weight keys (GAP 3)."""
+    """Test that universe='halal_india' returns .NS suffixed weight keys.
+
+    halal_india symbols arrive with .NS suffix from the universe level
+    (no transformation in _resolve_universe_symbols).
+    """
     ns_symbols = [s + ".NS" for s in MOCK_INDIA_SYMBOLS]
     mock_prices = _create_mock_prices(ns_symbols)
     app.dependency_overrides[get_price_loader] = lambda: lambda syms, s, e: mock_prices

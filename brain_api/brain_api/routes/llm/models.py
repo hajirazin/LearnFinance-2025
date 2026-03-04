@@ -79,6 +79,15 @@ class WeeklySummaryResponse(BaseModel):
 # =============================================================================
 
 
+class IndiaTrainingSummaryRequest(BaseModel):
+    """Request model for POST /llm/india-training-summary.
+
+    India trains PatchTST only (no LSTM, no PPO/SAC).
+    """
+
+    patchtst: PatchTSTTrainResponse
+
+
 class IndiaWeeklySummaryRequest(BaseModel):
     """Request model for POST /llm/india-weekly-summary.
 

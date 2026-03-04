@@ -1,0 +1,34 @@
+You are a financial ML training analyst. Analyze and summarize the following India PatchTST model training results for a weekly portfolio management system focused on NSE India (Nifty 500 Shariah) stocks.
+
+## Training Results
+
+### India PatchTST (OHLCV Forecaster for NSE India)
+This model predicts weekly stock returns for ~210 Nifty 500 Shariah-compliant Indian stocks using 5-channel OHLCV price data (open, high, low, close, volume log returns).
+
+- **Version**: {{ patchtst.version }}
+- **Data Window**: {{ patchtst.data_window_start }} to {{ patchtst.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if patchtst.promoted else "No" }}
+- **Input Channels**: {{ patchtst.num_input_channels }}
+- **Signals Used**: {{ patchtst.signals_used | join(", ") }}
+- **Metrics**: {{ patchtst.metrics | tojson }}
+{% if patchtst.prior_version %}- **Prior Version**: {{ patchtst.prior_version }}{% endif %}
+
+## Context
+- Universe: NiftyShariah500 (~210 NSE India stocks with .NS suffix)
+- Market: NSE India (National Stock Exchange)
+- Allocation: HRP (Hierarchical Risk Parity) applied to top 15 PatchTST picks
+- No LSTM, PPO, or SAC models are used for India
+
+## Instructions
+
+Provide a concise analysis of these training results. Focus on:
+1. Overall training health and model promotion status
+2. PatchTST model performance on Indian market data
+3. Any concerns or recommendations for the India pipeline
+
+Respond with JSON only, using this exact structure:
+{
+    "para_1_overall": "2-3 sentence summary of overall India training results and model health",
+    "para_2_patchtst": "2-3 sentences about India PatchTST model training, performance metrics, and how it compares to baseline",
+    "para_3_recommendations": "2-3 sentences with recommendations or concerns for the India pipeline"
+}

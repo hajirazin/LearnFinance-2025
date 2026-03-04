@@ -9,9 +9,9 @@ from brain_api.universe import (
     get_halal_india_universe,
     get_halal_new_universe,
     get_halal_universe,
+    get_nifty_shariah_500_universe,
 )
 from brain_api.universe.scrapers.nse import NseFetchError
-from brain_api.universe.stock_filter import YFinanceFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -66,22 +66,38 @@ def get_halal_filtered_stocks() -> dict:
 
 @router.get("/halal_india")
 def get_halal_india_stocks() -> dict:
-    """Get the Halal_India stock universe (top 15 factor-scored from Nifty 500 Shariah).
+    """Get the Halal_India stock universe (top 15 by PatchTST predicted return).
 
-    Fetches Nifty 500 Shariah constituents (~100-150 stocks) from NSE India,
-    applies factor scoring (0.4*Momentum + 0.3*Quality + 0.3*Value) without
-    junk filter (Shariah index already screens), returns top 15.
+    Takes the NiftyShariah500 base (~210 stocks), runs India PatchTST
+    inference on all, returns top 15 by predicted weekly return.
 
-    First call of each month fetches live data from NSE + yfinance (~2-3 minutes).
+    First call of each month runs PatchTST inference.
     Subsequent calls in the same month are served from cache.
     """
     from brain_api.main import shutdown_event
 
     try:
         return get_halal_india_universe(shutdown_event=shutdown_event)
-    except YFinanceFetchError as e:
+    except ValueError as e:
         logger.error(f"Halal India universe build failed: {e}")
         raise HTTPException(status_code=503, detail=str(e)) from e
     except NseFetchError as e:
         logger.error(f"Halal India NSE scraper failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@router.get("/nifty_shariah_500")
+def get_nifty_shariah_500_stocks() -> dict:
+    """Get the NiftyShariah500 stock universe (all Nifty 500 Shariah constituents).
+
+    Fetches all ~210 Nifty 500 Shariah Index constituents from NSE India.
+    Symbols include .NS suffix for yfinance compatibility.
+
+    First call of each month fetches live data from NSE.
+    Subsequent calls in the same month are served from cache.
+    """
+    try:
+        return get_nifty_shariah_500_universe()
+    except NseFetchError as e:
+        logger.error(f"NiftyShariah500 scraper failed: {e}")
         raise HTTPException(status_code=503, detail=str(e)) from e

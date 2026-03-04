@@ -2,9 +2,16 @@
 
 from typing import TYPE_CHECKING, Any
 
-from brain_api.core.config import get_hf_patchtst_model_repo
+from brain_api.core.config import (
+    get_hf_patchtst_india_model_repo,
+    get_hf_patchtst_model_repo,
+)
 from brain_api.storage.base_huggingface import BaseHuggingFaceModelStorage, HFModelInfo
-from brain_api.storage.patchtst.local import PatchTSTArtifacts, PatchTSTModelStorage
+from brain_api.storage.patchtst.local import (
+    PatchTSTArtifacts,
+    PatchTSTIndiaModelStorage,
+    PatchTSTModelStorage,
+)
 
 if TYPE_CHECKING:
     from transformers import PatchTSTForPrediction
@@ -12,7 +19,11 @@ if TYPE_CHECKING:
     from brain_api.core.patchtst import PatchTSTConfig
 
 # Re-export HFModelInfo for backward compatibility
-__all__ = ["HFModelInfo", "PatchTSTHuggingFaceModelStorage"]
+__all__ = [
+    "HFModelInfo",
+    "PatchTSTHuggingFaceModelStorage",
+    "PatchTSTIndiaHuggingFaceModelStorage",
+]
 
 
 class PatchTSTHuggingFaceModelStorage(
@@ -128,3 +139,32 @@ storage = PatchTSTHuggingFaceModelStorage(repo_id="{self.repo_id}")
 artifacts = storage.download_model(version="{version}")
 ```
 """
+
+
+class PatchTSTIndiaHuggingFaceModelStorage(
+    PatchTSTHuggingFaceModelStorage,
+):
+    """HuggingFace Hub storage for India PatchTST models.
+
+    Uses the India-specific HF repo and local cache directory
+    (``data/models/patchtst_india/``).
+    """
+
+    def __init__(
+        self,
+        repo_id: str | None = None,
+        token: str | None = None,
+        local_cache: PatchTSTIndiaModelStorage | None = None,
+    ):
+        if repo_id is None:
+            repo_id = get_hf_patchtst_india_model_repo()
+        if local_cache is None:
+            local_cache = PatchTSTIndiaModelStorage()
+        super().__init__(repo_id=repo_id, token=token, local_cache=local_cache)
+
+    @property
+    def model_type(self) -> str:
+        return "patchtst_india"
+
+    def _create_local_storage(self) -> PatchTSTIndiaModelStorage:
+        return PatchTSTIndiaModelStorage()

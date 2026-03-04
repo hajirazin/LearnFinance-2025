@@ -36,6 +36,7 @@ from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
     LocalModelStorage,
+    PatchTSTIndiaModelStorage,
     PatchTSTModelStorage,
 )
 from brain_api.storage.ppo import PPOLocalStorage
@@ -87,6 +88,10 @@ def get_forecaster_training_symbols() -> list[str]:
         from brain_api.universe.halal_filtered import get_halal_filtered_symbols
 
         return get_halal_filtered_symbols()
+    elif universe_type == UniverseType.NIFTY_SHARIAH_500:
+        from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
+
+        return get_nifty_shariah_500_symbols()
     else:  # Default: HALAL
         universe = get_halal_universe()
         return [stock["symbol"] for stock in universe["stocks"]]
@@ -140,6 +145,10 @@ def get_etl_symbols() -> list[str]:
         from brain_api.universe.halal_filtered import get_halal_filtered_symbols
 
         return get_halal_filtered_symbols()
+    elif universe_type == UniverseType.NIFTY_SHARIAH_500:
+        from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
+
+        return get_nifty_shariah_500_symbols()
     else:  # Default: HALAL
         universe = get_halal_universe()
         return [stock["symbol"] for stock in universe["stocks"]]
@@ -227,6 +236,16 @@ def get_patchtst_dataset_builder() -> PatchTSTDatasetBuilder:
 def get_patchtst_trainer() -> PatchTSTTrainer:
     """Get the training function."""
     return patchtst_train_model
+
+
+# ============================================================================
+# PatchTST India dependencies
+# ============================================================================
+
+
+def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
+    """Get the India PatchTST model storage instance."""
+    return PatchTSTIndiaModelStorage()
 
 
 # ============================================================================

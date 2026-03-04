@@ -18,6 +18,7 @@ ENV_HF_LSTM_MODEL_REPO = "HF_LSTM_MODEL_REPO"  # LSTM forecaster
 ENV_HF_PATCHTST_MODEL_REPO = "HF_PATCHTST_MODEL_REPO"  # PatchTST forecaster
 ENV_HF_PPO_MODEL_REPO = "HF_PPO_MODEL_REPO"  # PPO allocator (dual forecasts)
 ENV_HF_SAC_MODEL_REPO = "HF_SAC_MODEL_REPO"  # SAC allocator (dual forecasts)
+ENV_HF_PATCHTST_INDIA_MODEL_REPO = "HF_PATCHTST_INDIA_MODEL_REPO"  # India PatchTST
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
@@ -42,7 +43,8 @@ class UniverseType(str, Enum):
     SP500 = "sp500"  # S&P 500 (~500 stocks from datahub.io)
     HALAL_NEW = "halal_new"  # Expanded halal (~410 stocks from 5 ETFs + Alpaca filter)
     HALAL_FILTERED = "halal_filtered"  # Top 15 factor-scored from halal_new
-    HALAL_INDIA = "halal_india"  # Top 15 factor-scored from Nifty 500 Shariah (NSE)
+    HALAL_INDIA = "halal_india"  # Top 15 PatchTST-scored from Nifty 500 Shariah (NSE)
+    NIFTY_SHARIAH_500 = "nifty_shariah_500"  # All ~210 Nifty 500 Shariah constituents
 
 
 DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_NEW
@@ -71,6 +73,11 @@ def get_hf_lstm_model_repo() -> str | None:
 def get_hf_patchtst_model_repo() -> str | None:
     """Get HuggingFace PatchTST model repository name."""
     return os.environ.get(ENV_HF_PATCHTST_MODEL_REPO)
+
+
+def get_hf_patchtst_india_model_repo() -> str | None:
+    """Get HuggingFace India PatchTST model repository name."""
+    return os.environ.get(ENV_HF_PATCHTST_INDIA_MODEL_REPO)
 
 
 def get_hf_ppo_model_repo() -> str | None:

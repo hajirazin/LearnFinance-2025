@@ -7,7 +7,12 @@ from fastapi import APIRouter, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .gmail import GmailConfigError, send_html_email
-from .models import TrainingSummaryEmailRequest, TrainingSummaryEmailResponse
+from .models import (
+    IndiaTrainingSummaryEmailRequest,
+    IndiaTrainingSummaryEmailResponse,
+    TrainingSummaryEmailRequest,
+    TrainingSummaryEmailResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,67 @@ def send_training_summary_email(
     logger.info("Training summary email sent successfully")
 
     return TrainingSummaryEmailResponse(
+        is_success=is_success,
+        subject=subject,
+        body=html_body,
+    )
+
+
+@router.post(
+    "/india-training-summary", response_model=IndiaTrainingSummaryEmailResponse
+)
+def send_india_training_summary_email(
+    request: IndiaTrainingSummaryEmailRequest,
+) -> IndiaTrainingSummaryEmailResponse:
+    """Send an India training summary email (PatchTST only).
+
+    Args:
+        request: India PatchTST training result and LLM summary.
+
+    Returns:
+        Response with success status, subject, and HTML body.
+    """
+    logger.info("Generating India training summary email")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("india_training_summary_email.html.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: india_training_summary_email.html.j2",
+        ) from e
+
+    html_body = template.render(
+        patchtst=request.patchtst.model_dump(),
+        summary=request.summary,
+    )
+
+    subject = (
+        f"India Training Summary: {request.patchtst.data_window_start} "
+        f"to {request.patchtst.data_window_end}"
+    )
+
+    try:
+        send_html_email(subject=subject, html_body=html_body)
+        is_success = True
+    except GmailConfigError as e:
+        logger.error(f"Gmail configuration error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gmail configuration error: {e}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to send India training email: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to send email: {e}",
+        ) from e
+
+    logger.info("India training summary email sent successfully")
+
+    return IndiaTrainingSummaryEmailResponse(
         is_success=is_success,
         subject=subject,
         body=html_body,

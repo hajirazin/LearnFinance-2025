@@ -14,6 +14,7 @@ from brain_api.universe import (
     get_halal_india_symbols,
     get_halal_new_symbols,
     get_halal_symbols,
+    get_nifty_shariah_500_symbols,
     get_sp500_symbols,
 )
 from brain_api.universe.scrapers.nse import NseFetchError
@@ -22,8 +23,6 @@ from brain_api.universe.stock_filter import YFinanceFetchError
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-NS_SUFFIX = ".NS"
 
 
 # ============================================================================
@@ -98,8 +97,8 @@ def get_price_loader() -> PriceLoader:
 def _resolve_universe_symbols(universe: UniverseType) -> list[str]:
     """Resolve a UniverseType enum to a list of yfinance-compatible symbols.
 
-    For HALAL_INDIA, appends .NS suffix so yfinance fetches NSE prices
-    instead of US-listed ADRs.
+    India universes (HALAL_INDIA, NIFTY_SHARIAH_500) already include .NS
+    suffix from the universe level, so no transformation is needed here.
 
     Raises:
         ValueError: If the universe type is not supported.
@@ -109,6 +108,7 @@ def _resolve_universe_symbols(universe: UniverseType) -> list[str]:
         UniverseType.HALAL_NEW: get_halal_new_symbols,
         UniverseType.HALAL_FILTERED: get_halal_filtered_symbols,
         UniverseType.HALAL_INDIA: get_halal_india_symbols,
+        UniverseType.NIFTY_SHARIAH_500: get_nifty_shariah_500_symbols,
         UniverseType.SP500: get_sp500_symbols,
     }
 
@@ -116,12 +116,7 @@ def _resolve_universe_symbols(universe: UniverseType) -> list[str]:
     if resolver is None:
         raise ValueError(f"No symbol resolver for universe '{universe.value}'")
 
-    symbols = resolver()
-
-    if universe == UniverseType.HALAL_INDIA:
-        symbols = [s + NS_SUFFIX for s in symbols]
-
-    return symbols
+    return resolver()
 
 
 # ============================================================================

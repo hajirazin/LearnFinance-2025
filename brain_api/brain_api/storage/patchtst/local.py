@@ -74,3 +74,16 @@ class PatchTSTModelStorage(
             model=model,
             version=version,
         )
+
+
+class PatchTSTIndiaModelStorage(PatchTSTModelStorage):
+    """India PatchTST model storage at data/models/patchtst_india/.
+
+    Inherits all PatchTST storage behavior; only the model_type changes
+    so artifacts are written to a separate directory with an independent
+    ``current`` pointer.
+    """
+
+    @property
+    def model_type(self) -> str:
+        return "patchtst_india"

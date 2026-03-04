@@ -109,6 +109,24 @@ class WeeklyReportEmailResponse(BaseModel):
 # =============================================================================
 
 
+class IndiaTrainingSummaryEmailRequest(BaseModel):
+    """Request model for POST /email/india-training-summary.
+
+    India trains PatchTST only.
+    """
+
+    patchtst: PatchTSTTrainResponse
+    summary: dict[str, str]  # LLM-generated paragraphs
+
+
+class IndiaTrainingSummaryEmailResponse(BaseModel):
+    """Response model for POST /email/india-training-summary."""
+
+    is_success: bool
+    subject: str
+    body: str
+
+
 class IndiaWeeklyReportEmailRequest(BaseModel):
     """Request model for POST /email/india-weekly-report.
 

@@ -369,6 +369,7 @@ class TestBackfillSnapshotRange:
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
         mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.forecaster_type = "patchtst"
 
         mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
         mock_dataset = MagicMock()

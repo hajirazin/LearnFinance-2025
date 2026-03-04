@@ -16,11 +16,12 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Prefect** is the outer orchestrator:
-  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Sunday 11 AM UTC for training)
+  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Sunday 11 AM UTC for US training, Sunday 4:30 AM UTC for India training)
   - calling brain_api endpoints in the correct order
   - handling parallel task execution and skip logic
   - status tracking + flow observability
-  - India flow (`india_weekly_email.py`): universe validation -> HRP -> AI summary -> email (sequential, no forecasters/orders yet)
+  - India weekly email flow (`india_weekly_email.py`): universe validation -> HRP -> AI summary -> email (sequential, no forecasters/orders yet)
+  - India training flow (`india_weekly_training.py`): NiftyShariah500 universe -> PatchTST India train -> halal_india filtered -> LLM summary -> email
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
@@ -46,6 +47,8 @@ brain_api/
 │   │   ├── ppo.py
 │   │   └── sac.py
 │   ├── training/            # Same pattern as inference
+│   │   ├── patchtst.py      # US PatchTST training
+│   │   ├── patchtst_india.py # India PatchTST training
 │   │   └── ...
 │   ├── signals/
 │   │   └── endpoints.py
@@ -105,7 +108,8 @@ brain_api/
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /train/lstm` | Full LSTM retrain |
-| `POST /train/patchtst` | Full PatchTST retrain |
+| `POST /train/patchtst` | Full PatchTST retrain (US) |
+| `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
 | `POST /train/ppo/full` | Full PPO retrain (dual forecasts) |
 | `POST /train/ppo/finetune` | PPO fine-tune on experience buffer |
 | `POST /train/sac/full` | Full SAC retrain (dual forecasts) |
@@ -125,15 +129,18 @@ brain_api/
 |----------|---------|
 | `POST /llm/weekly-summary` | Generate AI summary of forecasts and allocations (US) |
 | `POST /llm/india-weekly-summary` | Generate AI summary of HRP concentration/diversification (India) |
+| `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
 | `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP (US) |
 | `POST /email/india-weekly-report` | Send India weekly portfolio email (HRP + AI summary) via Gmail SMTP |
+| `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
 
 **Other**:
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /universe/halal` | Halal stock universe |
-| `GET /universe/halal_india` | Top 15 factor-scored from Nifty 500 Shariah (NSE India) |
+| `GET /universe/halal_india` | Top 15 PatchTST-scored from Nifty 500 Shariah (NSE India) |
+| `GET /universe/nifty_shariah_500` | All ~210 Nifty 500 Shariah constituents (NSE India) |
 | `GET /models/active-symbols` | Active symbols from SAC model metadata |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill |
@@ -164,10 +171,11 @@ When migrating an endpoint to GCP:
 
 ### Price Forecasters
 
-| Model | Input | Output |
-|-------|-------|--------|
-| LSTM | OHLCV only (pure price) | Weekly return prediction |
-| PatchTST | OHLCV + All signals | Weekly return prediction |
+| Model | Market | Input | Output |
+|-------|--------|-------|--------|
+| LSTM | US | OHLCV only (pure price) | Weekly return prediction |
+| PatchTST | US | OHLCV + All signals | Weekly return prediction |
+| PatchTST India | India (NiftyShariah500) | OHLCV (5-channel) | Weekly return prediction |
 
 ### Portfolio Allocators
 
@@ -192,9 +200,10 @@ When migrating an endpoint to GCP:
 | Cash available | Portfolio state |
 
 **Key distinction:**
-- **LSTM** = pure price forecaster (close returns only)
-- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
-- **PPO/SAC** = RL allocators (receive signals + dual forecaster output)
+- **LSTM** = pure price forecaster (close returns only, US only)
+- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns, US)
+- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning)
+- **PPO/SAC** = RL allocators (receive signals + dual forecaster output, US only)
 
 ## Data storage rules
 
@@ -214,7 +223,7 @@ Every persisted record must include:
 
 ### Model storage
 
-Models are stored under `data/models/{lstm,patchtst}/<version>/`:
+Models are stored under `data/models/{lstm,patchtst,patchtst_india}/<version>/`:
 
 ```
 data/models/
@@ -226,8 +235,10 @@ data/models/
 │   │   └── metadata.json
 │   ├── snapshot-2025-12-31/        # point-in-time snapshots
 │   └── current                     # text file with active version
-└── patchtst/
-    └── (same structure)
+├── patchtst/
+│   └── (same structure)
+└── patchtst_india/
+    └── (same structure, independent current pointer)
 ```
 
 - Active version tracked by `data/models/{model}/current` (text file with version string)
@@ -332,9 +343,10 @@ The system must:
 
 | When | What | Trigger |
 |------|------|---------|
-| Monthly (Saturday) | Full retrain all models | Manual |
-| Weekly (Sunday) | Fine-tune PPO/SAC variants | Cron (Prefect) |
-| Monday 6 PM IST | Inference only | Cron (Prefect) |
+| Monthly (Saturday) | Full retrain all US models | Manual |
+| Weekly (Sunday 11 AM UTC) | Fine-tune PPO/SAC variants (US) | Cron (Prefect) |
+| Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Prefect) |
+| Monday 6 PM IST | US inference only | Cron (Prefect) |
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
 - **Promotion requires evaluation**: new model must beat prior + baseline before becoming `current`
@@ -386,6 +398,8 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm storage abstraction is used (not hardcoded paths)
 - [ ] Confirm LSTM remains pure-price (no signals in input)
 - [ ] Confirm PatchTST/PPO/SAC receive correct signal state vector
+- [ ] Confirm India PatchTST uses `patchtst_india` storage (not US `patchtst`)
+- [ ] Confirm India symbols retain `.NS` suffix throughout the pipeline
 
 ## AI assistant behavioral rules
 

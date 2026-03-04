@@ -27,19 +27,33 @@ def mock_universe_data():
     """Mock response from GET /universe/halal_india."""
     return {
         "stocks": [
-            {"symbol": "RELIANCE", "name": "Reliance Industries", "factor_score": 0.85},
             {
-                "symbol": "TCS",
-                "name": "Tata Consultancy Services",
-                "factor_score": 0.82,
+                "symbol": "RELIANCE.NS",
+                "predicted_weekly_return_pct": 3.5,
+                "rank": 1,
+                "model_version": "v2026-03-01-india123",
             },
-            {"symbol": "INFY", "name": "Infosys Ltd", "factor_score": 0.78},
+            {
+                "symbol": "TCS.NS",
+                "predicted_weekly_return_pct": 3.2,
+                "rank": 2,
+                "model_version": "v2026-03-01-india123",
+            },
+            {
+                "symbol": "INFY.NS",
+                "predicted_weekly_return_pct": 2.8,
+                "rank": 3,
+                "model_version": "v2026-03-01-india123",
+            },
         ],
-        "source": "nifty_500_shariah",
-        "symbol_suffix": ".NS",
-        "total_stocks": 120,
-        "total_scored": 95,
+        "total_candidates": 180,
+        "total_universe": 210,
+        "filtered_insufficient_history": 30,
         "top_n": 15,
+        "selection_method": "patchtst_forecast",
+        "model_version": "v2026-03-01-india123",
+        "symbol_suffix": ".NS",
+        "fetched_at": "2026-03-01T00:00:00+00:00",
     }
 
 
@@ -391,8 +405,14 @@ class TestIndiaTaskBehavior:
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__.return_value = mock_client
         mock_client.get.return_value.json.return_value = {
-            "stocks": [{"symbol": "RELIANCE"}],
-            "source": "nifty_500_shariah",
+            "stocks": [
+                {
+                    "symbol": "RELIANCE.NS",
+                    "predicted_weekly_return_pct": 3.5,
+                    "rank": 1,
+                }
+            ],
+            "selection_method": "patchtst_forecast",
         }
 
         result = get_halal_india_universe.fn()

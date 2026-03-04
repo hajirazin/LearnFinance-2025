@@ -157,6 +157,8 @@ class TestUniverseType:
         assert UniverseType.SP500.value == "sp500"
         assert UniverseType.HALAL_NEW.value == "halal_new"
         assert UniverseType.HALAL_FILTERED.value == "halal_filtered"
+        assert UniverseType.HALAL_INDIA.value == "halal_india"
+        assert UniverseType.NIFTY_SHARIAH_500.value == "nifty_shariah_500"
 
     def test_universe_type_is_string_compatible(self) -> None:
         """UniverseType can be compared with strings."""
@@ -164,6 +166,8 @@ class TestUniverseType:
         assert UniverseType.SP500 == "sp500"
         assert UniverseType.HALAL_NEW == "halal_new"
         assert UniverseType.HALAL_FILTERED == "halal_filtered"
+        assert UniverseType.HALAL_INDIA == "halal_india"
+        assert UniverseType.NIFTY_SHARIAH_500 == "nifty_shariah_500"
 
     def test_universe_type_from_string(self) -> None:
         """UniverseType can be created from string."""
@@ -171,6 +175,8 @@ class TestUniverseType:
         assert UniverseType("sp500") == UniverseType.SP500
         assert UniverseType("halal_new") == UniverseType.HALAL_NEW
         assert UniverseType("halal_filtered") == UniverseType.HALAL_FILTERED
+        assert UniverseType("halal_india") == UniverseType.HALAL_INDIA
+        assert UniverseType("nifty_shariah_500") == UniverseType.NIFTY_SHARIAH_500
 
     def test_universe_type_invalid_raises(self) -> None:
         """Invalid UniverseType value raises ValueError."""
@@ -215,6 +221,16 @@ class TestGetForecasterTrainUniverse:
             result = get_forecaster_train_universe()
         assert result == UniverseType.HALAL_FILTERED
 
+    def test_nifty_shariah_500_from_env(self) -> None:
+        """FORECASTER_TRAIN_UNIVERSE=nifty_shariah_500 returns NIFTY_SHARIAH_500."""
+        with patch.dict(
+            os.environ,
+            {"FORECASTER_TRAIN_UNIVERSE": "nifty_shariah_500"},
+            clear=True,
+        ):
+            result = get_forecaster_train_universe()
+        assert result == UniverseType.NIFTY_SHARIAH_500
+
     def test_case_insensitive(self) -> None:
         """Environment variable is case-insensitive."""
         with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL"}, clear=True):
@@ -236,6 +252,12 @@ class TestGetForecasterTrainUniverse:
         ):
             result = get_forecaster_train_universe()
         assert result == UniverseType.HALAL_FILTERED
+
+        with patch.dict(
+            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "NIFTY_SHARIAH_500"}, clear=True
+        ):
+            result = get_forecaster_train_universe()
+        assert result == UniverseType.NIFTY_SHARIAH_500
 
     def test_invalid_value_raises_error(self) -> None:
         """Invalid FORECASTER_TRAIN_UNIVERSE value raises ValueError."""
@@ -276,6 +298,12 @@ class TestGetEtlUniverse:
             result = get_etl_universe()
         assert result == UniverseType.HALAL_FILTERED
 
+    def test_nifty_shariah_500_from_env(self) -> None:
+        """ETL_UNIVERSE=nifty_shariah_500 returns NIFTY_SHARIAH_500."""
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "nifty_shariah_500"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.NIFTY_SHARIAH_500
+
     def test_case_insensitive(self) -> None:
         """Environment variable is case-insensitive."""
         with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL"}, clear=True):
@@ -293,6 +321,10 @@ class TestGetEtlUniverse:
         with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL_FILTERED"}, clear=True):
             result = get_etl_universe()
         assert result == UniverseType.HALAL_FILTERED
+
+        with patch.dict(os.environ, {"ETL_UNIVERSE": "NIFTY_SHARIAH_500"}, clear=True):
+            result = get_etl_universe()
+        assert result == UniverseType.NIFTY_SHARIAH_500
 
     def test_invalid_value_raises_error(self) -> None:
         """Invalid ETL_UNIVERSE value raises ValueError."""

@@ -6,7 +6,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
-from .models import TrainingSummaryRequest, TrainingSummaryResponse
+from .models import (
+    IndiaTrainingSummaryRequest,
+    TrainingSummaryRequest,
+    TrainingSummaryResponse,
+)
 from .providers import LLMProvider, get_llm_provider, parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -84,6 +88,62 @@ def generate_training_summary(
     except ValueError as e:
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
         # Return a fallback summary
+        summary = {
+            "para_1_overall": "Unable to generate AI summary. Please check the logs for details.",
+            "raw_response": llm_response.content[:500],
+        }
+
+    return TrainingSummaryResponse(
+        summary=summary,
+        provider=provider.name,
+        model_used=llm_response.model,
+        tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/india-training-summary", response_model=TrainingSummaryResponse)
+def generate_india_training_summary(
+    request: IndiaTrainingSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> TrainingSummaryResponse:
+    """Generate an LLM summary of India PatchTST training results.
+
+    India trains PatchTST only (no LSTM, PPO, SAC).
+
+    Args:
+        request: India PatchTST training result.
+        provider: LLM provider (injected via dependency).
+
+    Returns:
+        Summary with paragraph fields and metadata.
+    """
+    logger.info(f"Generating India training summary using provider={provider.name}")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("india_training_summary_prompt.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: india_training_summary_prompt.j2",
+        ) from e
+
+    prompt = template.render(patchtst=request.patchtst.model_dump())
+
+    try:
+        llm_response = provider.generate(prompt)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM service unavailable: {e}",
+        ) from e
+
+    try:
+        summary = parse_json_response(llm_response.content)
+    except ValueError as e:
+        logger.warning(f"Failed to parse LLM response as JSON: {e}")
         summary = {
             "para_1_overall": "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],

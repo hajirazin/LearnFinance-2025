@@ -3,6 +3,7 @@
 import gc
 import logging
 import time
+from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
@@ -53,6 +54,262 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _train_patchtst_core(
+    symbols: list[str],
+    storage: PatchTSTModelStorage,
+    hf_storage_class: type,
+    hf_model_repo_getter: Callable[[], str | None],
+    snapshot_forecaster_type: str,
+    skip_snapshot: bool,
+    config: PatchTSTConfig,
+    price_loader: PatchTSTPriceLoader,
+    dataset_builder: PatchTSTDatasetBuilder,
+    trainer: PatchTSTTrainer,
+    log_prefix: str = "[PatchTST]",
+) -> PatchTSTTrainResponse:
+    """Core PatchTST training logic shared by US and India endpoints.
+
+    Handles: version check -> load prices -> align -> build dataset -> train ->
+    evaluate promotion -> write artifacts -> HF upload -> snapshot backfill.
+
+    Args:
+        symbols: Stock symbols to train on.
+        storage: Local model storage instance.
+        hf_storage_class: HuggingFace storage class for this market.
+        hf_model_repo_getter: Callable returning HF repo ID.
+        snapshot_forecaster_type: "patchtst" or "patchtst_india".
+        skip_snapshot: Skip saving snapshots.
+        config: PatchTST training configuration.
+        price_loader: Function to load price data.
+        dataset_builder: Function to build datasets.
+        trainer: Function to train the model.
+        log_prefix: Logging prefix string.
+
+    Returns:
+        PatchTSTTrainResponse with training results.
+    """
+    start_date, end_date = resolve_training_window()
+    logger.info(f"{log_prefix} Starting training for {len(symbols)} symbols")
+    logger.info(f"{log_prefix} Data window: {start_date} to {end_date}")
+    logger.info(f"{log_prefix} Symbols: {symbols}")
+    logger.info(
+        f"{log_prefix} Config: {config.num_input_channels} channels, {config.epochs} epochs"
+    )
+
+    version = patchtst_compute_version(start_date, end_date, symbols, config)
+    logger.info(f"{log_prefix} Computed version: {version}")
+
+    if storage.version_exists(version):
+        logger.info(
+            f"{log_prefix} Version {version} already exists (idempotent), returning cached result"
+        )
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PatchTSTTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                num_input_channels=config.num_input_channels,
+                signals_used=["ohlcv"],
+            )
+
+    logger.info(f"{log_prefix} Loading price data for {len(symbols)} symbols...")
+    t0 = time.time()
+    prices = price_loader(symbols, start_date, end_date)
+    t_prices = time.time() - t0
+    logger.info(
+        f"{log_prefix} Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
+    )
+
+    if len(prices) == 0:
+        logger.error(f"{log_prefix} No price data loaded - cannot train model")
+        raise ValueError("No price data available for training")
+
+    logger.info(f"{log_prefix} Aligning multivariate data (OHLCV only)...")
+    t0 = time.time()
+    aligned_features = align_multivariate_data(prices, config)
+    t_align = time.time() - t0
+    logger.info(
+        f"{log_prefix} Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s"
+    )
+
+    if len(aligned_features) == 0:
+        logger.error(f"{log_prefix} No aligned features - cannot train model")
+        raise ValueError("No aligned features could be built from available data")
+
+    logger.info(f"{log_prefix} Building dataset...")
+    t0 = time.time()
+    dataset = dataset_builder(aligned_features, prices, config)
+    t_dataset = time.time() - t0
+    logger.info(
+        f"{log_prefix} Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples"
+    )
+
+    available_symbols = list(prices.keys())
+
+    del aligned_features, prices
+
+    if len(dataset.X) == 0:
+        logger.error(f"{log_prefix} Dataset is empty - cannot train model")
+        raise ValueError("No training samples could be built from aligned features")
+
+    X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
+    del dataset
+    gc.collect()
+
+    logger.info(f"{log_prefix} Starting model training...")
+    t0 = time.time()
+    result = trainer(X, y, feature_scaler, config)
+    t_train = time.time() - t0
+    logger.info(f"{log_prefix} Training complete in {t_train:.1f}s")
+    logger.info(
+        f"{log_prefix} Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}"
+    )
+
+    hf_model_repo = hf_model_repo_getter()
+    prior_info = get_prior_version_info(
+        local_storage=storage,
+        hf_storage_class=hf_storage_class,
+        hf_model_repo=hf_model_repo,
+    )
+    prior_version = prior_info.version
+    prior_val_loss = prior_info.val_loss
+
+    if prior_version:
+        logger.info(
+            f"{log_prefix} Prior version: {prior_version}, val_loss: {prior_val_loss}"
+        )
+    else:
+        logger.info(f"{log_prefix} No prior version exists (first model)")
+
+    promoted = patchtst_evaluate_for_promotion(
+        val_loss=result.val_loss,
+        prior_val_loss=prior_val_loss,
+    )
+    logger.info(
+        f"{log_prefix} Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
+    )
+
+    metadata = create_patchtst_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=symbols,
+        config=config,
+        train_loss=result.train_loss,
+        val_loss=result.val_loss,
+        baseline_loss=result.baseline_loss,
+        promoted=promoted,
+        prior_version=prior_version,
+    )
+
+    logger.info(f"{log_prefix} Writing artifacts for version {version}...")
+    storage.write_artifacts(
+        version=version,
+        model=result.model,
+        feature_scaler=result.feature_scaler,
+        config=config,
+        metadata=metadata,
+    )
+    logger.info(f"{log_prefix} Artifacts written successfully")
+
+    if promoted or prior_version is None:
+        storage.promote_version(version)
+        logger.info(f"{log_prefix} Version {version} promoted to current")
+
+    hf_repo = None
+    hf_url = None
+    storage_backend = get_storage_backend()
+
+    if storage_backend == "hf" and hf_model_repo:
+        try:
+            hf_storage = hf_storage_class(repo_id=hf_model_repo)
+            hf_has_main = hf_storage.get_current_version() is not None
+            should_make_current = promoted or not hf_has_main
+            logger.info(
+                f"{log_prefix} HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
+                f"make_current={should_make_current}"
+            )
+
+            hf_info = hf_storage.upload_model(
+                version=version,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=metadata,
+                make_current=should_make_current,
+            )
+            hf_repo = hf_info.repo_id
+            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
+            logger.info(f"{log_prefix} Model uploaded to HuggingFace: {hf_url}")
+        except Exception as e:
+            logger.error(f"{log_prefix} Failed to upload model to HuggingFace: {e}")
+
+    if not skip_snapshot:
+        snapshot_storage = SnapshotLocalStorage(snapshot_forecaster_type)
+        check_hf = storage_backend == "hf"
+
+        if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
+            snapshot_metadata = create_snapshot_metadata(
+                forecaster_type=snapshot_forecaster_type,
+                cutoff_date=end_date,
+                data_window_start=start_date.isoformat(),
+                data_window_end=end_date.isoformat(),
+                symbols=available_symbols,
+                config=config,
+                train_loss=result.train_loss,
+                val_loss=result.val_loss,
+            )
+            snapshot_storage.write_snapshot(
+                cutoff_date=end_date,
+                model=result.model,
+                feature_scaler=result.feature_scaler,
+                config=config,
+                metadata=snapshot_metadata,
+            )
+            logger.info(f"{log_prefix} Saved snapshot for cutoff {end_date}")
+
+            if storage_backend == "hf":
+                try:
+                    snapshot_storage.upload_snapshot_to_hf(end_date)
+                    logger.info(
+                        f"{log_prefix} Uploaded snapshot {end_date} to HuggingFace"
+                    )
+                except Exception as e:
+                    logger.error(f"{log_prefix} Failed to upload snapshot to HF: {e}")
+
+        logger.info(f"{log_prefix} Backfilling historical snapshots...")
+        _backfill_patchtst_snapshots(
+            symbols,
+            config,
+            start_date,
+            end_date,
+            snapshot_storage,
+            storage_backend,
+            log_prefix=log_prefix,
+        )
+
+    return PatchTSTTrainResponse(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        metrics={
+            "train_loss": result.train_loss,
+            "val_loss": result.val_loss,
+            "baseline_loss": result.baseline_loss,
+        },
+        promoted=promoted,
+        prior_version=prior_version,
+        hf_repo=hf_repo,
+        hf_url=hf_url,
+        num_input_channels=config.num_input_channels,
+        signals_used=["ohlcv"],
+    )
+
+
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
     skip_snapshot: bool = Query(
@@ -88,251 +345,20 @@ def train_patchtst(
     Returns:
         Training result including version, metrics, and promotion status.
     """
-    # Resolve window from API config
-    start_date, end_date = resolve_training_window()
-    logger.info(f"[PatchTST] Starting training for {len(symbols)} symbols")
-    logger.info(f"[PatchTST] Data window: {start_date} to {end_date}")
-    logger.info(f"[PatchTST] Symbols: {symbols}")
-    logger.info(
-        f"[PatchTST] Config: {config.num_input_channels} channels, {config.epochs} epochs"
-    )
-
-    # Compute deterministic version
-    version = patchtst_compute_version(start_date, end_date, symbols, config)
-    logger.info(f"[PatchTST] Computed version: {version}")
-
-    # Check if this version already exists (idempotent)
-    if storage.version_exists(version):
-        logger.info(
-            f"[PatchTST] Version {version} already exists (idempotent), returning cached result"
-        )
-        existing_metadata = storage.read_metadata(version)
-        if existing_metadata:
-            return PatchTSTTrainResponse(
-                version=version,
-                data_window_start=existing_metadata["data_window"]["start"],
-                data_window_end=existing_metadata["data_window"]["end"],
-                metrics=existing_metadata["metrics"],
-                promoted=existing_metadata["promoted"],
-                prior_version=existing_metadata.get("prior_version"),
-                num_input_channels=config.num_input_channels,
-                signals_used=["ohlcv"],
-            )
-
-    # Load price data
-    logger.info(f"[PatchTST] Loading price data for {len(symbols)} symbols...")
-    t0 = time.time()
-    prices = price_loader(symbols, start_date, end_date)
-    t_prices = time.time() - t0
-    logger.info(
-        f"[PatchTST] Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
-    )
-
-    if len(prices) == 0:
-        logger.error("[PatchTST] No price data loaded - cannot train model")
-        raise ValueError("No price data available for training")
-
-    # Align OHLCV data into 5-channel features
-    logger.info("[PatchTST] Aligning multivariate data (OHLCV only)...")
-    t0 = time.time()
-    aligned_features = align_multivariate_data(prices, config)
-    t_align = time.time() - t0
-    logger.info(
-        f"[PatchTST] Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s"
-    )
-
-    if len(aligned_features) == 0:
-        logger.error("[PatchTST] No aligned features - cannot train model")
-        raise ValueError("No aligned features could be built from available data")
-
-    # Build dataset
-    logger.info("[PatchTST] Building dataset...")
-    t0 = time.time()
-    dataset = dataset_builder(aligned_features, prices, config)
-    t_dataset = time.time() - t0
-    logger.info(
-        f"[PatchTST] Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples"
-    )
-
-    # Save symbols list before freeing prices (needed for snapshot)
-    available_symbols = list(prices.keys())
-
-    # Free aligned features and prices - no longer needed after dataset is built
-    del aligned_features, prices
-
-    if len(dataset.X) == 0:
-        logger.error("[PatchTST] Dataset is empty - cannot train model")
-        raise ValueError("No training samples could be built from aligned features")
-
-    # Extract dataset fields and free dataset object before training
-    X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
-    del dataset
-    gc.collect()
-
-    # Train model
-    logger.info("[PatchTST] Starting model training...")
-    t0 = time.time()
-    result = trainer(
-        X,
-        y,
-        feature_scaler,
-        config,
-    )
-    t_train = time.time() - t0
-    logger.info(f"[PatchTST] Training complete in {t_train:.1f}s")
-    logger.info(
-        f"[PatchTST] Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}"
-    )
-
-    # Get prior version info for promotion decision (checks local, then HF if needed)
     from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
 
-    hf_model_repo = get_hf_patchtst_model_repo()
-    prior_info = get_prior_version_info(
-        local_storage=storage,
-        hf_storage_class=PatchTSTHuggingFaceModelStorage,
-        hf_model_repo=hf_model_repo,
-    )
-    prior_version = prior_info.version
-    prior_val_loss = prior_info.val_loss
-
-    if prior_version:
-        logger.info(
-            f"[PatchTST] Prior version: {prior_version}, val_loss: {prior_val_loss}"
-        )
-    else:
-        logger.info("[PatchTST] No prior version exists (first model)")
-
-    # Decide on promotion
-    promoted = patchtst_evaluate_for_promotion(
-        val_loss=result.val_loss,
-        prior_val_loss=prior_val_loss,
-    )
-    logger.info(
-        f"[PatchTST] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
-    )
-
-    # Create metadata
-    metadata = create_patchtst_metadata(
-        version=version,
-        data_window_start=start_date.isoformat(),
-        data_window_end=end_date.isoformat(),
+    return _train_patchtst_core(
         symbols=symbols,
+        storage=storage,
+        hf_storage_class=PatchTSTHuggingFaceModelStorage,
+        hf_model_repo_getter=get_hf_patchtst_model_repo,
+        snapshot_forecaster_type="patchtst",
+        skip_snapshot=skip_snapshot,
         config=config,
-        train_loss=result.train_loss,
-        val_loss=result.val_loss,
-        baseline_loss=result.baseline_loss,
-        promoted=promoted,
-        prior_version=prior_version,
-    )
-
-    # Write artifacts locally
-    logger.info(f"[PatchTST] Writing artifacts for version {version}...")
-    storage.write_artifacts(
-        version=version,
-        model=result.model,
-        feature_scaler=result.feature_scaler,
-        config=config,
-        metadata=metadata,
-    )
-    logger.info("[PatchTST] Artifacts written successfully")
-
-    # Promote if passed evaluation, or if this is the first model
-    if promoted or prior_version is None:
-        storage.promote_version(version)
-        logger.info(f"[PatchTST] Version {version} promoted to current")
-
-    # Optionally push to HuggingFace Hub
-    hf_repo = None
-    hf_url = None
-    storage_backend = get_storage_backend()
-
-    if storage_backend == "hf" and hf_model_repo:
-        try:
-            hf_storage = PatchTSTHuggingFaceModelStorage(repo_id=hf_model_repo)
-
-            # Check if HF main branch has a version (might be empty even if local has one)
-            hf_has_main = hf_storage.get_current_version() is not None
-
-            # Promote to main if: passed promotion check OR HF main is empty (first upload)
-            should_make_current = promoted or not hf_has_main
-            logger.info(
-                f"[PatchTST] HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
-                f"make_current={should_make_current}"
-            )
-
-            hf_info = hf_storage.upload_model(
-                version=version,
-                model=result.model,
-                feature_scaler=result.feature_scaler,
-                config=config,
-                metadata=metadata,
-                make_current=should_make_current,
-            )
-            hf_repo = hf_info.repo_id
-            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
-            logger.info(f"[PatchTST] Model uploaded to HuggingFace: {hf_url}")
-        except Exception as e:
-            logger.error(f"[PatchTST] Failed to upload model to HuggingFace: {e}")
-            # Don't fail the training request if HF upload fails
-
-    # Save snapshots (unless skip_snapshot=True)
-    if not skip_snapshot:
-        snapshot_storage = SnapshotLocalStorage("patchtst")
-        check_hf = storage_backend == "hf"
-
-        # Save snapshot for current training window
-        if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
-            snapshot_metadata = create_snapshot_metadata(
-                forecaster_type="patchtst",
-                cutoff_date=end_date,
-                data_window_start=start_date.isoformat(),
-                data_window_end=end_date.isoformat(),
-                symbols=available_symbols,
-                config=config,
-                train_loss=result.train_loss,
-                val_loss=result.val_loss,
-            )
-            snapshot_storage.write_snapshot(
-                cutoff_date=end_date,
-                model=result.model,
-                feature_scaler=result.feature_scaler,
-                config=config,
-                metadata=snapshot_metadata,
-            )
-            logger.info(f"[PatchTST] Saved snapshot for cutoff {end_date}")
-
-            # Upload to HuggingFace if in HF mode
-            if storage_backend == "hf":
-                try:
-                    snapshot_storage.upload_snapshot_to_hf(end_date)
-                    logger.info(
-                        f"[PatchTST] Uploaded snapshot {end_date} to HuggingFace"
-                    )
-                except Exception as e:
-                    logger.error(f"[PatchTST] Failed to upload snapshot to HF: {e}")
-
-        # Also backfill all historical snapshots
-        logger.info("[PatchTST] Backfilling historical snapshots...")
-        _backfill_patchtst_snapshots(
-            symbols, config, start_date, end_date, snapshot_storage, storage_backend
-        )
-
-    return PatchTSTTrainResponse(
-        version=version,
-        data_window_start=start_date.isoformat(),
-        data_window_end=end_date.isoformat(),
-        metrics={
-            "train_loss": result.train_loss,
-            "val_loss": result.val_loss,
-            "baseline_loss": result.baseline_loss,
-        },
-        promoted=promoted,
-        prior_version=prior_version,
-        hf_repo=hf_repo,
-        hf_url=hf_url,
-        num_input_channels=config.num_input_channels,
-        signals_used=["ohlcv"],
+        price_loader=price_loader,
+        dataset_builder=dataset_builder,
+        trainer=trainer,
+        log_prefix="[PatchTST]",
     )
 
 
@@ -379,17 +405,14 @@ def _filter_signals_by_cutoff(
         if df.empty:
             continue
 
-        # Handle both DatetimeIndex and regular index
         if isinstance(df.index, pd.DatetimeIndex):
             filtered = df[df.index <= cutoff_ts]
         else:
-            # Try to convert index to datetime for comparison
             try:
                 idx = pd.to_datetime(df.index)
                 mask = idx <= cutoff_ts
                 filtered = df[mask]
             except (ValueError, TypeError):
-                # If conversion fails, include all data
                 filtered = df
 
         if len(filtered) > 0:
@@ -405,6 +428,7 @@ def _backfill_patchtst_snapshots(
     end_date: date,
     snapshot_storage: SnapshotLocalStorage,
     storage_backend: str = "local",
+    log_prefix: str = "[PatchTST Backfill]",
 ) -> None:
     """Backfill PatchTST snapshots for all years that RL walk-forward training needs.
 
@@ -423,13 +447,16 @@ def _backfill_patchtst_snapshots(
         end_date: Training data end date
         snapshot_storage: Storage instance
         storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
+        log_prefix: Logging prefix string
     """
+    backfill_prefix = (
+        f"{log_prefix} Backfill" if "Backfill" not in log_prefix else log_prefix
+    )
     start_year = start_date.year
     end_year = end_date.year
     bootstrap_years = 4
     check_hf = storage_backend == "hf"
 
-    # RL year Y needs snapshot-(Y-1)-12-31.  Create from (start_year-1) onward.
     first_snapshot_year = start_year - 1
     snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
 
@@ -442,40 +469,39 @@ def _backfill_patchtst_snapshots(
             snapshots_needed.append(cutoff_date)
 
     if not snapshots_needed:
-        logger.info("[PatchTST Backfill] All snapshots already exist, nothing to do")
+        logger.info(f"[{backfill_prefix}] All snapshots already exist, nothing to do")
         return
 
     logger.info(
-        f"[PatchTST Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
+        f"[{backfill_prefix}] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
     )
 
-    # Load prices ONCE for extended window (covers bootstrap for earliest snapshot)
     logger.info(
-        f"[PatchTST Backfill] Loading prices from {snapshot_data_start} to {end_date}..."
+        f"[{backfill_prefix}] Loading prices from {snapshot_data_start} to {end_date}..."
     )
     t0 = time.time()
     prices_full = patchtst_load_prices(symbols, snapshot_data_start, end_date)
     t_prices = time.time() - t0
     logger.info(
-        f"[PatchTST Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
+        f"[{backfill_prefix}] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
     )
 
     if len(prices_full) == 0:
         logger.warning(
-            "[PatchTST Backfill] No price data loaded, cannot create snapshots"
+            f"[{backfill_prefix}] No price data loaded, cannot create snapshots"
         )
         return
 
-    # Train each snapshot using filtered data
+    snapshot_forecaster_type = snapshot_storage.forecaster_type
+
     for cutoff_date in snapshots_needed:
-        logger.info(f"[PatchTST Backfill] Training snapshot for cutoff {cutoff_date}")
+        logger.info(f"[{backfill_prefix}] Training snapshot for cutoff {cutoff_date}")
         t0 = time.time()
 
-        # Filter prices to cutoff (no re-download!)
         prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
         if len(prices) == 0:
             logger.warning(
-                f"[PatchTST Backfill] No price data for cutoff {cutoff_date}, skipping"
+                f"[{backfill_prefix}] No price data for cutoff {cutoff_date}, skipping"
             )
             continue
 
@@ -483,14 +509,14 @@ def _backfill_patchtst_snapshots(
 
         if len(aligned_features) == 0:
             logger.warning(
-                f"[PatchTST Backfill] No aligned features for cutoff {cutoff_date}, skipping"
+                f"[{backfill_prefix}] No aligned features for cutoff {cutoff_date}, skipping"
             )
             continue
 
         dataset = patchtst_build_dataset(aligned_features, prices, config)
         if len(dataset.X) == 0:
             logger.warning(
-                f"[PatchTST Backfill] Empty dataset for cutoff {cutoff_date}, skipping"
+                f"[{backfill_prefix}] Empty dataset for cutoff {cutoff_date}, skipping"
             )
             continue
 
@@ -499,7 +525,7 @@ def _backfill_patchtst_snapshots(
         )
 
         metadata = create_snapshot_metadata(
-            forecaster_type="patchtst",
+            forecaster_type=snapshot_forecaster_type,
             cutoff_date=cutoff_date,
             data_window_start=snapshot_data_start.isoformat(),
             data_window_end=cutoff_date.isoformat(),
@@ -517,17 +543,16 @@ def _backfill_patchtst_snapshots(
             metadata=metadata,
         )
         logger.info(
-            f"[PatchTST Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
+            f"[{backfill_prefix}] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
         )
 
-        # Upload to HuggingFace if in HF mode
         if storage_backend == "hf":
             try:
                 snapshot_storage.upload_snapshot_to_hf(cutoff_date)
                 logger.info(
-                    f"[PatchTST Backfill] Uploaded snapshot {cutoff_date} to HuggingFace"
+                    f"[{backfill_prefix}] Uploaded snapshot {cutoff_date} to HuggingFace"
                 )
             except Exception as e:
                 logger.error(
-                    f"[PatchTST Backfill] Failed to upload snapshot to HF: {e}"
+                    f"[{backfill_prefix}] Failed to upload snapshot to HF: {e}"
                 )

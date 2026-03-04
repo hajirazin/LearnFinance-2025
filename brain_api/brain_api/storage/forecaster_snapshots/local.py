@@ -24,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.config import (
     get_hf_lstm_model_repo,
+    get_hf_patchtst_india_model_repo,
     get_hf_patchtst_model_repo,
     get_hf_token,
 )
@@ -94,7 +95,7 @@ class SnapshotLocalStorage:
 
     def __init__(
         self,
-        forecaster_type: Literal["lstm", "patchtst"],
+        forecaster_type: Literal["lstm", "patchtst", "patchtst_india"],
         base_path: Path | str | None = None,
         hf_token: str | None = None,
     ):
@@ -118,6 +119,8 @@ class SnapshotLocalStorage:
         """Get the HuggingFace repo ID for this forecaster type."""
         if self.forecaster_type == "lstm":
             return get_hf_lstm_model_repo()
+        elif self.forecaster_type == "patchtst_india":
+            return get_hf_patchtst_india_model_repo()
         else:
             return get_hf_patchtst_model_repo()
 

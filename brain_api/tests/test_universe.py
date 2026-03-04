@@ -7,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
-from brain_api.universe.stock_filter import YFinanceFetchError
 
 client = TestClient(app)
 
@@ -982,36 +981,77 @@ MOCK_NSE_CONSTITUENTS = [
 ]
 
 
-def _make_mock_india_metrics(symbols: list[str]) -> dict[str, dict]:
-    """Create mock metrics for .NS suffixed symbols."""
-    metrics = {}
-    for i, sym in enumerate(symbols):
-        metrics[sym] = {
-            "roe": 0.15 + i * 0.01,
-            "price": 1500.0 + i * 100,
-            "sma200": 1400.0,
-            "beta": 0.8 + i * 0.05,
-            "gross_margin": 0.35 + i * 0.01,
-            "roic": 0.10 + i * 0.005,
-            "earnings_yield": 0.04 + i * 0.002,
-            "six_month_return": 0.06 + i * 0.01,
-        }
-    return metrics
+def _make_mock_nifty_shariah_500_universe(
+    constituents: list[dict] | None = None,
+) -> dict:
+    """Create a mock NiftyShariah500 universe with .NS-suffixed symbols."""
+    if constituents is None:
+        constituents = MOCK_NSE_CONSTITUENTS
+    stocks = [{**c, "symbol": c["symbol"] + ".NS"} for c in constituents]
+    return {
+        "stocks": stocks,
+        "source": "nifty_500_shariah",
+        "symbol_suffix": ".NS",
+        "total_stocks": len(stocks),
+        "fetched_at": "2026-01-01T00:00:00+00:00",
+    }
+
+
+def _make_mock_india_batch_inference(symbols: list[str]):
+    """Create a mock BatchInferenceResult for India PatchTST."""
+    from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
+
+    predictions = [
+        SymbolPrediction(
+            symbol=sym,
+            predicted_weekly_return_pct=round(5.0 - i * 0.3, 4),
+            direction="UP" if (5.0 - i * 0.3) > 0 else "DOWN",
+            has_enough_history=True,
+            history_days_used=120,
+            data_end_date="2026-02-27",
+            target_week_start="2026-03-02",
+            target_week_end="2026-03-06",
+        )
+        for i, sym in enumerate(symbols)
+    ]
+    predictions.sort(key=lambda p: p.predicted_weekly_return_pct or 0, reverse=True)
+    return BatchInferenceResult(
+        predictions=predictions, model_version="v2026-03-01-india123"
+    )
+
+
+def _patch_india_min_wf_days():
+    """Mock compute_min_walkforward_days for halal_india tests."""
+    return patch(
+        "brain_api.universe.halal_india.compute_min_walkforward_days",
+        return_value=2660,
+    )
+
+
+def _mock_india_history_filter_pass_all(symbols: list[str]):
+    """Return a mock for filter_symbols_by_min_history that passes all symbols."""
+    return lambda syms, min_days, ref_date: (syms, [])
 
 
 def test_get_halal_india_returns_expected_structure():
     """Test that /universe/halal_india returns the expected response structure."""
-    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
-    mock_metrics = _make_mock_india_metrics(ns_symbols)
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
 
     with (
         patch(
-            "brain_api.universe.halal_india.scrape_nifty500_shariah",
-            return_value=MOCK_NSE_CONSTITUENTS,
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
         ),
         patch(
-            "brain_api.universe.halal_india.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_india")
@@ -1020,30 +1060,37 @@ def test_get_halal_india_returns_expected_structure():
     data = response.json()
 
     assert "stocks" in data
-    assert "source" in data
-    assert "symbol_suffix" in data
-    assert "total_stocks" in data
-    assert "total_scored" in data
+    assert "total_candidates" in data
+    assert "total_universe" in data
+    assert "filtered_insufficient_history" in data
     assert "top_n" in data
-    assert "fetched_at" in data
-
-    assert data["source"] == "nifty_500_shariah"
+    assert "selection_method" in data
+    assert data["selection_method"] == "patchtst_forecast"
+    assert "model_version" in data
+    assert "symbol_suffix" in data
     assert data["symbol_suffix"] == ".NS"
+    assert "fetched_at" in data
 
 
 def test_get_halal_india_returns_max_15_stocks():
     """Test that /universe/halal_india returns at most 15 stocks."""
-    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
-    mock_metrics = _make_mock_india_metrics(ns_symbols)
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
 
     with (
         patch(
-            "brain_api.universe.halal_india.scrape_nifty500_shariah",
-            return_value=MOCK_NSE_CONSTITUENTS,
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
         ),
         patch(
-            "brain_api.universe.halal_india.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_india")
@@ -1055,19 +1102,25 @@ def test_get_halal_india_returns_max_15_stocks():
     assert data["top_n"] == 15
 
 
-def test_get_halal_india_stocks_have_factor_scores():
-    """Test that each halal_india stock has factor_score and factor_components."""
-    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
-    mock_metrics = _make_mock_india_metrics(ns_symbols)
+def test_get_halal_india_stocks_have_predicted_returns():
+    """Test that each halal_india stock has predicted_weekly_return_pct and rank."""
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
 
     with (
         patch(
-            "brain_api.universe.halal_india.scrape_nifty500_shariah",
-            return_value=MOCK_NSE_CONSTITUENTS,
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
         ),
         patch(
-            "brain_api.universe.halal_india.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_india")
@@ -1076,25 +1129,32 @@ def test_get_halal_india_stocks_have_factor_scores():
     data = response.json()
 
     for stock in data["stocks"]:
-        assert "factor_score" in stock
-        assert "factor_components" in stock
-        assert "metrics" in stock
-        assert stock["factor_score"] is not None
+        assert "predicted_weekly_return_pct" in stock
+        assert "rank" in stock
+        assert "model_version" in stock
+        assert stock["predicted_weekly_return_pct"] is not None
+        assert stock["rank"] >= 1
 
 
-def test_get_halal_india_symbols_are_clean():
-    """Test that returned symbols do NOT have .NS suffix."""
-    ns_symbols = [c["symbol"] + ".NS" for c in MOCK_NSE_CONSTITUENTS]
-    mock_metrics = _make_mock_india_metrics(ns_symbols)
+def test_get_halal_india_symbols_have_ns_suffix():
+    """Test that returned symbols have .NS suffix (yfinance-ready)."""
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
 
     with (
         patch(
-            "brain_api.universe.halal_india.scrape_nifty500_shariah",
-            return_value=MOCK_NSE_CONSTITUENTS,
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
         ),
         patch(
-            "brain_api.universe.halal_india.fetch_stock_metrics",
-            return_value=mock_metrics,
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
         ),
     ):
         response = client.get("/universe/halal_india")
@@ -1103,27 +1163,35 @@ def test_get_halal_india_symbols_are_clean():
     data = response.json()
 
     for stock in data["stocks"]:
-        assert not stock["symbol"].endswith(".NS"), (
-            f"Symbol {stock['symbol']} should not have .NS suffix"
+        assert stock["symbol"].endswith(".NS"), (
+            f"Symbol {stock['symbol']} should have .NS suffix"
         )
 
 
-def test_get_halal_india_returns_503_on_yfinance_failure():
-    """Test that /universe/halal_india returns 503 when yfinance rate-limits us."""
+def test_get_halal_india_returns_503_when_no_model():
+    """Test that /universe/halal_india returns 503 when no India PatchTST model."""
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+
     with (
         patch(
-            "brain_api.universe.halal_india.scrape_nifty500_shariah",
-            return_value=MOCK_NSE_CONSTITUENTS,
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
         ),
         patch(
-            "brain_api.universe.halal_india.fetch_stock_metrics",
-            side_effect=YFinanceFetchError("90/100 failed (90.0%)"),
+            "brain_api.universe.halal_india.run_batch_inference",
+            side_effect=ValueError("No current PatchTST model version available"),
         ),
     ):
         response = client.get("/universe/halal_india")
 
     assert response.status_code == 503
-    assert "90/100" in response.json()["detail"]
+    assert "PatchTST" in response.json()["detail"]
 
 
 def test_get_halal_india_returns_503_on_nse_failure():
@@ -1131,7 +1199,7 @@ def test_get_halal_india_returns_503_on_nse_failure():
     from brain_api.universe.scrapers.nse import NseFetchError
 
     with patch(
-        "brain_api.universe.halal_india.scrape_nifty500_shariah",
+        "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
         side_effect=NseFetchError("NSE API returned empty data"),
     ):
         response = client.get("/universe/halal_india")
@@ -1278,3 +1346,75 @@ def test_scrape_nifty500_shariah_raises_on_http_error():
 
         with pytest.raises(NseFetchError, match="NSE session attempts failed"):
             scrape_nifty500_shariah()
+
+
+# ============================================================================
+# NiftyShariah500 Universe Endpoint Tests
+# ============================================================================
+
+
+def test_get_nifty_shariah_500_returns_expected_structure():
+    """Test that /universe/nifty_shariah_500 returns the expected response structure."""
+    with patch(
+        "brain_api.universe.nifty_shariah_500.scrape_nifty500_shariah",
+        return_value=MOCK_NSE_CONSTITUENTS,
+    ):
+        response = client.get("/universe/nifty_shariah_500")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "stocks" in data
+    assert "source" in data
+    assert "symbol_suffix" in data
+    assert "total_stocks" in data
+    assert "fetched_at" in data
+
+    assert data["source"] == "nifty_500_shariah"
+    assert data["symbol_suffix"] == ".NS"
+
+
+def test_get_nifty_shariah_500_symbols_have_ns_suffix():
+    """Test that all NiftyShariah500 symbols include .NS suffix."""
+    with patch(
+        "brain_api.universe.nifty_shariah_500.scrape_nifty500_shariah",
+        return_value=MOCK_NSE_CONSTITUENTS,
+    ):
+        response = client.get("/universe/nifty_shariah_500")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for stock in data["stocks"]:
+        assert stock["symbol"].endswith(".NS"), (
+            f"Symbol {stock['symbol']} should have .NS suffix"
+        )
+
+
+def test_get_nifty_shariah_500_returns_all_constituents():
+    """Test that /universe/nifty_shariah_500 returns ALL constituents (not capped at 15)."""
+    with patch(
+        "brain_api.universe.nifty_shariah_500.scrape_nifty500_shariah",
+        return_value=MOCK_NSE_CONSTITUENTS,
+    ):
+        response = client.get("/universe/nifty_shariah_500")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data["stocks"]) == len(MOCK_NSE_CONSTITUENTS)
+    assert data["total_stocks"] == len(MOCK_NSE_CONSTITUENTS)
+
+
+def test_get_nifty_shariah_500_returns_503_on_nse_failure():
+    """Test that /universe/nifty_shariah_500 returns 503 when NSE scraper fails."""
+    from brain_api.universe.scrapers.nse import NseFetchError
+
+    with patch(
+        "brain_api.universe.nifty_shariah_500.scrape_nifty500_shariah",
+        side_effect=NseFetchError("NSE API returned empty data"),
+    ):
+        response = client.get("/universe/nifty_shariah_500")
+
+    assert response.status_code == 503
+    assert "NSE API" in response.json()["detail"]

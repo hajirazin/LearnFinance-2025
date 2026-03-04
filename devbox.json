@@ -37,6 +37,8 @@
       "prefect:email:serve": ["cd prefect && uv run python -m flows.weekly_forecast_email"],
       "prefect:india:test": ["cd prefect && uv run python -m flows.india_weekly_email --test"],
       "prefect:india:serve": ["cd prefect && uv run python -m flows.india_weekly_email"],
+      "prefect:india-training:test": ["cd prefect && uv run python -m flows.india_weekly_training --test"],
+      "prefect:india-training:serve": ["cd prefect && uv run python -m flows.india_weekly_training"],
       "prefect:lint": ["cd prefect && uv run ruff check ."],
       "prefect:format": ["cd prefect && uv run ruff format ."],
       "hf:login": ["uv run huggingface-cli login"],

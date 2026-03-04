@@ -44,6 +44,7 @@ from .models import (
 )
 from .patchtst import _backfill_patchtst_snapshots
 from .patchtst import router as patchtst_router
+from .patchtst_india import router as patchtst_india_router
 from .ppo import router as ppo_router
 from .sac import router as sac_router
 
@@ -59,6 +60,7 @@ router = APIRouter()
 # Include all sub-routers
 router.include_router(lstm_router)
 router.include_router(patchtst_router)
+router.include_router(patchtst_india_router)
 router.include_router(ppo_router)
 router.include_router(sac_router)
 

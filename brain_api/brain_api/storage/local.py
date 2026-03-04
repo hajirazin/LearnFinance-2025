@@ -17,6 +17,7 @@ from brain_api.storage.metadata import create_training_metadata
 # PatchTST storage
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
+    PatchTSTIndiaModelStorage,
     PatchTSTModelStorage,
 )
 
@@ -103,6 +104,7 @@ __all__ = [
     "PPOLocalStorage",
     # PatchTST
     "PatchTSTArtifacts",
+    "PatchTSTIndiaModelStorage",
     "PatchTSTModelStorage",
     # SAC (unified with dual forecasts)
     "SACArtifacts",
