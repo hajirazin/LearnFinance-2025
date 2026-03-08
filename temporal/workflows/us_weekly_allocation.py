@@ -48,6 +48,7 @@ with workflow.unsafe.imports_passed_through():
         get_order_history_sac,
         get_ppo_portfolio,
         get_sac_portfolio,
+        resolve_next_attempt,
         submit_orders_hrp,
         submit_orders_ppo,
         submit_orders_sac,
@@ -113,9 +114,16 @@ class USWeeklyAllocationWorkflow:
         now_ist = workflow.now().astimezone()
         as_of_date = now_ist.strftime("%Y-%m-%d")
         run_id = f"paper:{as_of_date}"
-        attempt = 1
 
-        workflow.logger.info("Starting US weekly allocation pipeline...")
+        attempt = await workflow.execute_activity(
+            resolve_next_attempt,
+            args=[run_id, as_of_date],
+            start_to_close_timeout=SHORT_TIMEOUT,
+        )
+
+        workflow.logger.info(
+            f"Starting US weekly allocation pipeline (attempt={attempt})..."
+        )
 
         # Phase 0: Get active symbols + portfolios (parallel)
         (

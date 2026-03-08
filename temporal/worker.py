@@ -8,6 +8,7 @@ Usage:
 
 import asyncio
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
@@ -40,6 +41,7 @@ from activities.portfolio import (
     get_order_history_sac,
     get_ppo_portfolio,
     get_sac_portfolio,
+    resolve_next_attempt,
     submit_orders_hrp,
     submit_orders_ppo,
     submit_orders_sac,
@@ -104,6 +106,7 @@ ALL_ACTIVITIES = [
     get_order_history_ppo,
     get_order_history_sac,
     check_order_statuses,
+    resolve_next_attempt,
     # Execution / experience
     generate_orders_ppo,
     generate_orders_sac,
@@ -144,6 +147,7 @@ async def main():
         task_queue=TASK_QUEUE,
         workflows=ALL_WORKFLOWS,
         activities=ALL_ACTIVITIES,
+        activity_executor=ThreadPoolExecutor(max_workers=10),
     )
     print(f"Worker started on task queue '{TASK_QUEUE}' ({TEMPORAL_ADDRESS})")
     print(f"  Workflows: {len(ALL_WORKFLOWS)}")

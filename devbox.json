@@ -7,7 +7,7 @@
     "colima@latest",
     "docker@latest",
     "docker-compose@latest",
-    "temporal@latest",
+    "temporal-cli@latest",
     "jq@latest",
     "curl@latest",
     "pre-commit@latest"
@@ -36,10 +36,10 @@
       "temporal:test": ["cd temporal && uv run pytest"],
       "temporal:lint": ["cd temporal && uv run ruff check ."],
       "temporal:format": ["cd temporal && uv run ruff format ."],
-      "temporal:run:us-allocation": ["temporal workflow start --type USWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id us-allocation-manual"],
-      "temporal:run:us-training": ["temporal workflow start --type USWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id us-training-manual"],
-      "temporal:run:india-allocation": ["temporal workflow start --type IndiaWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id india-allocation-manual"],
-      "temporal:run:india-training": ["temporal workflow start --type IndiaWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id india-training-manual"],
+      "temporal:run:us-allocation": ["cd temporal && temporal workflow start --type USWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id us-allocation-manual"],
+      "temporal:run:us-training": ["cd temporal && temporal workflow start --type USWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id us-training-manual"],
+      "temporal:run:india-allocation": ["cd temporal && temporal workflow start --type IndiaWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id india-allocation-manual"],
+      "temporal:run:india-training": ["cd temporal && temporal workflow start --type IndiaWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id india-training-manual"],
       "hf:login": ["uv run huggingface-cli login"],
       "hf:whoami": ["uv run huggingface-cli whoami"]
     }

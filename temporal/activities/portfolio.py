@@ -1,6 +1,7 @@
 """Portfolio, order submission, order history, and order status activities."""
 
 import logging
+import re
 
 from temporalio import activity
 
@@ -16,6 +17,38 @@ from models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@activity.defn
+def resolve_next_attempt(run_id: str, as_of_date: str) -> int:
+    """Find the max attempt already used in Alpaca orders, return max + 1.
+
+    Parses client_order_id (format: paper:YYYY-MM-DD:attempt-N:SYMBOL:SIDE)
+    across all three accounts to avoid duplicate IDs on reruns.
+    """
+    max_attempt = 0
+    pattern = re.compile(rf"^{re.escape(run_id)}:attempt-(\d+):")
+
+    for account in ("ppo", "sac", "hrp"):
+        with get_client() as client:
+            response = client.get(
+                "/alpaca/order-history",
+                params={"account": account, "after": as_of_date},
+            )
+            response.raise_for_status()
+
+        for order in response.json():
+            coid = order.get("client_order_id", "")
+            match = pattern.match(coid)
+            if match:
+                max_attempt = max(max_attempt, int(match.group(1)))
+
+    next_attempt = max_attempt + 1
+    logger.info(
+        f"Resolved next attempt for {run_id}: {next_attempt} "
+        f"(max existing: {max_attempt})"
+    )
+    return next_attempt
 
 
 @activity.defn
@@ -172,20 +205,26 @@ def get_order_history_sac(after_date: str) -> list[OrderHistoryItem]:
 
 @activity.defn
 def check_order_statuses(account: str, client_order_ids: list[str]) -> list[dict]:
-    """Check order statuses by client_order_id via brain_api.
+    """Check order statuses using /alpaca/order-history endpoint.
 
+    Fetches recent order history and filters to the given client_order_ids.
     Returns list of {client_order_id, status, filled_qty, filled_avg_price}.
     """
     logger.info(
         f"Checking {len(client_order_ids)} order statuses for {account.upper()}..."
     )
+    today = activity.info().current_attempt_scheduled_time.strftime("%Y-%m-%d")
     with get_client() as client:
-        response = client.post(
-            "/alpaca/check-orders",
-            json={"account": account, "client_order_ids": client_order_ids},
+        response = client.get(
+            "/alpaca/order-history",
+            params={"account": account, "after": today},
         )
         response.raise_for_status()
-    data = response.json()
-    orders = data.get("orders", [])
-    logger.info(f"Got {len(orders)} order statuses for {account.upper()}")
-    return orders
+    all_orders = response.json()
+    id_set = set(client_order_ids)
+    matched = [o for o in all_orders if o.get("client_order_id") in id_set]
+    logger.info(
+        f"Got {len(matched)}/{len(client_order_ids)} order statuses "
+        f"for {account.upper()}"
+    )
+    return matched

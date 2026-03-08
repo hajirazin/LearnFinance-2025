@@ -222,6 +222,10 @@ def _make_mock_activities(
 ):
     """Build a list of mock activity functions that return fixture data."""
 
+    @activity.defn(name="resolve_next_attempt")
+    def mock_resolve_next_attempt(run_id, as_of_date) -> int:
+        return 1
+
     @activity.defn(name="get_active_symbols")
     def mock_get_active_symbols() -> ActiveSymbolsResponse:
         return active_symbols
@@ -339,6 +343,7 @@ def _make_mock_activities(
         return email_resp
 
     return [
+        mock_resolve_next_attempt,
         mock_get_active_symbols,
         mock_get_ppo_portfolio,
         mock_get_sac_portfolio,

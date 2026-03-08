@@ -39,7 +39,7 @@ def generate_orders_ppo(
         logger.info("PPO skipped - returning empty orders")
         return SkippedOrdersResponse(skipped=True, algorithm="ppo")
 
-    logger.info("Generating PPO orders...")
+    logger.info(f"Generating PPO orders (attempt={attempt})...")
     with get_client() as client:
         response = client.post(
             "/orders/generate",

@@ -73,7 +73,7 @@ class Position(BaseModel):
 class PortfolioSnapshot(BaseModel):
     """Current portfolio state from Alpaca or similar broker."""
 
-    cash: float = Field(..., ge=0)
+    cash: float = Field(..., description="Can be negative for margin accounts")
     positions: list[Position] = Field(default_factory=list)
 
 

@@ -28,6 +28,7 @@ def _alloc_to_dict(alloc, is_hrp: bool = False, as_of_date: str = "") -> dict:
     if isinstance(alloc, SkippedAllocation) or getattr(alloc, "skipped", False):
         if is_hrp:
             return {
+                "universe": "skipped",
                 "percentage_weights": {},
                 "symbols_used": 0,
                 "symbols_excluded": [],
