@@ -3,6 +3,7 @@
 Tests:
 - Full workflow execution with mocked activities
 - Skip logic when algorithms have open orders
+- Independent per-algorithm sell-wait-buy (sells don't block other accounts)
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -158,8 +159,7 @@ def buy_only_orders():
                 symbol="AAPL",
                 side="buy",
                 qty=5.0,
-                type="limit",
-                limit_price=175.50,
+                type="market",
                 time_in_force="day",
             ),
         ],
@@ -172,6 +172,39 @@ def buy_only_orders():
             skipped_small_orders=0,
         ),
         prices_used={"AAPL": 175.50},
+    )
+
+
+@pytest.fixture
+def sell_and_buy_orders():
+    return GenerateOrdersResponse(
+        orders=[
+            OrderModel(
+                client_order_id="paper:2026-02-05:attempt-1:MSFT:SELL",
+                symbol="MSFT",
+                side="sell",
+                qty=3.0,
+                type="market",
+                time_in_force="day",
+            ),
+            OrderModel(
+                client_order_id="paper:2026-02-05:attempt-1:AAPL:BUY",
+                symbol="AAPL",
+                side="buy",
+                qty=5.0,
+                type="market",
+                time_in_force="day",
+            ),
+        ],
+        summary=OrderSummary(
+            buys=1,
+            sells=1,
+            total_buy_value=877.50,
+            total_sell_value=1260.00,
+            turnover_pct=12.0,
+            skipped_small_orders=0,
+        ),
+        prices_used={"AAPL": 175.50, "MSFT": 420.00},
     )
 
 
@@ -219,6 +252,7 @@ def _make_mock_activities(
     submit_resp,
     summary_resp,
     email_resp,
+    check_order_statuses_fn=None,
 ):
     """Build a list of mock activity functions that return fixture data."""
 
@@ -316,6 +350,8 @@ def _make_mock_activities(
 
     @activity.defn(name="check_order_statuses")
     def mock_check_order_statuses(account, client_order_ids):
+        if check_order_statuses_fn is not None:
+            return check_order_statuses_fn(account, client_order_ids)
         return []
 
     @activity.defn(name="get_order_history_ppo")
@@ -559,3 +595,97 @@ class TestUSWeeklyAllocationSkipLogic:
             assert result["sac"]["skipped"] is True
             assert result["hrp"]["skipped"] is True
             assert result["email"]["is_success"] is True
+
+
+class TestUSWeeklyAllocationSellWaitBuy:
+    """Test independent per-algorithm sell-wait-buy pipelines."""
+
+    @pytest.mark.asyncio
+    async def test_staggered_sell_fills_complete_independently(
+        self,
+        active_symbols,
+        portfolio_no_open,
+        lstm_resp,
+        patchtst_resp,
+        news_resp,
+        fundamentals_resp,
+        ppo_alloc,
+        sac_alloc,
+        hrp_alloc,
+        sell_and_buy_orders,
+        buy_only_orders,
+        submit_resp,
+        summary_resp,
+        email_resp,
+    ):
+        """SAC sells fill immediately, PPO sells need one poll cycle.
+
+        Verifies each algorithm's sell-wait-buy runs independently -- SAC
+        buys proceed without waiting for PPO sells to fill.
+        """
+        ppo_poll_count = {"n": 0}
+
+        def staggered_check(account, client_order_ids):
+            if account == "sac":
+                return [
+                    {"client_order_id": cid, "status": "filled"}
+                    for cid in client_order_ids
+                ]
+            if account == "ppo":
+                ppo_poll_count["n"] += 1
+                if ppo_poll_count["n"] <= 1:
+                    return [
+                        {"client_order_id": cid, "status": "pending_new"}
+                        for cid in client_order_ids
+                    ]
+                return [
+                    {"client_order_id": cid, "status": "filled"}
+                    for cid in client_order_ids
+                ]
+            return []
+
+        activities = _make_mock_activities(
+            active_symbols=active_symbols,
+            ppo_portfolio=portfolio_no_open,
+            sac_portfolio=portfolio_no_open,
+            hrp_portfolio=portfolio_no_open,
+            fundamentals_resp=fundamentals_resp,
+            news_resp=news_resp,
+            lstm_resp=lstm_resp,
+            patchtst_resp=patchtst_resp,
+            ppo_alloc=ppo_alloc,
+            sac_alloc=sac_alloc,
+            hrp_alloc=hrp_alloc,
+            ppo_orders=sell_and_buy_orders,
+            sac_orders=sell_and_buy_orders,
+            hrp_orders=buy_only_orders,
+            submit_resp=submit_resp,
+            summary_resp=summary_resp,
+            email_resp=email_resp,
+            check_order_statuses_fn=staggered_check,
+        )
+
+        async with await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter
+        ) as env:
+            async with Worker(
+                env.client,
+                task_queue="test-queue",
+                workflows=[USWeeklyAllocationWorkflow],
+                activities=activities,
+                activity_executor=ThreadPoolExecutor(),
+            ):
+                result = await env.client.execute_workflow(
+                    USWeeklyAllocationWorkflow.run,
+                    id="test-us-staggered-sells",
+                    task_queue="test-queue",
+                )
+
+            assert result["skipped_algorithms"] == []
+            assert result["ppo"]["skipped"] is False
+            assert result["sac"]["skipped"] is False
+            assert result["hrp"]["skipped"] is False
+            assert result["ppo"]["orders_submitted"] > 0
+            assert result["sac"]["orders_submitted"] > 0
+            assert result["email"]["is_success"] is True
+            assert ppo_poll_count["n"] == 2

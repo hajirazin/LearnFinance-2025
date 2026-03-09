@@ -8,11 +8,10 @@ Phases:
 1. Get signals + forecasts (parallel)
 2. Run allocators: PPO, SAC, HRP (parallel, conditional on open orders)
 3. Generate orders + store experience
-4. Submit sell orders
-5. Poll with durable sleep until sells are terminal (or 48h timeout)
-6. Submit buy orders
-7. Get order history + update execution
-8. Generate LLM summary + send email
+4. Per-algorithm sell-wait-buy (parallel per account, each independently
+   submits sells -> polls until terminal -> submits buys)
+5. Get order history + update execution
+6. Generate LLM summary + send email
 """
 
 import asyncio
@@ -105,6 +104,74 @@ def _make_buy_response(
         summary=original.summary,
         prices_used=original.prices_used,
     )
+
+
+async def _sell_wait_buy(
+    account: str,
+    sells: GenerateOrdersResponse | SkippedOrdersResponse,
+    buy_orders: list[OrderModel],
+    original_orders: GenerateOrdersResponse | SkippedOrdersResponse,
+    submit_activity,
+):
+    """Run the full sell -> poll -> buy cycle for a single algorithm.
+
+    Each algorithm (PPO/SAC/HRP) has its own Alpaca account, so their
+    sell-wait-buy pipelines are fully independent and run in parallel.
+    """
+    sell_submit = await workflow.execute_activity(
+        submit_activity,
+        args=[sells],
+        start_to_close_timeout=SHORT_TIMEOUT,
+    )
+
+    sell_order_ids = _extract_sell_ids(sells)
+
+    if sell_order_ids:
+        workflow.logger.info(
+            f"[{account.upper()}] Waiting for {len(sell_order_ids)} sell orders..."
+        )
+        deadline = workflow.now() + SELL_DEADLINE
+
+        while workflow.now() < deadline:
+            statuses = await workflow.execute_activity(
+                check_order_statuses,
+                args=[account, sell_order_ids],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
+            all_terminal = all(
+                s.get("status", "").lower() in TERMINAL_STATUSES for s in statuses
+            )
+
+            if all_terminal:
+                workflow.logger.info(f"[{account.upper()}] All sell orders terminal.")
+                break
+
+            workflow.logger.info(
+                f"[{account.upper()}] Sells still pending, sleeping 15 min..."
+            )
+            await workflow.sleep(SELL_POLL_INTERVAL)
+        else:
+            workflow.logger.warning(
+                f"[{account.upper()}] Sell deadline reached (48h), proceeding to buys."
+            )
+
+    buy_resp = _make_buy_response(buy_orders, original_orders)
+    buy_submit = await workflow.execute_activity(
+        submit_activity,
+        args=[buy_resp],
+        start_to_close_timeout=SHORT_TIMEOUT,
+    )
+
+    return _combine_submit(sell_submit, buy_submit)
+
+
+def _extract_sell_ids(
+    sells: GenerateOrdersResponse | SkippedOrdersResponse,
+) -> list[str]:
+    """Extract client_order_ids for sell orders from a response."""
+    if isinstance(sells, SkippedOrdersResponse) or getattr(sells, "skipped", False):
+        return []
+    return [o.client_order_id for o in sells.orders if o.side == "sell"]
 
 
 @workflow.defn
@@ -294,96 +361,18 @@ class USWeeklyAllocationWorkflow:
         if experience_futures:
             await asyncio.gather(*experience_futures)
 
-        # Phase 4: Split into sells and buys
+        # Phase 4: Per-algorithm sell-wait-buy (parallel per account)
         ppo_sells, ppo_buys = _split_orders_by_side(ppo_orders)
         sac_sells, sac_buys = _split_orders_by_side(sac_orders)
         hrp_sells, hrp_buys = _split_orders_by_side(hrp_orders)
 
-        # Submit sells
-        ppo_sell_submit, sac_sell_submit, hrp_sell_submit = await asyncio.gather(
-            workflow.execute_activity(
-                submit_orders_ppo,
-                args=[ppo_sells],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-            workflow.execute_activity(
-                submit_orders_sac,
-                args=[sac_sells],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-            workflow.execute_activity(
-                submit_orders_hrp,
-                args=[hrp_sells],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
+        ppo_submit, sac_submit, hrp_submit = await asyncio.gather(
+            _sell_wait_buy("ppo", ppo_sells, ppo_buys, ppo_orders, submit_orders_ppo),
+            _sell_wait_buy("sac", sac_sells, sac_buys, sac_orders, submit_orders_sac),
+            _sell_wait_buy("hrp", hrp_sells, hrp_buys, hrp_orders, submit_orders_hrp),
         )
 
-        # Phase 5: Poll with durable sleep until sells are terminal
-        all_sell_order_ids = _collect_sell_order_ids(ppo_sells, sac_sells, hrp_sells)
-
-        if all_sell_order_ids:
-            workflow.logger.info(
-                f"Waiting for {len(all_sell_order_ids)} sell orders to fill..."
-            )
-            deadline = workflow.now() + SELL_DEADLINE
-
-            while workflow.now() < deadline:
-                all_terminal = True
-                for account, order_ids in all_sell_order_ids.items():
-                    if not order_ids:
-                        continue
-                    statuses = await workflow.execute_activity(
-                        check_order_statuses,
-                        args=[account, order_ids],
-                        start_to_close_timeout=SHORT_TIMEOUT,
-                    )
-                    for s in statuses:
-                        if s.get("status", "").lower() not in TERMINAL_STATUSES:
-                            all_terminal = False
-                            break
-                    if not all_terminal:
-                        break
-
-                if all_terminal:
-                    workflow.logger.info("All sell orders are terminal.")
-                    break
-
-                workflow.logger.info("Sell orders still pending, sleeping 15 min...")
-                await workflow.sleep(SELL_POLL_INTERVAL)
-            else:
-                workflow.logger.warning(
-                    "Sell deadline reached (48h), proceeding to buys."
-                )
-
-        # Phase 6: Submit buys
-        ppo_buy_resp = _make_buy_response(ppo_buys, ppo_orders)
-        sac_buy_resp = _make_buy_response(sac_buys, sac_orders)
-        hrp_buy_resp = _make_buy_response(hrp_buys, hrp_orders)
-
-        ppo_buy_submit, sac_buy_submit, hrp_buy_submit = await asyncio.gather(
-            workflow.execute_activity(
-                submit_orders_ppo,
-                args=[ppo_buy_resp],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-            workflow.execute_activity(
-                submit_orders_sac,
-                args=[sac_buy_resp],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-            workflow.execute_activity(
-                submit_orders_hrp,
-                args=[hrp_buy_resp],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-        )
-
-        # Combine sell + buy submit results for email
-        ppo_submit = _combine_submit(ppo_sell_submit, ppo_buy_submit)
-        sac_submit = _combine_submit(sac_sell_submit, sac_buy_submit)
-        hrp_submit = _combine_submit(hrp_sell_submit, hrp_buy_submit)
-
-        # Phase 7: Get order history + update execution
+        # Phase 5: Get order history + update execution
         if run_ppo:
             ppo_history = await workflow.execute_activity(
                 get_order_history_ppo,
@@ -407,7 +396,7 @@ class USWeeklyAllocationWorkflow:
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
 
-        # Phase 8: Generate summary + send email
+        # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
             args=[lstm, patchtst, news, fundamentals, hrp_alloc, sac_alloc, ppo_alloc],
@@ -458,18 +447,6 @@ class USWeeklyAllocationWorkflow:
                 "subject": email_result.subject,
             },
         }
-
-
-def _collect_sell_order_ids(ppo_sells, sac_sells, hrp_sells) -> dict[str, list[str]]:
-    """Collect all sell order client_order_ids grouped by account."""
-    result: dict[str, list[str]] = {}
-    for account, sells in [("ppo", ppo_sells), ("sac", sac_sells), ("hrp", hrp_sells)]:
-        if isinstance(sells, SkippedOrdersResponse) or getattr(sells, "skipped", False):
-            continue
-        ids = [o.client_order_id for o in sells.orders if o.side == "sell"]
-        if ids:
-            result[account] = ids
-    return result
 
 
 def _combine_submit(sell_submit, buy_submit):

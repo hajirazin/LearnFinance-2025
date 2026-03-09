@@ -238,7 +238,7 @@ class OrderModel(BaseModel):
     side: str
     qty: float
     type: str
-    limit_price: float
+    limit_price: float | None = None
     time_in_force: str
 
 

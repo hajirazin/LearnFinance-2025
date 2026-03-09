@@ -216,3 +216,4 @@ data/
 .devbox/
 
 scripts/output
+.DS_Store

@@ -69,9 +69,11 @@ class OrderToSubmit(BaseModel):
     symbol: str = Field(..., description="Stock symbol")
     qty: float = Field(..., gt=0, description="Quantity of shares")
     side: str = Field(..., description="'buy' or 'sell'")
-    type: str = Field(default="limit", description="Order type")
+    type: str = Field(default="market", description="Order type")
     time_in_force: str = Field(default="day", description="Time in force")
-    limit_price: float = Field(..., gt=0, description="Limit price in dollars")
+    limit_price: float | None = Field(
+        default=None, gt=0, description="Limit price (only for limit orders)"
+    )
     client_order_id: str = Field(..., description="Idempotent order ID")
 
 
@@ -288,18 +290,18 @@ def submit_orders(request: SubmitOrdersRequest) -> SubmitOrdersResponse:
         )
         for order in sorted_orders:
             try:
-                response = client.post(
-                    "/v2/orders",
-                    json={
-                        "symbol": order.symbol,
-                        "qty": str(order.qty),
-                        "side": order.side,
-                        "type": order.type,
-                        "time_in_force": order.time_in_force,
-                        "limit_price": str(order.limit_price),
-                        "client_order_id": order.client_order_id,
-                    },
-                )
+                payload = {
+                    "symbol": order.symbol,
+                    "qty": str(order.qty),
+                    "side": order.side,
+                    "type": order.type,
+                    "time_in_force": order.time_in_force,
+                    "client_order_id": order.client_order_id,
+                }
+                if order.limit_price is not None:
+                    payload["limit_price"] = str(order.limit_price)
+
+                response = client.post("/v2/orders", json=payload)
                 response.raise_for_status()
                 data = response.json()
 

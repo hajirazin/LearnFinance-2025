@@ -83,8 +83,10 @@ class OrderModel(BaseModel):
     qty: float = Field(
         ..., gt=0, description="Quantity of shares (supports fractional)"
     )
-    type: str = Field(..., description="Order type ('limit')")
-    limit_price: float = Field(..., gt=0, description="Limit price in dollars")
+    type: str = Field(default="market", description="Order type")
+    limit_price: float | None = Field(
+        default=None, gt=0, description="Limit price (only for limit orders)"
+    )
     time_in_force: str = Field(..., description="Time in force ('day')")
 
 
@@ -134,7 +136,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
     )
     """Generate orders to rebalance portfolio to target allocation.
 
-    This endpoint converts target allocation weights into actionable limit orders
+    This endpoint converts target allocation weights into actionable market orders
     that can be submitted directly to Alpaca. It handles:
 
     1. **Idempotent client_order_id generation**: Deterministic IDs based on
@@ -142,8 +144,8 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
 
     2. **Minimum trade filtering**: Orders below $10 value are skipped.
 
-    3. **Limit price calculation**: Adds 1% buffer (above market for buys,
-       below for sells) to improve fill probability.
+    3. **Sell qty cap**: Sell quantity is capped at position quantity to avoid
+       requesting more shares than held.
 
     4. **Fractional shares**: Quantities are calculated to 4 decimal places.
 
@@ -184,8 +186,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
           "symbol": "MSFT",
           "side": "buy",
           "qty": 2.5,
-          "type": "limit",
-          "limit_price": 419.55,
+          "type": "market",
           "time_in_force": "day"
         }
       ],

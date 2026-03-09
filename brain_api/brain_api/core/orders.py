@@ -1,9 +1,9 @@
 """Order generation logic for Alpaca paper trading.
 
-Converts allocation weights into actionable limit orders with:
+Converts allocation weights into actionable market orders with:
 - Idempotent client_order_id generation
 - Minimum trade value filtering
-- Limit price calculation with buffer
+- Sell qty capped at position quantity
 """
 
 from dataclasses import dataclass
@@ -16,10 +16,6 @@ import yfinance as yf
 
 # Skip orders smaller than this value (in dollars)
 MIN_TRADE_VALUE: float = 10.0
-
-# Buffer for limit price (2% above last price for buys, 2% below for sells)
-# This gives ~95%+ fill rate while still providing price protection
-LIMIT_PRICE_BUFFER_PCT: float = 0.02
 
 
 # ============================================================================
@@ -57,21 +53,23 @@ class Order:
     symbol: str
     side: str  # "buy" or "sell"
     qty: float
-    order_type: str  # "limit"
-    limit_price: float
+    order_type: str  # "market"
     time_in_force: str  # "day"
+    limit_price: float | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             "client_order_id": self.client_order_id,
             "symbol": self.symbol,
             "side": self.side,
             "qty": self.qty,
             "type": self.order_type,
-            "limit_price": self.limit_price,
             "time_in_force": self.time_in_force,
         }
+        if self.limit_price is not None:
+            result["limit_price"] = self.limit_price
+        return result
 
 
 @dataclass
@@ -197,25 +195,6 @@ def fetch_current_prices(symbols: list[str]) -> dict[str, float]:
     return prices
 
 
-def calculate_limit_price(current_price: float, side: str) -> float:
-    """Calculate limit price with buffer.
-
-    For buys: limit = current_price * (1 + buffer)
-    For sells: limit = current_price * (1 - buffer)
-
-    Args:
-        current_price: Current market price
-        side: "buy" or "sell"
-
-    Returns:
-        Limit price rounded to 2 decimal places
-    """
-    if side == "buy":
-        return round(current_price * (1 + LIMIT_PRICE_BUFFER_PCT), 2)
-    else:
-        return round(current_price * (1 - LIMIT_PRICE_BUFFER_PCT), 2)
-
-
 # ============================================================================
 # Main order generation function
 # ============================================================================
@@ -321,24 +300,22 @@ def generate_orders(
             side = "sell"
             total_sell_value += trade_value
 
-        # Calculate limit price first -- qty must be sized to fit buying power at limit price
-        limit_price = calculate_limit_price(current_price, side)
+        qty = trade_value / current_price
 
-        # Alpaca reserves buying power as qty * limit_price, so sizing with limit_price
-        # ensures orders stay within the cash buffer
-        qty = trade_value / limit_price
+        # Cap sell qty at position to avoid requesting more shares than held
+        if side == "sell":
+            position = current_positions.get(symbol)
+            if position:
+                qty = min(qty, position.qty)
 
-        # Generate client order ID
         client_order_id = generate_client_order_id(run_id, attempt, symbol, side)
 
-        # Create order
         order = Order(
             client_order_id=client_order_id,
             symbol=symbol,
             side=side,
-            qty=round(qty, 4),  # Alpaca supports fractional shares
-            order_type="limit",
-            limit_price=limit_price,
+            qty=round(qty, 4),
+            order_type="market",
             time_in_force="day",
         )
         orders.append(order)
