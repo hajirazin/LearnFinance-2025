@@ -36,14 +36,6 @@ Top 5 Allocations:
 - {{ sym }}: {{ "%.1f" | format(wt * 100) }}%
 {% endif %}{% endfor %}
 
-### PPO (On-Policy RL Allocator)
-Model Version: {{ ppo.model_version }}
-Turnover: {{ "%.1f" | format(ppo.turnover * 100) }}%
-Top 5 Allocations:
-{% for sym, wt in ppo.target_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 and sym != 'CASH' %}
-- {{ sym }}: {{ "%.1f" | format(wt * 100) }}%
-{% endif %}{% endfor %}
-
 ## News Sentiment
 {% for item in news.per_symbol[:10] %}
 - {{ item.symbol }}: sentiment={{ "%.2f" | format(item.sentiment_score) }}{% if item.top_k_articles %} ({{ item.top_k_articles[0].title[:50] }}...){% endif %}
@@ -60,10 +52,9 @@ Provide a concise analysis. Respond with JSON only:
 {
     "para_1_overall_summary": "<3 sentences: overall market outlook and key themes>",
     "para_2_sac": "<3 sentences: SAC allocator insights and notable positions>",
-    "para_3_ppo": "<3 sentences: PPO allocator insights and comparison to SAC>",
-    "para_4_hrp_summary": "<3 sentences: HRP baseline allocation and diversification>",
-    "para_5_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
-    "para_6_lstm_forecast": "<3 sentences: LSTM predictions and price momentum>",
-    "para_7_news_sentiment": "<3 sentences: overall news sentiment themes>",
-    "para_8_fundamentals": "<3 sentences: fundamental strength of top picks>"
+    "para_3_hrp_summary": "<3 sentences: HRP baseline allocation and diversification>",
+    "para_4_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
+    "para_5_lstm_forecast": "<3 sentences: LSTM predictions and price momentum>",
+    "para_6_news_sentiment": "<3 sentences: overall news sentiment themes>",
+    "para_7_fundamentals": "<3 sentences: fundamental strength of top picks>"
 }

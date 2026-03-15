@@ -3,7 +3,6 @@
 Tests for load_historical_fundamentals_from_cache() which is used by:
 - POST /signals/fundamentals/historical endpoint
 - PatchTST training
-- PPO training/finetune
 - SAC training/finetune
 """
 

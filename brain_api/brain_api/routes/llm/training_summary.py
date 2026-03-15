@@ -36,11 +36,11 @@ def generate_training_summary(
 ) -> TrainingSummaryResponse:
     """Generate an LLM summary of training results.
 
-    Takes all 4 training results (LSTM, PatchTST, PPO, SAC) and generates
+    Takes all 3 training results (LSTM, PatchTST, SAC) and generates
     a summary using the configured LLM provider (OpenAI or OLLAMA).
 
     Args:
-        request: Training results from all 4 models.
+        request: Training results from all 3 models.
         provider: LLM provider (injected via dependency).
 
     Returns:
@@ -66,7 +66,6 @@ def generate_training_summary(
     prompt = template.render(
         lstm=request.lstm.model_dump(),
         patchtst=request.patchtst.model_dump(),
-        ppo=request.ppo.model_dump(),
         sac=request.sac.model_dump(),
     )
 
@@ -108,7 +107,7 @@ def generate_india_training_summary(
 ) -> TrainingSummaryResponse:
     """Generate an LLM summary of India PatchTST training results.
 
-    India trains PatchTST only (no LSTM, PPO, SAC).
+    India trains PatchTST only (no LSTM, SAC).
 
     Args:
         request: India PatchTST training result.

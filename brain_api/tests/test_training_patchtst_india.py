@@ -53,7 +53,7 @@ def _mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
     )
 
 
-def _mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
+def _mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
     return TrainingResult(
@@ -66,7 +66,9 @@ def _mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
     )
 
 
-def _mock_trainer_worse(X, y, feature_scaler, config) -> TrainingResult:
+def _mock_trainer_worse(
+    X, y, feature_scaler, config, shutdown_event=None
+) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
     return TrainingResult(
@@ -106,15 +108,20 @@ def client_india(temp_india_storage):
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_patchtst_india_returns_200(client_india):
-    """POST /train/patchtst/india returns 200."""
-    response = client_india.post("/train/patchtst/india")
-    assert response.status_code == 200
+TRAIN_INDIA_URL = "/train/patchtst/india?skip_snapshot=true"
+
+
+def test_train_patchtst_india_returns_202(client_india):
+    """POST /train/patchtst/india returns 202 (training runs in background)."""
+    response = client_india.post(TRAIN_INDIA_URL)
+    assert response.status_code == 202
 
 
 def test_train_patchtst_india_returns_required_fields(client_india):
     """POST /train/patchtst/india returns all required PatchTSTTrainResponse fields."""
-    response = client_india.post("/train/patchtst/india")
+    response1 = client_india.post(TRAIN_INDIA_URL)
+    assert response1.status_code == 202
+    response = client_india.post(TRAIN_INDIA_URL)
     assert response.status_code == 200
 
     data = response.json()
@@ -131,14 +138,21 @@ def test_train_patchtst_india_returns_required_fields(client_india):
 
 def test_train_patchtst_india_idempotent_version(client_india):
     """Calling POST /train/patchtst/india twice returns the same version."""
-    r1 = client_india.post("/train/patchtst/india")
-    r2 = client_india.post("/train/patchtst/india")
-    assert r1.json()["version"] == r2.json()["version"]
+    r1 = client_india.post(TRAIN_INDIA_URL)
+    assert r1.status_code == 202
+    r2 = client_india.post(TRAIN_INDIA_URL)
+    assert r2.status_code == 200
+    r3 = client_india.post(TRAIN_INDIA_URL)
+    assert r3.status_code == 200
+    assert r2.json()["version"] == r3.json()["version"]
 
 
 def test_train_patchtst_india_first_model_always_promoted(client_india):
     """First India PatchTST model is always promoted."""
-    response = client_india.post("/train/patchtst/india")
+    response1 = client_india.post(TRAIN_INDIA_URL)
+    assert response1.status_code == 202
+    response = client_india.post(TRAIN_INDIA_URL)
+    assert response.status_code == 200
     assert response.json()["promoted"] is True
 
 
@@ -160,19 +174,24 @@ def test_train_patchtst_india_not_promoted_when_worse():
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
 
         client = TestClient(app)
+        train_url = "/train/patchtst/india?skip_snapshot=true"
 
         try:
-            r1 = client.post("/train/patchtst/india")
-            assert r1.status_code == 200
-            first_version = r1.json()["version"]
+            r1 = client.post(train_url)
+            assert r1.status_code == 202
+            r1b = client.post(train_url)
+            assert r1b.status_code == 200
+            first_version = r1b.json()["version"]
             assert storage.read_current_version() == first_version
 
             app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer_worse
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 
-            r2 = client.post("/train/patchtst/india")
-            assert r2.status_code == 200
-            assert r2.json()["promoted"] is False
+            r2 = client.post(train_url)
+            assert r2.status_code == 202
+            r2b = client.post(train_url)
+            assert r2b.status_code == 200
+            assert r2b.json()["promoted"] is False
             assert storage.read_current_version() == first_version
         finally:
             app.dependency_overrides.clear()
@@ -182,7 +201,9 @@ def test_train_patchtst_india_not_promoted_when_worse():
 
 def test_train_patchtst_india_uses_india_storage(client_india, temp_india_storage):
     """India PatchTST uses patchtst_india storage directory."""
-    response = client_india.post("/train/patchtst/india")
+    response1 = client_india.post(TRAIN_INDIA_URL)
+    assert response1.status_code == 202
+    response = client_india.post(TRAIN_INDIA_URL)
     assert response.status_code == 200
 
     version = response.json()["version"]

@@ -8,7 +8,7 @@ Build a **learning-focused** weekly paper-trading portfolio system for halal Nas
 
 - **Safe-by-default** (paper auto-submit only; reruns cannot duplicate orders)
 - **Audit-friendly** (every run reproducible and explainable)
-- **Learning-focused** (compare LSTM vs PatchTST, PPO vs SAC, all vs HRP baseline)
+- **Learning-focused** (compare LSTM vs PatchTST, SAC, all vs HRP baseline)
 - **Cloud-ready** (local-first design that can migrate to Cloud Functions / HuggingFace Hub)
 
 The goal is to learn which approaches work best, not to pick a single method upfront.
@@ -27,12 +27,11 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india filtered -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
   - US weekly training workflow (`USWeeklyTrainingWorkflow`): full retrain pipeline
-- **Prefect** (legacy, kept in `prefect/` for reference, same as `n8n/`)
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
   - price forecasting (LSTM pure-price, PatchTST OHLCV 5-channel)
-  - portfolio allocation (HRP math baseline, PPO variants, SAC variants)
+  - portfolio allocation (HRP math baseline, SAC variants)
   - order generation (convert weights to limit orders with idempotent IDs)
   - Alpaca integration (portfolio queries, order submission)
   - OpenAI/LLM integration (summaries via `/llm/weekly-summary`)
@@ -40,7 +39,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - explanation generation
   - persistence of run artifacts
 
-Avoid putting "business logic" inside Prefect tasks beyond orchestration.
+Avoid putting "business logic" inside Temporal activities beyond orchestration.
 
 ## Code structure
 
@@ -50,7 +49,6 @@ brain_api/
 │   ├── inference/           # One file per model
 │   │   ├── lstm.py
 │   │   ├── patchtst.py
-│   │   ├── ppo.py
 │   │   └── sac.py
 │   ├── training/            # Same pattern as inference
 │   │   ├── patchtst.py      # US PatchTST training
@@ -66,7 +64,6 @@ brain_api/
 ├── core/                    # Pure functions, no FastAPI dependency
 │   ├── lstm/
 │   ├── patchtst/
-│   ├── ppo/                 # PPO allocator (dual forecasts: LSTM + PatchTST)
 │   ├── sac/                 # SAC allocator (dual forecasts: LSTM + PatchTST)
 │   ├── hrp.py
 │   └── ...
@@ -95,11 +92,10 @@ temporal/                         # Temporal workflow orchestration
 │   ├── execution.py              # Order generation + experience
 │   ├── reporting.py              # Summary + email
 │   └── training.py               # Training activities (long timeouts + heartbeating)
-├── models/                       # Pydantic models (copied from prefect/flows/models/)
+├── models/                       # Pydantic models (shared with workflow orchestration)
 └── tests/
 
-prefect/                          # Legacy (kept as reference, like n8n/)
-n8n/                              # Legacy (kept as reference)
+# prefect/ and n8n/ were removed; Temporal is the sole orchestrator
 ```
 
 ## API design rules
@@ -112,17 +108,16 @@ n8n/                              # Legacy (kept as reference)
 |----------|---------|
 | `POST /inference/lstm` | Price predictions (symbols from model metadata) |
 | `POST /inference/patchtst` | Price predictions (symbols from model metadata) |
-| `POST /inference/ppo` | PPO allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
-**Orders** (called by Monday run via Prefect after allocations):
+**Orders** (called by Monday run via Temporal after allocations):
 
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /orders/generate` | Convert allocation weights to limit orders |
 
-**Signals** (called by Monday run via Prefect):
+**Signals** (called by Monday run via Temporal):
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -138,12 +133,10 @@ n8n/                              # Legacy (kept as reference)
 | `POST /train/lstm` | Full LSTM retrain |
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
-| `POST /train/ppo/full` | Full PPO retrain (dual forecasts) |
-| `POST /train/ppo/finetune` | PPO fine-tune on experience buffer |
 | `POST /train/sac/full` | Full SAC retrain (dual forecasts) |
 | `POST /train/sac/finetune` | SAC fine-tune on experience buffer |
 
-**Alpaca** (called by Monday run via Prefect for order execution):
+**Alpaca** (called by Monday run via Temporal for order execution):
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -151,7 +144,7 @@ n8n/                              # Legacy (kept as reference)
 | `POST /alpaca/submit-orders` | Submit orders to Alpaca paper trading |
 | `GET /alpaca/order-history` | Get order execution history |
 
-**LLM & Email** (called by Monday run via Prefect for reporting):
+**LLM & Email** (called by Monday run via Temporal for reporting):
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -193,7 +186,7 @@ When migrating an endpoint to GCP:
 1. Extract core function call into `main.py` with `def handler(request):`
 2. Set `STORAGE_BACKEND=huggingface` environment variable
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
-4. Update `BRAIN_API_URL` in Prefect to use Cloud Function URL
+4. Update `BRAIN_API_URL` in Temporal to use Cloud Function URL
 
 ## Model hierarchy
 
@@ -210,7 +203,6 @@ When migrating an endpoint to GCP:
 | Model | Input | Output |
 |-------|-------|--------|
 | HRP | Covariance matrix | Allocation weights |
-| PPO | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
 | SAC | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
 
 ### Signal state vector (for RL and PatchTST)
@@ -231,7 +223,7 @@ When migrating an endpoint to GCP:
 - **LSTM** = pure price forecaster (close returns only, US only)
 - **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns, US)
 - **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning)
-- **PPO/SAC** = RL allocators (receive signals + dual forecaster output, US only)
+- **SAC** = RL allocator (receives signals + dual forecaster output, US only)
 
 ## Data storage rules
 
@@ -285,7 +277,7 @@ Agents must produce **structured outputs** that can be stored and audited:
 
 Agents are used for **evidence synthesis**. Numeric optimization remains in deterministic code (feature engineering) + forecasters/RL.
 
-### LLM summary (Prefect orchestrated)
+### LLM summary (Temporal orchestrated)
 
 The Monday email includes an **AI summary** generated by OpenAI/GPT-4o-mini:
 
@@ -372,9 +364,9 @@ The system must:
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all US models | Manual |
-| Weekly (Sunday 11 AM UTC) | Fine-tune PPO/SAC variants (US) | Cron (Prefect) |
-| Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Prefect) |
-| Monday 6 PM IST | US inference only | Cron (Prefect) |
+| Weekly (Sunday 11 AM UTC) | Fine-tune SAC variants (US) | Cron (Temporal) |
+| Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Temporal) |
+| Monday 6 PM IST | US inference only | Cron (Temporal) |
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
 - **Promotion requires evaluation**: new model must beat prior + baseline before becoming `current`
@@ -394,7 +386,7 @@ Any implementation must include:
 
 ### Temporal workflow configuration
 
-Temporal replaces Prefect for workflow orchestration. Key configuration:
+Key configuration:
 
 - **Activity timeouts**: `start_to_close_timeout` on every activity (5 min for API calls, 10h for training)
 - **Activity retries**: `RetryPolicy(maximum_attempts=N)` on activities that call external APIs
@@ -428,7 +420,7 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm endpoints remain stateless (no global model cache)
 - [ ] Confirm storage abstraction is used (not hardcoded paths)
 - [ ] Confirm LSTM remains pure-price (no signals in input)
-- [ ] Confirm PatchTST/PPO/SAC receive correct signal state vector
+- [ ] Confirm PatchTST/SAC receive correct signal state vector
 - [ ] Confirm India PatchTST uses `patchtst_india` storage (not US `patchtst`)
 - [ ] Confirm India symbols retain `.NS` suffix throughout the pipeline
 
@@ -436,7 +428,7 @@ Before merging changes that touch ML/model code:
 
 1. **Never add silent fallbacks without asking first.** Fallbacks mask real bugs and break correctness. For example, falling back to momentum when a snapshot fails to load means the system silently produces garbage instead of surfacing the error. Always raise exceptions for unexpected failures; ask the user before adding any degraded-mode fallback.
 
-2. **Never break math for clean code or code reuse.** PPO and SAC (or any two models) can have different research and can use different math. Do not assume their math is the same just because it looks similar today -- do not copy one model's math into another for DRY or simplicity. Each model must be free to evolve its math independently based on research. If the math genuinely is identical (e.g., a standard formula like Sharpe ratio), sharing is fine. The rule is: research correctness comes first; never sacrifice it for code cleanliness.
+2. **Never break math for clean code or code reuse.** Different models (e.g., LSTM vs PatchTST, SAC vs future RL allocators) can have different research and can use different math. Do not assume their math is the same just because it looks similar today -- do not copy one model's math into another for DRY or simplicity. Each model must be free to evolve its math independently based on research. If the math genuinely is identical (e.g., a standard formula like Sharpe ratio), sharing is fine. The rule is: research correctness comes first; never sacrifice it for code cleanliness.
 
 ## AI assistant planning rules
 

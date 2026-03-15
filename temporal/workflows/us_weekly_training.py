@@ -6,10 +6,9 @@ Runs every Sunday at 11 AM UTC:
 3. Train PatchTST (OHLCV forecaster on all ~410 halal_new)
 4. Fetch halal_filtered universe (PatchTST forecast -> top 15)
 5. Refresh training data (signals for filtered 15 only)
-6. Train PPO (RL allocator on filtered 15)
-7. Train SAC (RL allocator on filtered 15)
-8. Generate training summary (LLM-powered analysis)
-9. Send training summary email
+6. Train SAC (RL allocator on filtered 15)
+7. Generate training summary (LLM-powered analysis)
+8. Send training summary email
 """
 
 from datetime import timedelta
@@ -26,7 +25,6 @@ with workflow.unsafe.imports_passed_through():
         send_training_summary_email,
         train_lstm,
         train_patchtst,
-        train_ppo,
         train_sac,
     )
 
@@ -76,13 +74,7 @@ class USWeeklyTrainingWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
-        # Steps 6-7: Train RL allocators on filtered 15
-        ppo_result = await workflow.execute_activity(
-            train_ppo,
-            start_to_close_timeout=TRAINING_TIMEOUT,
-            heartbeat_timeout=HEARTBEAT_TIMEOUT,
-            retry_policy=RetryPolicy(maximum_attempts=2),
-        )
+        # Step 6: Train SAC allocator on filtered 15
         sac_result = await workflow.execute_activity(
             train_sac,
             start_to_close_timeout=TRAINING_TIMEOUT,
@@ -90,18 +82,18 @@ class USWeeklyTrainingWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
-        # Step 8: Generate training summary using LLM
+        # Step 7: Generate training summary using LLM
         summary_result = await workflow.execute_activity(
             generate_training_summary,
-            args=[lstm_result, patchtst_result, ppo_result, sac_result],
+            args=[lstm_result, patchtst_result, sac_result],
             start_to_close_timeout=SHORT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
-        # Step 9: Send training summary email
+        # Step 8: Send training summary email
         email_result = await workflow.execute_activity(
             send_training_summary_email,
-            args=[lstm_result, patchtst_result, ppo_result, sac_result, summary_result],
+            args=[lstm_result, patchtst_result, sac_result, summary_result],
             start_to_close_timeout=SHORT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -128,7 +120,6 @@ class USWeeklyTrainingWorkflow:
                 "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
                 "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),
             },
-            "ppo": {"version": ppo_result.version, "promoted": ppo_result.promoted},
             "sac": {"version": sac_result.version, "promoted": sac_result.promoted},
             "summary": {
                 "provider": summary_result.provider,

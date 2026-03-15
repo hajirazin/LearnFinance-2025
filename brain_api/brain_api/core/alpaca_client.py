@@ -1,9 +1,9 @@
 """Alpaca API client with multi-account support.
 
 This module provides a client for interacting with Alpaca's paper trading API
-with support for multiple accounts (PPO, SAC, HRP).
+with support for multiple accounts (SAC, HRP).
 
-Each account has its own API credentials and is used for separate RL strategies.
+Each account has its own API credentials and is used for separate strategies.
 """
 
 import logging
@@ -22,7 +22,6 @@ ALPACA_PAPER_API_URL = "https://paper-api.alpaca.markets"
 class AlpacaAccount(str, Enum):
     """Alpaca account identifiers."""
 
-    PPO = "ppo"
     SAC = "sac"
     HRP = "hrp"
 
@@ -61,7 +60,6 @@ def get_account_credentials(account: AlpacaAccount) -> AlpacaCredentials | None:
     """Get Alpaca API credentials for an account from environment variables.
 
     Environment variables expected:
-    - PPO: ALPACA_PPO_API_KEY, ALPACA_PPO_API_SECRET
     - SAC: ALPACA_SAC_API_KEY, ALPACA_SAC_API_SECRET
     - HRP: ALPACA_HRP_API_KEY, ALPACA_HRP_API_SECRET
 
@@ -94,7 +92,7 @@ class AlpacaClient:
         """Initialize Alpaca client for a specific account.
 
         Args:
-            account: Which account to use (PPO, SAC, HRP).
+            account: Which account to use (SAC, HRP).
             credentials: API credentials. If None, loaded from env vars.
             timeout: HTTP request timeout in seconds.
         """
@@ -220,7 +218,7 @@ def get_alpaca_client(account: str | AlpacaAccount) -> AlpacaClient:
     """Factory function to get an Alpaca client for a specific account.
 
     Args:
-        account: Account name ("ppo", "sac", "hrp") or AlpacaAccount enum.
+        account: Account name ("sac", "hrp") or AlpacaAccount enum.
 
     Returns:
         AlpacaClient instance.
@@ -228,11 +226,6 @@ def get_alpaca_client(account: str | AlpacaAccount) -> AlpacaClient:
     if isinstance(account, str):
         account = AlpacaAccount(account.lower())
     return AlpacaClient(account)
-
-
-def get_ppo_client() -> AlpacaClient:
-    """Get Alpaca client for PPO account."""
-    return get_alpaca_client(AlpacaAccount.PPO)
 
 
 def get_sac_client() -> AlpacaClient:

@@ -59,7 +59,7 @@ class PatchTSTInferenceResponse(BaseModel):
 
 
 # ============================================================================
-# Portfolio models (shared by PPO and SAC endpoints)
+# Portfolio models (shared by SAC endpoint)
 # ============================================================================
 
 
@@ -84,35 +84,6 @@ class WeightChange(BaseModel):
     current_weight: float
     target_weight: float
     change: float
-
-
-# ============================================================================
-# PPO models (unified with dual forecasts: LSTM + PatchTST)
-# ============================================================================
-
-
-class PPOInferenceRequest(BaseModel):
-    """Request model for PPO inference endpoint (dual forecasts)."""
-
-    portfolio: PortfolioSnapshot = Field(
-        ...,
-        description="Current portfolio state (cash + positions)",
-    )
-    as_of_date: str | None = Field(
-        None,
-        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
-    )
-
-
-class PPOInferenceResponse(BaseModel):
-    """Response model for PPO inference endpoint."""
-
-    target_weights: dict[str, float]
-    turnover: float
-    target_week_start: str  # YYYY-MM-DD
-    target_week_end: str  # YYYY-MM-DD
-    model_version: str
-    weight_changes: list[WeightChange]
 
 
 # ============================================================================

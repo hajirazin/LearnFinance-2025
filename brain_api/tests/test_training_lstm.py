@@ -63,7 +63,7 @@ def mock_dataset_builder(prices, config) -> DatasetResult:
     )
 
 
-def mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
+def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingResult:
     """Return a mock training result with controllable metrics."""
     model = LSTMModel(config)
     return TrainingResult(
@@ -76,7 +76,9 @@ def mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
     )
 
 
-def mock_trainer_worse_than_baseline(X, y, feature_scaler, config) -> TrainingResult:
+def mock_trainer_worse_than_baseline(
+    X, y, feature_scaler, config, shutdown_event=None
+) -> TrainingResult:
     """Return a mock training result that is worse than baseline."""
     model = LSTMModel(config)
     return TrainingResult(
@@ -124,35 +126,39 @@ def client_with_mocks(temp_storage):
 # ============================================================================
 
 
-def test_train_lstm_empty_body_returns_200(client_with_mocks):
-    """POST /train/lstm with empty body returns 200."""
+def test_train_lstm_empty_body_returns_202(client_with_mocks):
+    """POST /train/lstm with empty body returns 202 on first call."""
     response = client_with_mocks.post("/train/lstm", json={})
-    assert response.status_code == 200
+    assert response.status_code == 202
 
 
-def test_train_lstm_no_body_returns_200(client_with_mocks):
-    """POST /train/lstm with no body returns 200."""
+def test_train_lstm_no_body_returns_202(client_with_mocks):
+    """POST /train/lstm with no body returns 202 on first call."""
     response = client_with_mocks.post("/train/lstm")
-    assert response.status_code == 200
+    assert response.status_code == 202
 
 
 def test_train_lstm_returns_resolved_window(client_with_mocks):
     """POST /train/lstm returns Friday-anchored data_window_end from config."""
+    response1 = client_with_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 202
+
+    # Second call returns cached result
     response = client_with_mocks.post("/train/lstm", json={})
     assert response.status_code == 200
 
     data = response.json()
     assert "data_window_start" in data
     assert "data_window_end" in data
-
-    # Verify window is Friday-anchored.
-    # Env config sets end_date to 2025-01-01 (Wednesday), which anchors to 2024-12-27 (Friday)
     assert data["data_window_end"] == "2024-12-27"
-    assert data["data_window_start"] == "2014-01-01"  # 10 years before 2024
+    assert data["data_window_start"] == "2014-01-01"
 
 
 def test_train_lstm_returns_required_fields(client_with_mocks):
     """POST /train/lstm returns all required response fields."""
+    response1 = client_with_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 202
+
     response = client_with_mocks.post("/train/lstm", json={})
     assert response.status_code == 200
 
@@ -176,34 +182,40 @@ def test_train_lstm_returns_required_fields(client_with_mocks):
 def test_train_lstm_idempotent_version(client_with_mocks):
     """Calling POST /train/lstm twice returns the same version."""
     response1 = client_with_mocks.post("/train/lstm", json={})
-    assert response1.status_code == 200
-    version1 = response1.json()["version"]
+    assert response1.status_code == 202
 
     response2 = client_with_mocks.post("/train/lstm", json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
-    assert version1 == version2, "Version should be identical on rerun with same config"
+    response3 = client_with_mocks.post("/train/lstm", json={})
+    assert response3.status_code == 200
+    version3 = response3.json()["version"]
+
+    assert version2 == version3, "Version should be identical on rerun with same config"
 
 
 def test_train_lstm_idempotent_does_not_change_current(client_with_mocks, temp_storage):
     """Rerunning training does not change 'current' pointer if already promoted."""
-    # First call - should promote
+    # First call - returns 202, background task promotes
     response1 = client_with_mocks.post("/train/lstm", json={})
-    assert response1.status_code == 200
-    data1 = response1.json()
-    version1 = data1["version"]
+    assert response1.status_code == 202
 
-    current_after_first = temp_storage.read_current_version()
-
-    # Second call - should return same version without changing current
+    # Second call - returns 200 cached result
     response2 = client_with_mocks.post("/train/lstm", json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
+    current_after_first = temp_storage.read_current_version()
+
+    # Third call - should return same version without changing current
+    response3 = client_with_mocks.post("/train/lstm", json={})
+    assert response3.status_code == 200
+    version3 = response3.json()["version"]
+
     current_after_second = temp_storage.read_current_version()
 
-    assert version1 == version2
+    assert version2 == version3
     assert current_after_first == current_after_second
 
 
@@ -214,10 +226,13 @@ def test_train_lstm_idempotent_does_not_change_current(client_with_mocks, temp_s
 
 def test_train_lstm_first_model_always_promoted(client_with_mocks):
     """First model is always promoted (no prior model to compare against)."""
-    response = client_with_mocks.post("/train/lstm", json={})
-    assert response.status_code == 200
+    response1 = client_with_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 202
 
-    data = response.json()
+    response2 = client_with_mocks.post("/train/lstm", json={})
+    assert response2.status_code == 200
+
+    data = response2.json()
     assert data["promoted"] is True
 
 
@@ -245,10 +260,13 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
         client = TestClient(app)
 
         try:
-            # Train first model - should be promoted (first model always promoted)
+            # Train first model - first call 202, second call 200 cached
             response1 = client.post("/train/lstm", json={})
-            assert response1.status_code == 200
-            first_version = response1.json()["version"]
+            assert response1.status_code == 202
+
+            response2 = client.post("/train/lstm", json={})
+            assert response2.status_code == 200
+            first_version = response2.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
             # Now train a worse model with different date (to generate new version)
@@ -259,10 +277,13 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
             )
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 
-            response2 = client.post("/train/lstm", json={})
-            assert response2.status_code == 200
+            response3 = client.post("/train/lstm", json={})
+            assert response3.status_code == 202
 
-            data = response2.json()
+            response4 = client.post("/train/lstm", json={})
+            assert response4.status_code == 200
+
+            data = response4.json()
             # Mock trainer returns val_loss=0.10 > prior=0.02
             assert data["promoted"] is False
 
@@ -293,8 +314,11 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
     client = TestClient(app)
 
     response1 = client.post("/train/lstm", json={})
-    assert response1.status_code == 200
-    promoted_version = response1.json()["version"]
+    assert response1.status_code == 202
+
+    response2 = client.post("/train/lstm", json={})
+    assert response2.status_code == 200
+    promoted_version = response2.json()["version"]
 
     # Verify it was promoted
     current_before = temp_storage.read_current_version()
@@ -308,12 +332,15 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
         "2025-01-13"  # Monday -> anchors to Jan 10 (Friday), different from Dec 27
     )
 
-    response2 = client.post("/train/lstm", json={})
-    assert response2.status_code == 200
-    data2 = response2.json()
+    response3 = client.post("/train/lstm", json={})
+    assert response3.status_code == 202
+
+    response4 = client.post("/train/lstm", json={})
+    assert response4.status_code == 200
+    data4 = response4.json()
 
     # Should not be promoted (worse than prior)
-    assert data2["promoted"] is False
+    assert data4["promoted"] is False
 
     # Current should still point to the first version
     current_after = temp_storage.read_current_version()

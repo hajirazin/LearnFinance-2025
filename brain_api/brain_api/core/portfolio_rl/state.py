@@ -16,7 +16,7 @@ import numpy as np
 
 @dataclass
 class PortfolioState:
-    """Current portfolio state for PPO decision-making.
+    """Current portfolio state for RL decision-making.
 
     This is the "current_weights + cash" part of the state.
     """
@@ -144,7 +144,7 @@ def build_state_vector(
     symbol_order: list[str],
     schema: StateSchema | None = None,
 ) -> np.ndarray:
-    """Build the full state vector for RL agents (PPO/SAC).
+    """Build the full state vector for RL agents (SAC).
 
     Args:
         signals: Dict of symbol -> signal_dict.

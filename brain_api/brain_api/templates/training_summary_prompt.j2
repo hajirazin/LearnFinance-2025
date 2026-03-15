@@ -20,15 +20,6 @@ This model predicts weekly stock returns using 5-channel OHLCV price data (open,
 - **Signals Used**: {{ patchtst.signals_used | join(", ") }}
 - **Metrics**: {{ patchtst.metrics | tojson }}
 
-### PPO (Reinforcement Learning Allocator)
-This model learns portfolio allocation strategies using Proximal Policy Optimization.
-
-- **Version**: {{ ppo.version }}
-- **Data Window**: {{ ppo.data_window_start }} to {{ ppo.data_window_end }}
-- **Promoted to Production**: {{ "Yes" if ppo.promoted else "No" }}
-- **Symbols Used**: {{ ppo.symbols_used | length }} stocks
-- **Metrics**: {{ ppo.metrics | tojson }}
-
 ### SAC (Reinforcement Learning Allocator)
 This model learns portfolio allocation strategies using Soft Actor-Critic algorithm.
 
@@ -50,7 +41,6 @@ Respond with JSON only, using this exact structure:
     "para_1_overall": "2-3 sentence summary of overall training results and model health",
     "para_2_lstm": "2-3 sentences about LSTM model training and performance",
     "para_3_patchtst": "2-3 sentences about PatchTST model training and its OHLCV approach",
-    "para_4_ppo": "2-3 sentences about PPO allocator training",
-    "para_5_sac": "2-3 sentences about SAC allocator training",
-    "para_6_recommendations": "2-3 sentences with any recommendations or concerns"
+    "para_4_sac": "2-3 sentences about SAC allocator training",
+    "para_5_recommendations": "2-3 sentences with any recommendations or concerns"
 }

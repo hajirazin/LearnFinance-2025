@@ -1,6 +1,6 @@
 """Portfolio RL shared core module.
 
-This module provides the shared components for PPO/SAC-based portfolio allocation:
+This module provides the shared components for RL-based portfolio allocation:
 - Weekly portfolio environment (long-only, simplex weights)
 - Transaction cost modeling
 - Constraint enforcement (cash buffer, max position size)
@@ -9,10 +9,10 @@ This module provides the shared components for PPO/SAC-based portfolio allocatio
 - Data loading (news sentiment, fundamentals)
 - Walk-forward forecast generation
 
-Used by `ppo` and `sac` unified agents.
+Used by `sac` unified agent.
 """
 
-from brain_api.core.portfolio_rl.config import DEFAULT_PPO_BASE_CONFIG, PPOBaseConfig
+from brain_api.core.portfolio_rl.config import DEFAULT_RL_BASE_CONFIG, RLBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     compute_turnover,
@@ -34,7 +34,7 @@ from brain_api.core.portfolio_rl.eval import (
     compute_max_drawdown,
     compute_sharpe_ratio,
     evaluate_policy,
-    evaluate_ppo_for_promotion,
+    evaluate_rl_for_promotion,
 )
 from brain_api.core.portfolio_rl.rewards import (
     compute_portfolio_return,
@@ -55,44 +55,34 @@ from brain_api.core.portfolio_rl.walkforward import (
 )
 
 __all__ = [
-    "DEFAULT_PPO_BASE_CONFIG",
+    "DEFAULT_RL_BASE_CONFIG",
     "EvaluationMetrics",
-    # Config
-    "PPOBaseConfig",
-    # Environment
     "PortfolioEnv",
-    # Scaler
     "PortfolioScaler",
     "PortfolioState",
-    # Walk-forward errors
+    "RLBaseConfig",
     "SnapshotInferenceError",
     "SnapshotUnavailableError",
     "StateSchema",
     "align_signals_to_weekly",
     "apply_softmax_to_weights",
-    # Walk-forward forecasts
     "build_dual_forecast_features",
     "build_forecast_features",
     "build_rl_training_signals",
-    # State
     "build_state_vector",
     "compute_baseline_metrics",
     "compute_cagr",
     "compute_hit_rate",
     "compute_hrp_baseline_metrics",
     "compute_max_drawdown",
-    # Rewards
     "compute_portfolio_return",
     "compute_reward",
-    # Evaluation
     "compute_sharpe_ratio",
     "compute_transaction_cost",
     "compute_turnover",
-    # Constraints
     "enforce_constraints",
     "evaluate_policy",
-    "evaluate_ppo_for_promotion",
+    "evaluate_rl_for_promotion",
     "load_historical_fundamentals",
-    # Data loading
     "load_historical_news_sentiment",
 ]

@@ -36,7 +36,7 @@ def send_training_summary_email(
 ) -> TrainingSummaryEmailResponse:
     """Send a training summary email.
 
-    Takes all 4 training results (LSTM, PatchTST, PPO, SAC) and the LLM-generated
+    Takes all 3 training results (LSTM, PatchTST, SAC) and the LLM-generated
     summary, renders an HTML email using Jinja2, and sends via Gmail SMTP.
 
     Email configuration comes from environment variables:
@@ -71,7 +71,6 @@ def send_training_summary_email(
     html_body = template.render(
         lstm=request.lstm.model_dump(),
         patchtst=request.patchtst.model_dump(),
-        ppo=request.ppo.model_dump(),
         sac=request.sac.model_dump(),
         summary=request.summary,
     )

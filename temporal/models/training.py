@@ -8,7 +8,7 @@ from pydantic import BaseModel
 class TrainingResponse(BaseModel):
     """Common response model for training endpoints.
 
-    Works for LSTM, PatchTST, PPO, and SAC training responses.
+    Works for LSTM, PatchTST, and SAC training responses.
     Uses flexible types to accommodate different metric structures.
     """
 
@@ -24,3 +24,11 @@ class TrainingResponse(BaseModel):
     symbols_used: list[str] | None = None
     num_input_channels: int | None = None
     signals_used: list[str] | None = None
+
+
+class TrainingJobResponse(BaseModel):
+    """202 response when a training job is started or already running."""
+
+    job_id: str
+    status: str
+    message: str

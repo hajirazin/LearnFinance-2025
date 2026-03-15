@@ -1,22 +1,22 @@
-"""PPO base configuration for portfolio RL."""
+"""Base configuration for portfolio RL (shared by all RL allocators)."""
 
 from dataclasses import dataclass
 from typing import Any
 
 
 @dataclass
-class PPOBaseConfig:
-    """PPO hyperparameters and environment configuration.
+class RLBaseConfig:
+    """RL hyperparameters and environment configuration.
 
-    This is the base config with shared settings for all PPO variants.
-    Variant-specific configs (PPOConfig, SACConfig) extend this.
+    This is the base config with shared settings for RL portfolio allocators.
+    Variant-specific configs (SACConfig) extend this separately.
     """
 
     # === Policy network ===
     hidden_sizes: tuple[int, ...] = (64, 64)
     activation: str = "tanh"
 
-    # === PPO algorithm ===
+    # === RL algorithm ===
     learning_rate: float = 3e-4
     clip_epsilon: float = 0.2
     gae_lambda: float = 0.95
@@ -96,7 +96,7 @@ class PPOBaseConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PPOBaseConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "RLBaseConfig":
         """Create config from dictionary."""
         # Handle hidden_sizes conversion from list to tuple
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
@@ -106,4 +106,4 @@ class PPOBaseConfig:
 
 
 # Default configuration
-DEFAULT_PPO_BASE_CONFIG = PPOBaseConfig()
+DEFAULT_RL_BASE_CONFIG = RLBaseConfig()

@@ -8,34 +8,25 @@ services:
     env_file:
       - ./brain_api/.env
 
-  prefect-server:
-    build: ./prefect
-    container_name: learnfinance-prefect-server
+  temporal-server:
+    image: temporalio/auto-setup:latest
+    container_name: learnfinance-temporal-server
     restart: always
     ports:
-      - "4200:4200"
-    command: ["uv", "run", "prefect", "server", "start", "--host", "0.0.0.0"]
+      - "7233:7233"
+      - "8233:8233"
+    environment:
+      - DB=sqlite
+      - TEMPORAL_ADDRESS=0.0.0.0:7233
 
-  prefect-training:
-    build: ./prefect
-    container_name: learnfinance-prefect-training
+  temporal-worker:
+    build: ./temporal
+    container_name: learnfinance-temporal-worker
     restart: always
     depends_on:
-      - prefect-server
+      - temporal-server
       - brain-api
     environment:
-      - PREFECT_API_URL=http://prefect-server:4200/api
+      - TEMPORAL_ADDRESS=temporal-server:7233
       - BRAIN_API_URL=http://brain-api:8000
-    command: ["uv", "run", "python", "-m", "flows.weekly_training"]
-
-  prefect-email:
-    build: ./prefect
-    container_name: learnfinance-prefect-email
-    restart: always
-    depends_on:
-      - prefect-server
-      - brain-api
-    environment:
-      - PREFECT_API_URL=http://prefect-server:4200/api
-      - BRAIN_API_URL=http://brain-api:8000
-    command: ["uv", "run", "python", "-m", "flows.weekly_forecast_email"]
+    command: ["uv", "run", "python", "-m", "worker"]

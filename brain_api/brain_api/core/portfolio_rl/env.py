@@ -1,4 +1,4 @@
-"""Weekly portfolio environment for PPO training.
+"""Weekly portfolio environment for RL training.
 
 This environment simulates weekly portfolio rebalancing with:
 - Long-only simplex weights + CASH
@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from brain_api.core.portfolio_rl.config import DEFAULT_PPO_BASE_CONFIG, PPOBaseConfig
+from brain_api.core.portfolio_rl.config import DEFAULT_RL_BASE_CONFIG, RLBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     compute_turnover,
@@ -62,7 +62,7 @@ class PortfolioEnv:
         lstm_forecasts: np.ndarray,
         patchtst_forecasts: np.ndarray,
         symbol_order: list[str],
-        config: PPOBaseConfig | None = None,
+        config: RLBaseConfig | None = None,
     ):
         """Initialize environment.
 
@@ -76,14 +76,14 @@ class PortfolioEnv:
             patchtst_forecasts: PatchTST forecast feature for each stock each week.
                                Shape: (n_weeks, n_stocks).
             symbol_order: Ordered list of stock symbols.
-            config: PPO configuration.
+            config: RL configuration.
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
         self.lstm_forecasts = lstm_forecasts
         self.patchtst_forecasts = patchtst_forecasts
         self.symbol_order = symbol_order
-        self.config = config or DEFAULT_PPO_BASE_CONFIG
+        self.config = config or DEFAULT_RL_BASE_CONFIG
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
@@ -335,7 +335,7 @@ def create_env_from_data(
     lstm_forecasts: dict[str, np.ndarray],
     patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
-    config: PPOBaseConfig | None = None,
+    config: RLBaseConfig | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
 
@@ -347,7 +347,7 @@ def create_env_from_data(
         lstm_forecasts: Dict of symbol -> array of LSTM forecast values.
         patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
-        config: PPO configuration.
+        config: RL configuration.
 
     Returns:
         PortfolioEnv instance.

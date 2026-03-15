@@ -36,14 +36,6 @@ def mock_training_summary_email_request():
             "num_input_channels": 5,
             "signals_used": ["ohlcv"],
         },
-        "ppo": {
-            "version": "v2026-01-15-ghi789",
-            "data_window_start": "2020-01-01",
-            "data_window_end": "2025-12-31",
-            "metrics": {"sharpe": 1.5, "max_drawdown": 0.15},
-            "promoted": True,
-            "symbols_used": ["AAPL", "MSFT", "GOOGL"],
-        },
         "sac": {
             "version": "v2026-01-15-jkl012",
             "data_window_start": "2020-01-01",
@@ -56,9 +48,8 @@ def mock_training_summary_email_request():
             "para_1_overall": "All models trained successfully with good metrics.",
             "para_2_lstm": "LSTM model shows strong price prediction capability.",
             "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
-            "para_4_ppo": "PPO allocator demonstrates solid risk-adjusted returns.",
-            "para_5_sac": "SAC shows promising results but was not promoted.",
-            "para_6_recommendations": "Consider investigating SAC promotion criteria.",
+            "para_4_sac": "SAC shows promising results but was not promoted.",
+            "para_5_recommendations": "Consider investigating SAC promotion criteria.",
         },
     }
 
@@ -180,11 +171,9 @@ class TestTrainingSummaryEmailEndpoint:
         assert "AI Analysis" in body
         assert "All models trained successfully" in body
 
-        # Check RL Allocators section
-        assert "RL Allocators Comparison" in body
-        assert "PPO" in body
+        # Check SAC Allocator section
+        assert "SAC Allocator" in body
         assert "SAC" in body
-        assert "v2026-01-15-ghi789" in body  # PPO version
         assert "v2026-01-15-jkl012" in body  # SAC version
 
         # Check Forecasters section
@@ -249,7 +238,7 @@ class TestTrainingSummaryEmailEndpoint:
                     "metrics": {},
                     "promoted": True,
                 },
-                # Missing patchtst, ppo, sac, summary
+                # Missing patchtst, sac, summary
             },
         )
         assert response.status_code == 422
@@ -306,7 +295,6 @@ def mock_weekly_report_email_request():
         "summary": {
             "para_1_overall_summary": "This week shows bullish momentum.",
             "para_2_sac": "SAC allocator favors tech stocks.",
-            "para_3_ppo": "PPO takes a conservative approach.",
             "para_4_hrp_summary": "HRP maintains diversified allocation.",
             "para_5_patchtst_forecast": "PatchTST predicts positive returns.",
             "para_6_lstm_forecast": "LSTM shows bullish signals.",
@@ -314,7 +302,6 @@ def mock_weekly_report_email_request():
             "para_8_fundamentals": "Fundamentals remain strong.",
         },
         "order_results": {
-            "ppo": {"orders_submitted": 5, "orders_failed": 0, "skipped": False},
             "sac": {"orders_submitted": 6, "orders_failed": 1, "skipped": False},
             "hrp": {"orders_submitted": 4, "orders_failed": 0, "skipped": False},
         },
@@ -328,14 +315,6 @@ def mock_weekly_report_email_request():
             "target_week_start": "2026-02-03",
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
-            "weight_changes": [],
-        },
-        "ppo": {
-            "target_weights": {"AAPL": 0.11, "MSFT": 0.09, "CASH": 0.08},
-            "turnover": 0.12,
-            "target_week_start": "2026-02-03",
-            "target_week_end": "2026-02-07",
-            "model_version": "v2026-01-15-ppo001",
             "weight_changes": [],
         },
         "hrp": {
@@ -500,7 +479,6 @@ class TestIndiaWeeklyReportEmailEndpoint:
         body = response.json()["body"]
 
         assert "SAC" not in body
-        assert "PPO" not in body
         assert "News Sentiment" not in body
         assert "Order Execution Summary" not in body
         assert "RL Allocations" not in body
@@ -608,8 +586,8 @@ class TestWeeklyReportEmailEndpoint:
     ):
         """Weekly report with skipped algorithms shows warning."""
         mock_send_email.return_value = True
-        mock_weekly_report_email_request["skipped_algorithms"] = ["PPO"]
-        mock_weekly_report_email_request["order_results"]["ppo"]["skipped"] = True
+        mock_weekly_report_email_request["skipped_algorithms"] = ["SAC"]
+        mock_weekly_report_email_request["order_results"]["sac"]["skipped"] = True
 
         response = client.post(
             "/email/weekly-report",
@@ -619,7 +597,7 @@ class TestWeeklyReportEmailEndpoint:
         assert response.status_code == 200
         body = response.json()["body"]
         assert "Skipped Algorithms" in body
-        assert "PPO" in body
+        assert "SAC" in body
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
     def test_weekly_report_smtp_failure(
@@ -683,10 +661,9 @@ class TestWeeklyReportEmailEndpoint:
         assert "AI Analysis Summary" in body
         assert "This week shows bullish momentum" in body
 
-        # Check RL Allocators section
-        assert "RL Allocations" in body
+        # Check SAC Allocation section
+        assert "SAC Allocation" in body
         assert "SAC" in body
-        assert "PPO" in body
 
         # Check HRP section
         assert "HRP Allocation" in body

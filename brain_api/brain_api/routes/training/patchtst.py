@@ -2,12 +2,14 @@
 
 import gc
 import logging
+import threading
 import time
 from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi.responses import JSONResponse
 
 from brain_api.core.config import (
     get_hf_patchtst_model_repo,
@@ -30,6 +32,7 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
+from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
@@ -48,7 +51,14 @@ from .dependencies import (
     get_patchtst_trainer,
 )
 from .helpers import get_prior_version_info
-from .models import PatchTSTTrainResponse
+from .job_registry import (
+    cancel_job,
+    complete_job,
+    fail_job,
+    get_or_create_job,
+    update_progress,
+)
+from .models import PatchTSTTrainResponse, TrainingJobResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -66,6 +76,8 @@ def _train_patchtst_core(
     dataset_builder: PatchTSTDatasetBuilder,
     trainer: PatchTSTTrainer,
     log_prefix: str = "[PatchTST]",
+    shutdown_event: threading.Event | None = None,
+    job_id: str | None = None,
 ) -> PatchTSTTrainResponse:
     """Core PatchTST training logic shared by US and India endpoints.
 
@@ -116,6 +128,8 @@ def _train_patchtst_core(
                 signals_used=["ohlcv"],
             )
 
+    if job_id:
+        update_progress(job_id, {"phase": "loading_prices"})
     logger.info(f"{log_prefix} Loading price data for {len(symbols)} symbols...")
     t0 = time.time()
     prices = price_loader(symbols, start_date, end_date)
@@ -140,6 +154,8 @@ def _train_patchtst_core(
         logger.error(f"{log_prefix} No aligned features - cannot train model")
         raise ValueError("No aligned features could be built from available data")
 
+    if job_id:
+        update_progress(job_id, {"phase": "building_dataset"})
     logger.info(f"{log_prefix} Building dataset...")
     t0 = time.time()
     dataset = dataset_builder(aligned_features, prices, config)
@@ -160,9 +176,11 @@ def _train_patchtst_core(
     del dataset
     gc.collect()
 
+    if job_id:
+        update_progress(job_id, {"phase": "training"})
     logger.info(f"{log_prefix} Starting model training...")
     t0 = time.time()
-    result = trainer(X, y, feature_scaler, config)
+    result = trainer(X, y, feature_scaler, config, shutdown_event=shutdown_event)
     t_train = time.time() - t0
     logger.info(f"{log_prefix} Training complete in {t_train:.1f}s")
     logger.info(
@@ -312,6 +330,7 @@ def _train_patchtst_core(
 
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
+    background_tasks: BackgroundTasks,
     skip_snapshot: bool = Query(
         False,
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
@@ -322,32 +341,49 @@ def train_patchtst(
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
     trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
-) -> PatchTSTTrainResponse:
+) -> PatchTSTTrainResponse | JSONResponse:
     """Train the OHLCV PatchTST model for weekly return prediction.
 
-    PatchTST uses 5-channel OHLCV log returns (open, high, low, close, volume)
-    to predict weekly returns. Channel-independent shared Transformer weights
-    learn temporal patterns from all 5 related OHLCV signals.
-
-    Input channels (5 total):
-    - OHLCV log returns: open_ret, high_ret, low_ret, close_ret, volume_ret
-
-    Uses API config for data window (default: last 15 years).
-    Writes versioned artifacts and promotes if evaluation passes.
-
-    By default, also saves snapshots for all historical years (for walk-forward
-    forecast generation in RL training). Use skip_snapshot=true to disable.
-
-    Args:
-        skip_snapshot: If True, skips saving snapshots. By default (False),
-                      saves snapshot for current training window + all historical years.
-
-    Returns:
-        Training result including version, metrics, and promotion status.
+    Returns 200 with cached result if version already exists (idempotent).
+    Returns 202 with job_id if training is started in the background.
+    Poll GET /train/status/{job_id} for progress and final result.
     """
+    start_date, end_date = resolve_training_window()
+    version = patchtst_compute_version(start_date, end_date, symbols, config)
+    logger.info(f"[PatchTST] Computed version: {version}")
+
+    if storage.version_exists(version):
+        logger.info(f"[PatchTST] Version {version} already exists (idempotent)")
+        existing_metadata = storage.read_metadata(version)
+        if existing_metadata:
+            return PatchTSTTrainResponse(
+                version=version,
+                data_window_start=existing_metadata["data_window"]["start"],
+                data_window_end=existing_metadata["data_window"]["end"],
+                metrics=existing_metadata["metrics"],
+                promoted=existing_metadata["promoted"],
+                prior_version=existing_metadata.get("prior_version"),
+                num_input_channels=config.num_input_channels,
+                signals_used=["ohlcv"],
+            )
+
+    job, is_new = get_or_create_job("patchtst", version)
+    if not is_new:
+        logger.info(f"[PatchTST] Job {job.job_id} already running, returning 202")
+        return JSONResponse(
+            status_code=202,
+            content=TrainingJobResponse(
+                job_id=job.job_id,
+                status=job.status,
+                message=f"PatchTST training already in progress for {version}",
+            ).model_dump(),
+        )
+
     from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
 
-    return _train_patchtst_core(
+    background_tasks.add_task(
+        _run_patchtst_training,
+        job_id=job.job_id,
         symbols=symbols,
         storage=storage,
         hf_storage_class=PatchTSTHuggingFaceModelStorage,
@@ -360,6 +396,60 @@ def train_patchtst(
         trainer=trainer,
         log_prefix="[PatchTST]",
     )
+    logger.info(f"[PatchTST] Background training started: {job.job_id}")
+
+    return JSONResponse(
+        status_code=202,
+        content=TrainingJobResponse(
+            job_id=job.job_id,
+            status="pending",
+            message=f"PatchTST training started for {version}",
+        ).model_dump(),
+    )
+
+
+def _run_patchtst_training(
+    *,
+    job_id: str,
+    symbols: list[str],
+    storage: PatchTSTModelStorage,
+    hf_storage_class: type,
+    hf_model_repo_getter: Callable[[], str | None],
+    snapshot_forecaster_type: str,
+    skip_snapshot: bool,
+    config: PatchTSTConfig,
+    price_loader: PatchTSTPriceLoader,
+    dataset_builder: PatchTSTDatasetBuilder,
+    trainer: PatchTSTTrainer,
+    log_prefix: str = "[PatchTST]",
+) -> None:
+    """Background task that runs the full PatchTST training pipeline."""
+    from brain_api.main import shutdown_event
+
+    try:
+        response = _train_patchtst_core(
+            symbols=symbols,
+            storage=storage,
+            hf_storage_class=hf_storage_class,
+            hf_model_repo_getter=hf_model_repo_getter,
+            snapshot_forecaster_type=snapshot_forecaster_type,
+            skip_snapshot=skip_snapshot,
+            config=config,
+            price_loader=price_loader,
+            dataset_builder=dataset_builder,
+            trainer=trainer,
+            log_prefix=log_prefix,
+            shutdown_event=shutdown_event,
+            job_id=job_id,
+        )
+        complete_job(job_id, response.model_dump())
+        logger.info(f"{log_prefix} Job {job_id} completed successfully")
+    except TrainingCancelledError:
+        cancel_job(job_id)
+        logger.info(f"{log_prefix} Job {job_id} cancelled by shutdown")
+    except Exception as e:
+        fail_job(job_id, str(e))
+        logger.error(f"{log_prefix} Job {job_id} failed: {e}")
 
 
 def _filter_prices_by_cutoff(

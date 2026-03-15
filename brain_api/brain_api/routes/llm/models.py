@@ -6,7 +6,6 @@ from brain_api.routes.allocation import HRPAllocationResponse
 from brain_api.routes.inference.models import (
     LSTMInferenceResponse,
     PatchTSTInferenceResponse,
-    PPOInferenceResponse,
     SACInferenceResponse,
 )
 from brain_api.routes.signals.models import (
@@ -16,7 +15,6 @@ from brain_api.routes.signals.models import (
 from brain_api.routes.training.models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
-    PPOTrainResponse,
     SACTrainResponse,
 )
 
@@ -30,7 +28,6 @@ class TrainingSummaryRequest(BaseModel):
 
     lstm: LSTMTrainResponse
     patchtst: PatchTSTTrainResponse
-    ppo: PPOTrainResponse
     sac: SACTrainResponse
 
 
@@ -62,7 +59,6 @@ class WeeklySummaryRequest(BaseModel):
     fundamentals: FundamentalsResponse  # from POST /signals/fundamentals
     hrp: HRPAllocationResponse  # from POST /allocation/hrp
     sac: SACInferenceResponse  # from POST /inference/sac
-    ppo: PPOInferenceResponse  # from POST /inference/ppo
 
 
 class WeeklySummaryResponse(BaseModel):
@@ -82,7 +78,7 @@ class WeeklySummaryResponse(BaseModel):
 class IndiaTrainingSummaryRequest(BaseModel):
     """Request model for POST /llm/india-training-summary.
 
-    India trains PatchTST only (no LSTM, no PPO/SAC).
+    India trains PatchTST only (no LSTM, no SAC).
     """
 
     patchtst: PatchTSTTrainResponse
@@ -91,7 +87,7 @@ class IndiaTrainingSummaryRequest(BaseModel):
 class IndiaWeeklySummaryRequest(BaseModel):
     """Request model for POST /llm/india-weekly-summary.
 
-    India pipeline is HRP-only (no PPO/SAC/news/fundamentals).
+    India pipeline is HRP-only (no SAC/news/fundamentals).
     The LLM analyzes HRP concentration and diversification.
     """
 

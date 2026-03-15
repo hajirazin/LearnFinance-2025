@@ -37,7 +37,7 @@ def generate_weekly_summary(
     """Generate an LLM summary of weekly forecast and allocation results.
 
     Takes all forecaster predictions (LSTM, PatchTST), allocator results
-    (SAC, PPO, HRP), signals (news, fundamentals), and generates a summary
+    (SAC, HRP), signals (news, fundamentals), and generates a summary
     using the configured LLM provider (OpenAI or OLLAMA).
 
     Does NOT include Alpaca order results - that data is only used in
@@ -74,7 +74,6 @@ def generate_weekly_summary(
         fundamentals=request.fundamentals.model_dump(),
         hrp=request.hrp.model_dump(),
         sac=request.sac.model_dump(),
-        ppo=request.ppo.model_dump(),
     )
 
     logger.debug(f"Generated prompt length: {len(prompt)} chars")
@@ -115,7 +114,7 @@ def generate_india_weekly_summary(
 ) -> WeeklySummaryResponse:
     """Generate an LLM summary of India HRP allocation results.
 
-    India pipeline is HRP-only (no PPO/SAC/news/fundamentals).
+    India pipeline is HRP-only (no SAC/news/fundamentals).
     Analyzes HRP concentration, diversification, and risk observations
     for NSE India halal stocks (Nifty 500 Shariah).
 

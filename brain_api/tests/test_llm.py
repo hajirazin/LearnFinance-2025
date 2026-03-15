@@ -43,14 +43,6 @@ def mock_training_summary_request():
             "num_input_channels": 5,
             "signals_used": ["ohlcv"],
         },
-        "ppo": {
-            "version": "v2026-01-15-ghi789",
-            "data_window_start": "2020-01-01",
-            "data_window_end": "2025-12-31",
-            "metrics": {"sharpe": 1.5, "max_drawdown": 0.15},
-            "promoted": True,
-            "symbols_used": ["AAPL", "MSFT", "GOOGL"],
-        },
         "sac": {
             "version": "v2026-01-15-jkl012",
             "data_window_start": "2020-01-01",
@@ -69,9 +61,8 @@ def mock_llm_json_response():
         "para_1_overall": "All models trained successfully with good metrics.",
         "para_2_lstm": "LSTM model shows strong price prediction capability.",
         "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
-        "para_4_ppo": "PPO allocator demonstrates solid risk-adjusted returns.",
-        "para_5_sac": "SAC shows promising results but was not promoted.",
-        "para_6_recommendations": "Consider investigating SAC promotion criteria.",
+        "para_4_sac": "SAC shows promising results but was not promoted.",
+        "para_5_recommendations": "Consider investigating SAC promotion criteria.",
     }
 
 
@@ -398,7 +389,7 @@ class TestTrainingSummaryEndpoint:
                         "metrics": {},
                         "promoted": True,
                     },
-                    # Missing patchtst, ppo, sac
+                    # Missing patchtst, sac
                 },
             )
             assert response.status_code == 422
@@ -512,14 +503,6 @@ def mock_weekly_summary_request():
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
         },
-        "ppo": {
-            "target_weights": {"AAPL": 0.11, "MSFT": 0.09, "CASH": 0.08},
-            "turnover": 0.12,
-            "target_week_start": "2026-02-03",
-            "target_week_end": "2026-02-07",
-            "model_version": "v2026-01-15-ppo001",
-            "weight_changes": [],
-        },
     }
 
 
@@ -529,12 +512,11 @@ def mock_weekly_llm_json_response():
     return {
         "para_1_overall_summary": "This week shows bullish momentum across tech stocks.",
         "para_2_sac": "SAC allocator favors AAPL and MSFT with moderate turnover.",
-        "para_3_ppo": "PPO takes a similar but slightly more conservative approach.",
-        "para_4_hrp_summary": "HRP maintains diversified allocation across sectors.",
-        "para_5_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
-        "para_6_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
-        "para_7_news_sentiment": "News sentiment is generally positive for holdings.",
-        "para_8_fundamentals": "Fundamentals remain strong with solid margins.",
+        "para_3_hrp_summary": "HRP maintains diversified allocation across sectors.",
+        "para_4_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
+        "para_5_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
+        "para_6_news_sentiment": "News sentiment is generally positive for holdings.",
+        "para_7_fundamentals": "Fundamentals remain strong with solid margins.",
     }
 
 

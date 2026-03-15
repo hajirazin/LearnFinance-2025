@@ -295,7 +295,7 @@ This plan fixes **10 pre-existing bugs**, ordered by severity:
 > - **DifferentialSharpe reward** (Moody & Saffell 2001): Added `DifferentialSharpe` class and `compute_blended_reward()` to `rewards.py`. Env `step()` now uses blended reward: `sharpe_weight * DSR + (1-sharpe_weight) * return_reward`.
 > - **PPO entropy_coef**: 0.01 → 0.05 in `config.py`. At 0.01, entropy bonus ~0.2 is negligible vs policy_loss ~0.5-1.0. At 0.05, entropy bonus ~1.1 provides meaningful exploration pressure for 16-dim action space. Still 4x less aggressive than SAC's init_alpha=0.2.
 > - **SAC reward_scale**: 100.0 → 1.0 in `sac_config.py`. Having reward_scale=100 AND normalize_rewards AND auto_entropy_tuning creates 3 competing magnitude controls. With reward_scale=1.0, Welford normalization produces mean~0 std~1 rewards, giving alpha a stable target.
-> - **Reward shaping config**: Added `sharpe_weight=0.5` and `sharpe_eta=0.01` to both `PPOBaseConfig` and `SACBaseConfig`.
+> - **Reward shaping config**: Added `sharpe_weight=0.5` and `sharpe_eta=0.01` to both `RLBaseConfig` and `SACBaseConfig`.
 > - **PPO data.py**: Removed volatility fields from TrainingData and build_training_data().
 > - **Training routes (ppo.py, sac.py)**: Updated build_dual_forecast_features destructuring from 4-tuple to 2-tuple. Removed volatility alignment blocks and volatility params from build_training_data() calls.
 

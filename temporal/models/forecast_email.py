@@ -122,17 +122,6 @@ class WeightChange(BaseModel):
     change: float
 
 
-class PPOInferenceResponse(BaseModel):
-    """Response from POST /inference/ppo."""
-
-    target_weights: dict[str, float]
-    turnover: float
-    model_version: str
-    target_week_start: str | None = None
-    target_week_end: str | None = None
-    weight_changes: list[WeightChange] = []
-
-
 class SACInferenceResponse(BaseModel):
     """Response from POST /inference/sac."""
 

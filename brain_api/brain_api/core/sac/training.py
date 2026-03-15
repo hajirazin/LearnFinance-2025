@@ -6,6 +6,7 @@ predictions as forecast features in the state vector.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -189,6 +190,7 @@ def create_env_from_training_data(
 def train_sac(
     training_data: TrainingData,
     config: SACConfig,
+    shutdown_event: threading.Event | None = None,
 ) -> SACTrainingResult:
     """Train SAC model with dual forecasts.
 
@@ -234,7 +236,7 @@ def train_sac(
     train_env_normalized = NormalizedEnv(train_env, scaler)
 
     # Train SAC
-    trainer = SACTrainer(train_env_normalized, config)
+    trainer = SACTrainer(train_env_normalized, config, shutdown_event=shutdown_event)
     trainer.train(total_timesteps=config.total_timesteps)
 
     # Get trained models
@@ -286,6 +288,7 @@ def finetune_sac(
     prior_scaler: PortfolioScaler,
     prior_config: SACConfig,
     finetune_config: SACFinetuneConfig,
+    shutdown_event: threading.Event | None = None,
 ) -> SACTrainingResult:
     """Fine-tune SAC model on recent data.
 
@@ -307,7 +310,7 @@ def finetune_sac(
     env_normalized = NormalizedEnv(env, prior_scaler)
 
     # Create trainer with prior models
-    trainer = SACTrainer(env_normalized, prior_config)
+    trainer = SACTrainer(env_normalized, prior_config, shutdown_event=shutdown_event)
 
     # Load prior weights
     trainer.actor.load_state_dict(prior_actor.state_dict())

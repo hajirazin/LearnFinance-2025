@@ -6,6 +6,10 @@ This module contains common functions used by multiple model training pipelines.
 import torch
 
 
+class TrainingCancelledError(Exception):
+    """Raised when training is cancelled by a shutdown event."""
+
+
 def get_device() -> torch.device:
     """Get the best available device for training.
 

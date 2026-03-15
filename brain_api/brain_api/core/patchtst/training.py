@@ -15,6 +15,7 @@ Built-in loss compares normalized predictions vs normalized targets.
 At inference, prediction_outputs are denormalized by RevIN automatically.
 """
 
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,7 +27,7 @@ from transformers import PatchTSTConfig as HFPatchTSTConfig
 from transformers import PatchTSTForPrediction
 
 from brain_api.core.patchtst.config import PatchTSTConfig
-from brain_api.core.training_utils import get_device
+from brain_api.core.training_utils import TrainingCancelledError, get_device
 
 
 @dataclass
@@ -79,6 +80,7 @@ def train_model_pytorch(
     y: np.ndarray,
     feature_scaler: StandardScaler,
     config: PatchTSTConfig,
+    shutdown_event: threading.Event | None = None,
 ) -> TrainingResult:
     """Train PatchTST model using PyTorch with multi-task loss on all 5 channels.
 
@@ -170,6 +172,9 @@ def train_model_pytorch(
     print("[PatchTST] Starting training...")
 
     for epoch in range(config.epochs):
+        if shutdown_event and shutdown_event.is_set():
+            print(f"[PatchTST] Training cancelled at epoch {epoch}/{config.epochs}")
+            raise TrainingCancelledError("PatchTST training cancelled by shutdown")
         model.train()
 
         total_train_loss = 0.0

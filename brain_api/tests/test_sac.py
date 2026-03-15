@@ -101,7 +101,7 @@ def create_mock_training_result(config: SACConfig) -> SACTrainingResult:
         avg_episode_return=0.02,
         avg_episode_sharpe=0.5,
         eval_sharpe=0.6,
-        eval_cagr=0.10,  # Good CAGR for promotion
+        eval_cagr=0.10,  # 10% CAGR, below 12% threshold (first model auto-promotes)
         eval_max_drawdown=0.15,
     )
 
@@ -352,13 +352,15 @@ class TestSACLSTMFinetune:
         client = TestClient(app)
 
         try:
+            response1 = client.post("/train/sac/finetune")
+            assert response1.status_code == 202
+
             response = client.post("/train/sac/finetune")
             assert response.status_code == 200
 
             data = response.json()
             end_date = dt_date.fromisoformat(data["data_window_end"])
 
-            # End date should always be a Friday
             assert end_date.weekday() == 4, (
                 f"Expected Friday, got {end_date.strftime('%A')}"
             )
@@ -374,8 +376,8 @@ class TestSACLSTMFinetune:
 class TestSACFullTraining:
     """Tests for /train/sac/full endpoint."""
 
-    def test_full_training_returns_200(self, temp_storage, monkeypatch):
-        """Test that full training endpoint returns 200."""
+    def test_full_training_returns_202_then_200(self, temp_storage, monkeypatch):
+        """Test that full training endpoint returns 202 then 200 on rerun."""
         from brain_api.routes.training import sac
 
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
@@ -388,17 +390,18 @@ class TestSACFullTraining:
         client = TestClient(app)
 
         try:
+            response1 = client.post("/train/sac/full")
+            assert response1.status_code == 202
+
             response = client.post("/train/sac/full")
             assert response.status_code == 200
 
             data = response.json()
-            # Check required fields
             assert "version" in data
             assert "data_window_start" in data
             assert "data_window_end" in data
             assert "promoted" in data
             assert "symbols_used" in data
-            # First training should auto-promote
             assert data["promoted"] is True
         finally:
             app.dependency_overrides.clear()
@@ -417,18 +420,18 @@ class TestSACFullTraining:
         client = TestClient(app)
 
         try:
-            # First training
             response1 = client.post("/train/sac/full")
-            assert response1.status_code == 200
-            version1 = response1.json()["version"]
+            assert response1.status_code == 202
 
-            # Second training with same config should be idempotent
             response2 = client.post("/train/sac/full")
             assert response2.status_code == 200
             version2 = response2.json()["version"]
 
-            # Versions should match (idempotent)
-            assert version1 == version2
+            response3 = client.post("/train/sac/full")
+            assert response3.status_code == 200
+            version3 = response3.json()["version"]
+
+            assert version2 == version3
         finally:
             app.dependency_overrides.clear()
 
@@ -451,7 +454,7 @@ class TestExperienceStore:
                 "run_id": "paper:2025-01-27",
                 "week_start": "2025-01-27",
                 "week_end": "2025-01-31",
-                "model_type": "ppo",
+                "model_type": "sac",
                 "model_version": "v2025-01-01_test123",
                 "state": {
                     "current_weights": {"AAPL": 0.10, "MSFT": 0.08, "CASH": 0.82},

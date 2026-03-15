@@ -36,7 +36,7 @@ def send_weekly_report_email(
     """Send a weekly portfolio analysis email.
 
     Takes the AI-generated summary, Alpaca order execution results,
-    allocation data (SAC, PPO, HRP), and forecast predictions (LSTM, PatchTST),
+    allocation data (SAC, HRP), and forecast predictions (LSTM, PatchTST),
     renders an HTML email using Jinja2, and sends via Gmail SMTP.
 
     Email configuration comes from environment variables:
@@ -77,7 +77,6 @@ def send_weekly_report_email(
         target_week_end=request.target_week_end,
         as_of_date=request.as_of_date,
         sac=request.sac.model_dump(),
-        ppo=request.ppo.model_dump(),
         hrp=request.hrp.model_dump(),
         lstm=request.lstm.model_dump(),
         patchtst=request.patchtst.model_dump(),
@@ -123,7 +122,7 @@ def send_india_weekly_report_email(
 ) -> WeeklyReportEmailResponse:
     """Send an India weekly portfolio analysis email.
 
-    India pipeline is HRP-only (no PPO/SAC/news/fundamentals/orders).
+    India pipeline is HRP-only (no SAC/news/fundamentals/orders).
     Renders an HTML email with the AI summary and HRP allocation table,
     and sends via Gmail SMTP.
 

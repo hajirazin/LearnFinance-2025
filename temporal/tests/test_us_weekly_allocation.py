@@ -26,7 +26,6 @@ from models import (
     OrderSummary,
     PatchTSTInferenceResponse,
     PositionModel,
-    PPOInferenceResponse,
     SACInferenceResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
@@ -118,17 +117,6 @@ def fundamentals_resp():
 
 
 @pytest.fixture
-def ppo_alloc():
-    return PPOInferenceResponse(
-        target_weights={"AAPL": 0.30, "CASH": 0.70},
-        turnover=0.15,
-        model_version="v1.0.0",
-        target_week_start="2026-02-10",
-        target_week_end="2026-02-14",
-    )
-
-
-@pytest.fixture
 def sac_alloc():
     return SACInferenceResponse(
         target_weights={"AAPL": 0.25, "CASH": 0.75},
@@ -211,7 +199,7 @@ def sell_and_buy_orders():
 @pytest.fixture
 def submit_resp():
     return SubmitOrdersResponse(
-        account="ppo", orders_submitted=1, orders_failed=0, skipped=False, results=[]
+        account="sac", orders_submitted=1, orders_failed=0, skipped=False, results=[]
     )
 
 
@@ -236,17 +224,14 @@ def email_resp():
 
 def _make_mock_activities(
     active_symbols,
-    ppo_portfolio,
     sac_portfolio,
     hrp_portfolio,
     fundamentals_resp,
     news_resp,
     lstm_resp,
     patchtst_resp,
-    ppo_alloc,
     sac_alloc,
     hrp_alloc,
-    ppo_orders,
     sac_orders,
     hrp_orders,
     submit_resp,
@@ -263,10 +248,6 @@ def _make_mock_activities(
     @activity.defn(name="get_active_symbols")
     def mock_get_active_symbols() -> ActiveSymbolsResponse:
         return active_symbols
-
-    @activity.defn(name="get_ppo_portfolio")
-    def mock_get_ppo_portfolio() -> AlpacaPortfolioResponse:
-        return ppo_portfolio
 
     @activity.defn(name="get_sac_portfolio")
     def mock_get_sac_portfolio() -> AlpacaPortfolioResponse:
@@ -292,10 +273,6 @@ def _make_mock_activities(
     def mock_get_patchtst_forecast(as_of_date):
         return patchtst_resp
 
-    @activity.defn(name="infer_ppo")
-    def mock_infer_ppo(portfolio, as_of_date):
-        return ppo_alloc
-
     @activity.defn(name="infer_sac")
     def mock_infer_sac(portfolio, as_of_date):
         return sac_alloc
@@ -303,10 +280,6 @@ def _make_mock_activities(
     @activity.defn(name="allocate_hrp")
     def mock_allocate_hrp(as_of_date, universe="halal_filtered"):
         return hrp_alloc
-
-    @activity.defn(name="generate_orders_ppo")
-    def mock_generate_orders_ppo(allocation, portfolio, run_id, attempt):
-        return ppo_orders
 
     @activity.defn(name="generate_orders_sac")
     def mock_generate_orders_sac(allocation, portfolio, run_id, attempt):
@@ -316,21 +289,9 @@ def _make_mock_activities(
     def mock_generate_orders_hrp(allocation, portfolio, run_id, attempt):
         return hrp_orders
 
-    @activity.defn(name="store_experience_ppo")
-    def mock_store_experience_ppo(*args):
-        return None
-
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
         return None
-
-    @activity.defn(name="submit_orders_ppo")
-    def mock_submit_orders_ppo(orders):
-        if isinstance(orders, SkippedOrdersResponse) or getattr(
-            orders, "skipped", False
-        ):
-            return SkippedSubmitResponse(account="ppo")
-        return submit_resp
 
     @activity.defn(name="submit_orders_sac")
     def mock_submit_orders_sac(orders):
@@ -354,17 +315,9 @@ def _make_mock_activities(
             return check_order_statuses_fn(account, client_order_ids)
         return []
 
-    @activity.defn(name="get_order_history_ppo")
-    def mock_get_order_history_ppo(after_date):
-        return []
-
     @activity.defn(name="get_order_history_sac")
     def mock_get_order_history_sac(after_date):
         return []
-
-    @activity.defn(name="update_execution_ppo")
-    def mock_update_execution_ppo(run_id, orders, history):
-        return None
 
     @activity.defn(name="update_execution_sac")
     def mock_update_execution_sac(run_id, orders, history):
@@ -381,28 +334,21 @@ def _make_mock_activities(
     return [
         mock_resolve_next_attempt,
         mock_get_active_symbols,
-        mock_get_ppo_portfolio,
         mock_get_sac_portfolio,
         mock_get_hrp_portfolio,
         mock_get_fundamentals,
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
-        mock_infer_ppo,
         mock_infer_sac,
         mock_allocate_hrp,
-        mock_generate_orders_ppo,
         mock_generate_orders_sac,
         mock_generate_orders_hrp,
-        mock_store_experience_ppo,
         mock_store_experience_sac,
-        mock_submit_orders_ppo,
         mock_submit_orders_sac,
         mock_submit_orders_hrp,
         mock_check_order_statuses,
-        mock_get_order_history_ppo,
         mock_get_order_history_sac,
-        mock_update_execution_ppo,
         mock_update_execution_sac,
         mock_generate_summary,
         mock_send_weekly_email,
@@ -421,7 +367,6 @@ class TestUSWeeklyAllocationAllRun:
         patchtst_resp,
         news_resp,
         fundamentals_resp,
-        ppo_alloc,
         sac_alloc,
         hrp_alloc,
         buy_only_orders,
@@ -431,17 +376,14 @@ class TestUSWeeklyAllocationAllRun:
     ):
         activities = _make_mock_activities(
             active_symbols=active_symbols,
-            ppo_portfolio=portfolio_no_open,
             sac_portfolio=portfolio_no_open,
             hrp_portfolio=portfolio_no_open,
             fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
-            ppo_alloc=ppo_alloc,
             sac_alloc=sac_alloc,
             hrp_alloc=hrp_alloc,
-            ppo_orders=buy_only_orders,
             sac_orders=buy_only_orders,
             hrp_orders=buy_only_orders,
             submit_resp=submit_resp,
@@ -467,7 +409,6 @@ class TestUSWeeklyAllocationAllRun:
 
             assert result["symbols_count"] == 15
             assert result["skipped_algorithms"] == []
-            assert result["ppo"]["skipped"] is False
             assert result["sac"]["skipped"] is False
             assert result["hrp"]["skipped"] is False
             assert result["email"]["is_success"] is True
@@ -477,7 +418,7 @@ class TestUSWeeklyAllocationSkipLogic:
     """Test algorithm skip logic when open orders exist."""
 
     @pytest.mark.asyncio
-    async def test_skip_ppo_when_open_orders(
+    async def test_skip_sac_when_open_orders(
         self,
         active_symbols,
         portfolio_no_open,
@@ -495,18 +436,15 @@ class TestUSWeeklyAllocationSkipLogic:
     ):
         activities = _make_mock_activities(
             active_symbols=active_symbols,
-            ppo_portfolio=portfolio_with_open,  # PPO has open orders
-            sac_portfolio=portfolio_no_open,
+            sac_portfolio=portfolio_with_open,  # SAC has open orders
             hrp_portfolio=portfolio_no_open,
             fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
-            ppo_alloc=None,
             sac_alloc=sac_alloc,
             hrp_alloc=hrp_alloc,
-            ppo_orders=SkippedOrdersResponse(skipped=True, algorithm="ppo"),
-            sac_orders=buy_only_orders,
+            sac_orders=SkippedOrdersResponse(skipped=True, algorithm="sac"),
             hrp_orders=buy_only_orders,
             submit_resp=submit_resp,
             summary_resp=summary_resp,
@@ -529,9 +467,8 @@ class TestUSWeeklyAllocationSkipLogic:
                     task_queue="test-queue",
                 )
 
-            assert "PPO" in result["skipped_algorithms"]
-            assert result["ppo"]["skipped"] is True
-            assert result["sac"]["skipped"] is False
+            assert "SAC" in result["skipped_algorithms"]
+            assert result["sac"]["skipped"] is True
             assert result["hrp"]["skipped"] is False
 
     @pytest.mark.asyncio
@@ -548,17 +485,14 @@ class TestUSWeeklyAllocationSkipLogic:
     ):
         activities = _make_mock_activities(
             active_symbols=active_symbols,
-            ppo_portfolio=portfolio_with_open,
             sac_portfolio=portfolio_with_open,
             hrp_portfolio=portfolio_with_open,
             fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
-            ppo_alloc=None,
             sac_alloc=None,
             hrp_alloc=None,
-            ppo_orders=SkippedOrdersResponse(skipped=True, algorithm="ppo"),
             sac_orders=SkippedOrdersResponse(skipped=True, algorithm="sac"),
             hrp_orders=SkippedOrdersResponse(skipped=True, algorithm="hrp"),
             submit_resp=SubmitOrdersResponse(
@@ -588,10 +522,8 @@ class TestUSWeeklyAllocationSkipLogic:
                     task_queue="test-queue",
                 )
 
-            assert "PPO" in result["skipped_algorithms"]
             assert "SAC" in result["skipped_algorithms"]
             assert "HRP" in result["skipped_algorithms"]
-            assert result["ppo"]["skipped"] is True
             assert result["sac"]["skipped"] is True
             assert result["hrp"]["skipped"] is True
             assert result["email"]["is_success"] is True
@@ -609,7 +541,6 @@ class TestUSWeeklyAllocationSellWaitBuy:
         patchtst_resp,
         news_resp,
         fundamentals_resp,
-        ppo_alloc,
         sac_alloc,
         hrp_alloc,
         sell_and_buy_orders,
@@ -618,12 +549,12 @@ class TestUSWeeklyAllocationSellWaitBuy:
         summary_resp,
         email_resp,
     ):
-        """SAC sells fill immediately, PPO sells need one poll cycle.
+        """SAC sells fill immediately, HRP sells need one poll cycle.
 
         Verifies each algorithm's sell-wait-buy runs independently -- SAC
-        buys proceed without waiting for PPO sells to fill.
+        buys proceed without waiting for HRP sells to fill.
         """
-        ppo_poll_count = {"n": 0}
+        hrp_poll_count = {"n": 0}
 
         def staggered_check(account, client_order_ids):
             if account == "sac":
@@ -631,9 +562,9 @@ class TestUSWeeklyAllocationSellWaitBuy:
                     {"client_order_id": cid, "status": "filled"}
                     for cid in client_order_ids
                 ]
-            if account == "ppo":
-                ppo_poll_count["n"] += 1
-                if ppo_poll_count["n"] <= 1:
+            if account == "hrp":
+                hrp_poll_count["n"] += 1
+                if hrp_poll_count["n"] <= 1:
                     return [
                         {"client_order_id": cid, "status": "pending_new"}
                         for cid in client_order_ids
@@ -646,19 +577,16 @@ class TestUSWeeklyAllocationSellWaitBuy:
 
         activities = _make_mock_activities(
             active_symbols=active_symbols,
-            ppo_portfolio=portfolio_no_open,
             sac_portfolio=portfolio_no_open,
             hrp_portfolio=portfolio_no_open,
             fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
-            ppo_alloc=ppo_alloc,
             sac_alloc=sac_alloc,
             hrp_alloc=hrp_alloc,
-            ppo_orders=sell_and_buy_orders,
             sac_orders=sell_and_buy_orders,
-            hrp_orders=buy_only_orders,
+            hrp_orders=sell_and_buy_orders,
             submit_resp=submit_resp,
             summary_resp=summary_resp,
             email_resp=email_resp,
@@ -682,10 +610,9 @@ class TestUSWeeklyAllocationSellWaitBuy:
                 )
 
             assert result["skipped_algorithms"] == []
-            assert result["ppo"]["skipped"] is False
             assert result["sac"]["skipped"] is False
             assert result["hrp"]["skipped"] is False
-            assert result["ppo"]["orders_submitted"] > 0
             assert result["sac"]["orders_submitted"] > 0
+            assert result["hrp"]["orders_submitted"] > 0
             assert result["email"]["is_success"] is True
-            assert ppo_poll_count["n"] == 2
+            assert hrp_poll_count["n"] == 2

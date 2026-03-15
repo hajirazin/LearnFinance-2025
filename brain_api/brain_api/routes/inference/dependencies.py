@@ -9,13 +9,11 @@ from brain_api.storage.local import (
     LocalModelStorage,
     PatchTSTModelStorage,
 )
-from brain_api.storage.ppo import PPOLocalStorage
 from brain_api.storage.sac import SACLocalStorage
 
 from .models import (
     LSTMInferenceRequest,
     PatchTSTInferenceRequest,
-    PPOInferenceRequest,
     SACInferenceRequest,
 )
 
@@ -70,22 +68,6 @@ def get_sentiment_parquet_path() -> Path:
     """Get the path to the historical sentiment parquet file."""
     project_root = Path(__file__).parent.parent.parent.parent
     return project_root / "data" / "output" / "daily_sentiment.parquet"
-
-
-# ============================================================================
-# PPO dependencies (unified with dual forecasts)
-# ============================================================================
-
-
-def get_ppo_storage() -> PPOLocalStorage:
-    """Get the PPO storage instance."""
-    return PPOLocalStorage()
-
-
-def get_ppo_as_of_date(request: PPOInferenceRequest) -> date:
-    """Get cutoff date (always Friday) from request or computed from today."""
-    reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
-    return resolve_cutoff_date(reference)
 
 
 # ============================================================================

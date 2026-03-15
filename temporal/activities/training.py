@@ -5,8 +5,10 @@ to keep the Temporal server informed during long-running training.
 """
 
 import logging
+import time
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
 from models import (
@@ -98,88 +100,81 @@ def fetch_halal_india_universe() -> dict:
     return data
 
 
+def _poll_training_job(
+    endpoint: str,
+    poll_interval: float = 60.0,
+) -> TrainingResponse:
+    """Start a training job via POST and poll until completion.
+
+    1. POST to endpoint: if 200, return result (idempotent cache hit)
+    2. If 202, extract job_id and poll GET /train/status/{job_id}
+    3. Heartbeat on each poll cycle to keep Temporal informed
+    4. Return TrainingResponse on completion, raise on failure/cancel
+    """
+    with get_training_client() as client:
+        response = client.post(endpoint)
+        response.raise_for_status()
+
+        if response.status_code == 200:
+            return TrainingResponse(**response.json())
+
+        job_data = response.json()
+        job_id = job_data["job_id"]
+        logger.info(f"Training job started: {job_id}")
+
+        while True:
+            activity.heartbeat(job_id)
+            time.sleep(poll_interval)
+
+            status_resp = client.get(f"/train/status/{job_id}")
+            status_resp.raise_for_status()
+            status = status_resp.json()
+
+            logger.info(
+                f"Job {job_id}: status={status['status']}, "
+                f"progress={status.get('progress', {})}"
+            )
+
+            if status["status"] == "completed":
+                return TrainingResponse(**status["result"])
+            elif status["status"] in ("failed", "cancelled"):
+                raise ApplicationError(
+                    f"Training {status['status']}: {status.get('error', 'unknown')}"
+                )
+
+
 @activity.defn
 def train_lstm() -> TrainingResponse:
     """Train the LSTM pure-price forecaster model."""
     logger.info("Starting LSTM training...")
-    activity.heartbeat()
-    with get_training_client() as client:
-        response = client.post("/train/lstm")
-        response.raise_for_status()
-    result = TrainingResponse(**response.json())
-    logger.info(
-        f"LSTM training complete: version={result.version}, promoted={result.promoted}"
-    )
-    return result
+    return _poll_training_job("/train/lstm")
 
 
 @activity.defn
 def train_patchtst() -> TrainingResponse:
     """Train the PatchTST OHLCV forecaster model."""
     logger.info("Starting PatchTST training...")
-    activity.heartbeat()
-    with get_training_client() as client:
-        response = client.post("/train/patchtst")
-        response.raise_for_status()
-    result = TrainingResponse(**response.json())
-    logger.info(
-        f"PatchTST training complete: version={result.version}, "
-        f"promoted={result.promoted}"
-    )
-    return result
-
-
-@activity.defn
-def train_ppo() -> TrainingResponse:
-    """Train the PPO reinforcement learning allocator."""
-    logger.info("Starting PPO training...")
-    activity.heartbeat()
-    with get_training_client() as client:
-        response = client.post("/train/ppo/full")
-        response.raise_for_status()
-    result = TrainingResponse(**response.json())
-    logger.info(
-        f"PPO training complete: version={result.version}, promoted={result.promoted}"
-    )
-    return result
+    return _poll_training_job("/train/patchtst")
 
 
 @activity.defn
 def train_sac() -> TrainingResponse:
     """Train the SAC reinforcement learning allocator."""
     logger.info("Starting SAC training...")
-    activity.heartbeat()
-    with get_training_client() as client:
-        response = client.post("/train/sac/full")
-        response.raise_for_status()
-    result = TrainingResponse(**response.json())
-    logger.info(
-        f"SAC training complete: version={result.version}, promoted={result.promoted}"
-    )
-    return result
+    return _poll_training_job("/train/sac/full")
 
 
 @activity.defn
 def train_india_patchtst() -> TrainingResponse:
     """Train the India PatchTST OHLCV forecaster model on NiftyShariah500."""
     logger.info("Starting India PatchTST training...")
-    activity.heartbeat()
-    with get_training_client() as client:
-        response = client.post("/train/patchtst/india")
-        response.raise_for_status()
-    result = TrainingResponse(**response.json())
-    logger.info(
-        f"India PatchTST training complete: version={result.version}, "
-        f"promoted={result.promoted}"
-    )
-    return result
+    return _poll_training_job("/train/patchtst/india")
 
 
 @activity.defn
 def generate_training_summary(
     lstm: TrainingResponse,
     patchtst: TrainingResponse,
-    ppo: TrainingResponse,
     sac: TrainingResponse,
 ) -> TrainingSummaryResponse:
     """Generate LLM summary of all training results."""
@@ -200,14 +195,6 @@ def generate_training_summary(
             "promoted": patchtst.promoted,
             "num_input_channels": patchtst.num_input_channels or 0,
             "signals_used": patchtst.signals_used or [],
-        },
-        "ppo": {
-            "version": ppo.version,
-            "data_window_start": ppo.data_window_start,
-            "data_window_end": ppo.data_window_end,
-            "metrics": ppo.metrics,
-            "promoted": ppo.promoted,
-            "symbols_used": ppo.symbols_used or [],
         },
         "sac": {
             "version": sac.version,
@@ -233,7 +220,6 @@ def generate_training_summary(
 def send_training_summary_email(
     lstm: TrainingResponse,
     patchtst: TrainingResponse,
-    ppo: TrainingResponse,
     sac: TrainingResponse,
     summary: TrainingSummaryResponse,
 ) -> TrainingSummaryEmailResponse:
@@ -255,14 +241,6 @@ def send_training_summary_email(
             "promoted": patchtst.promoted,
             "num_input_channels": patchtst.num_input_channels or 0,
             "signals_used": patchtst.signals_used or [],
-        },
-        "ppo": {
-            "version": ppo.version,
-            "data_window_start": ppo.data_window_start,
-            "data_window_end": ppo.data_window_end,
-            "metrics": ppo.metrics,
-            "promoted": ppo.promoted,
-            "symbols_used": ppo.symbols_used or [],
         },
         "sac": {
             "version": sac.version,

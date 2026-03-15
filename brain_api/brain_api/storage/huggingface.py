@@ -17,11 +17,6 @@ from brain_api.storage.patchtst.huggingface import (
     PatchTSTHuggingFaceModelStorage,
 )
 
-# PPO HuggingFace storage (unified with dual forecasts)
-from brain_api.storage.ppo.huggingface import (
-    PPOHuggingFaceModelStorage,
-)
-
 # SAC HuggingFace storage (unified with dual forecasts)
 from brain_api.storage.sac.huggingface import (
     SACHuggingFaceModelStorage,
@@ -33,8 +28,6 @@ __all__ = [
     "HuggingFaceDatasetStorage",
     # LSTM
     "HuggingFaceModelStorage",
-    # PPO (unified with dual forecasts)
-    "PPOHuggingFaceModelStorage",
     # PatchTST
     "PatchTSTHuggingFaceModelStorage",
     # SAC (unified with dual forecasts)

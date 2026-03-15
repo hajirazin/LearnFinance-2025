@@ -11,7 +11,6 @@ from models import (
     LSTMInferenceResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
-    PPOInferenceResponse,
     SACInferenceResponse,
     SkippedAllocation,
     SkippedSubmitResponse,
@@ -65,7 +64,6 @@ def generate_summary(
     fundamentals: FundamentalsResponse,
     hrp: HRPAllocationResponse | SkippedAllocation,
     sac: SACInferenceResponse | SkippedAllocation,
-    ppo: PPOInferenceResponse | SkippedAllocation,
 ) -> WeeklySummaryResponse:
     """Generate LLM summary of weekly results."""
     logger.info("Generating LLM summary...")
@@ -79,7 +77,6 @@ def generate_summary(
                 "fundamentals": fundamentals.model_dump(),
                 "hrp": _alloc_to_dict(hrp, is_hrp=True),
                 "sac": _alloc_to_dict(sac),
-                "ppo": _alloc_to_dict(ppo),
             },
         )
         response.raise_for_status()
@@ -95,8 +92,6 @@ def send_weekly_email(
     patchtst: PatchTSTInferenceResponse,
     hrp: HRPAllocationResponse | SkippedAllocation,
     sac: SACInferenceResponse | SkippedAllocation,
-    ppo: PPOInferenceResponse | SkippedAllocation,
-    ppo_submit: SubmitOrdersResponse | SkippedSubmitResponse,
     sac_submit: SubmitOrdersResponse | SkippedSubmitResponse,
     hrp_submit: SubmitOrdersResponse | SkippedSubmitResponse,
     target_week_start: str,
@@ -112,7 +107,6 @@ def send_weekly_email(
             json={
                 "summary": summary.summary,
                 "order_results": {
-                    "ppo": _submit_to_dict(ppo_submit),
                     "sac": _submit_to_dict(sac_submit),
                     "hrp": _submit_to_dict(hrp_submit),
                 },
@@ -121,7 +115,6 @@ def send_weekly_email(
                 "target_week_end": target_week_end,
                 "as_of_date": as_of_date,
                 "sac": _alloc_to_dict(sac, as_of_date=as_of_date),
-                "ppo": _alloc_to_dict(ppo, as_of_date=as_of_date),
                 "hrp": _alloc_to_dict(hrp, is_hrp=True, as_of_date=as_of_date),
                 "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),

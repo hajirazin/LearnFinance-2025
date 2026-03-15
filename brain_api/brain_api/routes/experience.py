@@ -1,7 +1,7 @@
 """Experience buffer and labeling endpoints.
 
 This module provides:
-- Storage for PPO experience tuples (state, action, turnover)
+- Storage for RL (SAC) experience tuples (state, action, turnover)
 - Labeling endpoint to fill in realized rewards after the week ends
 - Reading experience for fine-tuning
 """
@@ -66,7 +66,7 @@ class OrderExecutionReport(BaseModel):
 
 
 class ExperienceRecord(BaseModel):
-    """A single experience record for RL (PPO/SAC) training.
+    """A single experience record for RL (SAC) training.
 
     Lifecycle:
     1. Store: Called after inference with full state + intended action
@@ -74,10 +74,10 @@ class ExperienceRecord(BaseModel):
     3. Label: Called next week to fill in reward based on actual portfolio
     """
 
-    run_id: str  # e.g., "paper:2026-01-12:ppo" (includes model_type)
+    run_id: str  # e.g., "paper:2026-01-12:sac" (includes model_type)
     week_start: str  # ISO date
     week_end: str  # ISO date
-    model_type: str  # "ppo" or "sac"
+    model_type: str  # "sac"
     model_version: str
 
     # Full state at decision time
@@ -138,7 +138,7 @@ class StoreExperienceRequest(BaseModel):
     run_id: str
     week_start: str
     week_end: str
-    model_type: str  # "ppo" or "sac"
+    model_type: str  # "sac"
     model_version: str
 
     # Full state at decision time
@@ -197,7 +197,7 @@ class UpdateExecutionRequest(BaseModel):
     """
 
     run_id: str
-    model_type: str  # "ppo" or "sac"
+    model_type: str  # "sac"
 
     # Option 1: Pre-computed execution report (legacy)
     execution_report: list[dict] | None = Field(
@@ -237,7 +237,7 @@ class UpdateExecutionResponse(BaseModel):
 
 
 class ExperienceStorage:
-    """Storage for PPO experience records."""
+    """Storage for RL experience records."""
 
     def __init__(self, base_path: Path | str | None = None):
         if base_path is None:
@@ -412,7 +412,7 @@ def store_experience(
 ) -> StoreExperienceResponse:
     """Store an experience record with full state.
 
-    This is called after each RL (PPO/SAC) inference to record:
+    This is called after each RL (SAC) inference to record:
     - Full state (signals, forecasts, current_weights)
     - Intended action (target weights from policy)
     - Intended turnover
@@ -436,7 +436,7 @@ def store_experience(
         action = request.intended_action
         turnover = request.intended_turnover
 
-    # Create unique run_id including model_type to separate PPO and SAC
+    # Create unique run_id including model_type to separate model types
     run_id = request.run_id
     if not run_id.endswith(f":{request.model_type}"):
         run_id = f"{request.run_id}:{request.model_type}"
@@ -602,9 +602,9 @@ def label_experience(
         # Try to load with exact run_id first
         record = storage.load(request.run_id)
         if record is None:
-            # If not found, try with model_type suffixes (PPO and SAC)
+            # If not found, try with model_type suffix (SAC)
             # since store_experience appends :{model_type} to run_id
-            for model_type in ["ppo", "sac"]:
+            for model_type in ["sac"]:
                 suffixed_id = f"{request.run_id}:{model_type}"
                 record = storage.load(suffixed_id)
                 if record:
@@ -774,7 +774,7 @@ def _label_experience_for_account(
     """Label experience records for a specific account using actual weights.
 
     Args:
-        model_type: "ppo" or "sac"
+        model_type: "sac"
         run_id: Specific run to label, or None to label all unlabeled.
         storage: Experience storage instance.
 
@@ -918,30 +918,6 @@ def _label_experience_for_account(
         records_labeled=records_labeled,
         records_skipped=records_skipped,
         errors=errors,
-    )
-
-
-@router.post("/label/ppo", response_model=LabelExperienceResponse)
-def label_ppo_experience(
-    request: LabelExperienceRequest,
-    storage: ExperienceStorage = Depends(get_experience_storage),
-) -> LabelExperienceResponse:
-    """Label PPO experience records using actual execution from PPO Alpaca account.
-
-    This endpoint:
-    1. Finds unlabeled PPO experience records where week_end < today
-    2. Fetches actual portfolio weights from PPO Alpaca account
-    3. Computes reward based on ACTUAL weights (not intended)
-    4. Updates the experience record
-
-    The key difference from the generic /label endpoint is that this uses
-    the actual executed portfolio, accounting for any orders that expired
-    or only partially filled.
-    """
-    return _label_experience_for_account(
-        model_type="ppo",
-        run_id=request.run_id,
-        storage=storage,
     )
 
 

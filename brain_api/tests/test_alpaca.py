@@ -27,8 +27,6 @@ def mock_alpaca_credentials():
     with patch.dict(
         "os.environ",
         {
-            "ALPACA_PPO_KEY": "test-ppo-key",
-            "ALPACA_PPO_SECRET": "test-ppo-secret",
             "ALPACA_SAC_KEY": "test-sac-key",
             "ALPACA_SAC_SECRET": "test-sac-secret",
             "ALPACA_HRP_KEY": "test-hrp-key",
@@ -45,37 +43,6 @@ def mock_alpaca_credentials():
 
 class TestGetPortfolio:
     """Tests for GET /alpaca/portfolio endpoint."""
-
-    def test_get_portfolio_ppo_success(self, client, mock_alpaca_credentials):
-        """Test GET /alpaca/portfolio?account=ppo returns cash, positions, open_orders_count."""
-        mock_account = {"cash": "10000.50", "buying_power": "20000.00"}
-        mock_positions = [
-            {"symbol": "AAPL", "qty": "10", "market_value": "1750.00"},
-            {"symbol": "MSFT", "qty": "5", "market_value": "2000.00"},
-        ]
-        mock_orders = []  # No open orders
-
-        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
-            mock_client = MagicMock()
-            mock_client_class.return_value.__enter__.return_value = mock_client
-
-            # Setup responses for account, positions, orders
-            mock_client.get.side_effect = [
-                MagicMock(json=lambda: mock_account, raise_for_status=lambda: None),
-                MagicMock(json=lambda: mock_positions, raise_for_status=lambda: None),
-                MagicMock(json=lambda: mock_orders, raise_for_status=lambda: None),
-            ]
-
-            response = client.get("/alpaca/portfolio", params={"account": "ppo"})
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["cash"] == 10000.50
-        assert len(data["positions"]) == 2
-        assert data["positions"][0]["symbol"] == "AAPL"
-        assert data["positions"][0]["qty"] == 10.0
-        assert data["positions"][0]["market_value"] == 1750.00
-        assert data["open_orders_count"] == 0
 
     def test_get_portfolio_sac_success(self, client, mock_alpaca_credentials):
         """Test GET /alpaca/portfolio?account=sac returns normalized data."""
@@ -142,7 +109,7 @@ class TestGetPortfolio:
             mock_client_class.return_value.__enter__.return_value = mock_client
             mock_client.get.side_effect = httpx.TimeoutException("Connection timeout")
 
-            response = client.get("/alpaca/portfolio", params={"account": "ppo"})
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
 
         assert response.status_code == 503
         assert "timeout" in response.json()["detail"].lower()
@@ -161,7 +128,7 @@ class TestGetPortfolio:
                 "Unauthorized", request=MagicMock(), response=mock_response
             )
 
-            response = client.get("/alpaca/portfolio", params={"account": "ppo"})
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
 
         assert response.status_code == 503
 
@@ -189,7 +156,7 @@ class TestSubmitOrders:
             response = client.post(
                 "/alpaca/submit-orders",
                 json={
-                    "account": "ppo",
+                    "account": "sac",
                     "orders": [
                         {
                             "symbol": "AAPL",
@@ -206,7 +173,7 @@ class TestSubmitOrders:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["account"] == "ppo"
+        assert data["account"] == "sac"
         assert data["orders_submitted"] == 1
         assert data["orders_failed"] == 0
         assert data["skipped"] is False
@@ -297,7 +264,7 @@ class TestSubmitOrders:
         response = client.post(
             "/alpaca/submit-orders",
             json={
-                "account": "ppo",
+                "account": "sac",
                 "orders": [
                     {
                         "symbol": "AAPL",
@@ -349,7 +316,7 @@ class TestOrderHistory:
 
             response = client.get(
                 "/alpaca/order-history",
-                params={"account": "ppo", "after": "2026-02-01"},
+                params={"account": "sac", "after": "2026-02-01"},
             )
 
         assert response.status_code == 200
@@ -392,7 +359,7 @@ class TestOrderHistory:
         """Test GET /alpaca/order-history without after param returns 422."""
         response = client.get(
             "/alpaca/order-history",
-            params={"account": "ppo"},
+            params={"account": "sac"},
         )
         assert response.status_code == 422
 
@@ -429,7 +396,7 @@ class TestOrderHistory:
 
             response = client.get(
                 "/alpaca/order-history",
-                params={"account": "ppo", "after": "2026-02-01"},
+                params={"account": "sac", "after": "2026-02-01"},
             )
 
         assert response.status_code == 503

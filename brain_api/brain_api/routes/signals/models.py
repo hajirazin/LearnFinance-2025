@@ -183,7 +183,7 @@ class RefreshFundamentalsRequest(BaseModel):
 class RatiosResponse(BaseModel):
     """Financial ratios for a symbol at a point in time.
 
-    5 core ratios for PPO:
+    5 core ratios for RL allocators:
     - Profitability: gross_margin, operating_margin, net_margin
     - Liquidity: current_ratio
     - Leverage: debt_to_equity

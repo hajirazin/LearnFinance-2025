@@ -4,7 +4,7 @@ This module provides the ONE function for loading historical fundamentals
 from the local cache. All consumers should use this function:
 - POST /signals/fundamentals/historical endpoint
 - PatchTST training
-- PPO training/finetune
+- SAC training/finetune
 - SAC training/finetune
 """
 
@@ -36,7 +36,7 @@ def load_historical_fundamentals_from_cache(
     THE ONE function used by ALL:
     - POST /signals/fundamentals/historical endpoint
     - PatchTST training
-    - PPO training/finetune
+    - SAC training/finetune
     - SAC training/finetune
 
     Fundamentals are quarterly data that should be forward-filled to daily.

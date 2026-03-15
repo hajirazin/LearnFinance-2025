@@ -1,5 +1,6 @@
 """LSTM model training with gradient clipping and early stopping."""
 
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -10,7 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from brain_api.core.lstm.config import LSTMConfig
 from brain_api.core.lstm.model import LSTMModel
-from brain_api.core.training_utils import get_device
+from brain_api.core.training_utils import TrainingCancelledError, get_device
 
 
 @dataclass
@@ -30,6 +31,7 @@ def train_model_pytorch(
     y: np.ndarray,
     feature_scaler: StandardScaler,
     config: LSTMConfig,
+    shutdown_event: threading.Event | None = None,
 ) -> TrainingResult:
     """Train LSTM model using PyTorch.
 
@@ -115,6 +117,9 @@ def train_model_pytorch(
     print("[LSTM] Starting training...")
 
     for epoch in range(config.epochs):
+        if shutdown_event and shutdown_event.is_set():
+            print(f"[LSTM] Training cancelled at epoch {epoch}/{config.epochs}")
+            raise TrainingCancelledError("LSTM training cancelled by shutdown")
         model.train()
 
         total_train_loss = 0.0

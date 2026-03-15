@@ -6,13 +6,11 @@ from brain_api.routes.allocation import HRPAllocationResponse
 from brain_api.routes.inference.models import (
     LSTMInferenceResponse,
     PatchTSTInferenceResponse,
-    PPOInferenceResponse,
     SACInferenceResponse,
 )
 from brain_api.routes.training.models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
-    PPOTrainResponse,
     SACTrainResponse,
 )
 
@@ -30,7 +28,6 @@ class TrainingSummaryEmailRequest(BaseModel):
 
     lstm: LSTMTrainResponse
     patchtst: PatchTSTTrainResponse
-    ppo: PPOTrainResponse
     sac: SACTrainResponse
     summary: dict[str, str]  # LLM-generated paragraphs
 
@@ -59,7 +56,6 @@ class AlgorithmOrderResult(BaseModel):
 class OrderResultsData(BaseModel):
     """Order execution results from Alpaca for all algorithms."""
 
-    ppo: AlgorithmOrderResult
     sac: AlgorithmOrderResult
     hrp: AlgorithmOrderResult
 
@@ -86,7 +82,6 @@ class WeeklyReportEmailRequest(BaseModel):
 
     # RL Allocators - reuse exact API response types
     sac: SACInferenceResponse
-    ppo: PPOInferenceResponse
 
     # HRP - reuse exact API response type
     hrp: HRPAllocationResponse
@@ -130,7 +125,7 @@ class IndiaTrainingSummaryEmailResponse(BaseModel):
 class IndiaWeeklyReportEmailRequest(BaseModel):
     """Request model for POST /email/india-weekly-report.
 
-    India pipeline is HRP-only (no PPO/SAC/news/fundamentals/orders).
+    India pipeline is HRP-only (no SAC/news/fundamentals/orders).
     Contains the AI summary and HRP allocation data.
     Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
     """

@@ -303,20 +303,20 @@ def compute_hrp_baseline_metrics(
     return evaluate_policy(returns, turnovers, periods_per_year)
 
 
-def evaluate_ppo_for_promotion(
+def evaluate_rl_for_promotion(
     policy_metrics: EvaluationMetrics,
     symbol_returns: np.ndarray,
     prior_sharpe: float | None = None,
     is_first_model: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
-    """Evaluate PPO policy for promotion.
+    """Evaluate RL policy for promotion.
 
     Promotion rules:
     1. First model is always promoted (so inference has something)
     2. Subsequent models must beat:
        - Equal-weight baseline
        - HRP baseline
-       - Prior PPO model (if exists)
+       - Prior RL model (if exists)
 
     Primary metric: Sharpe ratio (after costs)
 

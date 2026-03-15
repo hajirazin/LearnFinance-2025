@@ -25,7 +25,7 @@ def get_active_symbols() -> ActiveSymbolsResponse:
 
     Used by the inference pipeline to determine which symbols to
     fetch signals for. SAC is the reference because all allocators
-    (PPO, SAC, HRP) operate on the same symbol set.
+    (SAC, HRP) operate on the same symbol set.
     """
     storage = SACLocalStorage()
     version = storage.read_current_version()

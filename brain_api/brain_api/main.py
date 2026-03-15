@@ -48,6 +48,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
     logger.info("Shutdown requested, signalling background tasks to stop...")
     shutdown_event.set()
+    from brain_api.routes.training.job_registry import cancel_all_running_jobs
+
+    cancel_all_running_jobs()
 
 
 app = FastAPI(

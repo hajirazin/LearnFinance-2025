@@ -98,20 +98,16 @@ def _make_us_training_activities(
     def mock_ref():
         return refresh
 
-    @activity.defn(name="train_ppo")
-    def mock_ppo():
-        return training
-
     @activity.defn(name="train_sac")
     def mock_sac():
         return training
 
     @activity.defn(name="generate_training_summary")
-    def mock_summ(lstm, patchtst, ppo, sac):
+    def mock_summ(lstm, patchtst, sac):
         return summary
 
     @activity.defn(name="send_training_summary_email")
-    def mock_em(lstm, patchtst, ppo, sac, summary_arg):
+    def mock_em(lstm, patchtst, sac, summary_arg):
         return email
 
     return [
@@ -120,7 +116,6 @@ def _make_us_training_activities(
         mock_ptst,
         mock_filt,
         mock_ref,
-        mock_ppo,
         mock_sac,
         mock_summ,
         mock_em,
@@ -171,7 +166,6 @@ class TestUSWeeklyTrainingWorkflow:
             assert result["filtered"]["selection_method"] == "patchtst_forecast"
             assert result["refresh"]["sentiment_gaps_filled"] == 10
             assert result["refresh"]["fundamentals_refreshed"] == 2
-            assert result["ppo"]["version"] == "v1.0.0"
             assert result["sac"]["version"] == "v1.0.0"
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True

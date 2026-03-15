@@ -1,7 +1,7 @@
 """Helper functions for training routes.
 
 This module provides reusable helper functions that are shared across
-multiple training routes (LSTM, PatchTST, PPO, SAC).
+multiple training routes (LSTM, PatchTST, SAC).
 """
 
 import logging

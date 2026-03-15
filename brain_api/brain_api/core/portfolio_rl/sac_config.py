@@ -44,7 +44,7 @@ class SACBaseConfig:
     q_value_clip: float = 100.0  # Clip Q-targets to prevent divergence
     normalize_rewards: bool = True  # Use running reward normalization
 
-    # === Environment (same as PPO for comparability) ===
+    # === Environment (shared RL environment defaults) ===
     cost_bps: int = 10  # Transaction cost in basis points
     cash_buffer: float = 0.02  # Minimum cash weight (2%)
     max_position_weight: float = 0.20  # Max weight per stock (20%)

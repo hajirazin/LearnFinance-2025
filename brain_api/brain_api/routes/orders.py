@@ -67,7 +67,7 @@ class GenerateOrdersRequest(BaseModel):
     )
     algorithm: str = Field(
         ...,
-        description="Algorithm name (e.g., 'ppo', 'sac', 'hrp')",
+        description="Algorithm name (e.g., 'sac', 'hrp')",
     )
 
 
@@ -173,7 +173,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
       },
       "run_id": "paper:2026-01-20",
       "attempt": 1,
-      "algorithm": "ppo"
+      "algorithm": "sac"
     }
     ```
 

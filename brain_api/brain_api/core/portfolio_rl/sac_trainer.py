@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -22,7 +23,7 @@ from brain_api.core.portfolio_rl.sac_networks import (
     hard_update,
     soft_update,
 )
-from brain_api.core.training_utils import get_device
+from brain_api.core.training_utils import TrainingCancelledError, get_device
 
 if TYPE_CHECKING:
     from brain_api.core.portfolio_rl.env import PortfolioEnv
@@ -57,6 +58,7 @@ class SACTrainer:
         env: PortfolioEnv,
         config: SACConfig,
         device: torch.device | None = None,
+        shutdown_event: threading.Event | None = None,
     ):
         """Initialize SAC trainer.
 
@@ -68,6 +70,7 @@ class SACTrainer:
         self.env = env
         self.config = config
         self.device = device or get_device()
+        self.shutdown_event = shutdown_event
 
         # Dimensions
         self.state_dim = env.state_dim
@@ -316,6 +319,13 @@ class SACTrainer:
 
         for step in range(total_timesteps):
             self.total_steps += 1
+            if (
+                step % 1000 == 0
+                and self.shutdown_event
+                and self.shutdown_event.is_set()
+            ):
+                print(f"[SAC] Training cancelled at step {step}/{total_timesteps}")
+                raise TrainingCancelledError("SAC training cancelled by shutdown")
 
             # Select action
             if self.total_steps < self.config.warmup_steps:

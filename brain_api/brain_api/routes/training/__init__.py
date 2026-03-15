@@ -3,11 +3,10 @@
 This module provides training endpoints for various model types:
 - LSTM: Pure price-based weekly return prediction
 - PatchTST: OHLCV 5-channel weekly return prediction
-- PPO: Portfolio allocator using dual forecasts (LSTM + PatchTST)
 - SAC: Portfolio allocator using dual forecasts (LSTM + PatchTST)
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 # Re-export dependencies for backward compatibility
 from .dependencies import (
@@ -19,8 +18,6 @@ from .dependencies import (
     get_patchtst_price_loader,
     get_patchtst_storage,
     get_patchtst_trainer,
-    get_ppo_config,
-    get_ppo_storage,
     get_price_loader,
     get_rl_training_symbols,
     get_sac_config,
@@ -30,6 +27,7 @@ from .dependencies import (
     get_trainer,
     snapshots_available,
 )
+from .job_registry import get_job
 
 # Re-export internal functions for backward compatibility
 from .lstm import _backfill_lstm_snapshots
@@ -39,13 +37,12 @@ from .lstm import router as lstm_router
 from .models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
-    PPOTrainResponse,
     SACTrainResponse,
+    TrainingJobStatusResponse,
 )
 from .patchtst import _backfill_patchtst_snapshots
 from .patchtst import router as patchtst_router
 from .patchtst_india import router as patchtst_india_router
-from .ppo import router as ppo_router
 from .sac import router as sac_router
 
 # Backward compat alias for _snapshots_available
@@ -61,13 +58,38 @@ router = APIRouter()
 router.include_router(lstm_router)
 router.include_router(patchtst_router)
 router.include_router(patchtst_india_router)
-router.include_router(ppo_router)
 router.include_router(sac_router)
+
+
+@router.get("/status/{job_id}", response_model=TrainingJobStatusResponse)
+def get_training_job_status(job_id: str) -> TrainingJobStatusResponse:
+    """Get the status of a training job.
+
+    Args:
+        job_id: The job ID returned from a training POST endpoint.
+
+    Returns:
+        Current status, progress, and result (when completed).
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
+
+    return TrainingJobStatusResponse(
+        job_id=job.job_id,
+        model_type=job.model_type,
+        status=job.status,
+        started_at=job.started_at.isoformat(),
+        completed_at=job.completed_at.isoformat() if job.completed_at else None,
+        progress=job.progress,
+        error=job.error,
+        result=job.result,
+    )
+
 
 __all__ = [
     # Response models
     "LSTMTrainResponse",
-    "PPOTrainResponse",
     "PatchTSTTrainResponse",
     "SACTrainResponse",
     "SnapshotLocalStorage",  # Re-exported for test patching compatibility
@@ -83,8 +105,6 @@ __all__ = [
     "get_patchtst_price_loader",
     "get_patchtst_storage",
     "get_patchtst_trainer",
-    "get_ppo_config",
-    "get_ppo_storage",
     "get_price_loader",
     "get_rl_training_symbols",
     "get_sac_config",

@@ -10,7 +10,6 @@ Every Monday **6:00 PM IST** (pre US open), the system orchestrates:
 2. **Price Forecasting**: Run LSTM (pure price) and PatchTST (OHLCV 5-channel) — both produce direct 5-day daily return forecasts
 3. **Portfolio Allocation**: Run multiple allocators for comparison:
    - **HRP** (Hierarchical Risk Parity) — math baseline
-   - **PPO** — on-policy RL agent (dual LSTM + PatchTST forecasts)
    - **SAC** — off-policy RL agent (dual LSTM + PatchTST forecasts)
 4. **LLM Summary**: OpenAI/GPT synthesizes all signals into market insights
 5. **Email**: Send comparison tables with all approaches for learning
@@ -26,13 +25,13 @@ The email shows **all allocations side-by-side** so you can learn which approach
 
 ```mermaid
 flowchart LR
-  prefect[Prefect_orchestrator] -->|schedule_Mon_18_IST| runApi[brain_api_FastAPI]
+  temporal[Temporal_orchestrator] -->|schedule_Mon_18_IST| runApi[brain_api_FastAPI]
 
   subgraph brain[python_brain]
     runApi --> universe[universe_service]
     runApi --> signals[signal_service]
     runApi --> forecasters[forecasters_LSTM_PatchTST]
-    runApi --> allocators[allocators_HRP_PPO_SAC]
+    runApi --> allocators[allocators_HRP_SAC]
   end
 
   signals --> raw[raw_evidence_store]
@@ -46,7 +45,7 @@ flowchart LR
 
 **Architecture overview:**
 
-- **Prefect** for scheduling/orchestration (triggers brain_api endpoints)
+- **Temporal** for scheduling/orchestration (triggers brain_api endpoints)
 - **brain_api** handles all integrations: Alpaca trading, OpenAI/LLM summaries, Gmail SMTP
 - A Python "AI brain" for price forecasting, allocation, and signal collection
 
@@ -66,8 +65,10 @@ This repo compares multiple approaches at each stage:
 | Model | Input | Status |
 |-------|-------|--------|
 | HRP | Covariance matrix | ✅ Active |
-| PPO | State vector + dual forecasts (LSTM + PatchTST) | ✅ Active |
+| ~~PPO~~ | ~~State vector + dual forecasts (LSTM + PatchTST)~~ | Retired |
 | SAC | State vector + dual forecasts (LSTM + PatchTST) | ✅ Active |
+
+> **Note:** After 3 months of paper-trading experimentation, HRP and SAC consistently outperformed PPO. PPO has been retired from the codebase.
 
 ### Signals
 
@@ -105,13 +106,13 @@ Portfolio-level:
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
 - **PatchTST** = OHLCV forecaster (5-channel log returns, direct 5-day prediction)
-- **PPO/SAC** = RL allocators (receive signals + both LSTM and PatchTST return forecasts)
+- **SAC** = RL allocator (receive signals + both LSTM and PatchTST return forecasts)
 
 ## Prerequisites
 
 - **Docker & Docker Compose** (for Postgres)
 - **Python 3.11+** with `uv` package manager
-- **Prefect 3.x** (for workflow orchestration)
+- **Temporal CLI** (for workflow orchestration)
 - Gmail app password (for email notifications)
 - Alpaca paper trading accounts (for order execution)
 
@@ -125,9 +126,8 @@ docker compose up -d
 
 This starts:
 - brain-api at http://localhost:8000
-- Prefect server at http://localhost:4200
-- Prefect training worker (Sunday cron)
-- Prefect email worker (Monday cron)
+- Temporal server at port 7233 (UI at port 8233)
+- Temporal worker (polls for workflows)
 
 ### 2. Start Brain API
 
@@ -159,10 +159,6 @@ To get a Gmail app password:
 
 **Alpaca Paper Trading (for order execution):**
 ```bash
-# PPO account
-ALPACA_PPO_KEY=your-ppo-api-key
-ALPACA_PPO_SECRET=your-ppo-api-secret
-
 # SAC account
 ALPACA_SAC_KEY=your-sac-api-key
 ALPACA_SAC_SECRET=your-sac-api-secret
@@ -172,11 +168,10 @@ ALPACA_HRP_KEY=your-hrp-api-key
 ALPACA_HRP_SECRET=your-hrp-api-secret
 ```
 
-Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API keys from each dashboard.
+Create 2 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API keys from each dashboard.
 
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
-| PPO | PPO | On-policy RL with dual forecasts (LSTM + PatchTST) |
 | SAC | SAC | Off-policy RL with dual forecasts (LSTM + PatchTST) |
 | HRP | HRP | Risk parity baseline |
 
@@ -185,72 +180,62 @@ Create 3 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-### 4. Install Prefect
+### 4. Start Temporal dev server
 
 ```bash
-cd prefect
-uv sync --extra dev
+devbox run temporal:server
 ```
 
-### 5. Test the workflow
+### 5. Start Temporal worker
 
 ```bash
-# Make sure brain_api is running, then in another terminal:
-cd prefect
-python flows/weekly_forecast_email.py --test
+# In another terminal:
+devbox run temporal:worker
 ```
 
-This runs a single execution of the weekly forecast email flow.
+### 6. Run a workflow manually
+
+```bash
+devbox run temporal:run:us-allocation
+```
 
 ## Weekly workflow setup
 
-The Prefect flow runs every Monday at 18:00 IST. See [prefect/README.md](prefect/README.md) for full details.
+The Temporal workflow runs every Monday at 18:00 IST.
 
-### Deploy the workflow
+### Register the schedule
 
 ```bash
-cd prefect
-
-# Option 1: Serve locally (for development)
-python flows/weekly_forecast_email.py
-
-# Option 2: Deploy to Prefect Cloud/Server
-prefect deploy flows/weekly_forecast_email.py:weekly_forecast_email_flow \
-    --name "weekly-forecast-email" \
-    --cron "0 18 * * 1" \
-    --timezone "Asia/Kolkata"
-
-# Start a worker to execute flows
-prefect worker start --pool default-agent-pool
+devbox run temporal:schedule
 ```
 
 ### Workflow flow
 
 ```mermaid
 sequenceDiagram
-  participant Prefect as Prefect
+  participant Temporal as Temporal
   participant Brain as brain_api
   participant Alpaca as alpaca_paper
   participant DB as run_db
   participant Email as Gmail_SMTP
 
-  Prefect->>Brain: GET /universe/halal
-  Prefect->>Brain: GET /alpaca/portfolio (PPO, SAC, HRP)
+  Temporal->>Brain: GET /universe/halal
+  Temporal->>Brain: GET /alpaca/portfolio (SAC, HRP)
   Brain->>Alpaca: Fetch positions and cash
-  Prefect->>Brain: POST /signals/fundamentals, /signals/news
-  Prefect->>Brain: POST /inference/lstm, /inference/patchtst
-  Prefect->>Brain: POST /inference/ppo, /inference/sac, /allocation/hrp
-  Prefect->>Brain: POST /orders/generate (for each algorithm)
-  Prefect->>Brain: POST /alpaca/submit-orders
+  Temporal->>Brain: POST /signals/fundamentals, /signals/news
+  Temporal->>Brain: POST /inference/lstm, /inference/patchtst
+  Temporal->>Brain: POST /inference/sac, /allocation/hrp
+  Temporal->>Brain: POST /orders/generate (for each algorithm)
+  Temporal->>Brain: POST /alpaca/submit-orders
   Brain->>Alpaca: Submit limit orders
-  Prefect->>Brain: POST /llm/weekly-summary
-  Prefect->>Brain: POST /email/weekly-report
+  Temporal->>Brain: POST /llm/weekly-summary
+  Temporal->>Brain: POST /email/weekly-report
   Brain->>Email: Send via SMTP
 ```
 
 ### 7-Phase execution architecture
 
-The Prefect flow executes in 7 phases with parallel tasks where possible:
+The Temporal workflow executes in 7 phases with parallel tasks where possible:
 
 ```mermaid
 flowchart TD
@@ -258,7 +243,6 @@ flowchart TD
 
     subgraph Phase0[Phase 0 - Universe and Portfolios]
         GetUniverse[GET Universe]
-        GetPPO[GET PPO Portfolio]
         GetSAC[GET SAC Portfolio]
         GetHRP[GET HRP Portfolio]
     end
@@ -275,7 +259,6 @@ flowchart TD
     Phase1 --> Phase2
 
     subgraph Phase2[Phase 2 - Allocators]
-        PPO[POST PPO Inference]
         SAC[POST SAC Inference]
         HRP[POST HRP Allocation]
     end
@@ -283,7 +266,6 @@ flowchart TD
     Phase2 --> Phase3
 
     subgraph Phase3[Phase 3 - Generate Orders]
-        OrdersPPO[Generate PPO Orders]
         OrdersSAC[Generate SAC Orders]
         OrdersHRP[Generate HRP Orders]
     end
@@ -291,7 +273,6 @@ flowchart TD
     Phase3 --> Phase4
 
     subgraph Phase4[Phase 4 - Submit Orders]
-        SubmitPPO[Submit PPO to Alpaca]
         SubmitSAC[Submit SAC to Alpaca]
         SubmitHRP[Submit HRP to Alpaca]
     end
@@ -299,7 +280,6 @@ flowchart TD
     Phase4 --> Phase5
 
     subgraph Phase5[Phase 5 - Update Execution]
-        HistoryPPO[Get PPO Order History]
         HistorySAC[Get SAC Order History]
     end
 
@@ -316,11 +296,8 @@ flowchart TD
 ### Environment variables
 
 ```bash
-# Brain API URL (for Prefect to call)
+# Brain API URL (for Temporal to call)
 BRAIN_API_URL=http://localhost:8000
-
-# Timezone (IST for Monday 6 PM runs)
-TZ=Asia/Kolkata
 
 # Universe overrides (default: halal_filtered)
 ETL_UNIVERSE=halal_filtered
@@ -374,7 +351,7 @@ Results are cached monthly (one fetch per calendar month) to avoid redundant ext
 
 ### RL reward design
 
-PPO and SAC use a **blended reward** combining portfolio return with a DifferentialSharpe ratio (Moody & Saffell 2001):
+SAC uses a **blended reward** combining portfolio return with a DifferentialSharpe ratio (Moody & Saffell 2001):
 
 `reward = sharpe_weight * DSR + (1 - sharpe_weight) * return_reward`
 
@@ -419,7 +396,7 @@ We store three kinds of data:
 |----------|---------|
 | `POST /inference/lstm` | LSTM 5-day return predictions (pure price) |
 | `POST /inference/patchtst` | PatchTST 5-day return predictions (OHLCV) |
-| `POST /inference/ppo` | PPO allocation (dual LSTM + PatchTST forecasts) |
+| ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ | (Retired) |
 | `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
@@ -444,8 +421,8 @@ We store three kinds of data:
 |----------|---------|---------|
 | `POST /train/lstm` | Full LSTM retrain | Monthly (manual) |
 | `POST /train/patchtst` | Full PatchTST retrain | Monthly (manual) |
-| `POST /train/ppo/full` | Full PPO retrain (dual forecasts) | Monthly (manual) |
-| `POST /train/ppo/finetune` | PPO fine-tune on experience buffer | Weekly (cron) |
+| ~~`POST /train/ppo/full`~~ | ~~Full PPO retrain (dual forecasts)~~ | ~~Monthly (manual)~~ |
+| ~~`POST /train/ppo/finetune`~~ | ~~PPO fine-tune on experience buffer~~ | ~~Weekly (cron)~~ |
 | `POST /train/sac/full` | Full SAC retrain (dual forecasts) | Monthly (manual) |
 | `POST /train/sac/finetune` | SAC fine-tune on experience buffer | Weekly (cron) |
 
@@ -500,7 +477,7 @@ We store three kinds of data:
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |
-| `POST /experience/label/ppo` | Label PPO experience with rewards |
+| ~~`POST /experience/label/ppo`~~ | ~~Label PPO experience with rewards~~ |
 | `POST /experience/label/sac` | Label SAC experience with rewards |
 | `GET /experience/list` | List stored experiences |
 
@@ -540,29 +517,6 @@ We store three kinds of data:
 }
 ```
 
-**PPO inference (dual forecasts):**
-
-```json
-// POST /inference/ppo
-// Request
-{
-  "portfolio": { "cash": 10000, "positions": [{"symbol": "AAPL", "market_value": 5000}] },
-  "as_of_date": "2025-12-29"
-}
-
-// Response
-{
-  "target_weights": { "AAPL": 0.15, "MSFT": 0.10, "CASH": 0.75 },
-  "turnover": 0.12,
-  "model_version": "v2026-01-09-ppo-abc123",
-  "target_week_start": "2025-12-29",
-  "target_week_end": "2026-01-02",
-  "weight_changes": [
-    { "symbol": "AAPL", "current_weight": 0.33, "target_weight": 0.15, "change": -0.18 }
-  ]
-}
-```
-
 ## Model lifecycle
 
 Monday inference runs **do not retrain** models. Training happens separately.
@@ -572,8 +526,8 @@ Monday inference runs **do not retrain** models. Training happens separately.
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all models | Manual |
-| Weekly (Sunday) | Fine-tune PPO + SAC variants | Cron (Prefect) |
-| Monday 6 PM IST | Inference only (all models) | Cron (Prefect) |
+| Weekly (Sunday) | Fine-tune SAC variant | Cron (Temporal) |
+| Monday 6 PM IST | Inference only (all models) | Cron (Temporal) |
 
 ### Training workflow
 
@@ -660,7 +614,7 @@ The API is designed so each endpoint can become a standalone **Google Cloud Func
 ┌─────────────────────────────────────────────────────────────┐
 │  Core function (pure Python, no framework dependency)       │
 │  • lstm_inference(features, model_path) → predictions       │
-│  • ppo_inference(state, policy_path) → allocation           │
+│  • sac_inference(state, policy_path) → allocation           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -676,7 +630,7 @@ The API is designed so each endpoint can become a standalone **Google Cloud Func
 1. Extract endpoint handler → standalone `main.py` with `def handler(request):`
 2. Swap `LocalStorage` → `HuggingFaceStorage` via environment variable
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
-4. Update `BRAIN_API_URL` in Prefect to call Cloud Function URL instead of local FastAPI
+4. Update `BRAIN_API_URL` in Temporal to call Cloud Function URL instead of local FastAPI
 
 ## Code structure
 
@@ -684,8 +638,8 @@ The API is designed so each endpoint can become a standalone **Google Cloud Func
 brain_api/brain_api/
 ├── main.py
 ├── routes/
-│   ├── inference/            # lstm.py, patchtst.py, ppo.py, sac.py
-│   ├── training/             # lstm.py, patchtst.py, ppo.py, sac.py
+│   ├── inference/            # lstm.py, patchtst.py, sac.py
+│   ├── training/             # lstm.py, patchtst.py, sac.py
 │   ├── signals/              # endpoints.py
 │   ├── email/                # weekly_report.py, training_summary.py
 │   ├── llm/                  # weekly_summary.py, training_summary.py
@@ -700,7 +654,6 @@ brain_api/brain_api/
 ├── core/
 │   ├── lstm/                 # model, dataset, inference, training
 │   ├── patchtst/             # dataset, data_loaders, inference, training
-│   ├── ppo/                  # model, data, trainer, inference
 │   ├── sac/                  # training, inference
 │   ├── portfolio_rl/         # env, rewards, state, constraints, scaler, sac_networks
 │   ├── fundamentals/         # fetcher, parser, storage, loader
@@ -716,7 +669,6 @@ brain_api/brain_api/
 │   ├── huggingface.py        # HuggingFaceStorage (swap via env var)
 │   ├── lstm/                 # local.py, huggingface.py
 │   ├── patchtst/
-│   ├── ppo/
 │   ├── sac/
 │   ├── datasets/
 │   └── forecaster_snapshots/

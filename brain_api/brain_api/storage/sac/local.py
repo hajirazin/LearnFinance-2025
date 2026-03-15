@@ -1,6 +1,6 @@
 """Local filesystem storage for SAC model artifacts (unified with dual forecasts).
 
-SAC stores more artifacts than PPO due to twin critics and target networks.
+SAC stores twin critics and target networks alongside the actor.
 """
 
 import json

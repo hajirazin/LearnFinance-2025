@@ -1,7 +1,7 @@
 """Data loading utilities for portfolio RL training.
 
 Provides functions to load historical signals (news, fundamentals) and
-align them to weekly frequency for PPO/SAC training.
+align them to weekly frequency for SAC training.
 """
 
 from datetime import date

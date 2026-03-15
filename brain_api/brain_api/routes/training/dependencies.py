@@ -31,7 +31,6 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
-from brain_api.core.ppo import DEFAULT_PPO_CONFIG, PPOConfig
 from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
@@ -39,7 +38,6 @@ from brain_api.storage.local import (
     PatchTSTIndiaModelStorage,
     PatchTSTModelStorage,
 )
-from brain_api.storage.ppo import PPOLocalStorage
 from brain_api.storage.sac import SACLocalStorage
 from brain_api.universe import get_halal_universe
 
@@ -98,10 +96,10 @@ def get_forecaster_training_symbols() -> list[str]:
 
 
 def get_rl_training_symbols() -> list[str]:
-    """Get symbols for RL training (PPO, SAC) and HRP allocation based on config.
+    """Get symbols for RL training (SAC) and HRP allocation based on config.
 
     Reads RL_TRAIN_UNIVERSE env var (restricted to halal and halal_filtered).
-    Both produce exactly 15 stocks, matching n_stocks=15 in PPO/SAC config.
+    Both produce exactly 15 stocks, matching n_stocks=15 in SAC config.
 
     Returns:
         List of 15 symbols for RL training / HRP allocation.
@@ -246,21 +244,6 @@ def get_patchtst_trainer() -> PatchTSTTrainer:
 def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
     """Get the India PatchTST model storage instance."""
     return PatchTSTIndiaModelStorage()
-
-
-# ============================================================================
-# PPO dependencies (unified with dual forecasts)
-# ============================================================================
-
-
-def get_ppo_storage() -> PPOLocalStorage:
-    """Get the PPO storage instance."""
-    return PPOLocalStorage()
-
-
-def get_ppo_config() -> PPOConfig:
-    """Get PPO configuration."""
-    return DEFAULT_PPO_CONFIG
 
 
 # ============================================================================

@@ -66,7 +66,7 @@ def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
     )
 
 
-def mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
+def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingResult:
     """Return a mock training result with controllable metrics."""
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -80,7 +80,9 @@ def mock_trainer(X, y, feature_scaler, config) -> TrainingResult:
     )
 
 
-def mock_trainer_worse_than_baseline(X, y, feature_scaler, config) -> TrainingResult:
+def mock_trainer_worse_than_baseline(
+    X, y, feature_scaler, config, shutdown_event=None
+) -> TrainingResult:
     """Return a mock training result that is worse than baseline."""
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -131,21 +133,26 @@ def client_with_mocks(temp_storage):
 # ============================================================================
 
 
-def test_train_patchtst_empty_body_returns_200(client_with_mocks):
-    """POST /train/patchtst with empty body returns 200."""
-    response = client_with_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 200
+TRAIN_URL = "/train/patchtst?skip_snapshot=true"
 
 
-def test_train_patchtst_no_body_returns_200(client_with_mocks):
-    """POST /train/patchtst with no body returns 200."""
-    response = client_with_mocks.post("/train/patchtst")
-    assert response.status_code == 200
+def test_train_patchtst_empty_body_returns_202(client_with_mocks):
+    """POST /train/patchtst with empty body returns 202 (training runs in background)."""
+    response = client_with_mocks.post(TRAIN_URL, json={})
+    assert response.status_code == 202
+
+
+def test_train_patchtst_no_body_returns_202(client_with_mocks):
+    """POST /train/patchtst with no body returns 202 (training runs in background)."""
+    response = client_with_mocks.post(TRAIN_URL)
+    assert response.status_code == 202
 
 
 def test_train_patchtst_returns_resolved_window(client_with_mocks):
     """POST /train/patchtst returns Friday-anchored data_window_end from config."""
-    response = client_with_mocks.post("/train/patchtst", json={})
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
+    response = client_with_mocks.post(TRAIN_URL, json={})
     assert response.status_code == 200
 
     data = response.json()
@@ -160,7 +167,9 @@ def test_train_patchtst_returns_resolved_window(client_with_mocks):
 
 def test_train_patchtst_returns_required_fields(client_with_mocks):
     """POST /train/patchtst returns all required response fields."""
-    response = client_with_mocks.post("/train/patchtst", json={})
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
+    response = client_with_mocks.post(TRAIN_URL, json={})
     assert response.status_code == 200
 
     data = response.json()
@@ -188,37 +197,43 @@ def test_train_patchtst_returns_required_fields(client_with_mocks):
 
 def test_train_patchtst_idempotent_version(client_with_mocks):
     """Calling POST /train/patchtst twice returns the same version."""
-    response1 = client_with_mocks.post("/train/patchtst", json={})
-    assert response1.status_code == 200
-    version1 = response1.json()["version"]
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
 
-    response2 = client_with_mocks.post("/train/patchtst", json={})
+    response2 = client_with_mocks.post(TRAIN_URL, json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
-    assert version1 == version2, "Version should be identical on rerun with same config"
+    response3 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response3.status_code == 200
+    version3 = response3.json()["version"]
+
+    assert version2 == version3, "Version should be identical on rerun with same config"
 
 
 def test_train_patchtst_idempotent_does_not_change_current(
     client_with_mocks, temp_storage
 ):
     """Rerunning training does not change 'current' pointer if already promoted."""
-    # First call - should promote
-    response1 = client_with_mocks.post("/train/patchtst", json={})
-    assert response1.status_code == 200
-    data1 = response1.json()
-    version1 = data1["version"]
+    # First call - 202 (training runs in background)
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
 
-    current_after_first = temp_storage.read_current_version()
-
-    # Second call - should return same version without changing current
-    response2 = client_with_mocks.post("/train/patchtst", json={})
+    # Second call - 200 (cached result)
+    response2 = client_with_mocks.post(TRAIN_URL, json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
+    current_after_first = temp_storage.read_current_version()
+
+    # Third call - 200 (cached, same version)
+    response3 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response3.status_code == 200
+    version3 = response3.json()["version"]
+
     current_after_second = temp_storage.read_current_version()
 
-    assert version1 == version2
+    assert version2 == version3
     assert current_after_first == current_after_second
 
 
@@ -229,7 +244,9 @@ def test_train_patchtst_idempotent_does_not_change_current(
 
 def test_train_patchtst_first_model_always_promoted(client_with_mocks):
     """First model is always promoted (no prior model to compare against)."""
-    response = client_with_mocks.post("/train/patchtst", json={})
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
+    response = client_with_mocks.post(TRAIN_URL, json={})
     assert response.status_code == 200
 
     data = response.json()
@@ -260,10 +277,13 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
         client = TestClient(app)
 
         try:
-            # Train first model - should be promoted (first model always promoted)
-            response1 = client.post("/train/patchtst", json={})
-            assert response1.status_code == 200
-            first_version = response1.json()["version"]
+            # Train first model - 202 then 200 (first model always promoted)
+            train_url = "/train/patchtst?skip_snapshot=true"
+            response1 = client.post(train_url, json={})
+            assert response1.status_code == 202
+            response1b = client.post(train_url, json={})
+            assert response1b.status_code == 200
+            first_version = response1b.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
             # Now train a worse model with different date (to generate new version)
@@ -274,10 +294,12 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
             )
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 
-            response2 = client.post("/train/patchtst", json={})
-            assert response2.status_code == 200
+            response2 = client.post(train_url, json={})
+            assert response2.status_code == 202
+            response2b = client.post(train_url, json={})
+            assert response2b.status_code == 200
 
-            data = response2.json()
+            data = response2b.json()
             # Mock trainer returns val_loss=0.10 > prior=0.02
             assert data["promoted"] is False
 
@@ -308,9 +330,12 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
 
     client = TestClient(app)
 
-    response1 = client.post("/train/patchtst", json={})
-    assert response1.status_code == 200
-    promoted_version = response1.json()["version"]
+    train_url = "/train/patchtst?skip_snapshot=true"
+    response1 = client.post(train_url, json={})
+    assert response1.status_code == 202
+    response1b = client.post(train_url, json={})
+    assert response1b.status_code == 200
+    promoted_version = response1b.json()["version"]
 
     # Verify it was promoted
     current_before = temp_storage.read_current_version()
@@ -323,9 +348,11 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     )
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
 
-    response2 = client.post("/train/patchtst", json={})
-    assert response2.status_code == 200
-    data2 = response2.json()
+    response2 = client.post(train_url, json={})
+    assert response2.status_code == 202
+    response2b = client.post(train_url, json={})
+    assert response2b.status_code == 200
+    data2 = response2b.json()
 
     # Should not be promoted (worse than prior)
     assert data2["promoted"] is False

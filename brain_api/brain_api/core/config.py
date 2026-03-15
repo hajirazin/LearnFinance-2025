@@ -16,7 +16,6 @@ ENV_CUTOFF_DATE = "CUTOFF_DATE"
 ENV_HF_TOKEN = "HF_TOKEN"
 ENV_HF_LSTM_MODEL_REPO = "HF_LSTM_MODEL_REPO"  # LSTM forecaster
 ENV_HF_PATCHTST_MODEL_REPO = "HF_PATCHTST_MODEL_REPO"  # PatchTST forecaster
-ENV_HF_PPO_MODEL_REPO = "HF_PPO_MODEL_REPO"  # PPO allocator (dual forecasts)
 ENV_HF_SAC_MODEL_REPO = "HF_SAC_MODEL_REPO"  # SAC allocator (dual forecasts)
 ENV_HF_PATCHTST_INDIA_MODEL_REPO = "HF_PATCHTST_INDIA_MODEL_REPO"  # India PatchTST
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
@@ -78,11 +77,6 @@ def get_hf_patchtst_model_repo() -> str | None:
 def get_hf_patchtst_india_model_repo() -> str | None:
     """Get HuggingFace India PatchTST model repository name."""
     return os.environ.get(ENV_HF_PATCHTST_INDIA_MODEL_REPO)
-
-
-def get_hf_ppo_model_repo() -> str | None:
-    """Get HuggingFace PPO model repository name (unified with dual forecasts)."""
-    return os.environ.get(ENV_HF_PPO_MODEL_REPO)
 
 
 def get_hf_sac_model_repo() -> str | None:
@@ -160,7 +154,7 @@ def get_etl_universe() -> UniverseType:
 def get_rl_train_universe() -> UniverseType:
     """Get RL/HRP training universe from environment.
 
-    Controls which stock universe PPO, SAC, and HRP are trained on.
+    Controls which stock universe SAC and HRP are trained on.
     Restricted to RL_ALLOWED_UNIVERSES (halal, halal_filtered) because
     RL allocators require exactly 15 stocks.
 

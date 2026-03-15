@@ -6,7 +6,7 @@ Runs every Monday at 18:00 IST (11:00 UTC). Single workflow replaces the
 Phases:
 0. Get active symbols + Alpaca portfolios (parallel)
 1. Get signals + forecasts (parallel)
-2. Run allocators: PPO, SAC, HRP (parallel, conditional on open orders)
+2. Run allocators: SAC, HRP (parallel, conditional on open orders)
 3. Generate orders + store experience
 4. Per-algorithm sell-wait-buy (parallel per account, each independently
    submits sells -> polls until terminal -> submits buys)
@@ -23,11 +23,8 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from activities.execution import (
         generate_orders_hrp,
-        generate_orders_ppo,
         generate_orders_sac,
-        store_experience_ppo,
         store_experience_sac,
-        update_execution_ppo,
         update_execution_sac,
     )
     from activities.inference import (
@@ -36,20 +33,16 @@ with workflow.unsafe.imports_passed_through():
         get_lstm_forecast,
         get_news_sentiment,
         get_patchtst_forecast,
-        infer_ppo,
         infer_sac,
     )
     from activities.portfolio import (
         check_order_statuses,
         get_active_symbols,
         get_hrp_portfolio,
-        get_order_history_ppo,
         get_order_history_sac,
-        get_ppo_portfolio,
         get_sac_portfolio,
         resolve_next_attempt,
         submit_orders_hrp,
-        submit_orders_ppo,
         submit_orders_sac,
     )
     from activities.reporting import generate_summary, send_weekly_email
@@ -115,7 +108,7 @@ async def _sell_wait_buy(
 ):
     """Run the full sell -> poll -> buy cycle for a single algorithm.
 
-    Each algorithm (PPO/SAC/HRP) has its own Alpaca account, so their
+    Each algorithm (SAC/HRP) has its own Alpaca account, so their
     sell-wait-buy pipelines are fully independent and run in parallel.
     """
     sell_submit = await workflow.execute_activity(
@@ -195,15 +188,11 @@ class USWeeklyAllocationWorkflow:
         # Phase 0: Get active symbols + portfolios (parallel)
         (
             active_symbols,
-            ppo_portfolio,
             sac_portfolio,
             hrp_portfolio,
         ) = await asyncio.gather(
             workflow.execute_activity(
                 get_active_symbols, start_to_close_timeout=SHORT_TIMEOUT
-            ),
-            workflow.execute_activity(
-                get_ppo_portfolio, start_to_close_timeout=SHORT_TIMEOUT
             ),
             workflow.execute_activity(
                 get_sac_portfolio, start_to_close_timeout=SHORT_TIMEOUT
@@ -214,13 +203,10 @@ class USWeeklyAllocationWorkflow:
         )
 
         symbols = active_symbols.symbols
-        run_ppo = ppo_portfolio.open_orders_count == 0
         run_sac = sac_portfolio.open_orders_count == 0
         run_hrp = hrp_portfolio.open_orders_count == 0
 
         skipped_algorithms = []
-        if not run_ppo:
-            skipped_algorithms.append("PPO")
         if not run_sac:
             skipped_algorithms.append("SAC")
         if not run_hrp:
@@ -259,14 +245,6 @@ class USWeeklyAllocationWorkflow:
 
         # Phase 2: Run allocators (parallel, conditional)
         alloc_futures = []
-        if run_ppo:
-            alloc_futures.append(
-                workflow.execute_activity(
-                    infer_ppo,
-                    args=[ppo_portfolio, as_of_date],
-                    start_to_close_timeout=INFERENCE_TIMEOUT,
-                )
-            )
         if run_sac:
             alloc_futures.append(
                 workflow.execute_activity(
@@ -287,11 +265,6 @@ class USWeeklyAllocationWorkflow:
         alloc_results = await asyncio.gather(*alloc_futures) if alloc_futures else []
 
         idx = 0
-        ppo_alloc = (
-            alloc_results[idx] if run_ppo else SkippedAllocation(algorithm="ppo")
-        )
-        if run_ppo:
-            idx += 1
         sac_alloc = (
             alloc_results[idx] if run_sac else SkippedAllocation(algorithm="sac")
         )
@@ -302,12 +275,7 @@ class USWeeklyAllocationWorkflow:
         )
 
         # Phase 3: Generate orders + store experience (parallel)
-        ppo_orders, sac_orders, hrp_orders = await asyncio.gather(
-            workflow.execute_activity(
-                generate_orders_ppo,
-                args=[ppo_alloc, ppo_portfolio, run_id, attempt],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
+        sac_orders, hrp_orders = await asyncio.gather(
             workflow.execute_activity(
                 generate_orders_sac,
                 args=[sac_alloc, sac_portfolio, run_id, attempt],
@@ -322,24 +290,6 @@ class USWeeklyAllocationWorkflow:
 
         # Store experience (fire and forget for RL algorithms)
         experience_futures = []
-        if run_ppo:
-            experience_futures.append(
-                workflow.execute_activity(
-                    store_experience_ppo,
-                    args=[
-                        run_id,
-                        target_week_start,
-                        target_week_end,
-                        ppo_alloc,
-                        ppo_portfolio,
-                        news,
-                        fundamentals,
-                        lstm,
-                        patchtst,
-                    ],
-                    start_to_close_timeout=SHORT_TIMEOUT,
-                )
-            )
         if run_sac:
             experience_futures.append(
                 workflow.execute_activity(
@@ -362,28 +312,15 @@ class USWeeklyAllocationWorkflow:
             await asyncio.gather(*experience_futures)
 
         # Phase 4: Per-algorithm sell-wait-buy (parallel per account)
-        ppo_sells, ppo_buys = _split_orders_by_side(ppo_orders)
         sac_sells, sac_buys = _split_orders_by_side(sac_orders)
         hrp_sells, hrp_buys = _split_orders_by_side(hrp_orders)
 
-        ppo_submit, sac_submit, hrp_submit = await asyncio.gather(
-            _sell_wait_buy("ppo", ppo_sells, ppo_buys, ppo_orders, submit_orders_ppo),
+        sac_submit, hrp_submit = await asyncio.gather(
             _sell_wait_buy("sac", sac_sells, sac_buys, sac_orders, submit_orders_sac),
             _sell_wait_buy("hrp", hrp_sells, hrp_buys, hrp_orders, submit_orders_hrp),
         )
 
         # Phase 5: Get order history + update execution
-        if run_ppo:
-            ppo_history = await workflow.execute_activity(
-                get_order_history_ppo,
-                args=[target_week_start],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            )
-            await workflow.execute_activity(
-                update_execution_ppo,
-                args=[run_id, ppo_orders, ppo_history],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            )
         if run_sac:
             sac_history = await workflow.execute_activity(
                 get_order_history_sac,
@@ -399,7 +336,7 @@ class USWeeklyAllocationWorkflow:
         # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[lstm, patchtst, news, fundamentals, hrp_alloc, sac_alloc, ppo_alloc],
+            args=[lstm, patchtst, news, fundamentals, hrp_alloc, sac_alloc],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
@@ -411,8 +348,6 @@ class USWeeklyAllocationWorkflow:
                 patchtst,
                 hrp_alloc,
                 sac_alloc,
-                ppo_alloc,
-                ppo_submit,
                 sac_submit,
                 hrp_submit,
                 target_week_start,
@@ -430,10 +365,6 @@ class USWeeklyAllocationWorkflow:
             "as_of_date": as_of_date,
             "symbols_count": len(symbols),
             "skipped_algorithms": skipped_algorithms,
-            "ppo": {
-                "orders_submitted": getattr(ppo_submit, "orders_submitted", 0),
-                "skipped": not run_ppo,
-            },
             "sac": {
                 "orders_submitted": getattr(sac_submit, "orders_submitted", 0),
                 "skipped": not run_sac,

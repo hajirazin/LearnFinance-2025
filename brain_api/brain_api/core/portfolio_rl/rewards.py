@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from brain_api.core.portfolio_rl.config import PPOBaseConfig
+    from brain_api.core.portfolio_rl.config import RLBaseConfig
 
 
 class DifferentialSharpe:
@@ -78,7 +78,7 @@ def compute_blended_reward(
     portfolio_simple_return: float,
     turnover: float,
     differential_sharpe: DifferentialSharpe,
-    config: PPOBaseConfig,
+    config: RLBaseConfig,
 ) -> float:
     """Compute blended reward: return + differential Sharpe.
 
@@ -174,7 +174,7 @@ def compute_transaction_cost(
 def compute_reward(
     portfolio_return: float,
     turnover: float,
-    config: PPOBaseConfig,
+    config: RLBaseConfig,
 ) -> float:
     """Compute scaled reward for RL training.
 
@@ -187,7 +187,7 @@ def compute_reward(
     Args:
         portfolio_return: Simple portfolio return (decimal).
         turnover: Portfolio turnover (0 to 1).
-        config: PPO config with cost_bps and reward_scale.
+        config: RL config with cost_bps and reward_scale.
 
     Returns:
         Scaled reward for RL training.
@@ -200,7 +200,7 @@ def compute_reward(
 def compute_reward_from_log_return(
     portfolio_log_return: float,
     turnover: float,
-    config: PPOBaseConfig,
+    config: RLBaseConfig,
 ) -> float:
     """Compute scaled reward using log return.
 
@@ -213,7 +213,7 @@ def compute_reward_from_log_return(
     Args:
         portfolio_log_return: Log portfolio return, i.e. log(1 + r).
         turnover: Portfolio turnover (0 to 1).
-        config: PPO config.
+        config: RL config.
 
     Returns:
         Scaled reward for RL training.

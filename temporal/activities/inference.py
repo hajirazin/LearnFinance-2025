@@ -12,7 +12,6 @@ from models import (
     LSTMInferenceResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
-    PPOInferenceResponse,
     SACInferenceResponse,
 )
 
@@ -101,32 +100,6 @@ def get_halal_india_universe() -> dict:
         f"source={data.get('source', 'unknown')}"
     )
     return data
-
-
-@activity.defn
-def infer_ppo(
-    portfolio: AlpacaPortfolioResponse, as_of_date: str
-) -> PPOInferenceResponse:
-    """Get PPO allocation."""
-    logger.info("Getting PPO allocation...")
-    with get_client() as client:
-        response = client.post(
-            "/inference/ppo",
-            json={
-                "portfolio": {
-                    "cash": portfolio.cash,
-                    "positions": [p.model_dump() for p in portfolio.positions],
-                },
-                "as_of_date": as_of_date,
-            },
-        )
-        response.raise_for_status()
-    result = PPOInferenceResponse(**response.json())
-    logger.info(
-        f"PPO allocation: {len(result.target_weights)} positions, "
-        f"turnover={result.turnover:.2%}"
-    )
-    return result
 
 
 @activity.defn

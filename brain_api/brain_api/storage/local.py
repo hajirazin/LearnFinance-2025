@@ -21,13 +21,6 @@ from brain_api.storage.patchtst.local import (
     PatchTSTModelStorage,
 )
 
-# PPO storage (unified with dual forecasts)
-from brain_api.storage.ppo.local import (
-    PPOArtifacts,
-    PPOLocalStorage,
-    create_ppo_metadata,
-)
-
 # SAC storage (unified with dual forecasts)
 from brain_api.storage.sac.local import (
     SACArtifacts,
@@ -99,9 +92,6 @@ __all__ = [
     "LSTMArtifacts",
     "LSTMLocalStorage",
     "LocalModelStorage",  # Backward compatibility alias
-    # PPO (unified with dual forecasts)
-    "PPOArtifacts",
-    "PPOLocalStorage",
     # PatchTST
     "PatchTSTArtifacts",
     "PatchTSTIndiaModelStorage",
@@ -111,7 +101,6 @@ __all__ = [
     "SACLocalStorage",
     "create_metadata",
     "create_patchtst_metadata",
-    "create_ppo_metadata",
     "create_sac_metadata",
     "create_training_metadata",
 ]

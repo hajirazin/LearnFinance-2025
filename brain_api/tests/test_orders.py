@@ -36,7 +36,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         assert len(result.orders) == 1
@@ -65,7 +65,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         assert len(result.orders) == 1
@@ -91,7 +91,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         for order in result.orders:
@@ -115,7 +115,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         order = result.orders[0]
@@ -142,7 +142,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         order = result.orders[0]
@@ -170,7 +170,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         order = result.orders[0]
@@ -197,7 +197,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         sell_orders = [o for o in result.orders if o.side == "sell"]
@@ -225,7 +225,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         assert result.summary.skipped_small_orders >= 0
@@ -247,7 +247,7 @@ class TestOrderGeneration:
                 portfolio=portfolio,
                 run_id="paper:2026-01-20",
                 attempt=1,
-                algorithm="ppo",
+                algorithm="sac",
             )
 
         order_dict = result.orders[0].to_dict()

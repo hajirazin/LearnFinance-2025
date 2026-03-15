@@ -1,7 +1,7 @@
 """Tests for experience storage and labeling endpoints.
 
 This module tests:
-- Full state experience storage (PPO and SAC)
+- Full state experience storage (SAC)
 - Experience labeling with actual execution
 - Execution report updates
 - Order comparison logic
@@ -66,121 +66,6 @@ def sample_full_state():
 def sample_intended_action():
     """Sample intended action for testing."""
     return {"AAPL": 0.15, "MSFT": 0.12, "CASH": 0.73}
-
-
-class TestExperienceFullStatePPO:
-    """Tests for PPO experience store with full state."""
-
-    def test_store_ppo_with_signals_and_forecasts(
-        self, client, sample_full_state, sample_intended_action
-    ):
-        """Test storing PPO experience with full state including signals and forecasts."""
-        response = client.post(
-            "/experience/store",
-            json={
-                "run_id": "paper:2026-01-20",
-                "week_start": "2026-01-20",
-                "week_end": "2026-01-24",
-                "model_type": "ppo",
-                "model_version": "v1.0.0",
-                "state": sample_full_state,
-                "intended_action": sample_intended_action,
-                "intended_turnover": 0.12,
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["stored"] is True
-        assert data["model_type"] == "ppo"
-        assert "ppo" in data["record_id"]
-
-    def test_store_ppo_validates_required_fields(self, client):
-        """Test that required fields are validated."""
-        # Missing run_id
-        response = client.post(
-            "/experience/store",
-            json={
-                "week_start": "2026-01-20",
-                "week_end": "2026-01-24",
-                "model_type": "ppo",
-                "model_version": "v1.0.0",
-                "state": {},
-                "intended_action": {},
-                "intended_turnover": 0.0,
-            },
-        )
-        assert response.status_code == 422
-
-    def test_ppo_state_includes_all_signal_types(
-        self, temp_storage, sample_full_state, sample_intended_action
-    ):
-        """Test that stored PPO state includes all signal types."""
-        record = ExperienceRecord(
-            run_id="paper:2026-01-20:ppo",
-            week_start="2026-01-20",
-            week_end="2026-01-24",
-            model_type="ppo",
-            model_version="v1.0.0",
-            state=sample_full_state,
-            intended_action=sample_intended_action,
-            intended_turnover=0.12,
-        )
-        temp_storage.store(record)
-        loaded = temp_storage.load("paper:2026-01-20:ppo")
-
-        assert loaded is not None
-        state = loaded.state
-        if isinstance(state, dict):
-            assert "signals" in state
-            assert "AAPL" in state["signals"]
-            assert "news_sentiment" in state["signals"]["AAPL"]
-            assert "gross_margin" in state["signals"]["AAPL"]
-
-    def test_ppo_state_includes_both_forecasts(
-        self, temp_storage, sample_full_state, sample_intended_action
-    ):
-        """Test that stored PPO state includes both LSTM and PatchTST forecasts."""
-        record = ExperienceRecord(
-            run_id="paper:2026-01-20:ppo",
-            week_start="2026-01-20",
-            week_end="2026-01-24",
-            model_type="ppo",
-            model_version="v1.0.0",
-            state=sample_full_state,
-            intended_action=sample_intended_action,
-            intended_turnover=0.12,
-        )
-        temp_storage.store(record)
-        loaded = temp_storage.load("paper:2026-01-20:ppo")
-
-        state = loaded.state
-        if isinstance(state, dict):
-            assert "lstm_forecasts" in state
-            assert "patchtst_forecasts" in state
-            assert "AAPL" in state["lstm_forecasts"]
-            assert "AAPL" in state["patchtst_forecasts"]
-
-    def test_ppo_state_includes_current_weights(
-        self, temp_storage, sample_full_state, sample_intended_action
-    ):
-        """Test that stored PPO state includes current portfolio weights."""
-        record = ExperienceRecord(
-            run_id="paper:2026-01-20:ppo",
-            week_start="2026-01-20",
-            week_end="2026-01-24",
-            model_type="ppo",
-            model_version="v1.0.0",
-            state=sample_full_state,
-            intended_action=sample_intended_action,
-            intended_turnover=0.12,
-        )
-        temp_storage.store(record)
-        loaded = temp_storage.load("paper:2026-01-20:ppo")
-
-        state = loaded.state
-        if isinstance(state, dict):
-            assert "current_weights" in state
-            assert "CASH" in state["current_weights"]
 
 
 class TestExperienceFullStateSAC:
@@ -293,152 +178,6 @@ class TestExperienceFullStateSAC:
         if isinstance(state, dict):
             assert "current_weights" in state
             assert abs(sum(state["current_weights"].values()) - 1.0) < 0.01
-
-
-class TestLabelPPOEndpoint:
-    """Tests for /experience/label/ppo endpoint."""
-
-    def test_label_ppo_endpoint_returns_200(self, client):
-        """Test that label PPO endpoint returns 200."""
-        with (
-            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
-            patch("brain_api.core.lstm.load_prices_yfinance") as mock_prices,
-        ):
-            mock_client = MagicMock()
-            mock_client.get_portfolio_weights.return_value = {"AAPL": 0.5, "CASH": 0.5}
-            mock_get_client.return_value = mock_client
-            mock_prices.return_value = {}
-
-            response = client.post(
-                "/experience/label/ppo",
-                json={"run_id": None},
-            )
-            assert response.status_code == 200
-
-    def test_label_ppo_fetches_from_ppo_account(
-        self, temp_storage, sample_full_state, sample_intended_action
-    ):
-        """Test that label PPO fetches from PPO Alpaca account."""
-        # Create a record first
-        record = ExperienceRecord(
-            run_id="paper:2026-01-01:ppo",
-            week_start="2026-01-01",
-            week_end="2026-01-05",
-            model_type="ppo",
-            model_version="v1.0.0",
-            state=sample_full_state,
-            intended_action=sample_intended_action,
-            intended_turnover=0.1,
-        )
-        temp_storage.store(record)
-
-        with (
-            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
-            patch(
-                "brain_api.routes.experience.get_experience_storage",
-                return_value=temp_storage,
-            ),
-        ):
-            mock_client = MagicMock()
-            mock_client.get_portfolio_weights.return_value = {"AAPL": 0.5, "CASH": 0.5}
-            mock_get_client.return_value = mock_client
-
-            from brain_api.routes.experience import _label_experience_for_account
-
-            # This should call the PPO client
-            with patch("brain_api.core.lstm.load_prices_yfinance") as mock_prices:
-                mock_prices.return_value = {}
-                _label_experience_for_account("ppo", None, temp_storage)
-
-            # Verify it was called with ppo account
-            from brain_api.core.alpaca_client import AlpacaAccount
-
-            mock_get_client.assert_called_with(AlpacaAccount.PPO)
-
-    def test_label_ppo_uses_actual_weights_not_intended(self):
-        """Test that labeling uses actual weights, not intended action."""
-        # Test the reward computation function directly
-        actual_weights = {"AAPL": 0.5, "MSFT": 0.3, "CASH": 0.2}
-        symbol_returns = {"AAPL": 0.05, "MSFT": -0.02}  # 5% and -2%
-
-        _reward, portfolio_return = _compute_reward_from_actual_weights(
-            actual_weights=actual_weights,
-            symbol_returns=symbol_returns,
-        )
-
-        # Expected: 0.5 * 0.05 + 0.3 * (-0.02) = 0.025 - 0.006 = 0.019
-        expected_return = 0.5 * 0.05 + 0.3 * (-0.02)
-        assert abs(portfolio_return - expected_return) < 0.001
-
-    def test_label_ppo_calculates_log_return(self):
-        """Test that reward uses log return."""
-        import numpy as np
-
-        actual_weights = {"AAPL": 1.0, "CASH": 0.0}
-        symbol_returns = {"AAPL": 0.10}  # 10% return
-
-        reward, _portfolio_return = _compute_reward_from_actual_weights(
-            actual_weights=actual_weights,
-            symbol_returns=symbol_returns,
-        )
-
-        # Log return for 10% = ln(1.10) ≈ 0.0953
-        expected_log_return = np.log(1.10)
-        # Reward = (log_return - tx_cost) * scale
-        # With estimated 10% turnover and 10bps cost: tx_cost = 0.10 * 0.001 = 0.0001
-        # scale = 100
-        expected_reward = (expected_log_return - 0.0001) * 100
-
-        # Check reward is in expected range (accounting for scale and cost)
-        assert reward > 0  # Should be positive for positive return
-        assert abs(reward - expected_reward) < 1.0
-
-    def test_label_ppo_includes_transaction_cost(self):
-        """Test that reward calculation includes transaction cost."""
-        # Two identical portfolio returns but different turnover expectations
-        actual_weights = {"AAPL": 1.0, "CASH": 0.0}
-        symbol_returns = {"AAPL": 0.0}  # Zero return
-
-        reward, _ = _compute_reward_from_actual_weights(
-            actual_weights=actual_weights,
-            symbol_returns=symbol_returns,
-            cost_bps=10,
-        )
-
-        # With zero return but transaction cost, reward should be negative
-        assert reward < 0
-
-    def test_label_ppo_skips_if_week_not_ended(
-        self, temp_storage, sample_full_state, sample_intended_action
-    ):
-        """Test that labeling skips records where week hasn't ended."""
-        # Create a record with future week_end
-        future_date = (date.today() + timedelta(days=7)).isoformat()
-        record = ExperienceRecord(
-            run_id="paper:future:ppo",
-            week_start=date.today().isoformat(),
-            week_end=future_date,
-            model_type="ppo",
-            model_version="v1.0.0",
-            state=sample_full_state,
-            intended_action=sample_intended_action,
-            intended_turnover=0.1,
-        )
-        temp_storage.store(record)
-
-        with (
-            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
-            patch("brain_api.core.lstm.load_prices_yfinance"),
-        ):
-            mock_client = MagicMock()
-            mock_get_client.return_value = mock_client
-
-            from brain_api.routes.experience import _label_experience_for_account
-
-            result = _label_experience_for_account("ppo", None, temp_storage)
-
-            # Should skip the record
-            assert result.records_skipped >= 1
 
 
 class TestLabelSACEndpoint:
@@ -585,7 +324,7 @@ class TestUpdateExecution:
                     "run_id": "paper:2026-01-20",
                     "week_start": "2026-01-20",
                     "week_end": "2026-01-24",
-                    "model_type": "ppo",
+                    "model_type": "sac",
                     "model_version": "v1.0.0",
                     "state": sample_full_state,
                     "intended_action": sample_intended_action,
@@ -598,7 +337,7 @@ class TestUpdateExecution:
                 "/experience/update-execution",
                 json={
                     "run_id": "paper:2026-01-20",
-                    "model_type": "ppo",
+                    "model_type": "sac",
                     "execution_report": [
                         {
                             "symbol": "AAPL",
@@ -624,7 +363,7 @@ class TestUpdateExecution:
             "/experience/update-execution",
             json={
                 "run_id": "nonexistent:2026-01-20",
-                "model_type": "ppo",
+                "model_type": "sac",
                 "execution_report": [],
             },
         )
@@ -981,7 +720,7 @@ class TestUpdateExecutionWithMatching:
                     "run_id": "paper:2026-02-05",
                     "week_start": "2026-02-05",
                     "week_end": "2026-02-09",
-                    "model_type": "ppo",
+                    "model_type": "sac",
                     "model_version": "v1.0.0",
                     "state": sample_full_state,
                     "intended_action": sample_intended_action,
@@ -994,7 +733,7 @@ class TestUpdateExecutionWithMatching:
                 "/experience/update-execution",
                 json={
                     "run_id": "paper:2026-02-05",
-                    "model_type": "ppo",
+                    "model_type": "sac",
                     "intended_orders": [
                         {
                             "symbol": "AAPL",
@@ -1100,9 +839,9 @@ class TestRewardLogSpaceConsistency:
         """Verify reward = (log(1+r) - log(1+tc)) * scale equals log((1+r)/(1+tc)) * scale."""
         import numpy as np
 
-        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+        from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = PPOBaseConfig(cost_bps=10, reward_scale=100.0)
+        config = RLBaseConfig(cost_bps=10, reward_scale=100.0)
         r = 0.02  # 2% weekly return
         turnover = 0.5  # 50% turnover
         tc = turnover * (config.cost_bps / 10_000)  # 0.0005
@@ -1118,9 +857,9 @@ class TestRewardLogSpaceConsistency:
         """Zero return with nonzero cost gives exactly -log(1+tc) * scale."""
         import numpy as np
 
-        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+        from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = PPOBaseConfig(cost_bps=10, reward_scale=100.0)
+        config = RLBaseConfig(cost_bps=10, reward_scale=100.0)
         turnover = 0.5
         tc = turnover * (config.cost_bps / 10_000)
 
@@ -1137,11 +876,9 @@ class TestRewardLogSpaceConsistency:
         """Verify the transaction cost term is log(1+tc), not raw tc."""
         import numpy as np
 
-        from brain_api.core.portfolio_rl.config import PPOBaseConfig
+        from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = PPOBaseConfig(
-            cost_bps=100, reward_scale=1.0
-        )  # 1% cost for larger diff
+        config = RLBaseConfig(cost_bps=100, reward_scale=1.0)  # 1% cost for larger diff
         turnover = 1.0  # 100% turnover for maximum cost
         tc = turnover * (config.cost_bps / 10_000)  # 0.01
 

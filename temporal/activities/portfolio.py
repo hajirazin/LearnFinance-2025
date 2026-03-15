@@ -29,7 +29,7 @@ def resolve_next_attempt(run_id: str, as_of_date: str) -> int:
     max_attempt = 0
     pattern = re.compile(rf"^{re.escape(run_id)}:attempt-(\d+):")
 
-    for account in ("ppo", "sac", "hrp"):
+    for account in ("sac", "hrp"):
         with get_client() as client:
             response = client.get(
                 "/alpaca/order-history",
@@ -62,22 +62,6 @@ def get_active_symbols() -> ActiveSymbolsResponse:
     logger.info(
         f"Got {len(result.symbols)} active symbols "
         f"(source={result.source_model}, version={result.model_version})"
-    )
-    return result
-
-
-@activity.defn
-def get_ppo_portfolio() -> AlpacaPortfolioResponse:
-    """Fetch PPO Alpaca account portfolio."""
-    logger.info("Fetching PPO portfolio from Alpaca...")
-    with get_client() as client:
-        response = client.get("/alpaca/portfolio", params={"account": "ppo"})
-        response.raise_for_status()
-    result = AlpacaPortfolioResponse(**response.json())
-    logger.info(
-        f"PPO portfolio: cash=${result.cash:.2f}, "
-        f"{len(result.positions)} positions, "
-        f"{result.open_orders_count} open orders"
     )
     return result
 
@@ -118,7 +102,7 @@ def _submit_orders(
     account: str,
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
-    """Submit orders for the given account. Shared logic for PPO/SAC/HRP."""
+    """Submit orders for the given account. Shared logic for SAC/HRP."""
     if isinstance(orders, SkippedOrdersResponse) or getattr(orders, "skipped", False):
         logger.info(f"{account.upper()} orders skipped")
         return SkippedSubmitResponse(account=account, skipped=True)
@@ -152,14 +136,6 @@ def _submit_orders(
 
 
 @activity.defn
-def submit_orders_ppo(
-    orders: GenerateOrdersResponse | SkippedOrdersResponse,
-) -> SubmitOrdersResponse | SkippedSubmitResponse:
-    """Submit PPO orders to Alpaca."""
-    return _submit_orders("ppo", orders)
-
-
-@activity.defn
 def submit_orders_sac(
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
@@ -173,20 +149,6 @@ def submit_orders_hrp(
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
     """Submit HRP orders to Alpaca."""
     return _submit_orders("hrp", orders)
-
-
-@activity.defn
-def get_order_history_ppo(after_date: str) -> list[OrderHistoryItem]:
-    """Fetch PPO order history from Alpaca."""
-    logger.info(f"Fetching PPO order history after {after_date}...")
-    with get_client() as client:
-        response = client.get(
-            "/alpaca/order-history", params={"account": "ppo", "after": after_date}
-        )
-        response.raise_for_status()
-    result = [OrderHistoryItem(**o) for o in response.json()]
-    logger.info(f"Got {len(result)} PPO orders from history")
-    return result
 
 
 @activity.defn
