@@ -1,5 +1,7 @@
 """Shared request/response models for inference endpoints."""
 
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
@@ -20,6 +22,12 @@ class LSTMInferenceRequest(BaseModel):
     as_of_date: str | None = Field(
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
+    )
+    symbols: Annotated[list[str], Field(min_length=1)] | None = Field(
+        None,
+        description=(
+            "Optional symbol list to scope inference. If omitted, uses model metadata symbols."
+        ),
     )
 
 
@@ -44,6 +52,12 @@ class PatchTSTInferenceRequest(BaseModel):
     as_of_date: str | None = Field(
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
+    )
+    symbols: Annotated[list[str], Field(min_length=1)] | None = Field(
+        None,
+        description=(
+            "Optional symbol list to scope inference. If omitted, uses model metadata symbols."
+        ),
     )
 
 

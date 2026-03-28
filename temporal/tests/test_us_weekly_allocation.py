@@ -266,11 +266,11 @@ def _make_mock_activities(
         return news_resp
 
     @activity.defn(name="get_lstm_forecast")
-    def mock_get_lstm_forecast(as_of_date):
+    def mock_get_lstm_forecast(as_of_date, symbols=None):
         return lstm_resp
 
     @activity.defn(name="get_patchtst_forecast")
-    def mock_get_patchtst_forecast(as_of_date):
+    def mock_get_patchtst_forecast(as_of_date, symbols=None):
         return patchtst_resp
 
     @activity.defn(name="infer_sac")

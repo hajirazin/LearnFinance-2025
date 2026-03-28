@@ -228,13 +228,13 @@ class USWeeklyAllocationWorkflow:
             ),
             workflow.execute_activity(
                 get_lstm_forecast,
-                args=[as_of_date],
+                args=[as_of_date, symbols],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
             workflow.execute_activity(
                 get_patchtst_forecast,
-                args=[as_of_date],
+                args=[as_of_date, symbols],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),

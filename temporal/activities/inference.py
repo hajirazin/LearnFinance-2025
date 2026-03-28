@@ -54,11 +54,23 @@ def get_news_sentiment(
 
 
 @activity.defn
-def get_lstm_forecast(as_of_date: str) -> LSTMInferenceResponse:
-    """Get LSTM price predictions. Symbols resolved by brain_api from model metadata."""
-    logger.info("Getting LSTM forecast (symbols from model metadata)...")
+def get_lstm_forecast(
+    as_of_date: str, symbols: list[str] | None = None
+) -> LSTMInferenceResponse:
+    """Get LSTM price predictions.
+
+    When ``symbols`` is set, scopes inference to that list; otherwise brain_api
+    uses model metadata symbols.
+    """
+    if symbols:
+        logger.info(f"Getting LSTM forecast for {len(symbols)} requested symbols...")
+    else:
+        logger.info("Getting LSTM forecast (symbols from model metadata)...")
+    payload: dict = {"as_of_date": as_of_date}
+    if symbols:
+        payload["symbols"] = symbols
     with get_client() as client:
-        response = client.post("/inference/lstm", json={"as_of_date": as_of_date})
+        response = client.post("/inference/lstm", json=payload)
         response.raise_for_status()
     result = LSTMInferenceResponse(**response.json())
     logger.info(
@@ -69,14 +81,24 @@ def get_lstm_forecast(as_of_date: str) -> LSTMInferenceResponse:
 
 
 @activity.defn
-def get_patchtst_forecast(as_of_date: str) -> PatchTSTInferenceResponse:
+def get_patchtst_forecast(
+    as_of_date: str, symbols: list[str] | None = None
+) -> PatchTSTInferenceResponse:
     """Get PatchTST predictions.
 
-    Symbols resolved by brain_api from model metadata.
+    When ``symbols`` is set, scopes inference to that list; otherwise brain_api
+    uses model metadata symbols.
     """
-    logger.info("Getting PatchTST forecast (symbols from model metadata)...")
+    if symbols:
+        n = len(symbols)
+        logger.info(f"Getting PatchTST forecast for {n} requested symbols...")
+    else:
+        logger.info("Getting PatchTST forecast (symbols from model metadata)...")
+    payload: dict = {"as_of_date": as_of_date}
+    if symbols:
+        payload["symbols"] = symbols
     with get_client() as client:
-        response = client.post("/inference/patchtst", json={"as_of_date": as_of_date})
+        response = client.post("/inference/patchtst", json=payload)
         response.raise_for_status()
     result = PatchTSTInferenceResponse(**response.json())
     logger.info(

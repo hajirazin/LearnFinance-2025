@@ -21,10 +21,10 @@ def infer_patchtst(
     request: PatchTSTInferenceRequest,
     storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
 ) -> PatchTSTInferenceResponse:
-    """Predict weekly returns using the current PatchTST model's symbols.
+    """Predict weekly returns using the current PatchTST model.
 
-    Symbols are resolved from the current model's training metadata,
-    ensuring inference always runs on exactly the symbols the model was trained on.
+    Symbols default to the current model's training metadata. When ``symbols`` is
+    provided in the request, inference runs only on that list (same model weights).
 
     Returns:
         PatchTSTInferenceResponse with per-symbol predictions and metadata
@@ -35,18 +35,26 @@ def infer_patchtst(
     """
     t_start = time.time()
 
-    # Resolve symbols from current model metadata
     version = storage.read_current_version()
     if not version:
         raise HTTPException(400, "No current PatchTST model version available")
-    metadata = storage.read_metadata(version)
-    if not metadata or "symbols" not in metadata:
-        raise HTTPException(400, f"PatchTST model {version} has no symbols in metadata")
-    symbols: list[str] = metadata["symbols"]
 
-    logger.info(
-        f"[PatchTST] Starting inference for {len(symbols)} symbols (model {version})"
-    )
+    if request.symbols is not None:
+        symbols = list(request.symbols)
+        logger.info(
+            f"[PatchTST] Using {len(symbols)} requested symbols (model {version})"
+        )
+    else:
+        metadata = storage.read_metadata(version)
+        if not metadata or "symbols" not in metadata:
+            raise HTTPException(
+                400, f"PatchTST model {version} has no symbols in metadata"
+            )
+        symbols = metadata["symbols"]
+        logger.info(
+            f"[PatchTST] Starting inference for {len(symbols)} symbols from metadata "
+            f"(model {version})"
+        )
 
     cutoff_date = get_patchtst_as_of_date(request)
     logger.info(f"[PatchTST] Cutoff date: {cutoff_date}")

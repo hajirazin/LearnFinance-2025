@@ -249,6 +249,27 @@ def test_inference_patchtst_empty_body_accepted(client_with_mocks):
     assert response.status_code == 200
 
 
+def test_inference_patchtst_requested_symbols_scopes_predictions(client_with_mocks):
+    """POST /inference/patchtst with symbols returns only those symbols."""
+    response = client_with_mocks.post(
+        "/inference/patchtst",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["predictions"]) == 1
+    assert data["predictions"][0]["symbol"] == "AAPL"
+
+
+def test_inference_patchtst_empty_symbols_list_returns_422(client_with_mocks):
+    """POST /inference/patchtst with symbols=[] fails validation (min_length=1)."""
+    response = client_with_mocks.post(
+        "/inference/patchtst",
+        json={"symbols": []},
+    )
+    assert response.status_code == 422
+
+
 def test_inference_patchtst_custom_as_of_date(client_with_mocks):
     """POST /inference/patchtst anchors custom as_of_date to Friday."""
     # 2025-01-06 is Monday -> cutoff should be 2025-01-03 (Friday)

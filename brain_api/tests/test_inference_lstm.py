@@ -432,6 +432,27 @@ def test_inference_lstm_custom_as_of_date(client_with_mocks):
     assert data["as_of_date"] == "2025-01-03"
 
 
+def test_inference_lstm_requested_symbols_scopes_predictions(client_with_mocks):
+    """POST /inference/lstm with symbols returns only those symbols (not full metadata)."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": ["AAPL"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["predictions"]) == 1
+    assert data["predictions"][0]["symbol"] == "AAPL"
+
+
+def test_inference_lstm_empty_symbols_list_returns_422(client_with_mocks):
+    """POST /inference/lstm with symbols=[] fails validation (min_length=1)."""
+    response = client_with_mocks.post(
+        "/inference/lstm",
+        json={"symbols": []},
+    )
+    assert response.status_code == 422
+
+
 # ============================================================================
 # Scenario 6: Sorting behavior (highest gain → highest loss)
 # ============================================================================

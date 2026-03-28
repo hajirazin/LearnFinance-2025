@@ -33,10 +33,10 @@ def infer_lstm(
     storage: LocalModelStorage = Depends(get_storage),
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> LSTMInferenceResponse:
-    """Predict weekly returns using the current LSTM model's symbols.
+    """Predict weekly returns using the current LSTM model.
 
-    Symbols are resolved from the current model's training metadata,
-    ensuring inference always runs on exactly the symbols the model was trained on.
+    Symbols default to the current model's training metadata. When ``symbols`` is
+    provided in the request, inference runs only on that list (same model weights).
 
     Returns:
         LSTMInferenceResponse with per-symbol predictions and metadata
@@ -47,19 +47,24 @@ def infer_lstm(
     """
     t_start = time.time()
 
-    # Resolve symbols from current model metadata
     version = storage.read_current_version()
     if not version:
         raise HTTPException(400, "No current LSTM model version available")
-    metadata = storage.read_metadata(version)
-    if not metadata or "symbols" not in metadata:
-        raise HTTPException(400, f"LSTM model {version} has no symbols in metadata")
-    symbols: list[str] = metadata["symbols"]
 
-    logger.info(
-        f"[LSTM] Starting inference for {len(symbols)} symbols (model {version})"
-    )
-    logger.info(f"[LSTM] Symbols: {symbols}")
+    if request.symbols is not None:
+        symbols = list(request.symbols)
+        logger.info(f"[LSTM] Using {len(symbols)} requested symbols (model {version})")
+        logger.info(f"[LSTM] Symbols: {symbols}")
+    else:
+        metadata = storage.read_metadata(version)
+        if not metadata or "symbols" not in metadata:
+            raise HTTPException(400, f"LSTM model {version} has no symbols in metadata")
+        symbols = metadata["symbols"]
+        logger.info(
+            f"[LSTM] Starting inference for {len(symbols)} symbols from metadata "
+            f"(model {version})"
+        )
+        logger.info(f"[LSTM] Symbols: {symbols}")
 
     # Get cutoff date (always a Friday)
     cutoff_date = get_as_of_date(request)
