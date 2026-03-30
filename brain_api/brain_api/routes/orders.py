@@ -101,6 +101,11 @@ class OrderSummaryModel(BaseModel):
     skipped_small_orders: int = Field(
         ..., ge=0, description="Orders skipped due to small value"
     )
+    skipped_below_threshold: int = Field(
+        ...,
+        ge=0,
+        description="Legs skipped: absolute weight change below min rebalance threshold",
+    )
 
 
 class GenerateOrdersResponse(BaseModel):
@@ -142,12 +147,19 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
     1. **Idempotent client_order_id generation**: Deterministic IDs based on
        run_id, attempt, symbol, and side prevent duplicate orders.
 
-    2. **Minimum trade filtering**: Orders below $10 value are skipped.
+    2. **Minimum weight change**: Legs with absolute weight delta below 1% of NAV
+       are skipped, except full exits (target weight 0 with an open position).
 
-    3. **Sell qty cap**: Sell quantity is capped at position quantity to avoid
+    3. **Minimum trade filtering**: Orders below $10 value are skipped.
+
+    4. **Buy funding cap**: If total buy notional exceeds cash plus expected
+       proceeds from generated sells, buy quantities are scaled down proportionally
+       (or buys dropped if no buying power).
+
+    5. **Sell qty cap**: Sell quantity is capped at position quantity to avoid
        requesting more shares than held.
 
-    4. **Fractional shares**: Quantities are calculated to 4 decimal places.
+    6. **Fractional shares**: Quantities are calculated to 4 decimal places.
 
     The generated orders can be submitted directly to Alpaca's POST /v2/orders
     endpoint. Alpaca will reject orders with duplicate client_order_ids,
@@ -196,7 +208,8 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         "total_buy_value": 1043.87,
         "total_sell_value": 0,
         "turnover_pct": 4.8,
-        "skipped_small_orders": 0
+        "skipped_small_orders": 0,
+        "skipped_below_threshold": 0
       },
       "prices_used": {"AAPL": 170.00, "MSFT": 415.00}
     }
@@ -275,6 +288,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         total_sell_value=result.summary.total_sell_value,
         turnover_pct=result.summary.turnover_pct,
         skipped_small_orders=result.summary.skipped_small_orders,
+        skipped_below_threshold=result.summary.skipped_below_threshold,
     )
 
     return GenerateOrdersResponse(

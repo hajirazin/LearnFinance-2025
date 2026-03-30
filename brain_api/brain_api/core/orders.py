@@ -2,7 +2,9 @@
 
 Converts allocation weights into actionable market orders with:
 - Idempotent client_order_id generation
+- Minimum absolute weight change (1% of NAV per leg; full exit exempt)
 - Minimum trade value filtering
+- Buy funding cap (scale buys to cash + surviving sell proceeds)
 - Sell qty capped at position quantity
 """
 
@@ -16,6 +18,9 @@ import yfinance as yf
 
 # Skip orders smaller than this value (in dollars)
 MIN_TRADE_VALUE: float = 10.0
+
+# Skip rebalance legs smaller than this absolute weight delta (fraction of NAV; 0.01 = 1%)
+MIN_REBALANCE_WEIGHT_DELTA: float = 0.01
 
 
 # ============================================================================
@@ -82,6 +87,7 @@ class OrderSummary:
     total_sell_value: float
     turnover_pct: float
     skipped_small_orders: int
+    skipped_below_threshold: int
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -92,6 +98,7 @@ class OrderSummary:
             "total_sell_value": round(self.total_sell_value, 2),
             "turnover_pct": round(self.turnover_pct, 2),
             "skipped_small_orders": self.skipped_small_orders,
+            "skipped_below_threshold": self.skipped_below_threshold,
         }
 
 
@@ -233,6 +240,7 @@ def generate_orders(
                 total_sell_value=0.0,
                 turnover_pct=0.0,
                 skipped_small_orders=0,
+                skipped_below_threshold=0,
             ),
             prices_used={},
         )
@@ -258,6 +266,7 @@ def generate_orders(
     # Calculate required trades
     orders: list[Order] = []
     skipped_small_orders = 0
+    skipped_below_threshold = 0
     total_buy_value = 0.0
     total_sell_value = 0.0
 
@@ -270,8 +279,10 @@ def generate_orders(
         target_weight = target_weights.get(symbol, 0.0)
         weight_diff = target_weight - current_weight
 
-        # Skip if no change needed
-        if abs(weight_diff) < 0.0001:  # Less than 0.01% change
+        # Skip negligible change (always allow full exit: target 0 with a position)
+        is_full_exit = target_weight == 0.0 and current_weight > 0.0
+        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA and not is_full_exit:
+            skipped_below_threshold += 1
             continue
 
         # Skip if we don't have a price
@@ -320,6 +331,23 @@ def generate_orders(
         )
         orders.append(order)
 
+    # Cap buys so total notional <= cash + expected sell proceeds (skipped sells reduce cash)
+    available_for_buys = portfolio.cash + total_sell_value
+    if available_for_buys <= 0:
+        orders = [o for o in orders if o.side == "sell"]
+        total_buy_value = 0.0
+    elif total_buy_value > available_for_buys:
+        scale = available_for_buys / total_buy_value
+        for o in orders:
+            if o.side == "buy":
+                o.qty = round(o.qty * scale, 4)
+        orders = [o for o in orders if o.side == "sell" or o.qty > 0]
+        total_buy_value = sum(
+            o.qty * prices[o.symbol]
+            for o in orders
+            if o.side == "buy" and o.symbol in prices
+        )
+
     # Calculate turnover
     turnover = (total_buy_value + total_sell_value) / 2 / total_value * 100
 
@@ -334,6 +362,7 @@ def generate_orders(
         total_sell_value=total_sell_value,
         turnover_pct=turnover,
         skipped_small_orders=skipped_small_orders,
+        skipped_below_threshold=skipped_below_threshold,
     )
 
     print(

@@ -158,6 +158,7 @@ def buy_only_orders():
             total_sell_value=0,
             turnover_pct=8.8,
             skipped_small_orders=0,
+            skipped_below_threshold=0,
         ),
         prices_used={"AAPL": 175.50},
     )
@@ -191,6 +192,7 @@ def sell_and_buy_orders():
             total_sell_value=1260.00,
             turnover_pct=12.0,
             skipped_small_orders=0,
+            skipped_below_threshold=0,
         ),
         prices_used={"AAPL": 175.50, "MSFT": 420.00},
     )

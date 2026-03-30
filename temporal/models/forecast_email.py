@@ -240,6 +240,7 @@ class OrderSummary(BaseModel):
     total_sell_value: float
     turnover_pct: float
     skipped_small_orders: int
+    skipped_below_threshold: int = 0
 
 
 class GenerateOrdersResponse(BaseModel):
