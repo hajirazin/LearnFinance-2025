@@ -1,4 +1,30 @@
 services:
+  temporal-server:
+    image: temporalio/temporal:latest
+    container_name: learnfinance-temporal-server
+    restart: always
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    command:
+      - server
+      - start-dev
+      - --ip=0.0.0.0
+      - --db-filename=/data/temporal.db
+      - --ui-port=8233
+    volumes:
+      # Bind mount to a host-owned directory so Temporal's non-root user
+      # can write temporal.db. Override TEMPORAL_DATA_DIR via env for
+      # other hosts. Default assumes Pi user 'razin'. Create once:
+      #   mkdir -p ~/learnfinance/temporal-data && chmod 777 ~/learnfinance/temporal-data
+      - ${TEMPORAL_DATA_DIR:-/home/razin/learnfinance/temporal-data}:/data
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   brain-api:
     build: ./brain_api
     container_name: learnfinance-brain-api
@@ -7,26 +33,35 @@ services:
       - "8000:8000"
     env_file:
       - ./brain_api/.env
-
-  temporal-server:
-    image: temporalio/auto-setup:latest
-    container_name: learnfinance-temporal-server
-    restart: always
-    ports:
-      - "7233:7233"
-      - "8233:8233"
-    environment:
-      - DB=sqlite
-      - TEMPORAL_ADDRESS=0.0.0.0:7233
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/docs').read(); sys.exit(0)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   temporal-worker:
     build: ./temporal
     container_name: learnfinance-temporal-worker
     restart: always
     depends_on:
-      - temporal-server
-      - brain-api
+      temporal-server:
+        condition: service_healthy
+      brain-api:
+        condition: service_healthy
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - BRAIN_API_URL=http://brain-api:8000
-    command: ["uv", "run", "python", "-m", "worker"]
+
+  temporal-schedules-init:
+    build: ./temporal
+    container_name: learnfinance-temporal-schedules-init
+    restart: on-failure
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+    command: ["uv", "run", "python", "-m", "schedules"]
+    # One-shot: exits 0 after registering (or skipping) schedules.
+    # `Exited (0)` in `docker compose ps` is the EXPECTED healthy state for this service.

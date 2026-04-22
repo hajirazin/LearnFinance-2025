@@ -27,6 +27,58 @@ devbox run temporal:schedule
 | USWeeklyTraining | Sunday 11:00 UTC | Full US model training |
 | IndiaWeeklyTraining | Sunday 04:30 UTC | India PatchTST training |
 
+## Schedule registration is idempotent
+
+`schedules.py` uses a **create-if-not-exists** pattern. On first run it creates
+the schedules; on every subsequent run it logs `SKIP (already exists, not
+updating)` and exits 0. This means the docker-compose `temporal-schedules-init`
+one-shot service can safely run on every `docker compose up -d --build` without
+side effects.
+
+Only the two allocation schedules are registered by default (see `SCHEDULES` in
+`schedules.py`). Training schedules are preserved as a commented `SCHEDULES_MAC`
+block for future use on a beefier host.
+
+## Changing a schedule on the Pi
+
+Because registration is create-if-not-exists, editing a schedule's cron in
+`schedules.py` and redeploying will NOT update a running Pi -- the init service
+sees the schedule already exists and logs `SKIP`. This is intentional (safety)
+but means you need an explicit escape hatch to change a cron later:
+
+```bash
+# 1. Edit temporal/schedules.py on the Mac.
+
+# 2. Delete the existing schedule on the Pi so init can recreate it:
+docker --context razinpi compose exec temporal-server \
+  temporal schedule delete --schedule-id us-weekly-allocate --address 127.0.0.1:7233
+
+# 3. Redeploy from the Mac; the Docker CLI uses the razinpi context,
+#    streams the local build context over SSH to the Pi's daemon, and
+#    temporal-schedules-init creates the new version.
+docker --context razinpi compose up -d --build
+docker --context razinpi compose logs temporal-schedules-init
+# Expect: "Created: us-weekly-allocate (<new cron>) - ..."
+```
+
+Note: no git checkout on the Pi is needed. The Pi only runs the Docker daemon;
+the repo and compose file live on the Mac. Every deploy uses whatever code is
+on the Mac at the moment you run `docker --context razinpi compose up -d --build`.
+
+The same procedure applies on the laptop for local development (drop
+`--context razinpi` and use `devbox run temporal:schedule` at step 3 instead).
+
+## Operator notes
+
+- `temporal-schedules-init` shows `Exited (0)` in `docker compose ps` after a
+  successful run. That is the expected healthy state for a one-shot container.
+- `temporal schedule describe --schedule-id <id>` is the source of truth for
+  "did the last scheduled run fire, when, and with what status".
+- The Temporal SQLite DB lives in a host bind mount on the Pi at
+  `~/learnfinance/temporal-data/temporal.db` (owned by the Pi user, so the
+  Temporal container's non-root user can write it). Do not delete that
+  directory — it holds every schedule's run history.
+
 ## Future Ideas
 
 - **Temporal Signals**: brain_api could send Signals to running workflows (e.g., "training done", "order filled") to eliminate polling. Requires adding a Temporal client to brain_api. Not needed now since the durable poll loop works well for a laptop setup.
