@@ -262,7 +262,9 @@ class SnapshotLocalStorage:
 
             config = LSTMConfig(**config_dict)
             model = LSTMModel(config)
-            model.load_state_dict(torch.load(weights_path, weights_only=True))
+            model.load_state_dict(
+                torch.load(weights_path, weights_only=True, map_location="cpu")
+            )
             model.eval()
 
             return LSTMSnapshotArtifacts(
@@ -279,7 +281,9 @@ class SnapshotLocalStorage:
             config = PatchTSTConfig(**config_dict)
             hf_config = config.to_hf_config()
             model = PatchTSTForPrediction(hf_config)
-            model.load_state_dict(torch.load(weights_path, weights_only=True))
+            model.load_state_dict(
+                torch.load(weights_path, weights_only=True, map_location="cpu")
+            )
             model.eval()
 
             return PatchTSTSnapshotArtifacts(

@@ -7,13 +7,10 @@ __pycache__/
 dist/
 build/
 .git/
-data/
-models/
-*.pt
-*.pth
-*.onnx
-*.pkl
-*.joblib
-*.parquet
-*.csv
-.env
+
+# Exclude only the giant training-input news cache (~20GB).
+# Everything else under data/ (models, cache, features, raw, output)
+# is shipped into the image so the Pi has local model artifacts.
+# When you promote a new SAC version on the Mac, rebuild + redeploy
+# to update the Pi: docker --context razinpi compose up -d --build
+data/input/financial-news-multisource/

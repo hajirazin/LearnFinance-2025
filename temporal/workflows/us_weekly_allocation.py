@@ -55,7 +55,10 @@ with workflow.unsafe.imports_passed_through():
     )
 
 SHORT_TIMEOUT = timedelta(minutes=5)
-INFERENCE_TIMEOUT = timedelta(minutes=10)
+# Must be greater than the httpx read timeout in temporal/activities/client.py
+# (currently 15 min) so httpx times out before Temporal does, allowing clean
+# retries. Pi FinBERT sentiment is the slowest activity at 5-6 min.
+INFERENCE_TIMEOUT = timedelta(minutes=20)
 SELL_POLL_INTERVAL = timedelta(minutes=15)
 SELL_DEADLINE = timedelta(hours=48)
 

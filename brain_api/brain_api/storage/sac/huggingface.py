@@ -278,7 +278,9 @@ class SACHuggingFaceModelStorage:
             activation=config.activation,
         )
         actor_path = local_path / "actor.pt"
-        actor.load_state_dict(torch.load(actor_path, weights_only=True))
+        actor.load_state_dict(
+            torch.load(actor_path, weights_only=True, map_location="cpu")
+        )
         actor.eval()
 
         # Initialize and load critic
@@ -289,7 +291,9 @@ class SACHuggingFaceModelStorage:
             activation=config.activation,
         )
         critic_path = local_path / "critic.pt"
-        critic.load_state_dict(torch.load(critic_path, weights_only=True))
+        critic.load_state_dict(
+            torch.load(critic_path, weights_only=True, map_location="cpu")
+        )
         critic.eval()
 
         # Initialize and load target critic
@@ -300,12 +304,14 @@ class SACHuggingFaceModelStorage:
             activation=config.activation,
         )
         critic_target_path = local_path / "critic_target.pt"
-        critic_target.load_state_dict(torch.load(critic_target_path, weights_only=True))
+        critic_target.load_state_dict(
+            torch.load(critic_target_path, weights_only=True, map_location="cpu")
+        )
         critic_target.eval()
 
         # Load log_alpha
         log_alpha_path = local_path / "log_alpha.pt"
-        log_alpha = torch.load(log_alpha_path, weights_only=True)
+        log_alpha = torch.load(log_alpha_path, weights_only=True, map_location="cpu")
 
         # Determine actual version from metadata if we downloaded 'main'
         actual_version = version

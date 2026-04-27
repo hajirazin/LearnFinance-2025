@@ -240,7 +240,9 @@ class BaseLocalModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT]):
 
         weights_path = self._version_path(version) / "weights.pt"
         model = self._create_model(config)
-        model.load_state_dict(torch.load(weights_path, weights_only=True))
+        model.load_state_dict(
+            torch.load(weights_path, weights_only=True, map_location="cpu")
+        )
         model.eval()  # Set to evaluation mode for inference
         return model
 

@@ -274,7 +274,9 @@ class BaseHuggingFaceModelStorage(
         # Load model
         weights_path = local_path / "weights.pt"
         model = self._create_model(config)
-        model.load_state_dict(torch.load(weights_path, weights_only=True))
+        model.load_state_dict(
+            torch.load(weights_path, weights_only=True, map_location="cpu")
+        )
         model.eval()
 
         # Determine actual version from metadata if we downloaded 'main'

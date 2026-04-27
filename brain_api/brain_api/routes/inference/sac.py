@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.sac import run_sac_inference
+from brain_api.core.training_utils import get_device
 from brain_api.storage.sac import SACLocalStorage
 
 from .dependencies import get_sac_as_of_date, get_sac_storage
@@ -60,7 +61,15 @@ def infer_sac(
             detail=str(e),
         ) from e
 
-    logger.info(f"[SAC] Model loaded: version={artifacts.version}")
+    # Storage layer always loads weights on CPU for portability (Mac/Pi/CUDA).
+    # Move actor to the best available device for fast inference (MPS on Mac,
+    # CPU on the Pi). The actor's get_action() reads device from its parameters,
+    # so this is the only placement decision needed for SAC inference.
+    artifacts.actor.to(get_device())
+    logger.info(
+        f"[SAC] Model loaded: version={artifacts.version}, "
+        f"device={next(artifacts.actor.parameters()).device}"
+    )
 
     # Convert portfolio snapshot to values dict
     cash_value = request.portfolio.cash

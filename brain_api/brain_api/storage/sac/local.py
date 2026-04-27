@@ -276,7 +276,9 @@ class SACLocalStorage:
 
         # Load actor weights
         actor_path = self._version_path(version) / "actor.pt"
-        actor.load_state_dict(torch.load(actor_path, weights_only=True))
+        actor.load_state_dict(
+            torch.load(actor_path, weights_only=True, map_location="cpu")
+        )
         actor.eval()
 
         # Initialize and load critics
@@ -287,7 +289,9 @@ class SACLocalStorage:
             activation=config.activation,
         )
         critic_path = self._version_path(version) / "critic.pt"
-        critic.load_state_dict(torch.load(critic_path, weights_only=True))
+        critic.load_state_dict(
+            torch.load(critic_path, weights_only=True, map_location="cpu")
+        )
         critic.eval()
 
         critic_target = TwinCritic(
@@ -297,12 +301,14 @@ class SACLocalStorage:
             activation=config.activation,
         )
         critic_target_path = self._version_path(version) / "critic_target.pt"
-        critic_target.load_state_dict(torch.load(critic_target_path, weights_only=True))
+        critic_target.load_state_dict(
+            torch.load(critic_target_path, weights_only=True, map_location="cpu")
+        )
         critic_target.eval()
 
         # Load log_alpha
         log_alpha_path = self._version_path(version) / "log_alpha.pt"
-        log_alpha = torch.load(log_alpha_path, weights_only=True)
+        log_alpha = torch.load(log_alpha_path, weights_only=True, map_location="cpu")
 
         return SACArtifacts(
             config=config,

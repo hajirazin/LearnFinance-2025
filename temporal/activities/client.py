@@ -8,7 +8,7 @@ BRAIN_API_URL = os.environ.get("BRAIN_API_URL", "http://localhost:8000")
 
 INFERENCE_TIMEOUT = httpx.Timeout(
     connect=30.0,
-    read=300.0,  # 5 minute read timeout for inference
+    read=900.0,  # 15 min: Pi FinBERT on 15 symbols × 10 articles takes 5-6 min
     write=30.0,
     pool=30.0,
 )
