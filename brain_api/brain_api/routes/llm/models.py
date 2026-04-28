@@ -91,4 +91,23 @@ class IndiaWeeklySummaryRequest(BaseModel):
     The LLM analyzes HRP concentration and diversification.
     """
 
-    hrp: HRPAllocationResponse  # from POST /allocation/hrp (universe=halal_india)
+    hrp: HRPAllocationResponse  # from POST /allocation/hrp
+    universe: str  # e.g. "halal_india" -- passed by Temporal for reporting context
+
+
+# =============================================================================
+# Double HRP Summary Models
+# =============================================================================
+
+
+class DoubleHRPSummaryRequest(BaseModel):
+    """Request model for POST /llm/india-double-hrp-summary.
+
+    Two-stage HRP: Stage 1 screens the full universe, Stage 2
+    re-allocates the top-N selected stocks.
+    """
+
+    stage1: HRPAllocationResponse  # full universe, long lookback
+    stage2: HRPAllocationResponse  # top-N stocks, short lookback
+    universe: str  # e.g. "nifty_shariah_500"
+    top_n: int  # e.g. 15

@@ -130,7 +130,6 @@ def sac_alloc():
 @pytest.fixture
 def hrp_alloc():
     return HRPAllocationResponse(
-        universe="halal_filtered",
         percentage_weights={"AAPL": 20.0, "MSFT": 15.0},
         symbols_used=2,
         symbols_excluded=[],
@@ -280,7 +279,7 @@ def _make_mock_activities(
         return sac_alloc
 
     @activity.defn(name="allocate_hrp")
-    def mock_allocate_hrp(as_of_date, universe="halal_filtered"):
+    def mock_allocate_hrp(symbols, as_of_date, lookback_days=252):
         return hrp_alloc
 
     @activity.defn(name="generate_orders_sac")

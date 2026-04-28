@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .models import (
+    DoubleHRPSummaryRequest,
     IndiaWeeklySummaryRequest,
     WeeklySummaryRequest,
     WeeklySummaryResponse,
@@ -140,7 +141,10 @@ def generate_india_weekly_summary(
             detail="Template not found: india_weekly_summary_prompt.j2",
         ) from e
 
-    prompt = template.render(hrp=request.hrp.model_dump())
+    prompt = template.render(
+        hrp=request.hrp.model_dump(),
+        universe=request.universe,
+    )
 
     logger.debug(f"Generated India prompt length: {len(prompt)} chars")
 
@@ -159,6 +163,73 @@ def generate_india_weekly_summary(
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
         summary = {
             "para_1_portfolio_overview": "Unable to generate AI summary. Please check the logs for details.",
+            "raw_response": llm_response.content[:500],
+        }
+
+    return WeeklySummaryResponse(
+        summary=summary,
+        provider=provider.name,
+        model_used=llm_response.model,
+        tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/india-double-hrp-summary", response_model=WeeklySummaryResponse)
+def generate_india_double_hrp_summary(
+    request: DoubleHRPSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> WeeklySummaryResponse:
+    """Generate an LLM summary of two-stage Double HRP allocation.
+
+    Stage 1 screens the full universe with a long lookback, then the
+    top-N stocks are re-allocated with a shorter lookback in Stage 2.
+
+    Args:
+        request: Both stage results, universe label, and top_n.
+        provider: LLM provider (injected via dependency).
+
+    Returns:
+        Summary with paragraph fields and metadata.
+
+    Raises:
+        HTTPException: If template loading or LLM call fails.
+    """
+    logger.info(f"Generating Double HRP summary using provider={provider.name}")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("india_double_hrp_summary_prompt.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: india_double_hrp_summary_prompt.j2",
+        ) from e
+
+    prompt = template.render(
+        stage1=request.stage1.model_dump(),
+        stage2=request.stage2.model_dump(),
+        universe=request.universe,
+        top_n=request.top_n,
+    )
+
+    logger.debug(f"Generated Double HRP prompt length: {len(prompt)} chars")
+
+    try:
+        llm_response = provider.generate(prompt)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM service unavailable: {e}",
+        ) from e
+
+    try:
+        summary = parse_json_response(llm_response.content)
+    except ValueError as e:
+        logger.warning(f"Failed to parse LLM response as JSON: {e}")
+        summary = {
+            "para_1_screening_overview": "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],
         }
 

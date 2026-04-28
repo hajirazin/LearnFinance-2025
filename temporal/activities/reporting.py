@@ -27,7 +27,6 @@ def _alloc_to_dict(alloc, is_hrp: bool = False, as_of_date: str = "") -> dict:
     if isinstance(alloc, SkippedAllocation) or getattr(alloc, "skipped", False):
         if is_hrp:
             return {
-                "universe": "skipped",
                 "percentage_weights": {},
                 "symbols_used": 0,
                 "symbols_excluded": [],
@@ -129,13 +128,14 @@ def send_weekly_email(
 @activity.defn
 def generate_india_summary(
     hrp: HRPAllocationResponse,
+    universe: str,
 ) -> WeeklySummaryResponse:
     """Generate LLM summary of India HRP allocation."""
     logger.info("Generating India LLM summary...")
     with get_client() as client:
         response = client.post(
             "/llm/india-weekly-summary",
-            json={"hrp": hrp.model_dump()},
+            json={"hrp": hrp.model_dump(), "universe": universe},
         )
         response.raise_for_status()
     result = WeeklySummaryResponse(**response.json())
@@ -147,6 +147,7 @@ def generate_india_summary(
 def send_india_weekly_email(
     summary: WeeklySummaryResponse,
     hrp: HRPAllocationResponse,
+    universe: str,
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
@@ -159,6 +160,7 @@ def send_india_weekly_email(
             json={
                 "summary": summary.summary,
                 "hrp": hrp.model_dump(),
+                "universe": universe,
                 "target_week_start": target_week_start,
                 "target_week_end": target_week_end,
                 "as_of_date": as_of_date,
@@ -167,4 +169,64 @@ def send_india_weekly_email(
         response.raise_for_status()
     result = WeeklyReportEmailResponse(**response.json())
     logger.info(f"India email sent: {result.subject}")
+    return result
+
+
+@activity.defn
+def generate_double_hrp_summary(
+    stage1: HRPAllocationResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+) -> WeeklySummaryResponse:
+    """Generate LLM summary of Double HRP two-stage allocation."""
+    logger.info("Generating Double HRP LLM summary...")
+    with get_client() as client:
+        response = client.post(
+            "/llm/india-double-hrp-summary",
+            json={
+                "stage1": stage1.model_dump(),
+                "stage2": stage2.model_dump(),
+                "universe": universe,
+                "top_n": top_n,
+            },
+        )
+        response.raise_for_status()
+    result = WeeklySummaryResponse(**response.json())
+    logger.info(
+        f"Generated Double HRP summary via {result.provider} ({result.model_used})"
+    )
+    return result
+
+
+@activity.defn
+def send_double_hrp_email(
+    summary: WeeklySummaryResponse,
+    stage1: HRPAllocationResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+    target_week_start: str,
+    target_week_end: str,
+    as_of_date: str,
+) -> WeeklyReportEmailResponse:
+    """Send Double HRP report email (both stages + AI summary)."""
+    logger.info("Sending Double HRP report email...")
+    with get_client() as client:
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json={
+                "summary": summary.summary,
+                "stage1": stage1.model_dump(),
+                "stage2": stage2.model_dump(),
+                "universe": universe,
+                "top_n": top_n,
+                "target_week_start": target_week_start,
+                "target_week_end": target_week_end,
+                "as_of_date": as_of_date,
+            },
+        )
+        response.raise_for_status()
+    result = WeeklyReportEmailResponse(**response.json())
+    logger.info(f"Double HRP email sent: {result.subject}")
     return result

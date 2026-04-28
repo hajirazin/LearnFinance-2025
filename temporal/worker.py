@@ -40,8 +40,10 @@ from activities.portfolio import (
     submit_orders_sac,
 )
 from activities.reporting import (
+    generate_double_hrp_summary,
     generate_india_summary,
     generate_summary,
+    send_double_hrp_email,
     send_india_weekly_email,
     send_weekly_email,
 )
@@ -62,6 +64,7 @@ from activities.training import (
 from activities.training import (
     fetch_halal_india_universe as fetch_halal_india_universe_training,
 )
+from workflows.india_double_hrp import IndiaDoubleHRPWorkflow
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
 from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
@@ -71,6 +74,7 @@ TASK_QUEUE = "learnfinance"
 TEMPORAL_ADDRESS = os.environ.get("TEMPORAL_ADDRESS", "localhost:7233")
 
 ALL_WORKFLOWS = [
+    IndiaDoubleHRPWorkflow,
     IndiaWeeklyAllocationWorkflow,
     IndiaWeeklyTrainingWorkflow,
     USWeeklyAllocationWorkflow,
@@ -105,6 +109,8 @@ ALL_ACTIVITIES = [
     send_weekly_email,
     generate_india_summary,
     send_india_weekly_email,
+    generate_double_hrp_summary,
+    send_double_hrp_email,
     # Training
     fetch_halal_new_universe,
     fetch_halal_filtered_universe,

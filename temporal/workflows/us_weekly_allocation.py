@@ -260,7 +260,7 @@ class USWeeklyAllocationWorkflow:
             alloc_futures.append(
                 workflow.execute_activity(
                     allocate_hrp,
-                    args=[as_of_date],
+                    args=[symbols, as_of_date],
                     start_to_close_timeout=INFERENCE_TIMEOUT,
                 )
             )

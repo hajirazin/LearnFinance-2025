@@ -132,6 +132,29 @@ class IndiaWeeklyReportEmailRequest(BaseModel):
 
     summary: dict[str, str]  # from POST /llm/india-weekly-summary (3 paragraphs)
     hrp: HRPAllocationResponse
+    universe: str  # e.g. "halal_india" -- passed by Temporal for reporting context
+    target_week_start: str
+    target_week_end: str
+    as_of_date: str
+
+
+# =============================================================================
+# Double HRP Report Email Models
+# =============================================================================
+
+
+class DoubleHRPEmailRequest(BaseModel):
+    """Request model for POST /email/india-double-hrp-report.
+
+    Two-stage HRP: Stage 1 screens the full universe, Stage 2
+    re-allocates the top-N selected stocks. Email shows both stages.
+    """
+
+    summary: dict[str, str]  # from POST /llm/india-double-hrp-summary
+    stage1: HRPAllocationResponse  # full universe, long lookback
+    stage2: HRPAllocationResponse  # top-N stocks, short lookback
+    universe: str  # e.g. "nifty_shariah_500"
+    top_n: int  # e.g. 15
     target_week_start: str
     target_week_end: str
     as_of_date: str

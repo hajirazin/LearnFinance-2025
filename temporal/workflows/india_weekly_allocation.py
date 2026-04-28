@@ -42,12 +42,13 @@ class IndiaWeeklyAllocationWorkflow:
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
-        stock_count = len(universe_data.get("stocks", []))
+        symbols = [s["symbol"] for s in universe_data.get("stocks", [])]
+        stock_count = len(symbols)
 
         # Phase 1: HRP allocation
         hrp = await workflow.execute_activity(
             allocate_hrp,
-            args=[as_of_date, "halal_india"],
+            args=[symbols, as_of_date],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
@@ -55,7 +56,7 @@ class IndiaWeeklyAllocationWorkflow:
         # Phase 2: AI summary
         summary = await workflow.execute_activity(
             generate_india_summary,
-            args=[hrp],
+            args=[hrp, "halal_india"],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
@@ -63,7 +64,14 @@ class IndiaWeeklyAllocationWorkflow:
         # Phase 3: Email
         email_result = await workflow.execute_activity(
             send_india_weekly_email,
-            args=[summary, hrp, target_week_start, target_week_end, as_of_date],
+            args=[
+                summary,
+                hrp,
+                "halal_india",
+                target_week_start,
+                target_week_end,
+                as_of_date,
+            ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )

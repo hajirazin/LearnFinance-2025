@@ -136,7 +136,6 @@ class SACInferenceResponse(BaseModel):
 class HRPAllocationResponse(BaseModel):
     """Response from POST /allocation/hrp."""
 
-    universe: str
     percentage_weights: dict[str, float]
     symbols_used: int
     symbols_excluded: list[str] = []

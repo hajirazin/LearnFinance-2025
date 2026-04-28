@@ -318,7 +318,6 @@ def mock_weekly_report_email_request():
             "weight_changes": [],
         },
         "hrp": {
-            "universe": "halal_filtered",
             "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
             "symbols_used": 15,
             "symbols_excluded": [],
@@ -390,7 +389,6 @@ def mock_india_weekly_report_email_request():
             "para_3_risk_observations": "IT sector is overweight; watch for currency risk.",
         },
         "hrp": {
-            "universe": "halal_india",
             "percentage_weights": {
                 "RELIANCE.NS": 12.3,
                 "TCS.NS": 10.1,
@@ -403,6 +401,7 @@ def mock_india_weekly_report_email_request():
             "lookback_days": 252,
             "as_of_date": "2026-03-02",
         },
+        "universe": "halal_india",
         "target_week_start": "2026-03-02",
         "target_week_end": "2026-03-06",
         "as_of_date": "2026-03-02",
@@ -537,7 +536,6 @@ class TestIndiaWeeklyReportEmailEndpoint:
             "/email/india-weekly-report",
             json={
                 "hrp": {
-                    "universe": "halal_india",
                     "percentage_weights": {"RELIANCE.NS": 12.3},
                     "symbols_used": 1,
                     "symbols_excluded": [],

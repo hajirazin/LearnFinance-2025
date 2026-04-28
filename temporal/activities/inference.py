@@ -152,19 +152,26 @@ def infer_sac(
 
 @activity.defn
 def allocate_hrp(
-    as_of_date: str, universe: str = "halal_filtered"
+    symbols: list[str], as_of_date: str, lookback_days: int = 252
 ) -> HRPAllocationResponse:
-    """Get HRP allocation for the given universe."""
-    logger.info(f"Getting HRP allocation (universe={universe})...")
+    """Get HRP allocation for the given symbols."""
+    logger.info(
+        f"Getting HRP allocation ({len(symbols)} symbols, lookback={lookback_days})..."
+    )
     with get_client() as client:
         response = client.post(
             "/allocation/hrp",
-            json={"as_of_date": as_of_date, "universe": universe},
+            json={
+                "symbols": symbols,
+                "as_of_date": as_of_date,
+                "lookback_days": lookback_days,
+            },
         )
         response.raise_for_status()
     result = HRPAllocationResponse(**response.json())
     logger.info(
         f"HRP allocation: {result.symbols_used} symbols, "
-        f"universe={result.universe}, excluded={len(result.symbols_excluded)}"
+        f"lookback={result.lookback_days}, "
+        f"excluded={len(result.symbols_excluded)}"
     )
     return result

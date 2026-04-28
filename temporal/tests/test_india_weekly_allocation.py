@@ -42,7 +42,6 @@ def mock_universe_data():
 @pytest.fixture
 def mock_hrp():
     return HRPAllocationResponse(
-        universe="halal_india",
         percentage_weights={"RELIANCE.NS": 25.0, "TCS.NS": 20.0, "INFY.NS": 15.0},
         symbols_used=3,
         symbols_excluded=[],
@@ -83,15 +82,15 @@ def _make_india_allocation_activities(
         return universe_data
 
     @activity.defn(name="allocate_hrp")
-    def mock_allocate_hrp(as_of_date, universe="halal_filtered"):
+    def mock_allocate_hrp(symbols, as_of_date, lookback_days=252):
         return hrp
 
     @activity.defn(name="generate_india_summary")
-    def mock_generate_india_summary(hrp_arg):
+    def mock_generate_india_summary(hrp_arg, universe):
         return summary
 
     @activity.defn(name="send_india_weekly_email")
-    def mock_send_india_weekly_email(summary_arg, hrp_arg, start, end, as_of):
+    def mock_send_india_weekly_email(summary_arg, hrp_arg, universe, start, end, as_of):
         return email
 
     return [
@@ -162,7 +161,7 @@ class TestIndiaWeeklyAllocationWorkflow:
             assert (end - start).days == 4
 
     @pytest.mark.asyncio
-    async def test_hrp_called_with_halal_india_universe(
+    async def test_hrp_called_with_universe_symbols(
         self, mock_universe_data, mock_hrp, mock_summary, mock_email
     ):
         hrp_calls = []
@@ -172,16 +171,16 @@ class TestIndiaWeeklyAllocationWorkflow:
             return mock_universe_data
 
         @activity.defn(name="allocate_hrp")
-        def mock_allocate(as_of_date, universe="halal_filtered"):
-            hrp_calls.append({"as_of_date": as_of_date, "universe": universe})
+        def mock_allocate(symbols, as_of_date, lookback_days=252):
+            hrp_calls.append({"symbols": symbols, "as_of_date": as_of_date})
             return mock_hrp
 
         @activity.defn(name="generate_india_summary")
-        def mock_gen(hrp_arg):
+        def mock_gen(hrp_arg, universe):
             return mock_summary
 
         @activity.defn(name="send_india_weekly_email")
-        def mock_send(summary_arg, hrp_arg, start, end, as_of):
+        def mock_send(summary_arg, hrp_arg, universe, start, end, as_of):
             return mock_email
 
         async with await WorkflowEnvironment.start_time_skipping(
@@ -201,7 +200,8 @@ class TestIndiaWeeklyAllocationWorkflow:
                 )
 
             assert len(hrp_calls) == 1
-            assert hrp_calls[0]["universe"] == "halal_india"
+            expected_symbols = [s["symbol"] for s in mock_universe_data["stocks"]]
+            assert hrp_calls[0]["symbols"] == expected_symbols
 
 
 class TestIndiaWorkflowFailurePropagation:

@@ -6,19 +6,8 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from brain_api.core.config import UniverseType
 from brain_api.core.hrp import HRPResult, compute_hrp_allocation
 from brain_api.core.lstm import load_prices_yfinance
-from brain_api.universe import (
-    get_halal_filtered_symbols,
-    get_halal_india_symbols,
-    get_halal_new_symbols,
-    get_halal_symbols,
-    get_nifty_shariah_500_symbols,
-    get_sp500_symbols,
-)
-from brain_api.universe.scrapers.nse import NseFetchError
-from brain_api.universe.stock_filter import YFinanceFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +22,16 @@ router = APIRouter()
 class HRPAllocationRequest(BaseModel):
     """Request model for HRP allocation endpoint."""
 
-    universe: UniverseType = Field(
+    symbols: list[str] = Field(
         ...,
-        description="Stock universe to allocate (e.g. 'halal_filtered', 'halal_india')",
+        min_length=1,
+        description="List of ticker symbols to allocate (e.g. ['AAPL', 'MSFT'] or ['INFY.NS', 'TCS.NS'])",
     )
     lookback_days: int = Field(
         252,
         ge=60,
-        le=504,
-        description="Number of trading days for return calculation (60-504, default 252 = 1 year)",
+        le=756,
+        description="Number of trading days for return calculation (60-756, default 252 = 1 year)",
     )
     as_of_date: str | None = Field(
         None,
@@ -52,10 +42,6 @@ class HRPAllocationRequest(BaseModel):
 class HRPAllocationResponse(BaseModel):
     """Response model for HRP allocation endpoint."""
 
-    universe: str = Field(
-        ...,
-        description="Universe used for allocation",
-    )
     percentage_weights: dict[str, float] = Field(
         ...,
         description="Target portfolio weights as percentages (sum to 100)",
@@ -94,31 +80,6 @@ def get_price_loader() -> PriceLoader:
     return load_prices_yfinance
 
 
-def _resolve_universe_symbols(universe: UniverseType) -> list[str]:
-    """Resolve a UniverseType enum to a list of yfinance-compatible symbols.
-
-    India universes (HALAL_INDIA, NIFTY_SHARIAH_500) already include .NS
-    suffix from the universe level, so no transformation is needed here.
-
-    Raises:
-        ValueError: If the universe type is not supported.
-    """
-    resolvers: dict[UniverseType, callable] = {
-        UniverseType.HALAL: get_halal_symbols,
-        UniverseType.HALAL_NEW: get_halal_new_symbols,
-        UniverseType.HALAL_FILTERED: get_halal_filtered_symbols,
-        UniverseType.HALAL_INDIA: get_halal_india_symbols,
-        UniverseType.NIFTY_SHARIAH_500: get_nifty_shariah_500_symbols,
-        UniverseType.SP500: get_sp500_symbols,
-    }
-
-    resolver = resolvers.get(universe)
-    if resolver is None:
-        raise ValueError(f"No symbol resolver for universe '{universe.value}'")
-
-    return resolver()
-
-
 # ============================================================================
 # Endpoint
 # ============================================================================
@@ -144,12 +105,7 @@ def allocate_hrp(
 
     Returns percentage weights that sum to 100 (e.g., AAPL: 8.2 means 8.2%).
     """
-    try:
-        symbols = _resolve_universe_symbols(request.universe)
-    except (YFinanceFetchError, NseFetchError, ValueError) as e:
-        logger.error(f"HRP universe resolution failed for '{request.universe}': {e}")
-        raise HTTPException(status_code=503, detail=str(e)) from e
-
+    symbols = request.symbols
     as_of = get_as_of_date(request)
 
     buffer_days = request.lookback_days + 30
@@ -180,7 +136,6 @@ def allocate_hrp(
     )
 
     return HRPAllocationResponse(
-        universe=request.universe.value,
         percentage_weights=sorted_weights,
         symbols_used=len(result.symbols_used),
         symbols_excluded=result.symbols_excluded,

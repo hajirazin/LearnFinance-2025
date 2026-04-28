@@ -27,6 +27,7 @@ from temporalio.client import (
 )
 from temporalio.contrib.pydantic import pydantic_data_converter
 
+from workflows.india_double_hrp import IndiaDoubleHRPWorkflow
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 
@@ -47,6 +48,13 @@ SCHEDULES = [
         "workflow_id": "india-weekly-allocate",
         "cron": "30 3 * * 1",  # Monday 03:30 UTC (09:00 IST)
         "description": "India weekly HRP allocation + email (Monday 9 AM IST)",
+    },
+    {
+        "id": "india-double-hrp",
+        "workflow": IndiaDoubleHRPWorkflow,
+        "workflow_id": "india-double-hrp",
+        "cron": "0 4 * * 1",  # Monday 04:00 UTC (09:30 IST)
+        "description": "India Double HRP (Shariah500 -> top 15) Monday 9:30 AM IST",
     },
 ]
 
