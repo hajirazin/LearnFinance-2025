@@ -20,16 +20,28 @@ logger = logging.getLogger(__name__)
 
 
 @activity.defn
-def resolve_next_attempt(run_id: str, as_of_date: str) -> int:
+def resolve_next_attempt(
+    run_id: str,
+    as_of_date: str,
+    accounts: list[str] | None = None,
+) -> int:
     """Find the max attempt already used in Alpaca orders, return max + 1.
 
     Parses client_order_id (format: paper:YYYY-MM-DD:attempt-N:SYMBOL:SIDE)
-    across all three accounts to avoid duplicate IDs on reruns.
+    across the given accounts to avoid duplicate IDs on reruns.
+
+    Each US strategy uses its own Alpaca account, so a workflow should
+    only scan its own account(s). Defaults to the SAC+HRP pair (the
+    legacy ``USWeeklyAllocationWorkflow`` accounts) so existing callers
+    keep working without changes.
     """
+    if accounts is None:
+        accounts = ["sac", "hrp"]
+
     max_attempt = 0
     pattern = re.compile(rf"^{re.escape(run_id)}:attempt-(\d+):")
 
-    for account in ("sac", "hrp"):
+    for account in accounts:
         with get_client() as client:
             response = client.get(
                 "/alpaca/order-history",
@@ -45,7 +57,7 @@ def resolve_next_attempt(run_id: str, as_of_date: str) -> int:
 
     next_attempt = max_attempt + 1
     logger.info(
-        f"Resolved next attempt for {run_id}: {next_attempt} "
+        f"Resolved next attempt for {run_id} accounts={accounts}: {next_attempt} "
         f"(max existing: {max_attempt})"
     )
     return next_attempt
@@ -92,6 +104,22 @@ def get_hrp_portfolio() -> AlpacaPortfolioResponse:
     result = AlpacaPortfolioResponse(**response.json())
     logger.info(
         f"HRP portfolio: cash=${result.cash:.2f}, "
+        f"{len(result.positions)} positions, "
+        f"{result.open_orders_count} open orders"
+    )
+    return result
+
+
+@activity.defn
+def get_dhrp_portfolio() -> AlpacaPortfolioResponse:
+    """Fetch Double HRP Alpaca account portfolio (halal_new universe)."""
+    logger.info("Fetching DHRP portfolio from Alpaca...")
+    with get_client() as client:
+        response = client.get("/alpaca/portfolio", params={"account": "dhrp"})
+        response.raise_for_status()
+    result = AlpacaPortfolioResponse(**response.json())
+    logger.info(
+        f"DHRP portfolio: cash=${result.cash:.2f}, "
         f"{len(result.positions)} positions, "
         f"{result.open_orders_count} open orders"
     )
@@ -149,6 +177,14 @@ def submit_orders_hrp(
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
     """Submit HRP orders to Alpaca."""
     return _submit_orders("hrp", orders)
+
+
+@activity.defn
+def submit_orders_dhrp(
+    orders: GenerateOrdersResponse | SkippedOrdersResponse,
+) -> SubmitOrdersResponse | SkippedSubmitResponse:
+    """Submit Double HRP orders to Alpaca (dhrp account)."""
+    return _submit_orders("dhrp", orders)
 
 
 @activity.defn

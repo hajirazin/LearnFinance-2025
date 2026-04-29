@@ -399,6 +399,8 @@ We store three kinds of data:
 | ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ | (Retired) |
 | `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
+| `POST /allocation/sticky-top-n` | Persist Stage 1 weights and select top-N with sticky retention |
+| `POST /allocation/record-final-weights` | Record Stage 2 final weights for the just-completed week |
 
 ### Order generation endpoints
 
@@ -432,6 +434,8 @@ We store three kinds of data:
 |----------|---------|
 | `POST /llm/weekly-summary` | Generate AI summary of weekly forecasts and allocations (US) |
 | `POST /llm/india-weekly-summary` | Generate AI summary of HRP concentration/diversification (India) |
+| `POST /llm/india-double-hrp-summary` | Generate AI summary of India two-stage HRP allocation |
+| `POST /llm/us-double-hrp-summary` | Generate AI summary of US Double HRP (halal_new + sticky selection) |
 | `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
 
 ### Email endpoints
@@ -440,6 +444,8 @@ We store three kinds of data:
 |----------|---------|
 | `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP (US) |
 | `POST /email/india-weekly-report` | Send India weekly portfolio email (HRP + AI summary) via Gmail SMTP |
+| `POST /email/india-double-hrp-report` | Send India Double HRP report (Stage 1 + Stage 2 + AI summary) |
+| `POST /email/us-double-hrp-report` | Send US Double HRP report (Stage 1 + Stage 2 + Alpaca order results + sticky stats) |
 | `POST /email/training-summary` | Send training summary email |
 
 ### Alpaca endpoints

@@ -158,3 +158,33 @@ class DoubleHRPEmailRequest(BaseModel):
     target_week_start: str
     target_week_end: str
     as_of_date: str
+
+
+class USDoubleHRPEmailRequest(BaseModel):
+    """Request model for POST /email/us-double-hrp-report.
+
+    US Double HRP with sticky selection. Differs from the India variant
+    in two ways:
+    - It includes Alpaca order execution results because US Double HRP
+      trades through a paper account.
+    - It supports a ``skipped`` short-circuit when last week's orders
+      were still open at run time.
+
+    On the skip path, ``stage1``/``stage2`` are still required (they will
+    typically be the prior-week's snapshot or empty) but the email
+    template hides allocation tables.
+    """
+
+    summary: dict[str, str]  # from POST /llm/us-double-hrp-summary
+    stage1: HRPAllocationResponse  # halal_new universe, long lookback
+    stage2: HRPAllocationResponse  # selected 15, short lookback
+    universe: str  # e.g. "halal_new"
+    top_n: int  # e.g. 15
+    target_week_start: str
+    target_week_end: str
+    as_of_date: str
+    order_results: AlgorithmOrderResult | None = None
+    skipped: bool = False
+    sticky_kept_count: int = 0
+    sticky_fillers_count: int = 0
+    previous_year_week_used: str | None = None

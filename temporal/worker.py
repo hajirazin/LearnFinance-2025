@@ -15,6 +15,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from activities.execution import (
+    generate_orders_dhrp,
     generate_orders_hrp,
     generate_orders_sac,
     store_experience_sac,
@@ -28,14 +29,18 @@ from activities.inference import (
     get_news_sentiment,
     get_patchtst_forecast,
     infer_sac,
+    record_final_weights,
+    select_sticky_top_n,
 )
 from activities.portfolio import (
     check_order_statuses,
     get_active_symbols,
+    get_dhrp_portfolio,
     get_hrp_portfolio,
     get_order_history_sac,
     get_sac_portfolio,
     resolve_next_attempt,
+    submit_orders_dhrp,
     submit_orders_hrp,
     submit_orders_sac,
 )
@@ -43,8 +48,10 @@ from activities.reporting import (
     generate_double_hrp_summary,
     generate_india_summary,
     generate_summary,
+    generate_us_double_hrp_summary,
     send_double_hrp_email,
     send_india_weekly_email,
+    send_us_double_hrp_email,
     send_weekly_email,
 )
 from activities.training import (
@@ -67,6 +74,7 @@ from activities.training import (
 from workflows.india_double_hrp import IndiaDoubleHRPWorkflow
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
 from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
+from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 from workflows.us_weekly_training import USWeeklyTrainingWorkflow
 
@@ -77,6 +85,7 @@ ALL_WORKFLOWS = [
     IndiaDoubleHRPWorkflow,
     IndiaWeeklyAllocationWorkflow,
     IndiaWeeklyTrainingWorkflow,
+    USDoubleHRPWorkflow,
     USWeeklyAllocationWorkflow,
     USWeeklyTrainingWorkflow,
 ]
@@ -90,18 +99,23 @@ ALL_ACTIVITIES = [
     get_halal_india_universe,
     infer_sac,
     allocate_hrp,
+    select_sticky_top_n,
+    record_final_weights,
     # Portfolio / orders
     get_active_symbols,
     get_sac_portfolio,
     get_hrp_portfolio,
+    get_dhrp_portfolio,
     submit_orders_sac,
     submit_orders_hrp,
+    submit_orders_dhrp,
     get_order_history_sac,
     check_order_statuses,
     resolve_next_attempt,
     # Execution / experience
     generate_orders_sac,
     generate_orders_hrp,
+    generate_orders_dhrp,
     store_experience_sac,
     update_execution_sac,
     # Reporting
@@ -111,6 +125,8 @@ ALL_ACTIVITIES = [
     send_india_weekly_email,
     generate_double_hrp_summary,
     send_double_hrp_email,
+    generate_us_double_hrp_summary,
+    send_us_double_hrp_email,
     # Training
     fetch_halal_new_universe,
     fetch_halal_filtered_universe,

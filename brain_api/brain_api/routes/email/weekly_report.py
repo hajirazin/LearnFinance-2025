@@ -10,6 +10,7 @@ from .gmail import GmailConfigError, send_html_email
 from .models import (
     DoubleHRPEmailRequest,
     IndiaWeeklyReportEmailRequest,
+    USDoubleHRPEmailRequest,
     WeeklyReportEmailRequest,
     WeeklyReportEmailResponse,
 )
@@ -255,6 +256,95 @@ def send_india_double_hrp_report_email(
         ) from e
 
     logger.info("Double HRP report email sent successfully")
+
+    return WeeklyReportEmailResponse(
+        is_success=is_success,
+        subject=subject,
+        body=html_body,
+    )
+
+
+@router.post("/us-double-hrp-report", response_model=WeeklyReportEmailResponse)
+def send_us_double_hrp_report_email(
+    request: USDoubleHRPEmailRequest,
+) -> WeeklyReportEmailResponse:
+    """Send a US Double HRP portfolio analysis email.
+
+    Mirrors the India Double HRP email but adds an Alpaca order execution
+    section (because US trades through a paper account) and a skip block
+    when last week's orders were still open at run time.
+
+    Args:
+        request: US Double HRP report data (stages + summary + orders).
+
+    Returns:
+        Response with success status, subject, and HTML body.
+
+    Raises:
+        HTTPException: If template loading or email sending fails.
+    """
+    logger.info("Generating US Double HRP report email")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("us_double_hrp_report_email.html.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: us_double_hrp_report_email.html.j2",
+        ) from e
+
+    order_results = (
+        request.order_results.model_dump() if request.order_results else None
+    )
+
+    html_body = template.render(
+        summary=request.summary,
+        stage1=request.stage1.model_dump(),
+        stage2=request.stage2.model_dump(),
+        universe=request.universe,
+        top_n=request.top_n,
+        target_week_start=request.target_week_start,
+        target_week_end=request.target_week_end,
+        as_of_date=request.as_of_date,
+        order_results=order_results,
+        skipped=request.skipped,
+        sticky_kept_count=request.sticky_kept_count,
+        sticky_fillers_count=request.sticky_fillers_count,
+        previous_year_week_used=request.previous_year_week_used,
+    )
+
+    logger.debug(f"Generated US Double HRP HTML body length: {len(html_body)} chars")
+
+    if request.skipped:
+        subject = (
+            f"US Double HRP Skipped ({request.target_week_start} "
+            f"-> {request.target_week_end})"
+        )
+    else:
+        subject = (
+            f"US Double HRP Portfolio Analysis ({request.target_week_start} "
+            f"-> {request.target_week_end})"
+        )
+
+    try:
+        send_html_email(subject=subject, html_body=html_body)
+        is_success = True
+    except GmailConfigError as e:
+        logger.error(f"Gmail configuration error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gmail configuration error: {e}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to send email: {e}",
+        ) from e
+
+    logger.info("US Double HRP report email sent successfully")
 
     return WeeklyReportEmailResponse(
         is_success=is_success,

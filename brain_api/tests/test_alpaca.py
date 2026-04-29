@@ -23,7 +23,7 @@ def client():
 
 @pytest.fixture
 def mock_alpaca_credentials():
-    """Mock Alpaca credentials for all accounts."""
+    """Mock Alpaca credentials for all accounts (sac, hrp, dhrp)."""
     with patch.dict(
         "os.environ",
         {
@@ -31,6 +31,8 @@ def mock_alpaca_credentials():
             "ALPACA_SAC_SECRET": "test-sac-secret",
             "ALPACA_HRP_KEY": "test-hrp-key",
             "ALPACA_HRP_SECRET": "test-hrp-secret",
+            "ALPACA_DHRP_KEY": "test-dhrp-key",
+            "ALPACA_DHRP_SECRET": "test-dhrp-secret",
         },
     ):
         yield
@@ -400,3 +402,122 @@ class TestOrderHistory:
             )
 
         assert response.status_code == 503
+
+
+# =============================================================================
+# Tests for the new dhrp account
+# =============================================================================
+
+
+class TestDHRPAccount:
+    """Cover the third Alpaca account (Double HRP, halal_new universe)."""
+
+    def test_get_portfolio_dhrp_uses_dhrp_credentials(
+        self, client, mock_alpaca_credentials
+    ):
+        """GET /alpaca/portfolio?account=dhrp should send ALPACA_DHRP_* headers."""
+        mock_account = {"cash": "8000.00"}
+        mock_positions = [{"symbol": "AAPL", "qty": "2", "market_value": "350.00"}]
+        mock_orders = []
+
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.get.side_effect = [
+                MagicMock(json=lambda: mock_account, raise_for_status=lambda: None),
+                MagicMock(json=lambda: mock_positions, raise_for_status=lambda: None),
+                MagicMock(json=lambda: mock_orders, raise_for_status=lambda: None),
+            ]
+
+            response = client.get("/alpaca/portfolio", params={"account": "dhrp"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cash"] == 8000.00
+        assert data["open_orders_count"] == 0
+
+        # Confirm the dhrp credentials made it into the httpx.Client kwargs.
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-dhrp-key"
+        assert kwargs["headers"]["APCA-API-SECRET-KEY"] == "test-dhrp-secret"
+
+    def test_get_portfolio_dhrp_missing_credentials_returns_500(self, client):
+        """Without ALPACA_DHRP_KEY/SECRET, the endpoint must 500 explicitly."""
+        with patch.dict(
+            "os.environ",
+            {"ALPACA_DHRP_KEY": "", "ALPACA_DHRP_SECRET": ""},
+        ):
+            response = client.get("/alpaca/portfolio", params={"account": "dhrp"})
+        assert response.status_code == 500
+        assert "ALPACA_DHRP_KEY" in response.json()["detail"]
+
+    def test_submit_orders_dhrp_uses_dhrp_credentials(
+        self, client, mock_alpaca_credentials
+    ):
+        """POST /alpaca/submit-orders with account=dhrp uses dhrp creds."""
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.post.return_value = MagicMock(
+                json=lambda: {"id": "order-dhrp-1", "status": "accepted"},
+                raise_for_status=lambda: None,
+            )
+
+            response = client.post(
+                "/alpaca/submit-orders",
+                json={
+                    "account": "dhrp",
+                    "orders": [
+                        {
+                            "symbol": "NVDA",
+                            "qty": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "time_in_force": "day",
+                            "limit_price": 700.0,
+                            "client_order_id": "paper:2026-02-23:attempt-1:NVDA:BUY",
+                        }
+                    ],
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["account"] == "dhrp"
+        assert data["orders_submitted"] == 1
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-dhrp-key"
+
+    def test_order_history_dhrp_success(self, client, mock_alpaca_credentials):
+        """GET /alpaca/order-history?account=dhrp returns dhrp order list."""
+        mock_orders = [
+            {
+                "id": "ord-dhrp-1",
+                "client_order_id": "paper:2026-02-23:attempt-1:AAPL:BUY",
+                "symbol": "AAPL",
+                "side": "buy",
+                "status": "filled",
+                "filled_qty": "1",
+                "filled_avg_price": "175.0",
+            }
+        ]
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.get.return_value = MagicMock(
+                json=lambda: mock_orders, raise_for_status=lambda: None
+            )
+
+            response = client.get(
+                "/alpaca/order-history",
+                params={"account": "dhrp", "after": "2026-02-23"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "ord-dhrp-1"
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-dhrp-key"

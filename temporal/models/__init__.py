@@ -26,6 +26,7 @@ from models.forecast_email import (
     WeeklySummaryResponse,
 )
 from models.llm import TrainingSummaryResponse
+from models.sticky import RecordFinalWeightsResponse, StickyTopNResponse
 from models.training import TrainingResponse
 from models.universe import ActiveSymbolsResponse
 
@@ -61,4 +62,7 @@ __all__ = [
     "UpdateExecutionResponse",
     "WeeklyReportEmailResponse",
     "WeeklySummaryResponse",
+    # Sticky-selection
+    "StickyTopNResponse",
+    "RecordFinalWeightsResponse",
 ]

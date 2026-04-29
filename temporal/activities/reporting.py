@@ -230,3 +230,81 @@ def send_double_hrp_email(
     result = WeeklyReportEmailResponse(**response.json())
     logger.info(f"Double HRP email sent: {result.subject}")
     return result
+
+
+@activity.defn
+def generate_us_double_hrp_summary(
+    stage1: HRPAllocationResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+) -> WeeklySummaryResponse:
+    """Generate LLM summary of US Double HRP two-stage allocation."""
+    logger.info("Generating US Double HRP LLM summary...")
+    with get_client() as client:
+        response = client.post(
+            "/llm/us-double-hrp-summary",
+            json={
+                "stage1": stage1.model_dump(),
+                "stage2": stage2.model_dump(),
+                "universe": universe,
+                "top_n": top_n,
+            },
+        )
+        response.raise_for_status()
+    result = WeeklySummaryResponse(**response.json())
+    logger.info(
+        f"Generated US Double HRP summary via {result.provider} ({result.model_used})"
+    )
+    return result
+
+
+@activity.defn
+def send_us_double_hrp_email(
+    summary: WeeklySummaryResponse,
+    stage1: HRPAllocationResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+    target_week_start: str,
+    target_week_end: str,
+    as_of_date: str,
+    sticky_kept_count: int = 0,
+    sticky_fillers_count: int = 0,
+    previous_year_week_used: str | None = None,
+    order_results: SubmitOrdersResponse | SkippedSubmitResponse | None = None,
+    skipped: bool = False,
+) -> WeeklyReportEmailResponse:
+    """Send US Double HRP report email.
+
+    On the skip path (``skipped=True`` or ``order_results`` is a
+    :class:`SkippedSubmitResponse`), the email body suppresses the
+    allocation/orders tables and shows a short banner about why the
+    week was skipped (last week's orders still open).
+    """
+    logger.info("Sending US Double HRP report email...")
+    payload: dict = {
+        "summary": summary.summary,
+        "stage1": stage1.model_dump(),
+        "stage2": stage2.model_dump(),
+        "universe": universe,
+        "top_n": top_n,
+        "target_week_start": target_week_start,
+        "target_week_end": target_week_end,
+        "as_of_date": as_of_date,
+        "sticky_kept_count": sticky_kept_count,
+        "sticky_fillers_count": sticky_fillers_count,
+        "previous_year_week_used": previous_year_week_used,
+        "skipped": skipped,
+    }
+    if order_results is not None:
+        payload["order_results"] = _submit_to_dict(order_results)
+    with get_client() as client:
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=payload,
+        )
+        response.raise_for_status()
+    result = WeeklyReportEmailResponse(**response.json())
+    logger.info(f"US Double HRP email sent: {result.subject}")
+    return result

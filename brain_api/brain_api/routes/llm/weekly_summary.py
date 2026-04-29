@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from .models import (
     DoubleHRPSummaryRequest,
     IndiaWeeklySummaryRequest,
+    USDoubleHRPSummaryRequest,
     WeeklySummaryRequest,
     WeeklySummaryResponse,
 )
@@ -163,6 +164,75 @@ def generate_india_weekly_summary(
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
         summary = {
             "para_1_portfolio_overview": "Unable to generate AI summary. Please check the logs for details.",
+            "raw_response": llm_response.content[:500],
+        }
+
+    return WeeklySummaryResponse(
+        summary=summary,
+        provider=provider.name,
+        model_used=llm_response.model,
+        tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/us-double-hrp-summary", response_model=WeeklySummaryResponse)
+def generate_us_double_hrp_summary(
+    request: USDoubleHRPSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> WeeklySummaryResponse:
+    """Generate an LLM summary of US Double HRP with sticky selection.
+
+    Stage 1 screens the full halal_new universe; sticky selection keeps
+    week-over-week stable picks; Stage 2 re-allocates the resulting 15
+    stocks. The summary frames the choice in terms of US paper trading
+    via the dhrp Alpaca account.
+
+    Args:
+        request: Both stage results, universe label, and top_n.
+        provider: LLM provider (injected via dependency).
+
+    Returns:
+        Summary with paragraph fields and metadata.
+
+    Raises:
+        HTTPException: If template loading or LLM call fails.
+    """
+    logger.info(f"Generating US Double HRP summary using provider={provider.name}")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("us_double_hrp_summary_prompt.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: us_double_hrp_summary_prompt.j2",
+        ) from e
+
+    prompt = template.render(
+        stage1=request.stage1.model_dump(),
+        stage2=request.stage2.model_dump(),
+        universe=request.universe,
+        top_n=request.top_n,
+    )
+
+    logger.debug(f"Generated US Double HRP prompt length: {len(prompt)} chars")
+
+    try:
+        llm_response = provider.generate(prompt)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM service unavailable: {e}",
+        ) from e
+
+    try:
+        summary = parse_json_response(llm_response.content)
+    except ValueError as e:
+        logger.warning(f"Failed to parse LLM response as JSON: {e}")
+        summary = {
+            "para_1_screening_overview": "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],
         }
 

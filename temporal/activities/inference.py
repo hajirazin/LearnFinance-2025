@@ -12,7 +12,9 @@ from models import (
     LSTMInferenceResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
+    RecordFinalWeightsResponse,
     SACInferenceResponse,
+    StickyTopNResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,6 +124,77 @@ def get_halal_india_universe() -> dict:
         f"source={data.get('source', 'unknown')}"
     )
     return data
+
+
+@activity.defn
+def select_sticky_top_n(
+    stage1: HRPAllocationResponse,
+    universe: str,
+    year_week: str,
+    as_of_date: str,
+    run_id: str,
+    top_n: int = 15,
+    stickiness_threshold_pp: float = 1.0,
+) -> StickyTopNResponse:
+    """Apply sticky-selection to a Stage 1 HRP result.
+
+    POSTs to brain_api's /allocation/sticky-top-n which persists Stage 1
+    weights and returns the chosen symbols + provenance (sticky vs
+    top_rank, evicted previous holdings).
+    """
+    logger.info(
+        f"[Sticky] {universe}/{year_week}: top_n={top_n} "
+        f"threshold={stickiness_threshold_pp}pp"
+    )
+    with get_client() as client:
+        response = client.post(
+            "/allocation/sticky-top-n",
+            json={
+                "stage1": stage1.model_dump(),
+                "universe": universe,
+                "year_week": year_week,
+                "as_of_date": as_of_date,
+                "run_id": run_id,
+                "top_n": top_n,
+                "stickiness_threshold_pp": stickiness_threshold_pp,
+            },
+        )
+        response.raise_for_status()
+    result = StickyTopNResponse(**response.json())
+    logger.info(
+        f"[Sticky] kept={result.kept_count} fillers={result.fillers_count} "
+        f"prev_yw={result.previous_year_week_used}"
+    )
+    return result
+
+
+@activity.defn
+def record_final_weights(
+    universe: str,
+    year_week: str,
+    final_weights_pct: dict[str, float],
+) -> RecordFinalWeightsResponse:
+    """Record Stage 2 final HRP weights for the just-completed week."""
+    logger.info(
+        f"[Sticky] Recording final weights for {universe}/{year_week} "
+        f"({len(final_weights_pct)} stocks)"
+    )
+    with get_client() as client:
+        response = client.post(
+            "/allocation/record-final-weights",
+            json={
+                "universe": universe,
+                "year_week": year_week,
+                "final_weights_pct": final_weights_pct,
+            },
+        )
+        response.raise_for_status()
+    result = RecordFinalWeightsResponse(**response.json())
+    logger.info(
+        f"[Sticky] Recorded {result.rows_updated} final weights "
+        f"for {universe}/{year_week}"
+    )
+    return result
 
 
 @activity.defn

@@ -29,6 +29,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 
 from workflows.india_double_hrp import IndiaDoubleHRPWorkflow
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
+from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 
 TASK_QUEUE = "learnfinance"
@@ -55,6 +56,15 @@ SCHEDULES = [
         "workflow_id": "india-double-hrp",
         "cron": "0 4 * * 1",  # Monday 04:00 UTC (09:30 IST)
         "description": "India Double HRP (Shariah500 -> top 15) Monday 9:30 AM IST",
+    },
+    {
+        "id": "us-double-hrp",
+        "workflow": USDoubleHRPWorkflow,
+        "workflow_id": "us-double-hrp",
+        # 30 minutes after us-weekly-allocate so the two US strategies do
+        # not race for brain_api time slots; both still hit Monday close.
+        "cron": "30 11 * * 1",  # Monday 11:30 UTC (17:00 IST)
+        "description": "US Double HRP (halal_new -> sticky top 15) Monday 5 PM IST",
     },
 ]
 

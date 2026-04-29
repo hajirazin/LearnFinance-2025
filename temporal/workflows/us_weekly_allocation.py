@@ -20,6 +20,12 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from workflows._order_execution import (
+    SHORT_TIMEOUT,
+    sell_wait_buy,
+    split_orders_by_side,
+)
+
 with workflow.unsafe.imports_passed_through():
     from activities.execution import (
         generate_orders_hrp,
@@ -36,7 +42,6 @@ with workflow.unsafe.imports_passed_through():
         infer_sac,
     )
     from activities.portfolio import (
-        check_order_statuses,
         get_active_symbols,
         get_hrp_portfolio,
         get_order_history_sac,
@@ -46,128 +51,12 @@ with workflow.unsafe.imports_passed_through():
         submit_orders_sac,
     )
     from activities.reporting import generate_summary, send_weekly_email
-    from models import (
-        GenerateOrdersResponse,
-        OrderModel,
-        SkippedAllocation,
-        SkippedOrdersResponse,
-        SkippedSubmitResponse,
-    )
+    from models import SkippedAllocation
 
-SHORT_TIMEOUT = timedelta(minutes=5)
 # Must be greater than the httpx read timeout in temporal/activities/client.py
 # (currently 15 min) so httpx times out before Temporal does, allowing clean
 # retries. Pi FinBERT sentiment is the slowest activity at 5-6 min.
 INFERENCE_TIMEOUT = timedelta(minutes=20)
-SELL_POLL_INTERVAL = timedelta(minutes=15)
-SELL_DEADLINE = timedelta(hours=48)
-
-TERMINAL_STATUSES = {"filled", "canceled", "expired", "rejected", "replaced"}
-
-
-def _split_orders_by_side(
-    orders_resp: GenerateOrdersResponse | SkippedOrdersResponse,
-) -> tuple[GenerateOrdersResponse | SkippedOrdersResponse, list[OrderModel]]:
-    """Split orders into sell-only response and buy order list.
-
-    Returns (sell_only_response, buy_orders_list).
-    """
-    if isinstance(orders_resp, SkippedOrdersResponse) or getattr(
-        orders_resp, "skipped", False
-    ):
-        return orders_resp, []
-
-    sell_orders = [o for o in orders_resp.orders if o.side == "sell"]
-    buy_orders = [o for o in orders_resp.orders if o.side == "buy"]
-
-    sell_response = GenerateOrdersResponse(
-        orders=sell_orders,
-        summary=orders_resp.summary,
-        prices_used=orders_resp.prices_used,
-    )
-    return sell_response, buy_orders
-
-
-def _make_buy_response(
-    buy_orders: list[OrderModel],
-    original: GenerateOrdersResponse | SkippedOrdersResponse,
-) -> GenerateOrdersResponse | SkippedOrdersResponse:
-    """Reconstruct a GenerateOrdersResponse with buy-only orders."""
-    if isinstance(original, SkippedOrdersResponse):
-        return original
-    return GenerateOrdersResponse(
-        orders=buy_orders,
-        summary=original.summary,
-        prices_used=original.prices_used,
-    )
-
-
-async def _sell_wait_buy(
-    account: str,
-    sells: GenerateOrdersResponse | SkippedOrdersResponse,
-    buy_orders: list[OrderModel],
-    original_orders: GenerateOrdersResponse | SkippedOrdersResponse,
-    submit_activity,
-):
-    """Run the full sell -> poll -> buy cycle for a single algorithm.
-
-    Each algorithm (SAC/HRP) has its own Alpaca account, so their
-    sell-wait-buy pipelines are fully independent and run in parallel.
-    """
-    sell_submit = await workflow.execute_activity(
-        submit_activity,
-        args=[sells],
-        start_to_close_timeout=SHORT_TIMEOUT,
-    )
-
-    sell_order_ids = _extract_sell_ids(sells)
-
-    if sell_order_ids:
-        workflow.logger.info(
-            f"[{account.upper()}] Waiting for {len(sell_order_ids)} sell orders..."
-        )
-        deadline = workflow.now() + SELL_DEADLINE
-
-        while workflow.now() < deadline:
-            statuses = await workflow.execute_activity(
-                check_order_statuses,
-                args=[account, sell_order_ids],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            )
-            all_terminal = all(
-                s.get("status", "").lower() in TERMINAL_STATUSES for s in statuses
-            )
-
-            if all_terminal:
-                workflow.logger.info(f"[{account.upper()}] All sell orders terminal.")
-                break
-
-            workflow.logger.info(
-                f"[{account.upper()}] Sells still pending, sleeping 15 min..."
-            )
-            await workflow.sleep(SELL_POLL_INTERVAL)
-        else:
-            workflow.logger.warning(
-                f"[{account.upper()}] Sell deadline reached (48h), proceeding to buys."
-            )
-
-    buy_resp = _make_buy_response(buy_orders, original_orders)
-    buy_submit = await workflow.execute_activity(
-        submit_activity,
-        args=[buy_resp],
-        start_to_close_timeout=SHORT_TIMEOUT,
-    )
-
-    return _combine_submit(sell_submit, buy_submit)
-
-
-def _extract_sell_ids(
-    sells: GenerateOrdersResponse | SkippedOrdersResponse,
-) -> list[str]:
-    """Extract client_order_ids for sell orders from a response."""
-    if isinstance(sells, SkippedOrdersResponse) or getattr(sells, "skipped", False):
-        return []
-    return [o.client_order_id for o in sells.orders if o.side == "sell"]
 
 
 @workflow.defn
@@ -315,12 +204,12 @@ class USWeeklyAllocationWorkflow:
             await asyncio.gather(*experience_futures)
 
         # Phase 4: Per-algorithm sell-wait-buy (parallel per account)
-        sac_sells, sac_buys = _split_orders_by_side(sac_orders)
-        hrp_sells, hrp_buys = _split_orders_by_side(hrp_orders)
+        sac_sells, sac_buys = split_orders_by_side(sac_orders)
+        hrp_sells, hrp_buys = split_orders_by_side(hrp_orders)
 
         sac_submit, hrp_submit = await asyncio.gather(
-            _sell_wait_buy("sac", sac_sells, sac_buys, sac_orders, submit_orders_sac),
-            _sell_wait_buy("hrp", hrp_sells, hrp_buys, hrp_orders, submit_orders_hrp),
+            sell_wait_buy("sac", sac_sells, sac_buys, sac_orders, submit_orders_sac),
+            sell_wait_buy("hrp", hrp_sells, hrp_buys, hrp_orders, submit_orders_hrp),
         )
 
         # Phase 5: Get order history + update execution
@@ -381,20 +270,3 @@ class USWeeklyAllocationWorkflow:
                 "subject": email_result.subject,
             },
         }
-
-
-def _combine_submit(sell_submit, buy_submit):
-    """Combine sell + buy submit results into a single response for email."""
-    if isinstance(sell_submit, SkippedSubmitResponse):
-        return buy_submit
-    if isinstance(buy_submit, SkippedSubmitResponse):
-        return sell_submit
-    from models import SubmitOrdersResponse
-
-    return SubmitOrdersResponse(
-        account=sell_submit.account,
-        orders_submitted=sell_submit.orders_submitted + buy_submit.orders_submitted,
-        orders_failed=sell_submit.orders_failed + buy_submit.orders_failed,
-        skipped=False,
-        results=list(sell_submit.results) + list(buy_submit.results),
-    )

@@ -1,9 +1,12 @@
 """Alpaca API client with multi-account support.
 
 This module provides a client for interacting with Alpaca's paper trading API
-with support for multiple accounts (SAC, HRP).
+with support for multiple accounts (SAC, HRP, DHRP).
 
-Each account has its own API credentials and is used for separate strategies.
+Each account has its own API credentials and is used for separate strategies:
+- SAC: RL allocator (US halal universe)
+- HRP: HRP baseline (US halal universe)
+- DHRP: Double HRP (US halal_new universe with sticky selection)
 """
 
 import logging
@@ -24,6 +27,7 @@ class AlpacaAccount(str, Enum):
 
     SAC = "sac"
     HRP = "hrp"
+    DHRP = "dhrp"
 
 
 @dataclass
@@ -59,21 +63,24 @@ class AlpacaPortfolio:
 def get_account_credentials(account: AlpacaAccount) -> AlpacaCredentials | None:
     """Get Alpaca API credentials for an account from environment variables.
 
-    Environment variables expected:
-    - SAC: ALPACA_SAC_API_KEY, ALPACA_SAC_API_SECRET
-    - HRP: ALPACA_HRP_API_KEY, ALPACA_HRP_API_SECRET
+    Environment variables expected (matching ``routes/alpaca.py`` and
+    ``brain_api/.env.example``):
+
+    - SAC:  ``ALPACA_SAC_KEY``,  ``ALPACA_SAC_SECRET``
+    - HRP:  ``ALPACA_HRP_KEY``,  ``ALPACA_HRP_SECRET``
+    - DHRP: ``ALPACA_DHRP_KEY``, ``ALPACA_DHRP_SECRET``
 
     Returns:
         AlpacaCredentials if found, None otherwise.
     """
     account_upper = account.value.upper()
-    api_key = os.environ.get(f"ALPACA_{account_upper}_API_KEY")
-    api_secret = os.environ.get(f"ALPACA_{account_upper}_API_SECRET")
+    api_key = os.environ.get(f"ALPACA_{account_upper}_KEY")
+    api_secret = os.environ.get(f"ALPACA_{account_upper}_SECRET")
 
     if not api_key or not api_secret:
         logger.warning(
             f"[Alpaca] Missing credentials for {account_upper} account. "
-            f"Set ALPACA_{account_upper}_API_KEY and ALPACA_{account_upper}_API_SECRET."
+            f"Set ALPACA_{account_upper}_KEY and ALPACA_{account_upper}_SECRET."
         )
         return None
 
@@ -104,8 +111,8 @@ class AlpacaClient:
         if self.credentials is None:
             raise ValueError(
                 f"No credentials available for account {account.value}. "
-                f"Set ALPACA_{account.value.upper()}_API_KEY and "
-                f"ALPACA_{account.value.upper()}_API_SECRET environment variables."
+                f"Set ALPACA_{account.value.upper()}_KEY and "
+                f"ALPACA_{account.value.upper()}_SECRET environment variables."
             )
 
     def _headers(self) -> dict[str, str]:
@@ -236,3 +243,8 @@ def get_sac_client() -> AlpacaClient:
 def get_hrp_client() -> AlpacaClient:
     """Get Alpaca client for HRP account."""
     return get_alpaca_client(AlpacaAccount.HRP)
+
+
+def get_dhrp_client() -> AlpacaClient:
+    """Get Alpaca client for Double HRP account."""
+    return get_alpaca_client(AlpacaAccount.DHRP)

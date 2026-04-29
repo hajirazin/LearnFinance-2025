@@ -231,6 +231,8 @@ Store three classes of data:
 
 - **Structured DB** (local Postgres via Docker)
   - runs, screening decisions, signals, decisions, orders
+- **Local SQLite** (single file at `data/allocation/sticky_history.db`)
+  - Stage 1 weight history + sticky-selection audit trail (multi-universe). Used by US Double HRP and reusable for any future Double HRP variant. See `brain_api/storage/sticky_history.py` for rerun semantics (delete-then-insert per `(universe, year_week)`).
 - **Raw evidence snapshots** (filesystem)
   - `data/raw/<run_id>/<attempt>/<source>/<symbol>.json`
 - **Feature snapshots**

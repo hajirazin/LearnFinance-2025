@@ -789,3 +789,141 @@ class TestWeeklySummaryEndpoint:
             )
         finally:
             app.dependency_overrides.clear()
+
+
+# =============================================================================
+# US Double HRP Summary Endpoint Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_us_double_hrp_request():
+    """Valid request payload for /llm/us-double-hrp-summary."""
+    return {
+        "stage1": {
+            "percentage_weights": {f"S{i:03d}": 0.5 for i in range(20)},
+            "symbols_used": 20,
+            "symbols_excluded": [],
+            "lookback_days": 756,
+            "as_of_date": "2026-02-23",
+        },
+        "stage2": {
+            "percentage_weights": {f"S{i:03d}": 100.0 / 15 for i in range(15)},
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-02-23",
+        },
+        "universe": "halal_new",
+        "top_n": 15,
+    }
+
+
+@pytest.fixture
+def mock_us_double_hrp_llm_response():
+    """Mock JSON response from LLM for US Double HRP summary."""
+    return {
+        "para_1_screening_overview": "HRP screened 410 halal_new stocks over 756 days.",
+        "para_2_selection_rationale": "Top 15 are tech-heavy with low correlation.",
+        "para_3_final_allocation": "Stage 2 distributes evenly with NVDA at 7.5%.",
+        "para_4_risk_observations": "Watch sector concentration in semis.",
+    }
+
+
+class TestUSDoubleHRPSummaryEndpoint:
+    """Tests for POST /llm/us-double-hrp-summary endpoint."""
+
+    def test_happy_path(
+        self, mock_us_double_hrp_request, mock_us_double_hrp_llm_response
+    ):
+        import json
+
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_us_double_hrp_llm_response),
+                model="gpt-4o-mini",
+                tokens_used=400,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/us-double-hrp-summary",
+                json=mock_us_double_hrp_request,
+            )
+            assert response.status_code == 200, response.text
+            data = response.json()
+            assert "para_1_screening_overview" in data["summary"]
+            assert "para_2_selection_rationale" in data["summary"]
+            assert data["provider"] == "openai"
+            assert data["model_used"] == "gpt-4o-mini"
+            assert data["tokens_used"] == 400
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_missing_required_field_returns_422(self):
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="{}", model="test", tokens_used=0),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            # Missing stage2
+            response = client.post(
+                "/llm/us-double-hrp-summary",
+                json={
+                    "stage1": {
+                        "percentage_weights": {"AAPL": 1.0},
+                        "symbols_used": 1,
+                        "symbols_excluded": [],
+                        "lookback_days": 756,
+                        "as_of_date": "2026-02-23",
+                    },
+                    "universe": "halal_new",
+                    "top_n": 15,
+                },
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_json_parse_fallback(self, mock_us_double_hrp_request):
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content="not json", model="gpt-4o-mini", tokens_used=50
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/us-double-hrp-summary",
+                json=mock_us_double_hrp_request,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert "para_1_screening_overview" in data["summary"]
+            assert (
+                "Unable to generate AI summary"
+                in data["summary"]["para_1_screening_overview"]
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_llm_failure_returns_503(self, mock_us_double_hrp_request):
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="", model="", tokens_used=None),
+            error=Exception("LLM down"),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/us-double-hrp-summary",
+                json=mock_us_double_hrp_request,
+            )
+            assert response.status_code == 503
+            assert "LLM service unavailable" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()

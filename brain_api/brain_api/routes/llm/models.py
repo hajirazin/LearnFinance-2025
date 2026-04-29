@@ -111,3 +111,18 @@ class DoubleHRPSummaryRequest(BaseModel):
     stage2: HRPAllocationResponse  # top-N stocks, short lookback
     universe: str  # e.g. "nifty_shariah_500"
     top_n: int  # e.g. 15
+
+
+class USDoubleHRPSummaryRequest(BaseModel):
+    """Request model for POST /llm/us-double-hrp-summary.
+
+    US two-stage HRP with sticky selection. Stage 1 screens the full
+    halal_new universe (~410 stocks); sticky selection picks 15; Stage 2
+    re-allocates those 15. The summary helps the human reviewer
+    understand why the chosen 15 were chosen.
+    """
+
+    stage1: HRPAllocationResponse  # halal_new universe, 756d lookback
+    stage2: HRPAllocationResponse  # selected 15, 252d lookback
+    universe: str  # e.g. "halal_new"
+    top_n: int  # e.g. 15

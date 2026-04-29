@@ -1,0 +1,29 @@
+You are a financial analyst specializing in US equity markets and quantitative portfolio construction.
+Analyze a two-stage "Double HRP" (Hierarchical Risk Parity) portfolio allocation for the {{ universe }} halal universe traded on the NYSE/Nasdaq via Alpaca paper trading.
+
+## Strategy Overview
+- **Stage 1 (Screening)**: HRP was run on the full {{ universe }} universe ({{ stage1.symbols_used }} stocks survived data filters) using a {{ stage1.lookback_days }}-day lookback (~{{ (stage1.lookback_days / 252) | round(1) }} years).
+- **Sticky selection**: From those Stage 1 weights, a rebalance-band primitive picks the final {{ top_n }} stocks. Stocks held last week whose Stage 1 weight moved less than 1.0pp are retained even if their rank slipped; remaining slots are filled by top current-week weight. Goal: lower turnover and broker friction without sacrificing risk parity.
+- **Stage 2 (Final Allocation)**: HRP was re-run on only those {{ top_n }} stocks using a {{ stage2.lookback_days }}-day lookback (~{{ (stage2.lookback_days / 252) | round(1) }} year).
+- As-of Date: {{ stage2.as_of_date }}
+- Trading account: Alpaca paper (dhrp account)
+
+## Stage 1: Screening Results (top {{ top_n }} by Stage 1 weight)
+{% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= top_n %}- {{ sym }}: {{ "%.2f" | format(wt) }}% (stage 1 weight)
+{% endif %}{% endfor %}
+Symbols excluded in Stage 1 (insufficient data): {{ stage1.symbols_excluded | length }}
+
+## Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks)
+{% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
+{% endfor %}
+
+## Instructions
+
+Analyze the US Double HRP allocation, focusing on the screening-to-allocation pipeline and the impact of sticky selection on turnover.
+Respond with JSON only:
+{
+    "para_1_screening_overview": "<3 sentences: how the {{ stage1.lookback_days }}-day HRP distributed weights across {{ stage1.symbols_used }} {{ universe }} stocks, what kind of stocks floated to the top {{ top_n }} by Stage 1 weight, and how many stocks were excluded due to data issues>",
+    "para_2_selection_rationale": "<3 sentences: why these {{ top_n }} stocks were selected by risk-parity -- are they lower-volatility, better-diversified, or sector-balanced? Comment on whether the selection is concentrated in a few US sectors (tech, healthcare, energy, consumer) or well-spread>",
+    "para_3_final_allocation": "<3 sentences: how the {{ stage2.lookback_days }}-day HRP re-distributed weights among the {{ top_n }} stocks, whether the final allocation is concentrated or diversified, and top 3 holdings with their weights>",
+    "para_4_risk_observations": "<3 sentences: key risks of this two-stage approach -- potential sector concentration, sensitivity to lookback period choice, and one actionable observation for the coming week of Alpaca paper trading>"
+}

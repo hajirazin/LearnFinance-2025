@@ -71,13 +71,59 @@ def generate_orders_hrp(
     HRP returns percentage_weights (10.5 = 10.5%), converted to
     target_weights (0.105) before calling the orders endpoint.
     """
+    return _generate_orders_from_hrp(
+        allocation=allocation,
+        portfolio=portfolio,
+        run_id=run_id,
+        attempt=attempt,
+        algorithm="hrp",
+    )
+
+
+@activity.defn
+def generate_orders_dhrp(
+    allocation: HRPAllocationResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Generate orders for the US Double HRP allocation.
+
+    Same conversion math as HRP (percentage -> fractional weights), but
+    tags orders with ``algorithm='dhrp'`` so brain_api persists them
+    against the right algorithm bucket.
+    """
+    return _generate_orders_from_hrp(
+        allocation=allocation,
+        portfolio=portfolio,
+        run_id=run_id,
+        attempt=attempt,
+        algorithm="dhrp",
+    )
+
+
+def _generate_orders_from_hrp(
+    *,
+    allocation: HRPAllocationResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+    algorithm: str,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Shared body for HRP-style allocators (HRP, DHRP).
+
+    Math is identical for both: convert pp weights to fractions and POST
+    to /orders/generate with the correct ``algorithm`` tag. Kept as a
+    single helper because the conversion truly is the same for any HRP
+    output; allocators that diverge mathematically should not call this.
+    """
     if isinstance(allocation, SkippedAllocation) or getattr(
         allocation, "skipped", False
     ):
-        logger.info("HRP skipped - returning empty orders")
-        return SkippedOrdersResponse(skipped=True, algorithm="hrp")
+        logger.info(f"{algorithm.upper()} skipped - returning empty orders")
+        return SkippedOrdersResponse(skipped=True, algorithm=algorithm)
 
-    logger.info("Generating HRP orders...")
+    logger.info(f"Generating {algorithm.upper()} orders...")
     target_weights = {
         sym: wt / 100 for sym, wt in allocation.percentage_weights.items()
     }
@@ -92,12 +138,15 @@ def generate_orders_hrp(
                 },
                 "run_id": run_id,
                 "attempt": attempt,
-                "algorithm": "hrp",
+                "algorithm": algorithm,
             },
         )
         response.raise_for_status()
     result = GenerateOrdersResponse(**response.json())
-    logger.info(f"HRP orders: {result.summary.buys} buys, {result.summary.sells} sells")
+    logger.info(
+        f"{algorithm.upper()} orders: {result.summary.buys} buys, "
+        f"{result.summary.sells} sells"
+    )
     return result
 
 

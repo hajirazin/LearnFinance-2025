@@ -673,3 +673,158 @@ class TestWeeklyReportEmailEndpoint:
 
         # Check footer
         assert "LearnFinance-2025" in body
+
+
+# =============================================================================
+# US Double HRP Report Email Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_us_double_hrp_email_request():
+    """Valid request payload for /email/us-double-hrp-report."""
+    return {
+        "summary": {
+            "para_1_screening_overview": "HRP screened 410 halal_new stocks.",
+            "para_2_selection_rationale": "Top 15 are tech-heavy.",
+            "para_3_final_allocation": "Stage 2 distributes evenly.",
+            "para_4_risk_observations": "Watch sector concentration.",
+        },
+        "stage1": {
+            "percentage_weights": {f"S{i:03d}": 0.5 for i in range(20)},
+            "symbols_used": 20,
+            "symbols_excluded": [],
+            "lookback_days": 756,
+            "as_of_date": "2026-02-23",
+        },
+        "stage2": {
+            "percentage_weights": {f"S{i:03d}": 100.0 / 15 for i in range(15)},
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-02-23",
+        },
+        "universe": "halal_new",
+        "top_n": 15,
+        "target_week_start": "2026-02-23",
+        "target_week_end": "2026-02-27",
+        "as_of_date": "2026-02-23",
+        "order_results": {
+            "orders_submitted": 14,
+            "orders_failed": 1,
+            "skipped": False,
+        },
+        "skipped": False,
+        "sticky_kept_count": 12,
+        "sticky_fillers_count": 3,
+        "previous_year_week_used": "202608",
+    }
+
+
+class TestUSDoubleHRPReportEmailEndpoint:
+    """Tests for POST /email/us-double-hrp-report endpoint."""
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_happy_path_with_orders(
+        self,
+        mock_send_email,
+        mock_us_double_hrp_email_request,
+    ):
+        mock_send_email.return_value = True
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=mock_us_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_success"] is True
+        assert "US Double HRP Portfolio Analysis" in data["subject"]
+        assert "2026-02-23" in data["subject"]
+
+        body = data["body"]
+        assert "AI Analysis Summary" in body
+        assert "Stage 1: Screening" in body
+        assert "Stage 2: Final Allocation" in body
+        assert "Alpaca Order Execution" in body
+        assert "Sticky Selection" in body
+        assert "halal_new" in body
+        assert "14" in body
+        assert "Run Skipped" not in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_skipped_path_hides_orders(
+        self,
+        mock_send_email,
+        mock_us_double_hrp_email_request,
+    ):
+        mock_send_email.return_value = True
+        mock_us_double_hrp_email_request["skipped"] = True
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=mock_us_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "US Double HRP Skipped" in data["subject"]
+        body = data["body"]
+        assert "Run Skipped" in body
+        assert "AI Analysis Summary" not in body
+        assert "Alpaca Order Execution" not in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_no_order_results_renders(
+        self,
+        mock_send_email,
+        mock_us_double_hrp_email_request,
+    ):
+        mock_send_email.return_value = True
+        mock_us_double_hrp_email_request["order_results"] = None
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=mock_us_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Stage 2: Final Allocation" in body
+        assert "Alpaca Order Execution" not in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_smtp_failure_returns_503(
+        self,
+        mock_send_email,
+        mock_us_double_hrp_email_request,
+    ):
+        mock_send_email.side_effect = Exception("SMTP down")
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=mock_us_double_hrp_email_request,
+        )
+        assert response.status_code == 503
+        assert "Failed to send email" in response.json()["detail"]
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_gmail_config_error_returns_500(
+        self,
+        mock_send_email,
+        mock_us_double_hrp_email_request,
+    ):
+        mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json=mock_us_double_hrp_email_request,
+        )
+        assert response.status_code == 500
+
+    def test_missing_required_field_returns_422(self):
+        response = client.post(
+            "/email/us-double-hrp-report",
+            json={
+                "summary": {"para_1": "x"},
+                "universe": "halal_new",
+                "top_n": 15,
+                "target_week_start": "2026-02-23",
+                "target_week_end": "2026-02-27",
+                "as_of_date": "2026-02-23",
+            },
+        )
+        assert response.status_code == 422
