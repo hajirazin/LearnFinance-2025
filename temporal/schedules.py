@@ -1,5 +1,9 @@
 """Register cron schedules with Temporal.
 
+Default ``SCHEDULES`` entries (see list below): ``us-weekly-allocate``,
+``india-weekly-allocate``, ``india-double-hrp``, ``us-double-hrp``. Run
+``devbox run temporal:schedule`` once per environment after deploy.
+
 Idempotent: safe to run repeatedly (e.g. as a docker compose init service).
 If a schedule already exists, the run logs a loud SKIP and moves on -- it does
 NOT update or delete. To change a schedule (e.g. cron expression), manually

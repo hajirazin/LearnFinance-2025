@@ -16,6 +16,10 @@ devbox run temporal:worker
 
 # One-time: register cron schedules
 devbox run temporal:schedule
+
+# Optional: trigger a Double HRP run by hand (requires worker + brain_api)
+devbox run temporal:run:india-double-hrp
+devbox run temporal:run:us-double-hrp
 ```
 
 ## Workflows
@@ -24,8 +28,10 @@ devbox run temporal:schedule
 |----------|----------|-------------|
 | USWeeklyAllocation | Monday 11:00 UTC | Allocation + sell-wait-buy + email |
 | IndiaWeeklyAllocation | Monday 03:30 UTC | India HRP allocation + email |
-| USWeeklyTraining | Sunday 11:00 UTC | Full US model training |
-| IndiaWeeklyTraining | Sunday 04:30 UTC | India PatchTST training |
+| IndiaDoubleHRP | Monday 04:00 UTC | Two-stage HRP (Nifty Shariah 500 → top 15) + email |
+| USDoubleHRP | Monday 11:30 UTC | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
+| USWeeklyTraining | Sunday 11:00 UTC | Full US model training (not in `SCHEDULES` by default) |
+| IndiaWeeklyTraining | Sunday 04:30 UTC | India PatchTST training (not in `SCHEDULES` by default) |
 
 ## Schedule registration is idempotent
 
@@ -35,7 +41,8 @@ updating)` and exits 0. This means the docker-compose `temporal-schedules-init`
 one-shot service can safely run on every `docker compose up -d --build` without
 side effects.
 
-Only the two allocation schedules are registered by default (see `SCHEDULES` in
+Four cron schedules are registered by default: US weekly allocation, India
+weekly allocation, India Double HRP, and US Double HRP (see `SCHEDULES` in
 `schedules.py`). Training schedules are preserved as a commented `SCHEDULES_MAC`
 block for future use on a beefier host.
 

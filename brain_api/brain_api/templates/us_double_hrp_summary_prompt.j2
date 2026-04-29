@@ -8,12 +8,13 @@ Analyze a two-stage "Double HRP" (Hierarchical Risk Parity) portfolio allocation
 - As-of Date: {{ stage2.as_of_date }}
 - Trading account: Alpaca paper (dhrp account)
 
-## Stage 1: Screening Results (top {{ top_n }} by Stage 1 weight)
-{% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= top_n %}- {{ sym }}: {{ "%.2f" | format(wt) }}% (stage 1 weight)
+## Stage 1: Screening Results (top 25 by Stage 1 weight)
+Showing the top 25 from Stage 1 so you can see context beyond the {{ top_n }} that were actually picked. Sticky selection chose {{ top_n }} of these (or carried over from last week) -- the chosen names appear with their Stage 2 weights below.
+{% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= 25 %}- {{ sym }}: {{ "%.2f" | format(wt) }}% (stage 1 weight)
 {% endif %}{% endfor %}
 Symbols excluded in Stage 1 (insufficient data): {{ stage1.symbols_excluded | length }}
 
-## Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks)
+## Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks selected for trading)
 {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
 {% endfor %}
 

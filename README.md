@@ -197,6 +197,9 @@ devbox run temporal:worker
 
 ```bash
 devbox run temporal:run:us-allocation
+devbox run temporal:run:india-allocation
+devbox run temporal:run:india-double-hrp
+devbox run temporal:run:us-double-hrp
 ```
 
 ## Weekly workflow setup

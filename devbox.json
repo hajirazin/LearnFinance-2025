@@ -36,6 +36,8 @@
       "temporal:run:us-allocation": ["cd temporal && temporal workflow start --type USWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id us-allocation-manual"],
       "temporal:run:us-training": ["cd temporal && temporal workflow start --type USWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id us-training-manual"],
       "temporal:run:india-allocation": ["cd temporal && temporal workflow start --type IndiaWeeklyAllocationWorkflow --task-queue learnfinance --workflow-id india-allocation-manual"],
+      "temporal:run:india-double-hrp": ["cd temporal && temporal workflow start --type IndiaDoubleHRPWorkflow --task-queue learnfinance --workflow-id india-double-hrp-manual"],
+      "temporal:run:us-double-hrp": ["cd temporal && temporal workflow start --type USDoubleHRPWorkflow --task-queue learnfinance --workflow-id us-double-hrp-manual"],
       "temporal:run:india-training": ["cd temporal && temporal workflow start --type IndiaWeeklyTrainingWorkflow --task-queue learnfinance --workflow-id india-training-manual"],
       "hf:login": ["uv run huggingface-cli login"],
       "hf:whoami": ["uv run huggingface-cli whoami"]

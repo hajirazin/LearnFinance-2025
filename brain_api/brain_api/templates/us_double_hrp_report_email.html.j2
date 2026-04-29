@@ -73,8 +73,8 @@
 
   <!-- Stage 1: Screening -->
   <div style="margin-bottom: 24px;">
-    <h3 style="color: #374151; border-bottom: 2px solid #7c3aed; padding-bottom: 8px;">Stage 1: Screening (Top {{ top_n }} from {{ stage1.symbols_used }})</h3>
-    <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage1.lookback_days }} trading days (~{{ (stage1.lookback_days / 252) | round(1) }}yr) | Excluded: {{ stage1.symbols_excluded | length }} symbols</p>
+    <h3 style="color: #374151; border-bottom: 2px solid #7c3aed; padding-bottom: 8px;">Stage 1: Screening (Top 25 from {{ stage1.symbols_used }})</h3>
+    <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage1.lookback_days }} trading days (~{{ (stage1.lookback_days / 252) | round(1) }}yr) | Excluded: {{ stage1.symbols_excluded | length }} symbols | Final {{ top_n }} chosen via sticky selection (see Stage 2)</p>
     <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
       <thead>
         <tr style="background-color: #f5f3ff;">
@@ -84,11 +84,11 @@
         </tr>
       </thead>
       <tbody>
-        {% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= top_n %}
-        <tr style="background-color: {% if loop.index <= 3 %}#f5f3ff{% else %}white{% endif %};">
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">{{ loop.index }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">{{ sym }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">{{ "%.2f" | format(wt) }}%</td>
+        {% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= 25 %}
+        <tr style="background-color: {% if loop.index <= 3 %}#f5f3ff{% elif loop.index <= top_n %}white{% else %}#f9fafb{% endif %};">
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ loop.index }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ sym }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ "%.2f" | format(wt) }}%</td>
         </tr>
         {% endif %}{% endfor %}
       </tbody>
