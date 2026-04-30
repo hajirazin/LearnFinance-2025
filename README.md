@@ -196,10 +196,11 @@ devbox run temporal:worker
 ### 6. Run a workflow manually
 
 ```bash
-devbox run temporal:run:us-allocation
-devbox run temporal:run:india-allocation
+devbox run temporal:run:us-sac-weekly
+devbox run temporal:run:india-alpha-hrp
 devbox run temporal:run:india-double-hrp
 devbox run temporal:run:us-double-hrp
+devbox run temporal:run:us-alpha-hrp
 ```
 
 ## Weekly workflow setup
@@ -231,8 +232,8 @@ sequenceDiagram
   Temporal->>Brain: POST /orders/generate (for each algorithm)
   Temporal->>Brain: POST /alpaca/submit-orders
   Brain->>Alpaca: Submit limit orders
-  Temporal->>Brain: POST /llm/weekly-summary
-  Temporal->>Brain: POST /email/weekly-report
+  Temporal->>Brain: POST /llm/sac-weekly-summary
+  Temporal->>Brain: POST /email/sac-weekly-report
   Brain->>Email: Send via SMTP
 ```
 
@@ -435,8 +436,8 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /llm/weekly-summary` | Generate AI summary of weekly forecasts and allocations (US) |
-| `POST /llm/india-weekly-summary` | Generate AI summary of HRP concentration/diversification (India) |
+| `POST /llm/sac-weekly-summary` | Generate AI summary of the SAC-only weekly run (US) |
+| `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST top-15 alpha screen + HRP) |
 | `POST /llm/india-double-hrp-summary` | Generate AI summary of India two-stage HRP allocation |
 | `POST /llm/us-double-hrp-summary` | Generate AI summary of US Double HRP (halal_new + sticky selection) |
 | `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
@@ -445,8 +446,8 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /email/weekly-report` | Send weekly portfolio analysis email via Gmail SMTP (US) |
-| `POST /email/india-weekly-report` | Send India weekly portfolio email (HRP + AI summary) via Gmail SMTP |
+| `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
+| `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (HRP + AI summary) via Gmail SMTP |
 | `POST /email/india-double-hrp-report` | Send India Double HRP report (Stage 1 + Stage 2 + AI summary) |
 | `POST /email/us-double-hrp-report` | Send US Double HRP report (Stage 1 + Stage 2 + Alpaca order results + sticky stats) |
 | `POST /email/training-summary` | Send training summary email |

@@ -1,4 +1,4 @@
-You are a financial analyst. Analyze the weekly portfolio allocation results and provide insights.
+You are a financial analyst. Analyze the SAC-only weekly portfolio allocation results and provide insights.
 
 ## Forecaster Predictions
 
@@ -18,15 +18,7 @@ Top Predictions:
 - {{ p.symbol }}: {{ "%.2f" | format(p.predicted_weekly_return_pct) }}% ({{ p.direction }})
 {% endif %}{% endfor %}
 
-## Allocator Results
-
-### HRP (Risk Parity Baseline)
-As-of Date: {{ hrp.as_of_date }}
-Symbols Used: {{ hrp.symbols_used }}
-Top 5 Allocations:
-{% for sym, wt in hrp.percentage_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 %}
-- {{ sym }}: {{ "%.1f" | format(wt) }}%
-{% endif %}{% endfor %}
+## Allocator Result
 
 ### SAC (Off-Policy RL Allocator)
 Model Version: {{ sac.model_version }}
@@ -52,9 +44,8 @@ Provide a concise analysis. Respond with JSON only:
 {
     "para_1_overall_summary": "<3 sentences: overall market outlook and key themes>",
     "para_2_sac": "<3 sentences: SAC allocator insights and notable positions>",
-    "para_3_hrp_summary": "<3 sentences: HRP baseline allocation and diversification>",
-    "para_4_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
-    "para_5_lstm_forecast": "<3 sentences: LSTM predictions and price momentum>",
-    "para_6_news_sentiment": "<3 sentences: overall news sentiment themes>",
-    "para_7_fundamentals": "<3 sentences: fundamental strength of top picks>"
+    "para_3_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
+    "para_4_lstm_forecast": "<3 sentences: LSTM predictions and price momentum>",
+    "para_5_news_sentiment": "<3 sentences: overall news sentiment themes>",
+    "para_6_fundamentals": "<3 sentences: fundamental strength of top picks>"
 }

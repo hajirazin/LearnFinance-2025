@@ -1,12 +1,13 @@
-"""India weekly allocation workflow.
+"""India Alpha-HRP weekly allocation workflow.
 
 Runs every Monday at 09:00 IST:
-1. Validate halal_india universe
+1. Validate halal_india universe (PatchTST top-15 alpha screen on Nifty
+   Shariah 500, mirroring the US Alpha-HRP shape)
 2. Run HRP allocation with universe=halal_india
-3. Generate India AI summary via LLM
-4. Send India weekly report email
+3. Generate India Alpha-HRP AI summary via LLM
+4. Send India Alpha-HRP report email
 
-No forecasters, no RL allocators, no order execution.
+No order execution.
 """
 
 from datetime import timedelta
@@ -16,7 +17,10 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from activities.inference import allocate_hrp, get_halal_india_universe
-    from activities.reporting import generate_india_summary, send_india_weekly_email
+    from activities.reporting import (
+        generate_india_alpha_hrp_summary,
+        send_india_alpha_hrp_email,
+    )
 
 ACTIVITY_TIMEOUT = timedelta(minutes=5)
 ACTIVITY_RETRY = 2
@@ -55,7 +59,7 @@ class IndiaWeeklyAllocationWorkflow:
 
         # Phase 2: AI summary
         summary = await workflow.execute_activity(
-            generate_india_summary,
+            generate_india_alpha_hrp_summary,
             args=[hrp, "halal_india"],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
@@ -63,7 +67,7 @@ class IndiaWeeklyAllocationWorkflow:
 
         # Phase 3: Email
         email_result = await workflow.execute_activity(
-            send_india_weekly_email,
+            send_india_alpha_hrp_email,
             args=[
                 summary,
                 hrp,

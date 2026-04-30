@@ -4,11 +4,11 @@ from fastapi import APIRouter
 
 from .models import (
     AlgorithmOrderResult,
-    IndiaWeeklyReportEmailRequest,
+    IndiaAlphaHRPEmailRequest,
     OrderResultsData,
+    SACWeeklyReportEmailRequest,
     TrainingSummaryEmailRequest,
     TrainingSummaryEmailResponse,
-    WeeklyReportEmailRequest,
     WeeklyReportEmailResponse,
 )
 from .training_summary import router as training_summary_router
@@ -23,11 +23,11 @@ router.include_router(weekly_report_router)
 
 __all__ = [
     "AlgorithmOrderResult",
-    "IndiaWeeklyReportEmailRequest",
+    "IndiaAlphaHRPEmailRequest",
     "OrderResultsData",
+    "SACWeeklyReportEmailRequest",
     "TrainingSummaryEmailRequest",
     "TrainingSummaryEmailResponse",
-    "WeeklyReportEmailRequest",
     "WeeklyReportEmailResponse",
     "router",
 ]

@@ -10,10 +10,10 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from .gmail import GmailConfigError, send_html_email
 from .models import (
     DoubleHRPEmailRequest,
-    IndiaWeeklyReportEmailRequest,
+    IndiaAlphaHRPEmailRequest,
+    SACWeeklyReportEmailRequest,
     USAlphaHRPEmailRequest,
     USDoubleHRPEmailRequest,
-    WeeklyReportEmailRequest,
     WeeklyReportEmailResponse,
 )
 
@@ -115,15 +115,16 @@ def _build_subject(
 SubjectFn = Callable[[bool], str]
 
 
-@router.post("/weekly-report", response_model=WeeklyReportEmailResponse)
-def send_weekly_report_email(
-    request: WeeklyReportEmailRequest,
+@router.post("/sac-weekly-report", response_model=WeeklyReportEmailResponse)
+def send_sac_weekly_report_email(
+    request: SACWeeklyReportEmailRequest,
 ) -> WeeklyReportEmailResponse:
-    """Send a weekly portfolio analysis email.
+    """Send a SAC-only weekly portfolio analysis email.
 
-    Takes the AI-generated summary, Alpaca order execution results,
-    allocation data (SAC, HRP), and forecast predictions (LSTM, PatchTST),
-    renders an HTML email using Jinja2, and sends via Gmail SMTP.
+    Takes the AI-generated summary, the SAC Alpaca order execution
+    results, the SAC allocation, and forecast predictions (LSTM,
+    PatchTST), renders an HTML email using Jinja2, and sends via Gmail
+    SMTP. HRP weekly reporting runs through ``/email/us-alpha-hrp-report``.
 
     Email configuration comes from environment variables:
     - GMAIL_USER: sender address
@@ -131,10 +132,10 @@ def send_weekly_report_email(
     - TRAINING_EMAIL_TO: recipient address
     - TRAINING_EMAIL_CC: CC recipients (optional)
     """
-    logger.info("Generating weekly report email")
+    logger.info("Generating SAC weekly report email")
 
     return _render_and_send_email(
-        template_name="weekly_report_email.html.j2",
+        template_name="sac_weekly_report_email.html.j2",
         context={
             "summary": request.summary,
             "order_results": request.order_results.model_dump(),
@@ -143,33 +144,34 @@ def send_weekly_report_email(
             "target_week_end": request.target_week_end,
             "as_of_date": request.as_of_date,
             "sac": request.sac.model_dump(),
-            "hrp": request.hrp.model_dump(),
             "lstm": request.lstm.model_dump(),
             "patchtst": request.patchtst.model_dump(),
         },
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,
-            base="Weekly Portfolio Analysis",
+            base="SAC Weekly Portfolio Analysis",
         ),
-        log_label="Weekly report",
+        log_label="SAC weekly report",
     )
 
 
-@router.post("/india-weekly-report", response_model=WeeklyReportEmailResponse)
-def send_india_weekly_report_email(
-    request: IndiaWeeklyReportEmailRequest,
+@router.post("/india-alpha-hrp-report", response_model=WeeklyReportEmailResponse)
+def send_india_alpha_hrp_report_email(
+    request: IndiaAlphaHRPEmailRequest,
 ) -> WeeklyReportEmailResponse:
-    """Send an India weekly portfolio analysis email.
+    """Send an India Alpha-HRP portfolio analysis email.
 
-    India pipeline is HRP-only (no SAC/news/fundamentals/orders).
-    Renders an HTML email with the AI summary and HRP allocation table,
-    and sends via Gmail SMTP.
+    India weekly allocation is structurally "PatchTST top-15 alpha screen
+    on Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the
+    India counterpart of the US Alpha-HRP path. Renders an HTML email
+    with the AI summary and HRP allocation table, and sends via Gmail
+    SMTP.
     """
-    logger.info("Generating India weekly report email")
+    logger.info("Generating India Alpha-HRP report email")
 
     return _render_and_send_email(
-        template_name="india_weekly_report_email.html.j2",
+        template_name="india_alpha_hrp_report_email.html.j2",
         context={
             "summary": request.summary,
             "hrp": request.hrp.model_dump(),
@@ -181,9 +183,9 @@ def send_india_weekly_report_email(
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,
-            base="India Weekly Portfolio Analysis",
+            base="India Alpha-HRP Portfolio Analysis",
         ),
-        log_label="India weekly report",
+        log_label="India Alpha-HRP report",
     )
 
 

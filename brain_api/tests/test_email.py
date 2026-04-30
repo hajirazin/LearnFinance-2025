@@ -295,15 +295,13 @@ def mock_weekly_report_email_request():
         "summary": {
             "para_1_overall_summary": "This week shows bullish momentum.",
             "para_2_sac": "SAC allocator favors tech stocks.",
-            "para_4_hrp_summary": "HRP maintains diversified allocation.",
-            "para_5_patchtst_forecast": "PatchTST predicts positive returns.",
-            "para_6_lstm_forecast": "LSTM shows bullish signals.",
-            "para_7_news_sentiment": "News sentiment is positive.",
-            "para_8_fundamentals": "Fundamentals remain strong.",
+            "para_3_patchtst_forecast": "PatchTST predicts positive returns.",
+            "para_4_lstm_forecast": "LSTM shows bullish signals.",
+            "para_5_news_sentiment": "News sentiment is positive.",
+            "para_6_fundamentals": "Fundamentals remain strong.",
         },
         "order_results": {
             "sac": {"orders_submitted": 6, "orders_failed": 1, "skipped": False},
-            "hrp": {"orders_submitted": 4, "orders_failed": 0, "skipped": False},
         },
         "skipped_algorithms": [],
         "target_week_start": "2026-02-03",
@@ -316,13 +314,6 @@ def mock_weekly_report_email_request():
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
-        },
-        "hrp": {
-            "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
-            "symbols_used": 15,
-            "symbols_excluded": [],
-            "lookback_days": 252,
-            "as_of_date": "2026-02-03",
         },
         "lstm": {
             "predictions": [
@@ -375,13 +366,13 @@ def mock_weekly_report_email_request():
 
 
 # =============================================================================
-# India Weekly Report Email Tests
+# India Alpha-HRP Report Email Tests
 # =============================================================================
 
 
 @pytest.fixture
 def mock_india_weekly_report_email_request():
-    """Valid request payload for India weekly report email endpoint."""
+    """Valid request payload for India Alpha-HRP report email endpoint."""
     return {
         "summary": {
             "para_1_portfolio_overview": "HRP allocated across 15 NSE stocks with moderate concentration.",
@@ -408,8 +399,8 @@ def mock_india_weekly_report_email_request():
     }
 
 
-class TestIndiaWeeklyReportEmailEndpoint:
-    """Tests for POST /email/india-weekly-report endpoint."""
+class TestIndiaAlphaHRPReportEmailEndpoint:
+    """Tests for POST /email/india-alpha-hrp-report endpoint."""
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
     def test_successful_india_report_send(
@@ -417,18 +408,18 @@ class TestIndiaWeeklyReportEmailEndpoint:
         mock_send_email,
         mock_india_weekly_report_email_request,
     ):
-        """Successful India weekly report email send."""
+        """Successful India Alpha-HRP report email send."""
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json=mock_india_weekly_report_email_request,
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["is_success"] is True
-        assert "India Weekly Portfolio Analysis" in data["subject"]
+        assert "India Alpha-HRP Portfolio Analysis" in data["subject"]
         assert "2026-03-02" in data["subject"]
         assert "2026-03-06" in data["subject"]
         assert len(data["body"]) > 0
@@ -444,18 +435,18 @@ class TestIndiaWeeklyReportEmailEndpoint:
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json=mock_india_weekly_report_email_request,
         )
 
         assert response.status_code == 200
         body = response.json()["body"]
 
-        assert "India Weekly Portfolio Analysis (NSE)" in body
+        assert "India Alpha-HRP Portfolio Analysis (NSE)" in body
         assert "Nifty 500 Shariah" in body
         assert "AI Analysis Summary" in body
         assert "HRP allocated across 15 NSE stocks" in body
-        assert "HRP Allocation" in body
+        assert "Alpha-HRP Allocation" in body
         assert "RELIANCE.NS" in body
         assert "TCS.NS" in body
         assert "LearnFinance-2025" in body
@@ -470,7 +461,7 @@ class TestIndiaWeeklyReportEmailEndpoint:
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json=mock_india_weekly_report_email_request,
         )
 
@@ -493,7 +484,7 @@ class TestIndiaWeeklyReportEmailEndpoint:
         mock_send_email.side_effect = Exception("SMTP connection failed")
 
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json=mock_india_weekly_report_email_request,
         )
 
@@ -510,7 +501,7 @@ class TestIndiaWeeklyReportEmailEndpoint:
         mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
 
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json=mock_india_weekly_report_email_request,
         )
 
@@ -520,7 +511,7 @@ class TestIndiaWeeklyReportEmailEndpoint:
     def test_india_report_missing_hrp_returns_422(self):
         """Missing HRP field returns 422."""
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json={
                 "summary": {"para_1": "test"},
                 "target_week_start": "2026-03-02",
@@ -533,7 +524,7 @@ class TestIndiaWeeklyReportEmailEndpoint:
     def test_india_report_missing_summary_returns_422(self):
         """Missing summary field returns 422."""
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json={
                 "hrp": {
                     "percentage_weights": {"RELIANCE.NS": 12.3},
@@ -550,8 +541,8 @@ class TestIndiaWeeklyReportEmailEndpoint:
         assert response.status_code == 422
 
 
-class TestWeeklyReportEmailEndpoint:
-    """Tests for POST /email/weekly-report endpoint."""
+class TestSACWeeklyReportEmailEndpoint:
+    """Tests for POST /email/sac-weekly-report endpoint."""
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
     def test_successful_weekly_report_send(
@@ -559,18 +550,18 @@ class TestWeeklyReportEmailEndpoint:
         mock_send_email,
         mock_weekly_report_email_request,
     ):
-        """Successful weekly report email send."""
+        """Successful SAC weekly report email send."""
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json=mock_weekly_report_email_request,
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["is_success"] is True
-        assert "Weekly Portfolio Analysis" in data["subject"]
+        assert "SAC Weekly Portfolio Analysis" in data["subject"]
         assert "2026-02-03" in data["subject"]
         assert "2026-02-07" in data["subject"]
         assert len(data["body"]) > 0
@@ -582,13 +573,13 @@ class TestWeeklyReportEmailEndpoint:
         mock_send_email,
         mock_weekly_report_email_request,
     ):
-        """Weekly report with skipped algorithms shows warning."""
+        """SAC weekly report with skipped algorithms shows warning."""
         mock_send_email.return_value = True
         mock_weekly_report_email_request["skipped_algorithms"] = ["SAC"]
         mock_weekly_report_email_request["order_results"]["sac"]["skipped"] = True
 
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json=mock_weekly_report_email_request,
         )
 
@@ -607,7 +598,7 @@ class TestWeeklyReportEmailEndpoint:
         mock_send_email.side_effect = Exception("SMTP connection failed")
 
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json=mock_weekly_report_email_request,
         )
 
@@ -624,7 +615,7 @@ class TestWeeklyReportEmailEndpoint:
         mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
 
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json=mock_weekly_report_email_request,
         )
 
@@ -637,11 +628,11 @@ class TestWeeklyReportEmailEndpoint:
         mock_send_email,
         mock_weekly_report_email_request,
     ):
-        """Email body contains all expected sections."""
+        """Email body contains all expected SAC-only sections."""
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json=mock_weekly_report_email_request,
         )
 
@@ -649,7 +640,7 @@ class TestWeeklyReportEmailEndpoint:
         body = response.json()["body"]
 
         # Check header
-        assert "Weekly Portfolio Analysis" in body
+        assert "SAC Weekly Portfolio Analysis" in body
         assert "2026-02-03" in body
 
         # Check Order Execution Summary
@@ -662,9 +653,6 @@ class TestWeeklyReportEmailEndpoint:
         # Check SAC Allocation section
         assert "SAC Allocation" in body
         assert "SAC" in body
-
-        # Check HRP section
-        assert "HRP Allocation" in body
 
         # Check Forecasters section
         assert "Price Forecasts" in body

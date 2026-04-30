@@ -279,7 +279,7 @@ class UpdateExecutionResponse(BaseModel):
 
 
 class WeeklySummaryResponse(BaseModel):
-    """Response from POST /llm/weekly-summary."""
+    """Response from POST /llm/sac-weekly-summary (and other LLM summary endpoints)."""
 
     summary: dict[str, str]
     provider: str
@@ -288,7 +288,7 @@ class WeeklySummaryResponse(BaseModel):
 
 
 class WeeklyReportEmailResponse(BaseModel):
-    """Response from POST /email/weekly-report."""
+    """Response from POST /email/sac-weekly-report and the other weekly email routes."""
 
     is_success: bool
     subject: str

@@ -24,17 +24,14 @@ from models import (
 logger = logging.getLogger(__name__)
 
 
-def _alloc_to_dict(alloc, is_hrp: bool = False, as_of_date: str = "") -> dict:
-    """Convert allocation to dict, handling skipped allocations."""
+def _alloc_to_dict(alloc) -> dict:
+    """Convert an allocation to dict, handling skipped allocations.
+
+    Used for the SAC weekly report payload. The HRP weekly path lives in
+    its own US Alpha-HRP activities and serializes its own payload, so
+    no HRP branch is needed here.
+    """
     if isinstance(alloc, SkippedAllocation) or getattr(alloc, "skipped", False):
-        if is_hrp:
-            return {
-                "percentage_weights": {},
-                "symbols_used": 0,
-                "symbols_excluded": [],
-                "lookback_days": 0,
-                "as_of_date": as_of_date,
-            }
         return {
             "target_weights": {},
             "turnover": 0,
@@ -63,20 +60,18 @@ def generate_summary(
     patchtst: PatchTSTInferenceResponse,
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
-    hrp: HRPAllocationResponse | SkippedAllocation,
     sac: SACInferenceResponse | SkippedAllocation,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of weekly results."""
-    logger.info("Generating LLM summary...")
+    """Generate LLM summary of the SAC-only weekly run."""
+    logger.info("Generating SAC weekly LLM summary...")
     with get_client() as client:
         response = client.post(
-            "/llm/weekly-summary",
+            "/llm/sac-weekly-summary",
             json={
                 "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),
                 "news": news.model_dump(),
                 "fundamentals": fundamentals.model_dump(),
-                "hrp": _alloc_to_dict(hrp, is_hrp=True),
                 "sac": _alloc_to_dict(sac),
             },
         )
@@ -91,32 +86,28 @@ def send_weekly_email(
     summary: WeeklySummaryResponse,
     lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
-    hrp: HRPAllocationResponse | SkippedAllocation,
     sac: SACInferenceResponse | SkippedAllocation,
     sac_submit: SubmitOrdersResponse | SkippedSubmitResponse,
-    hrp_submit: SubmitOrdersResponse | SkippedSubmitResponse,
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
     skipped_algorithms: list[str],
 ) -> WeeklyReportEmailResponse:
-    """Send weekly report email."""
-    logger.info("Sending weekly report email...")
+    """Send the SAC-only weekly report email."""
+    logger.info("Sending SAC weekly report email...")
     with get_client() as client:
         response = client.post(
-            "/email/weekly-report",
+            "/email/sac-weekly-report",
             json={
                 "summary": summary.summary,
                 "order_results": {
                     "sac": _submit_to_dict(sac_submit),
-                    "hrp": _submit_to_dict(hrp_submit),
                 },
                 "skipped_algorithms": skipped_algorithms,
                 "target_week_start": target_week_start,
                 "target_week_end": target_week_end,
                 "as_of_date": as_of_date,
-                "sac": _alloc_to_dict(sac, as_of_date=as_of_date),
-                "hrp": _alloc_to_dict(hrp, is_hrp=True, as_of_date=as_of_date),
+                "sac": _alloc_to_dict(sac),
                 "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),
             },
@@ -128,25 +119,27 @@ def send_weekly_email(
 
 
 @activity.defn
-def generate_india_summary(
+def generate_india_alpha_hrp_summary(
     hrp: HRPAllocationResponse,
     universe: str,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of India HRP allocation."""
-    logger.info("Generating India LLM summary...")
+    """Generate LLM summary of India Alpha-HRP allocation."""
+    logger.info("Generating India Alpha-HRP LLM summary...")
     with get_client() as client:
         response = client.post(
-            "/llm/india-weekly-summary",
+            "/llm/india-alpha-hrp-summary",
             json={"hrp": hrp.model_dump(), "universe": universe},
         )
         response.raise_for_status()
     result = WeeklySummaryResponse(**response.json())
-    logger.info(f"Generated India summary via {result.provider} ({result.model_used})")
+    logger.info(
+        f"Generated India Alpha-HRP summary via {result.provider} ({result.model_used})"
+    )
     return result
 
 
 @activity.defn
-def send_india_weekly_email(
+def send_india_alpha_hrp_email(
     summary: WeeklySummaryResponse,
     hrp: HRPAllocationResponse,
     universe: str,
@@ -154,11 +147,11 @@ def send_india_weekly_email(
     target_week_end: str,
     as_of_date: str,
 ) -> WeeklyReportEmailResponse:
-    """Send India weekly report email (HRP + AI summary)."""
-    logger.info("Sending India weekly report email...")
+    """Send India Alpha-HRP report email (HRP + AI summary)."""
+    logger.info("Sending India Alpha-HRP report email...")
     with get_client() as client:
         response = client.post(
-            "/email/india-weekly-report",
+            "/email/india-alpha-hrp-report",
             json={
                 "summary": summary.summary,
                 "hrp": hrp.model_dump(),
@@ -170,7 +163,7 @@ def send_india_weekly_email(
         )
         response.raise_for_status()
     result = WeeklyReportEmailResponse(**response.json())
-    logger.info(f"India email sent: {result.subject}")
+    logger.info(f"India Alpha-HRP email sent: {result.subject}")
     return result
 
 

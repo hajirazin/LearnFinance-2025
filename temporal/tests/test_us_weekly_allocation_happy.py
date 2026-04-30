@@ -1,8 +1,8 @@
 """Happy-path test for the SAC-only ``USWeeklyAllocationWorkflow``.
 
 Asserts that the legacy HRP allocator/orders/submit activities are not
-invoked and that the email payload still carries an empty ``hrp``
-placeholder for schema stability.
+invoked and that the SAC-only weekly summary/email activities are
+called with SAC-only positional args (no HRP placeholders).
 """
 
 from __future__ import annotations
@@ -72,6 +72,6 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
             f"observed retired calls: {forbidden_calls}"
         )
 
-        assert summary_calls and summary_calls[0]["hrp_symbols_used"] == 0
-        assert email_calls and email_calls[0]["hrp_symbols_used"] == 0
-        assert email_calls[0]["hrp_submit_skipped"] is True
+        assert summary_calls and summary_calls[0]["sac_skipped"] is False
+        assert email_calls and email_calls[0]["sac_skipped"] is False
+        assert email_calls[0]["sac_submit_skipped"] is False

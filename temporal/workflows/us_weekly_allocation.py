@@ -9,6 +9,11 @@ HRP path has been **retired** in favor of the dedicated
 universe -> rank-band sticky -> HRP). The HRP Alpaca paper account is
 unchanged; only the strategy that produces its weekly weights changed.
 
+The SAC weekly LLM summary / email lives at ``/llm/sac-weekly-summary``
+and ``/email/sac-weekly-report`` (renamed from the legacy
+``/llm/weekly-summary`` / ``/email/weekly-report`` once HRP was
+removed from this path).
+
 Phases (SAC-only):
 0. Get active symbols + SAC portfolio (parallel)
 1. Get signals + forecasts (parallel)
@@ -16,9 +21,7 @@ Phases (SAC-only):
 3. Generate SAC orders + store SAC experience
 4. SAC sell-wait-buy
 5. Get SAC order history + update execution
-6. Generate LLM summary + send email (HRP fields are empty placeholders
-   so the existing /llm/weekly-summary and /email/weekly-report payload
-   schemas continue to work without breaking changes)
+6. Generate SAC LLM summary + send SAC weekly email
 """
 
 import asyncio
@@ -54,28 +57,9 @@ with workflow.unsafe.imports_passed_through():
         submit_orders_sac,
     )
     from activities.reporting import generate_summary, send_weekly_email
-    from models import HRPAllocationResponse, SkippedAllocation, SkippedSubmitResponse
+    from models import SkippedAllocation
 
 INFERENCE_TIMEOUT = timedelta(minutes=20)
-
-
-def _empty_hrp_placeholder(as_of_date: str) -> HRPAllocationResponse:
-    """Empty HRP allocation used to keep the summary/email schemas stable.
-
-    The ``naive HRP`` allocator that this workflow used to run has been
-    retired (see ``USAlphaHRPWorkflow``). The downstream LLM/email
-    routes still accept an ``hrp`` field, so we pass an empty
-    placeholder. The Jinja templates already branch on
-    ``hrp.symbols_used == 0``-style guards in their existing skip
-    paths.
-    """
-    return HRPAllocationResponse(
-        percentage_weights={},
-        symbols_used=0,
-        symbols_excluded=[],
-        lookback_days=0,
-        as_of_date=as_of_date,
-    )
 
 
 @workflow.defn
@@ -161,11 +145,6 @@ class USWeeklyAllocationWorkflow:
         else:
             sac_alloc = SkippedAllocation(algorithm="sac")
 
-        # Empty HRP placeholder; naive HRP was retired in favor of
-        # USAlphaHRPWorkflow, but the existing weekly-summary/email
-        # routes still accept an ``hrp`` field.
-        hrp_alloc = _empty_hrp_placeholder(as_of_date)
-
         # Phase 3: Generate SAC orders.
         sac_orders = await workflow.execute_activity(
             generate_orders_sac,
@@ -197,10 +176,6 @@ class USWeeklyAllocationWorkflow:
             "sac", sac_sells, sac_buys, sac_orders, submit_orders_sac
         )
 
-        # HRP placeholder submit response so downstream schemas stay
-        # the same shape (both algorithms reported, hrp is "skipped").
-        hrp_submit = SkippedSubmitResponse(account="hrp", skipped=True)
-
         # Phase 5: Get SAC order history + update execution.
         if run_sac:
             sac_history = await workflow.execute_activity(
@@ -217,7 +192,7 @@ class USWeeklyAllocationWorkflow:
         # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[lstm, patchtst, news, fundamentals, hrp_alloc, sac_alloc],
+            args=[lstm, patchtst, news, fundamentals, sac_alloc],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
@@ -227,10 +202,8 @@ class USWeeklyAllocationWorkflow:
                 summary,
                 lstm,
                 patchtst,
-                hrp_alloc,
                 sac_alloc,
                 sac_submit,
-                hrp_submit,
                 target_week_start,
                 target_week_end,
                 as_of_date,

@@ -19,15 +19,15 @@ __all__ = [
     "AlgorithmOrderResult",
     "AlphaScoreItem",
     "DoubleHRPEmailRequest",
+    "IndiaAlphaHRPEmailRequest",
     "IndiaTrainingSummaryEmailRequest",
     "IndiaTrainingSummaryEmailResponse",
-    "IndiaWeeklyReportEmailRequest",
     "OrderResultsData",
+    "SACWeeklyReportEmailRequest",
     "TrainingSummaryEmailRequest",
     "TrainingSummaryEmailResponse",
     "USAlphaHRPEmailRequest",
     "USDoubleHRPEmailRequest",
-    "WeeklyReportEmailRequest",
     "WeeklyReportEmailResponse",
 ]
 
@@ -58,7 +58,7 @@ class TrainingSummaryEmailResponse(BaseModel):
 
 
 # =============================================================================
-# Weekly Report Email Models
+# SAC Weekly Report Email Models
 # =============================================================================
 
 
@@ -71,21 +71,25 @@ class AlgorithmOrderResult(BaseModel):
 
 
 class OrderResultsData(BaseModel):
-    """Order execution results from Alpaca for all algorithms."""
+    """Order execution results from Alpaca for the SAC-only weekly path.
+
+    HRP weekly trading runs in the dedicated US Alpha-HRP path and reports
+    its order results on its own email endpoint, so this payload only carries
+    the SAC account.
+    """
 
     sac: AlgorithmOrderResult
-    hrp: AlgorithmOrderResult
 
 
-class WeeklyReportEmailRequest(BaseModel):
-    """Request model for POST /email/weekly-report.
+class SACWeeklyReportEmailRequest(BaseModel):
+    """Request model for POST /email/sac-weekly-report.
 
-    Contains everything needed to render the email.
+    Contains everything needed to render the SAC-only weekly email.
     Uses exact API response types for allocation/forecast data.
     Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
     """
 
-    # AI Summary (from /llm/weekly-summary)
+    # AI Summary (from /llm/sac-weekly-summary)
     summary: dict[str, str]
 
     # Alpaca Results
@@ -100,16 +104,13 @@ class WeeklyReportEmailRequest(BaseModel):
     # RL Allocators - reuse exact API response types
     sac: SACInferenceResponse
 
-    # HRP - reuse exact API response type
-    hrp: HRPAllocationResponse
-
     # Forecasters - reuse exact API response types
     lstm: LSTMInferenceResponse
     patchtst: PatchTSTInferenceResponse
 
 
 class WeeklyReportEmailResponse(BaseModel):
-    """Response model for POST /email/weekly-report."""
+    """Response model for POST /email/sac-weekly-report (and other weekly email endpoints)."""
 
     is_success: bool
     subject: str
@@ -139,15 +140,17 @@ class IndiaTrainingSummaryEmailResponse(BaseModel):
     body: str
 
 
-class IndiaWeeklyReportEmailRequest(BaseModel):
-    """Request model for POST /email/india-weekly-report.
+class IndiaAlphaHRPEmailRequest(BaseModel):
+    """Request model for POST /email/india-alpha-hrp-report.
 
-    India pipeline is HRP-only (no SAC/news/fundamentals/orders).
-    Contains the AI summary and HRP allocation data.
+    India weekly allocation is structurally "PatchTST top-15 alpha screen on
+    Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the India
+    counterpart of the US Alpha-HRP path. Contains the AI summary and the
+    HRP allocation data sized over the alpha-screened picks.
     Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
     """
 
-    summary: dict[str, str]  # from POST /llm/india-weekly-summary (3 paragraphs)
+    summary: dict[str, str]  # from POST /llm/india-alpha-hrp-summary (3 paragraphs)
     hrp: HRPAllocationResponse
     universe: str  # e.g. "halal_india" -- passed by Temporal for reporting context
     target_week_start: str

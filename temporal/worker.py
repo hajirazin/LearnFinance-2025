@@ -49,12 +49,12 @@ from activities.portfolio import (
 )
 from activities.reporting import (
     generate_double_hrp_summary,
-    generate_india_summary,
+    generate_india_alpha_hrp_summary,
     generate_summary,
     generate_us_alpha_hrp_summary,
     generate_us_double_hrp_summary,
     send_double_hrp_email,
-    send_india_weekly_email,
+    send_india_alpha_hrp_email,
     send_us_alpha_hrp_email,
     send_us_double_hrp_email,
     send_weekly_email,
@@ -131,8 +131,8 @@ ALL_ACTIVITIES = [
     # Reporting
     generate_summary,
     send_weekly_email,
-    generate_india_summary,
-    send_india_weekly_email,
+    generate_india_alpha_hrp_summary,
+    send_india_alpha_hrp_email,
     generate_double_hrp_summary,
     send_double_hrp_email,
     generate_us_double_hrp_summary,

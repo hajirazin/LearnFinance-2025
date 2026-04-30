@@ -139,13 +139,13 @@ def make_sac_only_activities(
 
     @activity.defn(name="generate_summary")
     def mock_generate_summary(
-        lstm, patchtst, news, fundamentals, hrp, sac
+        lstm, patchtst, news, fundamentals, sac
     ) -> WeeklySummaryResponse:
         if summary_calls is not None:
             summary_calls.append(
                 {
-                    "hrp_symbols_used": _coerce(hrp, "symbols_used"),
-                    "hrp_skipped": _coerce(hrp, "skipped") or False,
+                    "sac_skipped": _coerce(sac, "skipped") or False,
+                    "sac_model_version": _coerce(sac, "model_version"),
                 }
             )
         return summary_resp
@@ -153,12 +153,12 @@ def make_sac_only_activities(
     @activity.defn(name="send_weekly_email")
     def mock_send_weekly_email(*args, **kwargs):
         if email_calls is not None:
-            hrp = args[3] if len(args) > 3 else None
-            hrp_submit = args[6] if len(args) > 6 else None
+            sac = args[3] if len(args) > 3 else None
+            sac_submit = args[4] if len(args) > 4 else None
             email_calls.append(
                 {
-                    "hrp_symbols_used": _coerce(hrp, "symbols_used"),
-                    "hrp_submit_skipped": _coerce(hrp_submit, "skipped"),
+                    "sac_skipped": _coerce(sac, "skipped") or False,
+                    "sac_submit_skipped": _coerce(sac_submit, "skipped") or False,
                 }
             )
         return email_resp

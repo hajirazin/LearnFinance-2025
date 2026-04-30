@@ -3,10 +3,10 @@
 from fastapi import APIRouter
 
 from .models import (
-    IndiaWeeklySummaryRequest,
+    IndiaAlphaHRPSummaryRequest,
+    SACWeeklySummaryRequest,
     TrainingSummaryRequest,
     TrainingSummaryResponse,
-    WeeklySummaryRequest,
     WeeklySummaryResponse,
 )
 from .providers import (
@@ -28,14 +28,14 @@ router.include_router(training_summary_router)
 router.include_router(weekly_summary_router)
 
 __all__ = [
-    "IndiaWeeklySummaryRequest",
+    "IndiaAlphaHRPSummaryRequest",
     "LLMProvider",
     "LLMResponse",
     "OllamaProvider",
     "OpenAIProvider",
+    "SACWeeklySummaryRequest",
     "TrainingSummaryRequest",
     "TrainingSummaryResponse",
-    "WeeklySummaryRequest",
     "WeeklySummaryResponse",
     "get_llm_provider",
     "parse_json_response",

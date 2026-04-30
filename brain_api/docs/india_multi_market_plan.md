@@ -309,7 +309,7 @@ flowchart TD
     Phase3 --> Phase4
 
     subgraph Phase4["Phase 4 - Email"]
-        SendEmail["POST /email/weekly-report (universe=nifty_shariah)"]
+        SendEmail["POST /email/india-alpha-hrp-report (universe=nifty_shariah)"]
     end
 ```
 

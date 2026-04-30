@@ -65,7 +65,7 @@ def mock_summary():
 def mock_email():
     return WeeklyReportEmailResponse(
         is_success=True,
-        subject="India Weekly Portfolio Analysis (2026-03-02 -> 2026-03-06)",
+        subject="India Alpha-HRP Portfolio Analysis (2026-03-02 -> 2026-03-06)",
         body="<html><body>India report</body></html>",
     )
 
@@ -85,19 +85,21 @@ def _make_india_allocation_activities(
     def mock_allocate_hrp(symbols, as_of_date, lookback_days=252):
         return hrp
 
-    @activity.defn(name="generate_india_summary")
-    def mock_generate_india_summary(hrp_arg, universe):
+    @activity.defn(name="generate_india_alpha_hrp_summary")
+    def mock_generate_india_alpha_hrp_summary(hrp_arg, universe):
         return summary
 
-    @activity.defn(name="send_india_weekly_email")
-    def mock_send_india_weekly_email(summary_arg, hrp_arg, universe, start, end, as_of):
+    @activity.defn(name="send_india_alpha_hrp_email")
+    def mock_send_india_alpha_hrp_email(
+        summary_arg, hrp_arg, universe, start, end, as_of
+    ):
         return email
 
     return [
         mock_get_halal_india_universe,
         mock_allocate_hrp,
-        mock_generate_india_summary,
-        mock_send_india_weekly_email,
+        mock_generate_india_alpha_hrp_summary,
+        mock_send_india_alpha_hrp_email,
     ]
 
 
@@ -175,11 +177,11 @@ class TestIndiaWeeklyAllocationWorkflow:
             hrp_calls.append({"symbols": symbols, "as_of_date": as_of_date})
             return mock_hrp
 
-        @activity.defn(name="generate_india_summary")
+        @activity.defn(name="generate_india_alpha_hrp_summary")
         def mock_gen(hrp_arg, universe):
             return mock_summary
 
-        @activity.defn(name="send_india_weekly_email")
+        @activity.defn(name="send_india_alpha_hrp_email")
         def mock_send(summary_arg, hrp_arg, universe, start, end, as_of):
             return mock_email
 

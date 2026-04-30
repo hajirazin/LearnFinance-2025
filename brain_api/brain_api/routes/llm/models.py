@@ -22,13 +22,13 @@ from brain_api.routes.training.models import (
 __all__ = [
     "AlphaScoreItem",
     "DoubleHRPSummaryRequest",
+    "IndiaAlphaHRPSummaryRequest",
     "IndiaTrainingSummaryRequest",
-    "IndiaWeeklySummaryRequest",
+    "SACWeeklySummaryRequest",
     "TrainingSummaryRequest",
     "TrainingSummaryResponse",
     "USAlphaHRPSummaryRequest",
     "USDoubleHRPSummaryRequest",
-    "WeeklySummaryRequest",
     "WeeklySummaryResponse",
 ]
 
@@ -55,15 +55,17 @@ class TrainingSummaryResponse(BaseModel):
 
 
 # =============================================================================
-# Weekly Summary Models
+# SAC Weekly Summary Models
 # =============================================================================
 
 
-class WeeklySummaryRequest(BaseModel):
-    """Request model for POST /llm/weekly-summary.
+class SACWeeklySummaryRequest(BaseModel):
+    """Request model for POST /llm/sac-weekly-summary.
 
     All fields are the exact response types from their respective endpoints.
-    This endpoint generates an AI summary of weekly forecast/allocation results.
+    This endpoint generates an AI summary of the SAC-only weekly run on the
+    SAC Alpaca paper account. HRP weekly reporting lives in the dedicated
+    ``/llm/us-alpha-hrp-summary`` endpoint and is not included here.
     Does NOT include Alpaca order results - that's only for the email endpoint.
     """
 
@@ -71,12 +73,11 @@ class WeeklySummaryRequest(BaseModel):
     patchtst: PatchTSTInferenceResponse  # from POST /inference/patchtst
     news: NewsSignalResponse  # from POST /signals/news
     fundamentals: FundamentalsResponse  # from POST /signals/fundamentals
-    hrp: HRPAllocationResponse  # from POST /allocation/hrp
     sac: SACInferenceResponse  # from POST /inference/sac
 
 
 class WeeklySummaryResponse(BaseModel):
-    """Response model for POST /llm/weekly-summary."""
+    """Response model for POST /llm/sac-weekly-summary (and other LLM summary endpoints)."""
 
     summary: dict[str, str]  # 8 paragraph fields from LLM
     provider: str  # "openai" or "ollama"
@@ -98,11 +99,13 @@ class IndiaTrainingSummaryRequest(BaseModel):
     patchtst: PatchTSTTrainResponse
 
 
-class IndiaWeeklySummaryRequest(BaseModel):
-    """Request model for POST /llm/india-weekly-summary.
+class IndiaAlphaHRPSummaryRequest(BaseModel):
+    """Request model for POST /llm/india-alpha-hrp-summary.
 
-    India pipeline is HRP-only (no SAC/news/fundamentals).
-    The LLM analyzes HRP concentration and diversification.
+    India weekly allocation is structurally "PatchTST top-15 alpha screen on
+    Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the India
+    counterpart of the US Alpha-HRP path. The LLM analyzes HRP concentration
+    and diversification across the alpha-screened picks.
     """
 
     hrp: HRPAllocationResponse  # from POST /allocation/hrp

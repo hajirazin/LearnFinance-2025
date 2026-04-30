@@ -487,13 +487,6 @@ def mock_weekly_summary_request():
                 },
             ],
         },
-        "hrp": {
-            "percentage_weights": {"AAPL": 10.5, "MSFT": 8.2, "GOOGL": 7.1},
-            "symbols_used": 15,
-            "symbols_excluded": [],
-            "lookback_days": 252,
-            "as_of_date": "2026-02-03",
-        },
         "sac": {
             "target_weights": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.05},
             "turnover": 0.15,
@@ -507,26 +500,25 @@ def mock_weekly_summary_request():
 
 @pytest.fixture
 def mock_weekly_llm_json_response():
-    """Mock JSON response from LLM for weekly summary."""
+    """Mock JSON response from LLM for SAC weekly summary."""
     return {
         "para_1_overall_summary": "This week shows bullish momentum across tech stocks.",
         "para_2_sac": "SAC allocator favors AAPL and MSFT with moderate turnover.",
-        "para_3_hrp_summary": "HRP maintains diversified allocation across sectors.",
-        "para_4_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
-        "para_5_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
-        "para_6_news_sentiment": "News sentiment is generally positive for holdings.",
-        "para_7_fundamentals": "Fundamentals remain strong with solid margins.",
+        "para_3_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
+        "para_4_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
+        "para_5_news_sentiment": "News sentiment is generally positive for holdings.",
+        "para_6_fundamentals": "Fundamentals remain strong with solid margins.",
     }
 
 
 # =============================================================================
-# India Weekly Summary Endpoint Tests
+# India Alpha-HRP Summary Endpoint Tests
 # =============================================================================
 
 
 @pytest.fixture
 def mock_india_weekly_summary_request():
-    """Valid request payload for India weekly summary endpoint (HRP only)."""
+    """Valid request payload for India Alpha-HRP summary endpoint (HRP only)."""
     return {
         "hrp": {
             "percentage_weights": {
@@ -565,15 +557,15 @@ def mock_india_llm_json_response():
     }
 
 
-class TestIndiaWeeklySummaryEndpoint:
-    """Tests for POST /llm/india-weekly-summary endpoint."""
+class TestIndiaAlphaHRPSummaryEndpoint:
+    """Tests for POST /llm/india-alpha-hrp-summary endpoint."""
 
     def test_successful_india_summary_generation(
         self,
         mock_india_weekly_summary_request,
         mock_india_llm_json_response,
     ):
-        """Successful India weekly summary generation with HRP data."""
+        """Successful India Alpha-HRP summary generation with HRP data."""
         import json
 
         mock_provider = MockLLMProvider(
@@ -589,7 +581,7 @@ class TestIndiaWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/india-weekly-summary",
+                "/llm/india-alpha-hrp-summary",
                 json=mock_india_weekly_summary_request,
             )
 
@@ -620,7 +612,7 @@ class TestIndiaWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/india-weekly-summary",
+                "/llm/india-alpha-hrp-summary",
                 json=mock_india_weekly_summary_request,
             )
 
@@ -647,7 +639,7 @@ class TestIndiaWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/india-weekly-summary",
+                "/llm/india-alpha-hrp-summary",
                 json=mock_india_weekly_summary_request,
             )
 
@@ -671,7 +663,7 @@ class TestIndiaWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/india-weekly-summary",
+                "/llm/india-alpha-hrp-summary",
                 json={},
             )
             assert response.status_code == 422
@@ -688,7 +680,7 @@ class TestIndiaWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/india-weekly-summary",
+                "/llm/india-alpha-hrp-summary",
                 json={"hrp": "invalid"},
             )
             assert response.status_code == 422
@@ -696,8 +688,8 @@ class TestIndiaWeeklySummaryEndpoint:
             app.dependency_overrides.clear()
 
 
-class TestWeeklySummaryEndpoint:
-    """Tests for POST /llm/weekly-summary endpoint."""
+class TestSACWeeklySummaryEndpoint:
+    """Tests for POST /llm/sac-weekly-summary endpoint."""
 
     def test_successful_weekly_summary_generation(
         self,
@@ -720,7 +712,7 @@ class TestWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/weekly-summary",
+                "/llm/sac-weekly-summary",
                 json=mock_weekly_summary_request,
             )
 
@@ -749,7 +741,7 @@ class TestWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/weekly-summary",
+                "/llm/sac-weekly-summary",
                 json=mock_weekly_summary_request,
             )
 
@@ -776,7 +768,7 @@ class TestWeeklySummaryEndpoint:
 
         try:
             response = client.post(
-                "/llm/weekly-summary",
+                "/llm/sac-weekly-summary",
                 json=mock_weekly_summary_request,
             )
 
