@@ -43,6 +43,7 @@ class _FakeResponse:
     def __init__(self, json_payload: dict, status: int = 200) -> None:
         self._payload = json_payload
         self.status_code = status
+        self.text = str(json_payload)
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -55,15 +56,22 @@ class _FakeResponse:
 class _FakeClient:
     """Records the path + json body of each POST/GET, returns a queued response."""
 
-    def __init__(self, responses: dict[str, dict]) -> None:
+    def __init__(
+        self,
+        responses: dict[str, dict],
+        statuses: dict[str, int] | None = None,
+    ) -> None:
         self._responses = responses
+        self._statuses = statuses or {}
         self.calls: list[dict[str, Any]] = []
 
     def post(self, path: str, json: dict | None = None) -> _FakeResponse:
         self.calls.append({"method": "POST", "path": path, "json": json})
         if path not in self._responses:
             raise AssertionError(f"Unexpected POST {path}")
-        return _FakeResponse(self._responses[path])
+        return _FakeResponse(
+            self._responses[path], status=self._statuses.get(path, 200)
+        )
 
     def get(self, path: str) -> _FakeResponse:
         self.calls.append({"method": "GET", "path": path, "json": None})
@@ -95,30 +103,27 @@ def _patch_client(module, fake: _FakeClient):
 
 
 class TestScoreHalalNewWithPatchTST:
-    def test_calls_inference_patchtst_with_full_symbol_list(self):
+    """The activity is now a thin HTTP wrapper around
+    ``POST /inference/patchtst/score-batch`` with ``market='us'``.
+    Math invariants (non-finite rejection, ``min_predictions`` floor)
+    live in :mod:`brain_api.core.patchtst.score_validation` and are
+    enforced inside the brain_api endpoint -- these activity tests
+    only assert the wire contract.
+    """
+
+    def test_calls_score_batch_with_market_us_and_full_symbol_list(self):
         symbols = [f"SYM{i}" for i in range(20)]
         fake_response = {
-            "predictions": [
-                {
-                    "symbol": s,
-                    "predicted_weekly_return_pct": float(20 - i),
-                    "direction": "up",
-                    "has_enough_history": True,
-                    "history_days_used": 600,
-                    "data_end_date": "2026-04-28",
-                    "target_week_start": "2026-04-27",
-                    "target_week_end": "2026-05-01",
-                    "daily_returns": [0.0] * 5,
-                }
-                for i, s in enumerate(symbols)
-            ],
+            "scores": {s: float(20 - i) for i, s in enumerate(symbols)},
             "model_version": "v2026-04-26-abc",
             "as_of_date": "2026-04-28",
-            "signals_used": ["ohlcv"],
             "target_week_start": "2026-04-27",
             "target_week_end": "2026-05-01",
+            "requested_count": 20,
+            "predicted_count": 20,
+            "excluded_symbols": [],
         }
-        fake = _FakeClient({"/inference/patchtst": fake_response})
+        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
         with _patch_client(inference_module, fake):
             result = inference_module.score_halal_new_with_patchtst(
                 symbols=symbols,
@@ -133,93 +138,94 @@ class TestScoreHalalNewWithPatchTST:
         assert result.excluded_symbols == []
         assert len(fake.calls) == 1
         call = fake.calls[0]
-        assert call["path"] == "/inference/patchtst"
-        assert call["json"] == {"as_of_date": "2026-04-28", "symbols": symbols}
+        assert call["path"] == "/inference/patchtst/score-batch"
+        assert call["json"] == {
+            "market": "us",
+            "symbols": symbols,
+            "as_of_date": "2026-04-28",
+            "min_predictions": 15,
+        }
 
-    def test_excludes_predictions_with_none(self):
-        symbols = ["A", "B", "C"]
+    def test_passes_through_excluded_symbols_from_endpoint(self):
+        # The endpoint already drops symbols whose prediction is None;
+        # the activity simply maps the response into the typed model.
         fake_response = {
-            "predictions": [
-                {
-                    "symbol": "A",
-                    "predicted_weekly_return_pct": 1.5,
-                    "direction": "up",
-                    "has_enough_history": True,
-                    "history_days_used": 600,
-                    "data_end_date": "2026-04-28",
-                    "target_week_start": "2026-04-27",
-                    "target_week_end": "2026-05-01",
-                    "daily_returns": [0.0] * 5,
-                },
-                {
-                    "symbol": "B",
-                    "predicted_weekly_return_pct": None,
-                    "direction": "flat",
-                    "has_enough_history": False,
-                    "history_days_used": 5,
-                    "data_end_date": None,
-                    "target_week_start": "",
-                    "target_week_end": "",
-                    "daily_returns": None,
-                },
-                {
-                    "symbol": "C",
-                    "predicted_weekly_return_pct": 0.5,
-                    "direction": "up",
-                    "has_enough_history": True,
-                    "history_days_used": 600,
-                    "data_end_date": "2026-04-28",
-                    "target_week_start": "2026-04-27",
-                    "target_week_end": "2026-05-01",
-                    "daily_returns": [0.0] * 5,
-                },
-            ],
+            "scores": {"A": 1.5, "C": 0.5},
             "model_version": "v",
             "as_of_date": "2026-04-28",
-            "signals_used": ["ohlcv"],
             "target_week_start": "2026-04-27",
             "target_week_end": "2026-05-01",
+            "requested_count": 3,
+            "predicted_count": 2,
+            "excluded_symbols": ["B"],
         }
-        fake = _FakeClient({"/inference/patchtst": fake_response})
+        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
         with _patch_client(inference_module, fake):
             result = inference_module.score_halal_new_with_patchtst(
-                symbols=symbols,
+                symbols=["A", "B", "C"],
                 as_of_date="2026-04-28",
                 min_predictions=2,
             )
         assert set(result.scores) == {"A", "C"}
         assert result.excluded_symbols == ["B"]
 
-    def test_raises_when_too_few_predictions(self):
-        # Only one valid prediction, but min_predictions=15 -> raise.
-        fake_response = {
-            "predictions": [
-                {
-                    "symbol": "A",
-                    "predicted_weekly_return_pct": 1.0,
-                    "direction": "up",
-                    "has_enough_history": True,
-                    "history_days_used": 600,
-                    "data_end_date": "2026-04-28",
-                    "target_week_start": "2026-04-27",
-                    "target_week_end": "2026-05-01",
-                    "daily_returns": [0.0] * 5,
+    def test_re_raises_422_as_runtime_error(self):
+        # The brain_api endpoint returns 422 when the math invariants
+        # (non-finite scores or below ``min_predictions`` floor) fail.
+        # The activity must surface that as RuntimeError so the
+        # workflow's RetryPolicy treats it as terminal.
+        fake = _FakeClient(
+            responses={
+                "/inference/patchtst/score-batch": {
+                    "detail": (
+                        "PatchTST batch produced 1 valid score but min_predictions=15"
+                    )
                 }
-            ],
-            "model_version": "v",
-            "as_of_date": "2026-04-28",
-            "signals_used": ["ohlcv"],
-            "target_week_start": "2026-04-27",
-            "target_week_end": "2026-05-01",
-        }
-        fake = _FakeClient({"/inference/patchtst": fake_response})
+            },
+            statuses={"/inference/patchtst/score-batch": 422},
+        )
         with (
             _patch_client(inference_module, fake),
-            pytest.raises(RuntimeError, match="below min_predictions"),
+            pytest.raises(RuntimeError, match="min_predictions"),
         ):
             inference_module.score_halal_new_with_patchtst(
                 symbols=["A"], as_of_date="2026-04-28", min_predictions=15
             )
+
+
+class TestScoreHalalIndiaWithPatchTST:
+    """Mirrors the US wrapper but with ``market='india'``."""
+
+    def test_calls_score_batch_with_market_india(self):
+        symbols = ["NSE001.NS", "NSE002.NS", "NSE003.NS"]
+        fake_response = {
+            "scores": {s: float(3 - i) for i, s in enumerate(symbols)},
+            "model_version": "v2026-04-26-india",
+            "as_of_date": "2026-04-28",
+            "target_week_start": "2026-04-27",
+            "target_week_end": "2026-05-01",
+            "requested_count": 3,
+            "predicted_count": 3,
+            "excluded_symbols": [],
+        }
+        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
+        with _patch_client(inference_module, fake):
+            result = inference_module.score_halal_india_with_patchtst(
+                symbols=symbols,
+                as_of_date="2026-04-28",
+                min_predictions=2,
+            )
+        assert isinstance(result, PatchTSTBatchScores)
+        assert result.model_version == "v2026-04-26-india"
+        assert result.scores["NSE001.NS"] == 3.0
+        call = fake.calls[0]
+        assert call["path"] == "/inference/patchtst/score-batch"
+        assert call["json"] == {
+            "market": "india",
+            "symbols": symbols,
+            "as_of_date": "2026-04-28",
+            "min_predictions": 2,
+        }
 
 
 # ---------------------------------------------------------------------------

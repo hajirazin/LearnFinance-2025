@@ -11,8 +11,11 @@ from transformers import PatchTSTForPrediction
 from brain_api.core.patchtst import DEFAULT_CONFIG, PatchTSTConfig
 from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
 from brain_api.main import app
-from brain_api.routes.inference import get_patchtst_storage
-from brain_api.storage.local import PatchTSTModelStorage
+from brain_api.routes.inference import (
+    get_patchtst_india_storage,
+    get_patchtst_storage,
+)
+from brain_api.storage.local import PatchTSTIndiaModelStorage, PatchTSTModelStorage
 
 # ============================================================================
 # Test fixtures and mocks
@@ -361,3 +364,273 @@ def test_inference_patchtst_returns_daily_returns_field(client_with_mocks):
         assert len(pred["daily_returns"]) == 5
         for dr in pred["daily_returns"]:
             assert isinstance(dr, int | float)
+
+
+# ============================================================================
+# /inference/patchtst/india
+# ============================================================================
+
+
+@pytest.fixture
+def temp_india_storage():
+    """Temporary India PatchTST storage with mock artifacts."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        storage = PatchTSTIndiaModelStorage(base_path=tmpdir)
+        create_mock_patchtst_artifacts(storage, DEFAULT_CONFIG)
+        yield storage
+
+
+@pytest.fixture
+def india_client_with_mocks(temp_india_storage, monkeypatch):
+    """Test client with India PatchTST storage + mocked run_batch_inference."""
+    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+
+    from brain_api.routes.inference import patchtst as inference_module
+
+    def mock_run_batch(symbols, cutoff_date, storage=None):
+        return _make_mock_batch_result(symbols)
+
+    monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+
+
+def test_inference_patchtst_india_returns_200(india_client_with_mocks):
+    """POST /inference/patchtst/india returns 200 with model symbols."""
+    response = india_client_with_mocks.post("/inference/patchtst/india", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert {p["symbol"] for p in data["predictions"]} == {"AAPL", "MSFT"}
+    assert data["signals_used"] == ["ohlcv"]
+
+
+def test_inference_patchtst_india_no_model_returns_400():
+    """POST /inference/patchtst/india returns 400 when no India model is current."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        empty_storage = PatchTSTIndiaModelStorage(base_path=tmpdir)
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_patchtst_india_storage] = lambda: empty_storage
+
+        client = TestClient(app)
+        try:
+            response = client.post("/inference/patchtst/india", json={})
+            assert response.status_code == 400
+            assert "No current PatchTST" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_inference_patchtst_india_empty_symbols_returns_422(india_client_with_mocks):
+    """POST /inference/patchtst/india with symbols=[] fails Field min_length=1."""
+    response = india_client_with_mocks.post(
+        "/inference/patchtst/india", json={"symbols": []}
+    )
+    assert response.status_code == 422
+
+
+def test_inference_patchtst_india_uses_india_storage(
+    temp_storage, temp_india_storage, monkeypatch
+):
+    """The India route must read from PatchTSTIndiaModelStorage, not the US one.
+
+    We create a US model with version 'us-version' and an India model
+    with version 'india-version'; the India route must surface the
+    India version. This guards against accidental wiring back to
+    get_patchtst_storage.
+    """
+    # Override the US version on temp_storage so the two are visibly distinct.
+    us_version = temp_storage.read_current_version()
+    india_version = temp_india_storage.read_current_version()
+    assert us_version == india_version  # both are MOCK_VERSION; that's fine
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
+    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+
+    from brain_api.routes.inference import patchtst as inference_module
+
+    seen_storage = []
+
+    def mock_run_batch(symbols, cutoff_date, storage=None):
+        seen_storage.append(storage)
+        return _make_mock_batch_result(symbols)
+
+    monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
+
+    client = TestClient(app)
+    try:
+        response = client.post("/inference/patchtst/india", json={})
+        assert response.status_code == 200
+        # The mock captured exactly one call; the storage object must be
+        # the India one we provided -- not the US one.
+        assert len(seen_storage) == 1
+        assert seen_storage[0] is temp_india_storage
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ============================================================================
+# /inference/patchtst/score-batch
+# ============================================================================
+
+
+@pytest.fixture
+def score_batch_client(temp_storage, temp_india_storage, monkeypatch):
+    """Test client with both US and India storage + mocked batch inference.
+
+    Lets us flip ``market`` between calls without re-initialising the
+    test client.
+    """
+    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
+    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+
+    from brain_api.routes.inference import patchtst as inference_module
+
+    def mock_run_batch(symbols, cutoff_date, storage=None):
+        return _make_mock_batch_result(symbols)
+
+    monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+
+
+def test_score_batch_us_happy_path(score_batch_client):
+    """market='us' returns finite scores keyed by symbol + metadata fields."""
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "us", "symbols": ["AAPL", "MSFT"], "min_predictions": 1},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data["scores"].keys()) == {"AAPL", "MSFT"}
+    assert data["requested_count"] == 2
+    assert data["predicted_count"] == 2
+    assert data["model_version"] == MOCK_VERSION
+    assert data["target_week_start"]
+    assert data["target_week_end"]
+    assert data["excluded_symbols"] == []
+
+
+def test_score_batch_india_happy_path(score_batch_client):
+    """market='india' uses the India storage path and returns the same shape."""
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={
+            "market": "india",
+            "symbols": ["RELIANCE.NS", "TCS.NS"],
+            "min_predictions": 1,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data["scores"].keys()) == {"RELIANCE.NS", "TCS.NS"}
+    assert data["predicted_count"] == 2
+
+
+def test_score_batch_response_shape_has_required_fields(score_batch_client):
+    """Regression: verify all PatchTSTScoreBatchResponse fields are present.
+
+    This locks the response contract that the Temporal
+    score_halal_*_with_patchtst activities deserialise.
+    """
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "us", "symbols": ["AAPL"], "min_predictions": 1},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    for field in (
+        "scores",
+        "model_version",
+        "as_of_date",
+        "target_week_start",
+        "target_week_end",
+        "requested_count",
+        "predicted_count",
+        "excluded_symbols",
+    ):
+        assert field in data, f"Missing field: {field}"
+
+
+def test_score_batch_non_finite_returns_422(score_batch_client, monkeypatch):
+    """A NaN prediction must surface as 422 (rank-band invariant violation)."""
+    from brain_api.routes.inference import patchtst as inference_module
+
+    def mock_run_batch_with_nan(symbols, cutoff_date, storage=None):
+        result = _make_mock_batch_result(symbols)
+        # Replace the first prediction's score with NaN.
+        result.predictions[0].predicted_weekly_return_pct = float("nan")
+        return result
+
+    monkeypatch.setattr(
+        inference_module, "run_batch_inference", mock_run_batch_with_nan
+    )
+
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "us", "symbols": ["AAPL", "MSFT"], "min_predictions": 1},
+    )
+    assert response.status_code == 422
+    assert "non-finite" in response.json()["detail"]
+
+
+def test_score_batch_below_min_predictions_returns_422(score_batch_client):
+    """Below-floor finite count must raise 422."""
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "us", "symbols": ["AAPL"], "min_predictions": 5},
+    )
+    assert response.status_code == 422
+    assert "below" in response.json()["detail"]
+
+
+def test_score_batch_empty_symbols_returns_422(score_batch_client):
+    """symbols=[] fails Field min_length=1 validation."""
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "us", "symbols": [], "min_predictions": 1},
+    )
+    assert response.status_code == 422
+
+
+def test_score_batch_invalid_market_returns_422(score_batch_client):
+    """market='europe' fails the Literal validator."""
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={"market": "europe", "symbols": ["AAPL"], "min_predictions": 1},
+    )
+    assert response.status_code == 422
+
+
+def test_score_batch_no_india_model_returns_400():
+    """market='india' without a current India model returns 400."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        empty_india = PatchTSTIndiaModelStorage(base_path=tmpdir)
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_patchtst_india_storage] = lambda: empty_india
+        # US storage is irrelevant for this test, but the dep is required;
+        # an empty US storage is fine because we never read it.
+        with tempfile.TemporaryDirectory() as us_tmp:
+            empty_us = PatchTSTModelStorage(base_path=us_tmp)
+            app.dependency_overrides[get_patchtst_storage] = lambda: empty_us
+
+            client = TestClient(app)
+            try:
+                response = client.post(
+                    "/inference/patchtst/score-batch",
+                    json={
+                        "market": "india",
+                        "symbols": ["RELIANCE.NS"],
+                        "min_predictions": 1,
+                    },
+                )
+                assert response.status_code == 400
+                assert "india" in response.json()["detail"]
+            finally:
+                app.dependency_overrides.clear()

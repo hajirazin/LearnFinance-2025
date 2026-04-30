@@ -12,6 +12,7 @@ from fastapi import APIRouter
 from .dependencies import (
     get_as_of_date,
     get_patchtst_as_of_date,
+    get_patchtst_india_storage,
     get_patchtst_storage,
     get_price_loader,
     get_sac_as_of_date,
@@ -76,6 +77,7 @@ __all__ = [
     # Dependencies
     "get_as_of_date",
     "get_patchtst_as_of_date",
+    "get_patchtst_india_storage",
     "get_patchtst_storage",
     "get_price_loader",
     "get_sac_as_of_date",

@@ -1,24 +1,19 @@
-You are a financial analyst specializing in Indian equity markets.
-Analyze this week's India Alpha-HRP portfolio: PatchTST top-15 alpha screen on the
-Nifty 500 Shariah universe, then HRP risk-balanced sizing across the chosen names.
+{% extends "alpha_hrp_summary_prompt_base.j2" %}
 
-## HRP Allocation
-As-of Date: {{ hrp.as_of_date }}
-Universe: {{ universe }}
-Symbols Allocated: {{ hrp.symbols_used }}
-Symbols Excluded: {{ hrp.symbols_excluded | length }}
+{% block analyst_intro %}You are a financial analyst specializing in Indian equity markets and quantitative portfolio construction.{% endblock %}
 
-All Allocations (sorted by weight):
-{% for sym, wt in hrp.percentage_weights.items() | sort(attribute='1', reverse=true) %}
-- {{ sym }}: {{ "%.1f" | format(wt) }}%
-{% endfor %}
+{% block strategy_overview_extras %}
+- Universe source: Nifty 500 Shariah constituents on the National Stock Exchange of India (NSE), filtered for halal compliance. Symbols carry the `.NS` suffix.
+- Reporting only: India runs are paper-only and do NOT submit orders through Alpaca; the report is for learning/audit, not for execution.
+{% endblock %}
 
-## Instructions
-
-Analyze the HRP allocation focusing on concentration and diversification.
+{% block instructions %}
+Analyze the India Alpha-HRP allocation, focusing on the alpha-then-risk pipeline and the rank-band turnover damper. Be concrete; reference specific symbols and numbers. Use Indian sector terminology (IT services, pharma, financials, FMCG, auto, capital goods, energy, metals).
 Respond with JSON only:
 {
-    "para_1_portfolio_overview": "<3 sentences: summary of how HRP distributed weights across the {{ hrp.symbols_used }} stocks, whether it is concentrated or well-diversified, and the top 3 holdings>",
-    "para_2_concentration_analysis": "<3 sentences: concentration risk assessment -- what percentage the top 3 and top 5 stocks hold together, whether any single stock dominates, and how this compares to equal-weight>",
-    "para_3_risk_observations": "<3 sentences: risk observations based on the allocation pattern -- sector concentration if recognizable from the stock names, any defensive positioning, and one key thing to watch this week>"
+    "para_1_market_outlook": "<3 sentences: which Indian sectors/themes dominate the top 25 PatchTST forecasts, what the spread of top-rank predicted returns suggests about NSE dispersion this week, and how many universe symbols failed to produce a valid forecast>",
+    "para_2_selection_rationale": "<3 sentences: why the chosen {{ top_n }} were selected -- comment on whether the basket is concentrated in a few Indian sectors (IT services, pharma, financials, FMCG, auto, capital goods) or well-spread, and whether the rank-band kept stable winners or had to evict slipping names>",
+    "para_3_final_allocation": "<3 sentences: how the {{ stage2.lookback_days }}-day HRP re-distributed weight across the {{ stage2.symbols_used }} stocks that received non-zero weight, whether the final allocation is concentrated or diversified, and the top 3 holdings (with their .NS symbols and weights)>",
+    "para_4_risk_observations": "<3 sentences: key risks specific to alpha-then-risk on Indian equities -- INR/USD currency exposure for foreign reviewers, NSE-specific liquidity considerations on small-caps within the basket, and one actionable observation for the coming week>"
 }
+{% endblock %}

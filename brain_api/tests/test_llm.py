@@ -518,42 +518,47 @@ def mock_weekly_llm_json_response():
 
 @pytest.fixture
 def mock_india_weekly_summary_request():
-    """Valid request payload for India Alpha-HRP summary endpoint (HRP only)."""
+    """Valid request payload for India Alpha-HRP summary endpoint.
+
+    Mirrors the US Alpha-HRP fixture in tests/test_llm_us_alpha_hrp.py
+    with NSE symbols. The shape is the unified
+    :class:`AlphaHRPSummaryRequest` -- both markets share the same DTO
+    post-parity, discriminated by the ``universe`` field.
+    """
     return {
-        "hrp": {
-            "percentage_weights": {
-                "RELIANCE.NS": 12.3,
-                "TCS.NS": 10.1,
-                "INFY.NS": 9.5,
-                "HDFCBANK.NS": 8.7,
-                "BAJFINANCE.NS": 7.2,
-                "WIPRO.NS": 6.8,
-                "MARUTI.NS": 6.4,
-                "NESTLEIND.NS": 5.9,
-                "TITAN.NS": 5.5,
-                "DABUR.NS": 5.1,
-                "COLPAL.NS": 4.8,
-                "HINDUNILVR.NS": 4.5,
-                "GODREJCP.NS": 4.3,
-                "MARICO.NS": 4.6,
-                "PIDILITIND.NS": 4.3,
-            },
+        "stage1_top_scores": [
+            {"symbol": f"NSE{i:03d}.NS", "score": 5.0 - 0.1 * i, "rank": i + 1}
+            for i in range(20)
+        ],
+        "model_version": "v2026-04-26-india",
+        "predicted_count": 200,
+        "requested_count": 210,
+        "selected_symbols": [f"NSE{i:03d}.NS" for i in range(15)],
+        "kept_count": 12,
+        "fillers_count": 3,
+        "evicted_from_previous": {"OLD1.NS": "rank_out_of_hold"},
+        "previous_year_week_used": "202617",
+        "stage2": {
+            "percentage_weights": {f"NSE{i:03d}.NS": 100.0 / 15 for i in range(15)},
             "symbols_used": 15,
-            "symbols_excluded": ["ADANIENT.NS"],
+            "symbols_excluded": [],
             "lookback_days": 252,
-            "as_of_date": "2026-03-02",
+            "as_of_date": "2026-04-28",
         },
-        "universe": "halal_india",
+        "universe": "halal_india_alpha",
+        "top_n": 15,
+        "hold_threshold": 30,
     }
 
 
 @pytest.fixture
 def mock_india_llm_json_response():
-    """Mock JSON response from LLM for India summary."""
+    """Mock JSON response from LLM for India summary (4-paragraph schema)."""
     return {
-        "para_1_portfolio_overview": "HRP allocated across 15 NSE stocks with moderate concentration.",
-        "para_2_concentration_analysis": "Top 3 holdings (RELIANCE, TCS, INFY) hold 31.9% combined.",
-        "para_3_risk_observations": "IT sector is overweight; watch for INR/USD currency risk.",
+        "para_1_market_outlook": "Top 25 PatchTST forecasts cluster around IT services and pharma.",
+        "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
+        "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
+        "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
     }
 
 
@@ -565,7 +570,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
         mock_india_weekly_summary_request,
         mock_india_llm_json_response,
     ):
-        """Successful India Alpha-HRP summary generation with HRP data."""
+        """Successful India Alpha-HRP summary generation."""
         import json
 
         mock_provider = MockLLMProvider(
@@ -585,15 +590,16 @@ class TestIndiaAlphaHRPSummaryEndpoint:
                 json=mock_india_weekly_summary_request,
             )
 
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text
             data = response.json()
             assert "summary" in data
             assert data["provider"] == "openai"
             assert data["model_used"] == "gpt-4o-mini"
             assert data["tokens_used"] == 350
-            assert "para_1_portfolio_overview" in data["summary"]
-            assert "para_2_concentration_analysis" in data["summary"]
-            assert "para_3_risk_observations" in data["summary"]
+            assert "para_1_market_outlook" in data["summary"]
+            assert "para_2_selection_rationale" in data["summary"]
+            assert "para_3_final_allocation" in data["summary"]
+            assert "para_4_risk_observations" in data["summary"]
         finally:
             app.dependency_overrides.clear()
 
@@ -625,7 +631,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
         self,
         mock_india_weekly_summary_request,
     ):
-        """Invalid JSON from LLM returns fallback summary."""
+        """Invalid JSON from LLM returns the para_1_market_outlook fallback stub."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
@@ -645,16 +651,17 @@ class TestIndiaAlphaHRPSummaryEndpoint:
 
             assert response.status_code == 200
             data = response.json()
-            assert "para_1_portfolio_overview" in data["summary"]
+            # The fallback uses para_1_market_outlook (matches US schema).
+            assert "para_1_market_outlook" in data["summary"]
             assert (
                 "Unable to generate AI summary"
-                in data["summary"]["para_1_portfolio_overview"]
+                in data["summary"]["para_1_market_outlook"]
             )
         finally:
             app.dependency_overrides.clear()
 
-    def test_india_summary_missing_hrp_returns_422(self):
-        """Missing HRP field returns 422."""
+    def test_india_summary_missing_required_fields_returns_422(self):
+        """Empty request body fails Pydantic validation (no required fields)."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(content="{}", model="test", tokens_used=0),
@@ -670,8 +677,8 @@ class TestIndiaAlphaHRPSummaryEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_india_summary_invalid_hrp_returns_422(self):
-        """Invalid HRP structure returns 422."""
+    def test_india_summary_invalid_stage2_returns_422(self):
+        """Invalid stage2 structure fails Pydantic validation."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(content="{}", model="test", tokens_used=0),
@@ -681,7 +688,17 @@ class TestIndiaAlphaHRPSummaryEndpoint:
         try:
             response = client.post(
                 "/llm/india-alpha-hrp-summary",
-                json={"hrp": "invalid"},
+                json={
+                    "stage1_top_scores": [],
+                    "model_version": "v",
+                    "predicted_count": 0,
+                    "requested_count": 0,
+                    "selected_symbols": [],
+                    "stage2": "not-an-hrp-allocation",
+                    "universe": "halal_india_alpha",
+                    "top_n": 15,
+                    "hold_threshold": 30,
+                },
             )
             assert response.status_code == 422
         finally:

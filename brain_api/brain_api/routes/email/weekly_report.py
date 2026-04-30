@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .gmail import GmailConfigError, send_html_email
 from .models import (
+    AlphaHRPEmailRequest,
     DoubleHRPEmailRequest,
     IndiaAlphaHRPEmailRequest,
     SACWeeklyReportEmailRequest,
@@ -115,6 +116,45 @@ def _build_subject(
 SubjectFn = Callable[[bool], str]
 
 
+def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
+    """Build the Jinja context dict for an Alpha-HRP email render.
+
+    Centralises the shape contract of the alpha-HRP email template
+    context across US and India. The base ``AlphaHRPEmailRequest``
+    carries every common field; the US subclass adds ``order_results``
+    and ``skipped`` (India does not trade so its base instance leaves
+    them at their defaults of ``None`` / ``False``).
+
+    The skipped/order-execution blocks in the template render based on
+    these context keys -- always present, always honest about whether
+    they apply to this market.
+    """
+    order_results = getattr(request, "order_results", None)
+    if order_results is not None:
+        order_results = order_results.model_dump()
+    return {
+        "summary": request.summary,
+        "stage1_top_scores": [item.model_dump() for item in request.stage1_top_scores],
+        "model_version": request.model_version,
+        "predicted_count": request.predicted_count,
+        "requested_count": request.requested_count,
+        "selected_symbols": request.selected_symbols,
+        "kept_count": request.kept_count,
+        "fillers_count": request.fillers_count,
+        "evicted_from_previous": request.evicted_from_previous,
+        "previous_year_week_used": request.previous_year_week_used,
+        "stage2": request.stage2.model_dump(),
+        "universe": request.universe,
+        "top_n": request.top_n,
+        "hold_threshold": request.hold_threshold,
+        "target_week_start": request.target_week_start,
+        "target_week_end": request.target_week_end,
+        "as_of_date": request.as_of_date,
+        "order_results": order_results,
+        "skipped": getattr(request, "skipped", False),
+    }
+
+
 @router.post("/sac-weekly-report", response_model=WeeklyReportEmailResponse)
 def send_sac_weekly_report_email(
     request: SACWeeklyReportEmailRequest,
@@ -162,24 +202,17 @@ def send_india_alpha_hrp_report_email(
 ) -> WeeklyReportEmailResponse:
     """Send an India Alpha-HRP portfolio analysis email.
 
-    India weekly allocation is structurally "PatchTST top-15 alpha screen
-    on Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the
-    India counterpart of the US Alpha-HRP path. Renders an HTML email
-    with the AI summary and HRP allocation table, and sends via Gmail
-    SMTP.
+    India weekly allocation is structurally "PatchTST alpha screen on
+    Nifty Shariah 500 -> rank-band sticky -> HRP". The email mirrors the
+    US Alpha-HRP report (Stage 1 top-25, sticky kept/fillers/evicted,
+    Stage 2 weights) minus the Alpaca order-execution / skipped blocks,
+    since India does not trade through a paper account.
     """
     logger.info("Generating India Alpha-HRP report email")
 
     return _render_and_send_email(
         template_name="india_alpha_hrp_report_email.html.j2",
-        context={
-            "summary": request.summary,
-            "hrp": request.hrp.model_dump(),
-            "universe": request.universe,
-            "target_week_start": request.target_week_start,
-            "target_week_end": request.target_week_end,
-            "as_of_date": request.as_of_date,
-        },
+        context=_alpha_hrp_email_context(request),
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,
@@ -283,35 +316,9 @@ def send_us_alpha_hrp_report_email(
     """
     logger.info("Generating US Alpha-HRP report email")
 
-    order_results = (
-        request.order_results.model_dump() if request.order_results else None
-    )
-
     return _render_and_send_email(
         template_name="us_alpha_hrp_report_email.html.j2",
-        context={
-            "summary": request.summary,
-            "stage1_top_scores": [
-                item.model_dump() for item in request.stage1_top_scores
-            ],
-            "model_version": request.model_version,
-            "predicted_count": request.predicted_count,
-            "requested_count": request.requested_count,
-            "selected_symbols": request.selected_symbols,
-            "kept_count": request.kept_count,
-            "fillers_count": request.fillers_count,
-            "evicted_from_previous": request.evicted_from_previous,
-            "previous_year_week_used": request.previous_year_week_used,
-            "stage2": request.stage2.model_dump(),
-            "universe": request.universe,
-            "top_n": request.top_n,
-            "hold_threshold": request.hold_threshold,
-            "target_week_start": request.target_week_start,
-            "target_week_end": request.target_week_end,
-            "as_of_date": request.as_of_date,
-            "order_results": order_results,
-            "skipped": request.skipped,
-        },
+        context=_alpha_hrp_email_context(request),
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,

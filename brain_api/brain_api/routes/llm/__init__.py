@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from .models import (
-    IndiaAlphaHRPSummaryRequest,
+    AlphaHRPSummaryRequest,
     SACWeeklySummaryRequest,
     TrainingSummaryRequest,
     TrainingSummaryResponse,
@@ -28,7 +28,7 @@ router.include_router(training_summary_router)
 router.include_router(weekly_summary_router)
 
 __all__ = [
-    "IndiaAlphaHRPSummaryRequest",
+    "AlphaHRPSummaryRequest",
     "LLMProvider",
     "LLMResponse",
     "OllamaProvider",

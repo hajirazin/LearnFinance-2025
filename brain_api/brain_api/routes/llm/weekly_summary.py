@@ -7,10 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .models import (
+    AlphaHRPSummaryRequest,
     DoubleHRPSummaryRequest,
-    IndiaAlphaHRPSummaryRequest,
     SACWeeklySummaryRequest,
-    USAlphaHRPSummaryRequest,
     USDoubleHRPSummaryRequest,
     WeeklySummaryResponse,
 )
@@ -105,46 +104,58 @@ def generate_sac_weekly_summary(
     )
 
 
-@router.post("/india-alpha-hrp-summary", response_model=WeeklySummaryResponse)
-def generate_india_alpha_hrp_summary(
-    request: IndiaAlphaHRPSummaryRequest,
-    provider: LLMProvider = Depends(get_llm_provider),
+def _render_alpha_hrp_summary(
+    *,
+    template_name: str,
+    request: AlphaHRPSummaryRequest,
+    provider: LLMProvider,
+    fallback_para_key: str,
+    log_label: str,
 ) -> WeeklySummaryResponse:
-    """Generate an LLM summary of India Alpha-HRP allocation results.
+    """Render an Alpha-HRP prompt and call the LLM provider.
 
-    India weekly allocation is structurally "PatchTST top-15 alpha screen on
-    Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the India
-    counterpart of the US Alpha-HRP path. Analyzes HRP concentration,
-    diversification, and risk observations across the alpha-screened picks.
+    Both the US and India Alpha-HRP summary endpoints share an identical
+    pipeline:
 
-    Args:
-        request: HRP allocation data from POST /allocation/hrp.
-        provider: LLM provider (injected via dependency).
+    1. Load market-specific Jinja prompt (Stage 1 top-25 + sticky outcome
+       sections come from a shared base template; only the JSON schema
+       paragraphs differ per market).
+    2. Render with the same ``AlphaHRPSummaryRequest`` payload shape.
+    3. Call the provider; parse JSON; fall back to a single-paragraph
+       error stub on parse failure.
 
-    Returns:
-        Summary with 3 paragraph fields and metadata.
-
-    Raises:
-        HTTPException: If template loading or LLM call fails.
+    The fallback ``para_*`` key differs per market only because each
+    template's first paragraph has a market-specific name.
     """
-    logger.info(f"Generating India Alpha-HRP summary using provider={provider.name}")
+    logger.info(f"Generating {log_label} summary using provider={provider.name}")
 
     try:
         env = get_jinja_env()
-        template = env.get_template("india_alpha_hrp_summary_prompt.j2")
+        template = env.get_template(template_name)
     except TemplateNotFound as e:
         logger.error(f"Template not found: {e}")
         raise HTTPException(
             status_code=500,
-            detail="Template not found: india_alpha_hrp_summary_prompt.j2",
+            detail=f"Template not found: {template_name}",
         ) from e
 
     prompt = template.render(
-        hrp=request.hrp.model_dump(),
+        stage1_top_scores=[item.model_dump() for item in request.stage1_top_scores],
+        model_version=request.model_version,
+        predicted_count=request.predicted_count,
+        requested_count=request.requested_count,
+        selected_symbols=request.selected_symbols,
+        kept_count=request.kept_count,
+        fillers_count=request.fillers_count,
+        evicted_from_previous=request.evicted_from_previous,
+        previous_year_week_used=request.previous_year_week_used,
+        stage2=request.stage2.model_dump(),
         universe=request.universe,
+        top_n=request.top_n,
+        hold_threshold=request.hold_threshold,
     )
 
-    logger.debug(f"Generated India Alpha-HRP prompt length: {len(prompt)} chars")
+    logger.debug(f"Generated {log_label} prompt length: {len(prompt)} chars")
 
     try:
         llm_response = provider.generate(prompt)
@@ -160,7 +171,7 @@ def generate_india_alpha_hrp_summary(
     except ValueError as e:
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
         summary = {
-            "para_1_portfolio_overview": "Unable to generate AI summary. Please check the logs for details.",
+            fallback_para_key: "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],
         }
 
@@ -169,6 +180,29 @@ def generate_india_alpha_hrp_summary(
         provider=provider.name,
         model_used=llm_response.model,
         tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/india-alpha-hrp-summary", response_model=WeeklySummaryResponse)
+def generate_india_alpha_hrp_summary(
+    request: AlphaHRPSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> WeeklySummaryResponse:
+    """Generate an LLM summary of India Alpha-HRP weekly results.
+
+    Stage 1 is PatchTST predicted weekly returns over Nifty Shariah 500
+    (``halal_india`` universe label, ``halal_india_alpha`` sticky
+    partition); rank-band sticky selection picks the top ``top_n`` with
+    hold threshold ``hold_threshold``; Stage 2 HRP risk-parity sizes the
+    chosen Indian names. India does NOT trade through Alpaca, so order
+    execution is not part of the report.
+    """
+    return _render_alpha_hrp_summary(
+        template_name="india_alpha_hrp_summary_prompt.j2",
+        request=request,
+        provider=provider,
+        fallback_para_key="para_1_market_outlook",
+        log_label="India Alpha-HRP",
     )
 
 
@@ -243,7 +277,7 @@ def generate_us_double_hrp_summary(
 
 @router.post("/us-alpha-hrp-summary", response_model=WeeklySummaryResponse)
 def generate_us_alpha_hrp_summary(
-    request: USAlphaHRPSummaryRequest,
+    request: AlphaHRPSummaryRequest,
     provider: LLMProvider = Depends(get_llm_provider),
 ) -> WeeklySummaryResponse:
     """Generate an LLM summary of US Alpha-HRP weekly results.
@@ -254,59 +288,12 @@ def generate_us_alpha_hrp_summary(
     alpha-then-risk pipeline for the human reviewer of the ``hrp``
     Alpaca paper account.
     """
-    logger.info(f"Generating US Alpha-HRP summary using provider={provider.name}")
-
-    try:
-        env = get_jinja_env()
-        template = env.get_template("us_alpha_hrp_summary_prompt.j2")
-    except TemplateNotFound as e:
-        logger.error(f"Template not found: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Template not found: us_alpha_hrp_summary_prompt.j2",
-        ) from e
-
-    prompt = template.render(
-        stage1_top_scores=[item.model_dump() for item in request.stage1_top_scores],
-        model_version=request.model_version,
-        predicted_count=request.predicted_count,
-        requested_count=request.requested_count,
-        selected_symbols=request.selected_symbols,
-        kept_count=request.kept_count,
-        fillers_count=request.fillers_count,
-        evicted_from_previous=request.evicted_from_previous,
-        previous_year_week_used=request.previous_year_week_used,
-        stage2=request.stage2.model_dump(),
-        universe=request.universe,
-        top_n=request.top_n,
-        hold_threshold=request.hold_threshold,
-    )
-
-    logger.debug(f"Generated US Alpha-HRP prompt length: {len(prompt)} chars")
-
-    try:
-        llm_response = provider.generate(prompt)
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"LLM service unavailable: {e}",
-        ) from e
-
-    try:
-        summary = parse_json_response(llm_response.content)
-    except ValueError as e:
-        logger.warning(f"Failed to parse LLM response as JSON: {e}")
-        summary = {
-            "para_1_market_outlook": "Unable to generate AI summary. Please check the logs for details.",
-            "raw_response": llm_response.content[:500],
-        }
-
-    return WeeklySummaryResponse(
-        summary=summary,
-        provider=provider.name,
-        model_used=llm_response.model,
-        tokens_used=llm_response.tokens_used,
+    return _render_alpha_hrp_summary(
+        template_name="us_alpha_hrp_summary_prompt.j2",
+        request=request,
+        provider=provider,
+        fallback_para_key="para_1_market_outlook",
+        log_label="US Alpha-HRP",
     )
 
 

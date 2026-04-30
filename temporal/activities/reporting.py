@@ -120,15 +120,27 @@ def send_weekly_email(
 
 @activity.defn
 def generate_india_alpha_hrp_summary(
-    hrp: HRPAllocationResponse,
+    scores: PatchTSTBatchScores,
+    sticky: RankBandTopNResponse,
+    stage2: HRPAllocationResponse,
     universe: str,
+    top_n: int,
+    hold_threshold: int,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of India Alpha-HRP allocation."""
+    """Generate LLM summary of the India Alpha-HRP weekly run.
+
+    Stage 1 is PatchTST predicted weekly returns over Nifty Shariah 500
+    (alpha screen, ``halal_india_alpha`` partition); Stage 2 is HRP
+    risk-parity sizing on the chosen ``top_n``. Mirrors the US
+    counterpart -- same payload shape via :func:`_build_alpha_hrp_report_payload`.
+    """
     logger.info("Generating India Alpha-HRP LLM summary...")
     with get_client() as client:
         response = client.post(
             "/llm/india-alpha-hrp-summary",
-            json={"hrp": hrp.model_dump(), "universe": universe},
+            json=_build_alpha_hrp_report_payload(
+                scores, sticky, stage2, universe, top_n, hold_threshold
+            ),
         )
         response.raise_for_status()
     result = WeeklySummaryResponse(**response.json())
@@ -141,25 +153,37 @@ def generate_india_alpha_hrp_summary(
 @activity.defn
 def send_india_alpha_hrp_email(
     summary: WeeklySummaryResponse,
-    hrp: HRPAllocationResponse,
+    scores: PatchTSTBatchScores,
+    sticky: RankBandTopNResponse,
+    stage2: HRPAllocationResponse,
     universe: str,
+    top_n: int,
+    hold_threshold: int,
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
 ) -> WeeklyReportEmailResponse:
-    """Send India Alpha-HRP report email (HRP + AI summary)."""
+    """Send the India Alpha-HRP weekly report email.
+
+    India does not trade through Alpaca, so this activity has no
+    ``order_results`` / ``skipped`` parameters -- the email template's
+    order-execution and skipped-notice blocks render empty via the
+    base template's defaults.
+    """
     logger.info("Sending India Alpha-HRP report email...")
+    payload: dict = {
+        "summary": summary.summary,
+        **_build_alpha_hrp_report_payload(
+            scores, sticky, stage2, universe, top_n, hold_threshold
+        ),
+        "target_week_start": target_week_start,
+        "target_week_end": target_week_end,
+        "as_of_date": as_of_date,
+    }
     with get_client() as client:
         response = client.post(
             "/email/india-alpha-hrp-report",
-            json={
-                "summary": summary.summary,
-                "hrp": hrp.model_dump(),
-                "universe": universe,
-                "target_week_start": target_week_start,
-                "target_week_end": target_week_end,
-                "as_of_date": as_of_date,
-            },
+            json=payload,
         )
         response.raise_for_status()
     result = WeeklyReportEmailResponse(**response.json())
@@ -322,7 +346,7 @@ def _alpha_top_scores(scores: PatchTSTBatchScores, top_k: int = 25) -> list[dict
     ]
 
 
-def _build_us_alpha_hrp_report_payload(
+def _build_alpha_hrp_report_payload(
     scores: PatchTSTBatchScores,
     sticky: RankBandTopNResponse,
     stage2: HRPAllocationResponse,
@@ -330,13 +354,17 @@ def _build_us_alpha_hrp_report_payload(
     top_n: int,
     hold_threshold: int,
 ) -> dict:
-    """Common JSON shape for US Alpha-HRP LLM-summary and email payloads.
+    """Common JSON shape for Alpha-HRP LLM-summary and email payloads.
 
-    Both /llm/us-alpha-hrp-summary and /email/us-alpha-hrp-report take
-    the same Stage 1 + sticky + Stage 2 fields. Centralising the shape
-    here keeps the two activities from drifting (e.g. one starts using
+    The same Stage 1 (top-25 alpha scores) + rank-band sticky + Stage 2
+    (HRP) bundle ships to both ``/llm/{us,india}-alpha-hrp-summary`` and
+    ``/email/{us,india}-alpha-hrp-report``. Centralising the shape here
+    keeps the four activities from drifting (e.g. one starts using
     ``top_n`` while the other uses ``stage2.symbols_used``) and means
-    only one place needs touching when the prompt template changes.
+    only one place needs touching when the prompt/email templates
+    change. The function is universe-parametric -- the
+    ``halal_new_alpha`` (US) vs ``halal_india_alpha`` (India)
+    discrimination flows through the ``universe`` arg untouched.
     """
     return {
         "stage1_top_scores": _alpha_top_scores(scores),
@@ -376,7 +404,7 @@ def generate_us_alpha_hrp_summary(
     with get_client() as client:
         response = client.post(
             "/llm/us-alpha-hrp-summary",
-            json=_build_us_alpha_hrp_report_payload(
+            json=_build_alpha_hrp_report_payload(
                 scores, sticky, stage2, universe, top_n, hold_threshold
             ),
         )
@@ -414,7 +442,7 @@ def send_us_alpha_hrp_email(
     logger.info("Sending US Alpha-HRP report email...")
     payload: dict = {
         "summary": summary.summary,
-        **_build_us_alpha_hrp_report_payload(
+        **_build_alpha_hrp_report_payload(
             scores, sticky, stage2, universe, top_n, hold_threshold
         ),
         "target_week_start": target_week_start,

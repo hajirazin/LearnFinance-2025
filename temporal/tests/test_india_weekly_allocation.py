@@ -1,60 +1,114 @@
-"""Tests for India weekly allocation Temporal workflow.
+"""Tests for the India Alpha-HRP Temporal workflow.
 
-Tests:
-- Full workflow execution with mocked activities
-- Sequential dependency (failure propagation)
-- Correct date calculations
+Covers cold-start (no prior week) and stable-week scenarios mirroring
+``tests/test_us_alpha_hrp_happy.py``. Failure propagation is also
+exercised at the universe-fetch boundary (no Alpaca account, so the
+US sell-wait-buy / skip-path branches are not present).
 """
 
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from __future__ import annotations
 
 import pytest
 from temporalio import activity
 from temporalio.client import WorkflowFailureError
-from temporalio.contrib.pydantic import pydantic_data_converter
-from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import Worker
 
 from models import (
     HRPAllocationResponse,
+    PatchTSTBatchScores,
+    RankBandTopNResponse,
+    RecordFinalWeightsResponse,
     WeeklyReportEmailResponse,
     WeeklySummaryResponse,
+)
+from tests.harness import (
+    make_india_alpha_hrp_activities,
+    worker_with_activities,
 )
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
 
 
 @pytest.fixture
-def mock_universe_data():
+def india_universe_data():
+    """Simulated nifty_shariah_500 universe response (~210 in production)."""
     return {
-        "stocks": [
-            {"symbol": "RELIANCE.NS", "predicted_weekly_return_pct": 3.5, "rank": 1},
-            {"symbol": "TCS.NS", "predicted_weekly_return_pct": 3.2, "rank": 2},
-            {"symbol": "INFY.NS", "predicted_weekly_return_pct": 2.8, "rank": 3},
-        ],
-        "total_candidates": 180,
-        "total_universe": 210,
-        "top_n": 15,
-        "selection_method": "patchtst_forecast",
+        "stocks": [{"symbol": f"NSE{i:03d}.NS"} for i in range(20)],
+        "total_stocks": 20,
+        "source": "nifty_shariah_500",
     }
 
 
 @pytest.fixture
-def mock_hrp():
-    return HRPAllocationResponse(
-        percentage_weights={"RELIANCE.NS": 25.0, "TCS.NS": 20.0, "INFY.NS": 15.0},
-        symbols_used=3,
-        symbols_excluded=[],
-        as_of_date="2026-03-02",
+def india_patchtst_scores():
+    """20 valid India PatchTST scores spread evenly so ranks are unambiguous."""
+    return PatchTSTBatchScores(
+        scores={f"NSE{i:03d}.NS": float(20 - i) for i in range(20)},
+        model_version="v2026-04-26-india",
+        as_of_date="2026-04-28",
+        target_week_start="2026-04-28",
+        target_week_end="2026-05-02",
+        requested_count=20,
+        predicted_count=20,
+        excluded_symbols=[],
     )
 
 
 @pytest.fixture
-def mock_summary():
+def india_stage2_alloc():
+    weights = {f"NSE{i:03d}.NS": round(100.0 / 15, 2) for i in range(15)}
+    return HRPAllocationResponse(
+        percentage_weights=weights,
+        symbols_used=15,
+        symbols_excluded=[],
+        lookback_days=252,
+        as_of_date="2026-04-28",
+    )
+
+
+@pytest.fixture
+def india_sticky_cold_start():
+    selected = [f"NSE{i:03d}.NS" for i in range(15)]
+    return RankBandTopNResponse(
+        selected=selected,
+        reasons={s: "top_rank" for s in selected},
+        kept_count=0,
+        fillers_count=15,
+        evicted_from_previous={},
+        previous_year_week_used=None,
+        universe="halal_india_alpha",
+        year_week="202618",
+        top_n=15,
+        hold_threshold=30,
+    )
+
+
+@pytest.fixture
+def india_sticky_stable():
+    selected = [f"NSE{i:03d}.NS" for i in range(15)]
+    return RankBandTopNResponse(
+        selected=selected,
+        reasons={s: "sticky" for s in selected},
+        kept_count=15,
+        fillers_count=0,
+        evicted_from_previous={},
+        previous_year_week_used="202617",
+        universe="halal_india_alpha",
+        year_week="202618",
+        top_n=15,
+        hold_threshold=30,
+    )
+
+
+@pytest.fixture
+def india_record_final_resp():
+    return RecordFinalWeightsResponse(
+        rows_updated=15, universe="halal_india_alpha", year_week="202618"
+    )
+
+
+@pytest.fixture
+def india_summary_resp():
     return WeeklySummaryResponse(
-        summary={
-            "para_1_portfolio_overview": "HRP distributed weights across 3 stocks."
-        },
+        summary={"para_1_market_outlook": "Top NSE names look strong."},
         provider="openai",
         model_used="gpt-4o-mini",
         tokens_used=350,
@@ -62,178 +116,192 @@ def mock_summary():
 
 
 @pytest.fixture
-def mock_email():
+def india_email_resp():
     return WeeklyReportEmailResponse(
         is_success=True,
-        subject="India Alpha-HRP Portfolio Analysis (2026-03-02 -> 2026-03-06)",
-        body="<html><body>India report</body></html>",
+        subject="India Alpha-HRP Portfolio Analysis (2026-04-28 -> 2026-05-02)",
+        body="<html><body>India Alpha-HRP report</body></html>",
     )
 
 
-def _make_india_allocation_activities(
-    universe_data, hrp, summary, email, *, universe_error=None
-):
-    """Build mock activities for IndiaWeeklyAllocationWorkflow."""
-
-    @activity.defn(name="get_halal_india_universe")
-    def mock_get_halal_india_universe() -> dict:
-        if universe_error:
-            raise universe_error
-        return universe_data
-
-    @activity.defn(name="allocate_hrp")
-    def mock_allocate_hrp(symbols, as_of_date, lookback_days=252):
-        return hrp
-
-    @activity.defn(name="generate_india_alpha_hrp_summary")
-    def mock_generate_india_alpha_hrp_summary(hrp_arg, universe):
-        return summary
-
-    @activity.defn(name="send_india_alpha_hrp_email")
-    def mock_send_india_alpha_hrp_email(
-        summary_arg, hrp_arg, universe, start, end, as_of
-    ):
-        return email
-
-    return [
-        mock_get_halal_india_universe,
-        mock_allocate_hrp,
-        mock_generate_india_alpha_hrp_summary,
-        mock_send_india_alpha_hrp_email,
-    ]
-
-
-class TestIndiaWeeklyAllocationWorkflow:
+class TestIndiaAlphaHRPHappyPath:
     @pytest.mark.asyncio
-    async def test_full_workflow_success(
-        self, mock_universe_data, mock_hrp, mock_summary, mock_email
+    async def test_full_workflow_cold_start(
+        self,
+        india_universe_data,
+        india_patchtst_scores,
+        india_stage2_alloc,
+        india_sticky_cold_start,
+        india_record_final_resp,
+        india_summary_resp,
+        india_email_resp,
     ):
-        activities = _make_india_allocation_activities(
-            mock_universe_data, mock_hrp, mock_summary, mock_email
+        score_calls: list[dict] = []
+        select_calls: list[dict] = []
+        hrp_calls: list[dict] = []
+        record_final_calls: list[dict] = []
+
+        activities = make_india_alpha_hrp_activities(
+            universe_data=india_universe_data,
+            scores=india_patchtst_scores,
+            stage2=india_stage2_alloc,
+            sticky=india_sticky_cold_start,
+            record_final=india_record_final_resp,
+            summary=india_summary_resp,
+            email=india_email_resp,
+            score_calls=score_calls,
+            select_calls=select_calls,
+            hrp_calls=hrp_calls,
+            record_final_calls=record_final_calls,
         )
 
-        async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter
+        async with worker_with_activities(
+            [IndiaWeeklyAllocationWorkflow], activities
         ) as env:
-            async with Worker(
-                env.client,
+            result = await env.client.execute_workflow(
+                IndiaWeeklyAllocationWorkflow.run,
+                id="test-india-alpha-hrp-cold-start",
                 task_queue="test-queue",
-                workflows=[IndiaWeeklyAllocationWorkflow],
-                activities=activities,
-                activity_executor=ThreadPoolExecutor(),
-            ):
-                result = await env.client.execute_workflow(
-                    IndiaWeeklyAllocationWorkflow.run,
-                    id="test-india-email",
-                    task_queue="test-queue",
-                )
+            )
 
-            assert result["universe_stocks"] == 3
-            assert result["hrp_symbols"] == 3
-            assert result["summary_provider"] == "openai"
-            assert result["email"]["is_success"] is True
-            assert "India" in result["email"]["subject"]
+        # Phase-by-phase assertions on the workflow output.
+        assert result["universe_symbols"] == 20
+        assert result["stage1_predicted_count"] == 20
+        assert result["model_version"] == "v2026-04-26-india"
+        assert result["top_n"] == 15
+        assert result["hold_threshold"] == 30
+        assert result["kept_count"] == 0
+        assert result["fillers_count"] == 15
+        assert result["previous_year_week_used"] is None
+        assert result["stage2_symbols_used"] == 15
+        assert len(result["selected_symbols"]) == 15
+        assert result["email"]["is_success"] is True
+
+        # Phase 1: PatchTST scoring activity called with full universe.
+        assert len(score_calls) == 1
+        assert score_calls[0]["symbols"] == [
+            s["symbol"] for s in india_universe_data["stocks"]
+        ]
+        assert score_calls[0]["min_predictions"] == 15
+
+        # Phase 1.5: rank-band selection on the halal_india_alpha
+        # partition (NOT halal_new_alpha -- distinct by mathematical
+        # requirement to keep sticky rows isolated per market).
+        assert len(select_calls) == 1
+        assert select_calls[0]["universe"] == "halal_india_alpha"
+        assert select_calls[0]["top_n"] == 15
+        assert select_calls[0]["hold_threshold"] == 30
+        assert select_calls[0]["scores_count"] == 20
+
+        # Phase 2: HRP runs ONLY on the selected set with 252d lookback.
+        assert len(hrp_calls) == 1
+        assert hrp_calls[0]["lookback_days"] == 252
+        assert hrp_calls[0]["symbols"] == india_sticky_cold_start.selected
+
+        # Phase 2.5: final weights recorded under the correct partition.
+        assert len(record_final_calls) == 1
+        assert record_final_calls[0]["universe"] == "halal_india_alpha"
+        assert record_final_calls[0]["year_week"] == select_calls[0]["year_week"]
+        assert record_final_calls[0]["n_weights"] == 15
 
     @pytest.mark.asyncio
-    async def test_target_week_end_is_4_days_after_start(
-        self, mock_universe_data, mock_hrp, mock_summary, mock_email
+    async def test_stable_week_all_kept(
+        self,
+        india_universe_data,
+        india_patchtst_scores,
+        india_stage2_alloc,
+        india_sticky_stable,
+        india_record_final_resp,
+        india_summary_resp,
+        india_email_resp,
     ):
-        activities = _make_india_allocation_activities(
-            mock_universe_data, mock_hrp, mock_summary, mock_email
+        activities = make_india_alpha_hrp_activities(
+            universe_data=india_universe_data,
+            scores=india_patchtst_scores,
+            stage2=india_stage2_alloc,
+            sticky=india_sticky_stable,
+            record_final=india_record_final_resp,
+            summary=india_summary_resp,
+            email=india_email_resp,
         )
 
-        async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter
+        async with worker_with_activities(
+            [IndiaWeeklyAllocationWorkflow], activities
         ) as env:
-            async with Worker(
-                env.client,
+            result = await env.client.execute_workflow(
+                IndiaWeeklyAllocationWorkflow.run,
+                id="test-india-alpha-hrp-stable",
                 task_queue="test-queue",
-                workflows=[IndiaWeeklyAllocationWorkflow],
-                activities=activities,
-                activity_executor=ThreadPoolExecutor(),
-            ):
-                result = await env.client.execute_workflow(
-                    IndiaWeeklyAllocationWorkflow.run,
-                    id="test-india-email-dates",
-                    task_queue="test-queue",
-                )
+            )
 
-            start = datetime.strptime(result["target_week_start"], "%Y-%m-%d")
-            end = datetime.strptime(result["target_week_end"], "%Y-%m-%d")
-            assert (end - start).days == 4
-
-    @pytest.mark.asyncio
-    async def test_hrp_called_with_universe_symbols(
-        self, mock_universe_data, mock_hrp, mock_summary, mock_email
-    ):
-        hrp_calls = []
-
-        @activity.defn(name="get_halal_india_universe")
-        def mock_universe():
-            return mock_universe_data
-
-        @activity.defn(name="allocate_hrp")
-        def mock_allocate(symbols, as_of_date, lookback_days=252):
-            hrp_calls.append({"symbols": symbols, "as_of_date": as_of_date})
-            return mock_hrp
-
-        @activity.defn(name="generate_india_alpha_hrp_summary")
-        def mock_gen(hrp_arg, universe):
-            return mock_summary
-
-        @activity.defn(name="send_india_alpha_hrp_email")
-        def mock_send(summary_arg, hrp_arg, universe, start, end, as_of):
-            return mock_email
-
-        async with await WorkflowEnvironment.start_time_skipping(
-            data_converter=pydantic_data_converter
-        ) as env:
-            async with Worker(
-                env.client,
-                task_queue="test-queue",
-                workflows=[IndiaWeeklyAllocationWorkflow],
-                activities=[mock_universe, mock_allocate, mock_gen, mock_send],
-                activity_executor=ThreadPoolExecutor(),
-            ):
-                await env.client.execute_workflow(
-                    IndiaWeeklyAllocationWorkflow.run,
-                    id="test-india-email-hrp",
-                    task_queue="test-queue",
-                )
-
-            assert len(hrp_calls) == 1
-            expected_symbols = [s["symbol"] for s in mock_universe_data["stocks"]]
-            assert hrp_calls[0]["symbols"] == expected_symbols
+        # All 15 selected are kept from prior week.
+        assert result["kept_count"] == 15
+        assert result["fillers_count"] == 0
+        assert result["previous_year_week_used"] == "202617"
+        assert result["stage2_symbols_used"] == 15
 
 
 class TestIndiaWorkflowFailurePropagation:
     @pytest.mark.asyncio
     async def test_universe_failure_stops_workflow(
-        self, mock_universe_data, mock_hrp, mock_summary, mock_email
+        self,
+        india_patchtst_scores,
+        india_stage2_alloc,
+        india_sticky_cold_start,
+        india_record_final_resp,
+        india_summary_resp,
+        india_email_resp,
     ):
-        activities = _make_india_allocation_activities(
-            mock_universe_data,
-            mock_hrp,
-            mock_summary,
-            mock_email,
-            universe_error=RuntimeError("NSE API down"),
-        )
+        """If fetch_nifty_shariah_500_universe raises, the workflow fails.
 
-        async with (
-            await WorkflowEnvironment.start_time_skipping(
-                data_converter=pydantic_data_converter
-            ) as env,
-            Worker(
-                env.client,
-                task_queue="test-queue",
-                workflows=[IndiaWeeklyAllocationWorkflow],
-                activities=activities,
-                activity_executor=ThreadPoolExecutor(),
-            ),
-        ):
+        We override only the universe activity inside a hand-rolled
+        harness so the mocked downstream activities are never reached.
+        Confirms the phase-0 boundary stops the rest of the pipeline.
+        """
+
+        @activity.defn(name="fetch_nifty_shariah_500_universe")
+        def mock_fetch_universe() -> dict:
+            raise RuntimeError("NSE API down")
+
+        @activity.defn(name="score_halal_india_with_patchtst")
+        def mock_score(symbols, as_of_date, min_predictions=15):
+            return india_patchtst_scores
+
+        @activity.defn(name="select_rank_band_top_n")
+        def mock_select(*args, **kwargs):
+            return india_sticky_cold_start
+
+        @activity.defn(name="allocate_hrp")
+        def mock_allocate(*args, **kwargs):
+            return india_stage2_alloc
+
+        @activity.defn(name="record_final_weights")
+        def mock_record(*args, **kwargs):
+            return india_record_final_resp
+
+        @activity.defn(name="generate_india_alpha_hrp_summary")
+        def mock_summary(*args, **kwargs):
+            return india_summary_resp
+
+        @activity.defn(name="send_india_alpha_hrp_email")
+        def mock_email(*args, **kwargs):
+            return india_email_resp
+
+        async with worker_with_activities(
+            [IndiaWeeklyAllocationWorkflow],
+            [
+                mock_fetch_universe,
+                mock_score,
+                mock_select,
+                mock_allocate,
+                mock_record,
+                mock_summary,
+                mock_email,
+            ],
+        ) as env:
             with pytest.raises(WorkflowFailureError):
                 await env.client.execute_workflow(
                     IndiaWeeklyAllocationWorkflow.run,
-                    id="test-india-email-fail",
+                    id="test-india-alpha-hrp-fail",
                     task_queue="test-queue",
                 )

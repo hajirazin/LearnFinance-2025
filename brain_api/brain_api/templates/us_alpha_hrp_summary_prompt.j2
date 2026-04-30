@@ -1,32 +1,12 @@
-You are a financial analyst specializing in US equity markets and quantitative portfolio construction.
-Analyze a two-stage "Alpha-HRP" portfolio allocation for the {{ universe }} halal universe traded on the NYSE/Nasdaq via Alpaca paper trading.
+{% extends "alpha_hrp_summary_prompt_base.j2" %}
 
-## Strategy Overview
-- **Stage 1 (Alpha screen)**: PatchTST (OHLCV transformer) was run on the full {{ universe }} universe ({{ predicted_count }}/{{ requested_count }} stocks produced valid weekly-return forecasts) using model version `{{ model_version }}`. Symbols are then ranked by predicted_weekly_return_pct descending.
-- **Rank-band sticky selection**: From those ranks, an asymmetric rank-band picks the final {{ top_n }} stocks. Entry threshold is rank <= {{ top_n }} (K_in); a previously-held stock is **retained** as long as its current rank is <= {{ hold_threshold }} (K_hold), even if it slipped out of the entry zone. Goal: capture alpha without churning friction every time mid-rank names reshuffle.
-- **Stage 2 (Risk-parity sizing)**: HRP was run on the {{ top_n }} chosen stocks using a {{ stage2.lookback_days }}-day lookback (~{{ (stage2.lookback_days / 252) | round(1) }} year). After HRP's covariance/data-alignment step, {{ stage2.symbols_used }} stocks ended up with a non-zero weight; any names dropped by HRP are listed in `symbols_excluded`.
-- As-of Date: {{ stage2.as_of_date }}
+{% block analyst_intro %}You are a financial analyst specializing in US equity markets and quantitative portfolio construction.{% endblock %}
+
+{% block strategy_overview_extras %}
 - Trading account: Alpaca paper (`hrp` account; algorithm tag `alpha_hrp`)
+{% endblock %}
 
-## Stage 1: Alpha Ranking (top 25 by predicted weekly return %)
-Showing the top 25 PatchTST forecasts so you can see context beyond the {{ top_n }} that were actually picked. Rank-band sticky retained {{ kept_count }} of last week's holdings and filled {{ fillers_count }} slots from this week's highest ranks.
-{% for item in stage1_top_scores %}- #{{ item.rank }} {{ item.symbol }}: {{ "%+.2f" | format(item.score) }}% predicted weekly return
-{% endfor %}
-
-## Sticky Selection Outcome
-- Selected ({{ top_n }}): {{ selected_symbols | join(", ") }}
-- Kept from last week (rank inside K_hold={{ hold_threshold }}): {{ kept_count }}
-- Newly entered (top {{ top_n }} this week): {{ fillers_count }}
-- Previously held but evicted: {{ evicted_from_previous | length }}
-{% for sym, reason in evicted_from_previous.items() %}  - {{ sym }}: {{ reason }}
-{% endfor %}- Comparison week: {{ previous_year_week_used or "cold start (no prior week)" }}
-
-## Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks weighted by HRP)
-{% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
-{% endfor %}
-
-## Instructions
-
+{% block instructions %}
 Analyze the US Alpha-HRP allocation, focusing on the alpha-then-risk pipeline and the rank-band turnover damper. Be concrete; reference specific symbols and numbers.
 Respond with JSON only:
 {
@@ -35,3 +15,4 @@ Respond with JSON only:
     "para_3_final_allocation": "<3 sentences: how the {{ stage2.lookback_days }}-day HRP re-distributed weight across the {{ stage2.symbols_used }} stocks that received non-zero weight, whether the final allocation is concentrated or diversified, and the top 3 holdings with their weights>",
     "para_4_risk_observations": "<3 sentences: key risks specific to alpha-then-risk -- forecaster dependency, rank-band parameter sensitivity, and one actionable observation for the coming week of Alpaca paper trading>"
 }
+{% endblock %}

@@ -20,14 +20,13 @@ from brain_api.routes.training.models import (
 )
 
 __all__ = [
+    "AlphaHRPSummaryRequest",
     "AlphaScoreItem",
     "DoubleHRPSummaryRequest",
-    "IndiaAlphaHRPSummaryRequest",
     "IndiaTrainingSummaryRequest",
     "SACWeeklySummaryRequest",
     "TrainingSummaryRequest",
     "TrainingSummaryResponse",
-    "USAlphaHRPSummaryRequest",
     "USDoubleHRPSummaryRequest",
     "WeeklySummaryResponse",
 ]
@@ -99,19 +98,6 @@ class IndiaTrainingSummaryRequest(BaseModel):
     patchtst: PatchTSTTrainResponse
 
 
-class IndiaAlphaHRPSummaryRequest(BaseModel):
-    """Request model for POST /llm/india-alpha-hrp-summary.
-
-    India weekly allocation is structurally "PatchTST top-15 alpha screen on
-    Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the India
-    counterpart of the US Alpha-HRP path. The LLM analyzes HRP concentration
-    and diversification across the alpha-screened picks.
-    """
-
-    hrp: HRPAllocationResponse  # from POST /allocation/hrp
-    universe: str  # e.g. "halal_india" -- passed by Temporal for reporting context
-
-
 # =============================================================================
 # Double HRP Summary Models
 # =============================================================================
@@ -146,34 +132,36 @@ class USDoubleHRPSummaryRequest(BaseModel):
 
 
 # =============================================================================
-# US Alpha-HRP Summary Models
+# Alpha-HRP Summary Models (shared across US + India)
 # =============================================================================
 
 
-class USAlphaHRPSummaryRequest(BaseModel):
-    """Request model for POST /llm/us-alpha-hrp-summary.
+class AlphaHRPSummaryRequest(BaseModel):
+    """Request model for POST /llm/{us,india}-alpha-hrp-summary.
 
-    Stage 1 = PatchTST predicted weekly returns over halal_new
-    (~410 stocks); rank-band sticky selection picks ``top_n`` (default
-    15) with hold threshold ``hold_threshold`` (default 30); Stage 2
-    HRP risk-parity sizes the chosen names. The LLM gets the top-25
-    Stage 1 scores, the rank-band sticky stats (kept/fillers/evicted),
-    and the final HRP weights.
+    Both markets share an identical Stage 1 (PatchTST alpha screen) ->
+    rank-band sticky -> Stage 2 (HRP) pipeline; only the underlying
+    universe + trained weights differ. The LLM payload shape is therefore
+    one DTO. The ``universe`` field discriminates -- e.g.
+    ``halal_new`` for US, ``halal_india`` for India -- and downstream
+    prompt copy can branch on it.
+
+    Sticky-history partition keys (``halal_new_alpha``,
+    ``halal_india_alpha``) keep rank-band rows isolated from any
+    weight-band variant on the same tradable universe -- see
+    :mod:`brain_api.core.strategy_partitions`.
     """
 
     stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
     model_version: str  # PatchTST model version used for stage 1
     predicted_count: int  # how many of requested_count produced valid scores
-    requested_count: int  # full halal_new size sent into PatchTST
+    requested_count: int  # universe size sent into PatchTST
     selected_symbols: list[str]  # final top_n chosen
     kept_count: int
     fillers_count: int
     evicted_from_previous: dict[str, str] = {}
     previous_year_week_used: str | None = None
     stage2: HRPAllocationResponse  # HRP weights on the chosen top_n
-    # Sticky-history partition key (e.g. "halal_new_alpha"). Keeps
-    # rank-band sticky rows isolated from US Double HRP's weight-band
-    # rows on the same tradable universe.
     universe: str
     top_n: int  # K_in (entry threshold)
     hold_threshold: int  # K_hold (sticky retention threshold)

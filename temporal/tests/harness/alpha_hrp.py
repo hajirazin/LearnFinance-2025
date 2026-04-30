@@ -152,3 +152,111 @@ def make_us_alpha_hrp_activities(
         mock_generate_summary,
         mock_send_email,
     ]
+
+
+def make_india_alpha_hrp_activities(
+    *,
+    universe_data,
+    scores,
+    stage2,
+    sticky,
+    record_final,
+    summary,
+    email,
+    score_calls=None,
+    select_calls=None,
+    hrp_calls=None,
+    record_final_calls=None,
+):
+    """Build mock activity functions for ``IndiaWeeklyAllocationWorkflow``.
+
+    Mirrors :func:`make_us_alpha_hrp_activities` for the India Alpha-HRP
+    pipeline. India does NOT trade through Alpaca, so this harness omits
+    the four Alpaca-specific activities (``resolve_next_attempt``,
+    ``get_hrp_portfolio``, ``generate_orders_alpha_hrp``,
+    ``submit_orders_hrp``) and the ``check_order_statuses`` polling
+    activity.
+
+    The seven returned activities cover the new India workflow phases:
+    Phase 0 fetch_nifty_shariah_500_universe, Phase 1
+    score_halal_india_with_patchtst, Phase 1.5 select_rank_band_top_n,
+    Phase 2 allocate_hrp, Phase 2.5 record_final_weights, Phase 3
+    generate_india_alpha_hrp_summary, Phase 4
+    send_india_alpha_hrp_email.
+    """
+
+    @activity.defn(name="fetch_nifty_shariah_500_universe")
+    def mock_fetch_universe() -> dict:
+        return universe_data
+
+    @activity.defn(name="score_halal_india_with_patchtst")
+    def mock_score(symbols, as_of_date, min_predictions=15):
+        if score_calls is not None:
+            score_calls.append(
+                {
+                    "symbols": symbols,
+                    "as_of_date": as_of_date,
+                    "min_predictions": min_predictions,
+                }
+            )
+        return scores
+
+    @activity.defn(name="select_rank_band_top_n")
+    def mock_select_rank_band(
+        scores_arg, universe, year_week, as_of_date, run_id, top_n, hold_threshold
+    ):
+        if select_calls is not None:
+            select_calls.append(
+                {
+                    "scores_count": len(scores_arg),
+                    "universe": universe,
+                    "year_week": year_week,
+                    "as_of_date": as_of_date,
+                    "run_id": run_id,
+                    "top_n": top_n,
+                    "hold_threshold": hold_threshold,
+                }
+            )
+        return sticky
+
+    @activity.defn(name="allocate_hrp")
+    def mock_allocate_hrp(symbols, as_of_date, lookback_days=252):
+        if hrp_calls is not None:
+            hrp_calls.append(
+                {
+                    "symbols": symbols,
+                    "as_of_date": as_of_date,
+                    "lookback_days": lookback_days,
+                }
+            )
+        return stage2
+
+    @activity.defn(name="record_final_weights")
+    def mock_record_final(universe, year_week, final_weights_pct):
+        if record_final_calls is not None:
+            record_final_calls.append(
+                {
+                    "universe": universe,
+                    "year_week": year_week,
+                    "n_weights": len(final_weights_pct),
+                }
+            )
+        return record_final
+
+    @activity.defn(name="generate_india_alpha_hrp_summary")
+    def mock_generate_summary(*args, **kwargs):
+        return summary
+
+    @activity.defn(name="send_india_alpha_hrp_email")
+    def mock_send_email(*args, **kwargs):
+        return email
+
+    return [
+        mock_fetch_universe,
+        mock_score,
+        mock_select_rank_band,
+        mock_allocate_hrp,
+        mock_record_final,
+        mock_generate_summary,
+        mock_send_email,
+    ]

@@ -1,0 +1,196 @@
+{# Shared base for Alpha-HRP weekly email reports (US + India).
+
+Owns the math-aware sections that must be identical across markets:
+
+* Stage 1 top-25 PatchTST forecast table -- including the greying logic
+  that visually separates the K_in entry zone (rank <= top_n) from the
+  K_hold extension zone (rank > top_n). This is a math-aware visual
+  invariant; if US and India disagreed on what "grey" means, readers
+  could not compare them.
+* Sticky selection block -- kept_count, fillers_count, evicted prior
+  holdings, prior week comparison.
+* Stage 2 HRP allocation table with running total -- one
+  implementation, no drift.
+* Order execution block -- only renders when ``order_results`` is
+  provided (US Alpaca path); silently empty for India.
+* Skipped notice -- only renders when ``skipped`` is true (US open
+  orders gate); India never sets this.
+
+Children only override colour palette + market copy:
+
+* {% block strategy_primary %} / {% block strategy_primary_bg %} /
+  {% block strategy_header_bg %} / {% block summary_grad_start %} /
+  {% block summary_grad_end %} -- colours
+* {% block document_title %} / {% block strategy_label %} -- copy
+* {% block skipped_notice %} -- US only (India relies on the default
+  empty block)
+* {% block order_execution_heading %} -- US only
+
+The chrome (HTML head, body wrapper, footer scaffolding) comes from
+``us_report_base.html.j2``. That base name is historical; it is
+universe-agnostic. #}
+{% extends "us_report_base.html.j2" %}
+
+{# ---- Strategy palette (default = US red/rose; India overrides) ---- #}
+{% block strategy_primary %}#e11d48{% endblock %}
+{% block strategy_primary_bg %}#fff1f2{% endblock %}
+{% block strategy_header_bg %}#ffe4e6{% endblock %}
+{% block summary_grad_start %}#e11d48{% endblock %}
+{% block summary_grad_end %}#be123c{% endblock %}
+{% block stage2_primary %}#10b981{% endblock %}
+{% block stage2_primary_bg %}#f0fdf4{% endblock %}
+{% block sticky_primary %}#06b6d4{% endblock %}
+{% block sticky_primary_bg %}#ecfeff{% endblock %}
+{% block sticky_text %}#0e7490{% endblock %}
+{% block sticky_text_dim %}#155e75{% endblock %}
+
+{# ---- Strategy labels ---- #}
+{% block strategy_label %}Alpha-HRP{% endblock %}
+
+{# ---- Header (children typically override entirely for market copy) ---- #}
+{% block header %}
+  <h1 style="color: #1f2937; margin-bottom: 8px;">{% block header_title %}{{ self.strategy_label() }} Portfolio Analysis{% endblock %}</h1>
+  <div style="background-color: {{ self.strategy_header_bg() }}; padding: 16px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid {{ self.strategy_primary() }};">
+    <strong>Target Week:</strong> {{ target_week_start }} &rarr; {{ target_week_end }} &nbsp;|&nbsp;
+    <strong>As-of Date:</strong> {{ as_of_date }} &nbsp;|&nbsp;
+    <strong>Universe:</strong> {{ universe }} &nbsp;|&nbsp;
+    <strong>Strategy:</strong> PatchTST alpha &rarr; rank-band (K_in={{ top_n }}, K_hold={{ hold_threshold }}) &rarr; HRP
+  </div>
+{% endblock %}
+
+{# ---- AI summary block (4-paragraph wrapper, math-aware in that
+       paragraph order matches the prompt schema) ---- #}
+{% block ai_summary %}
+  <div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, {{ self.summary_grad_start() }} 0%, {{ self.summary_grad_end() }} 100%); border-radius: 12px; color: white;">
+    <h2 style="margin-top: 0; margin-bottom: 16px;">AI Analysis Summary</h2>
+
+    {% if summary.para_1_market_outlook %}
+    <div style="margin-bottom: 16px;">
+      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">1. Market Outlook</h4>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_1_market_outlook }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary.para_2_selection_rationale %}
+    <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="margin: 0 0 8px 0;">2. Selection Rationale</h4>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_2_selection_rationale }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary.para_3_final_allocation %}
+    <div style="margin-bottom: 16px;">
+      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">3. Final Allocation</h4>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_3_final_allocation }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary.para_4_risk_observations %}
+    <div>
+      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">4. Risk Observations</h4>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_4_risk_observations }}</p>
+    </div>
+    {% endif %}
+  </div>
+{% endblock %}
+
+{# ---- Sticky selection (kept/fillers/evicted/prev-week) ---- #}
+{% block sticky %}
+  <div style="margin-bottom: 24px; padding: 16px; background-color: {{ self.sticky_primary_bg() }}; border-radius: 8px; border-left: 4px solid {{ self.sticky_primary() }};">
+    <h3 style="margin-top: 0; color: {{ self.sticky_text() }};">Rank-band Sticky Selection</h3>
+    <p style="margin: 0; font-size: 14px; color: {{ self.sticky_text_dim() }};">
+      Kept from prior week (rank inside K_hold={{ hold_threshold }}): <strong>{{ kept_count }}</strong> &nbsp;|&nbsp;
+      Newly entered (top {{ top_n }} this week): <strong>{{ fillers_count }}</strong> &nbsp;|&nbsp;
+      Evicted previous holdings: <strong>{{ evicted_from_previous | length }}</strong> &nbsp;|&nbsp;
+      Prior week compared: <strong>{{ previous_year_week_used or "(cold start)" }}</strong>
+    </p>
+    {% if evicted_from_previous %}
+    <p style="margin: 8px 0 0 0; font-size: 13px; color: {{ self.sticky_text_dim() }};">
+      Evicted: {% for sym, reason in evicted_from_previous.items() %}<strong>{{ sym }}</strong> ({{ reason }}){% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+  </div>
+{% endblock %}
+
+{# ---- Stage 1 alpha screen top-25 table.
+
+       Greying past top_n is a math-aware visualisation: rows with
+       rank <= top_n are in the K_in entry zone (this week's actual
+       picks); rows with rank > top_n are shown for context only and
+       are visually demoted. Both markets MUST agree on this rule or
+       comparison reports become misleading. #}
+{% block stage1 %}
+  <div style="margin-bottom: 24px;">
+    <h3 style="color: #374151; border-bottom: 2px solid {{ self.strategy_primary() }}; padding-bottom: 8px;">Stage 1: Alpha Screen (Top 25 of {{ predicted_count }} valid PatchTST forecasts)</h3>
+    <p style="color: #6b7280; font-size: 14px;">PatchTST model: <code>{{ model_version }}</code> | Universe size: {{ requested_count }} | Forecasts produced: {{ predicted_count }} | New names enter only at rank &le; K_in={{ top_n }}; previously-held names are retained while their rank stays &le; K_hold={{ hold_threshold }}</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+      <thead>
+        <tr style="background-color: {{ self.strategy_primary_bg() }};">
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.strategy_primary() }}; width: 40px;">#</th>
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.strategy_primary() }};">Symbol</th>
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.strategy_primary() }};">PatchTST Predicted Weekly Return</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in stage1_top_scores %}
+        <tr style="background-color: {% if item.rank <= 3 %}{{ self.strategy_primary_bg() }}{% elif item.rank <= top_n %}white{% else %}#f9fafb{% endif %};">
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ item.rank }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ item.symbol }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ "%+.2f" | format(item.score) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+
+{# ---- Stage 2 HRP allocation table with running total ---- #}
+{% block stage2 %}
+  <div style="margin-bottom: 24px;">
+    <h3 style="color: #374151; border-bottom: 2px solid {{ self.stage2_primary() }}; padding-bottom: 8px;">Stage 2: HRP Allocation ({{ stage2.symbols_used }} stocks)</h3>
+    <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage2.lookback_days }} trading days (~{{ (stage2.lookback_days / 252) | round(1) }}yr) | As-of: {{ stage2.as_of_date }}</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
+      <thead>
+        <tr style="background-color: {{ self.stage2_primary_bg() }};">
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }}; width: 40px;">#</th>
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }};">Symbol</th>
+          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }};">Weight</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(total=0.0) %}
+        {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}{% if wt > 0 %}
+        {% set ns.total = ns.total + wt %}
+        <tr>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">{{ loop.index }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">{{ sym }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: {{ (wt * 3) | int }}px; height: 12px; background: linear-gradient(90deg, {{ self.stage2_primary() }}, #34d399); border-radius: 3px;"></div>
+              <span>{{ "%.2f" | format(wt) }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endif %}{% endfor %}
+        <tr style="background-color: {{ self.stage2_primary_bg() }};">
+          <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">&Sigma;</td>
+          <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">Total</td>
+          <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">{{ "%.2f" | format(ns.total) }}%</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="color: #6b7280; font-size: 12px; margin-top: 6px;"><em>Weights are HRP fractions &times; 100; the row sum should round to 100%. Tiny deviations reflect display rounding only.</em></p>
+  </div>
+{% endblock %}
+
+{% block footer_signature %}Generated by LearnFinance-2025 | Alpha-HRP (PatchTST alpha &rarr; rank-band sticky &rarr; HRP risk parity){% endblock %}
+
+{# Override the parent footer to swap "Alpaca Paper Trading" for a
+   market-specific trading note, so India ("paper-only, no broker")
+   doesn't lie about Alpaca. US keeps the default. #}
+{% block footer %}
+  <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+    <em>{{ self.footer_signature() }} | {% block footer_trading_note %}Alpaca Paper Trading{% endblock %} | {{ universe }} | Not financial advice</em><br/>
+    Run as-of: {{ as_of_date }}
+  </div>
+{% endblock %}

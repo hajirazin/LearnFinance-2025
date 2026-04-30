@@ -31,6 +31,9 @@ from brain_api.core.patchtst.inference import (
     run_batch_inference,
     run_inference,
 )
+from brain_api.core.patchtst.score_validation import (
+    validate_and_collect_finite_scores,
+)
 
 # Training
 from brain_api.core.patchtst.training import TrainingResult, train_model_pytorch
@@ -61,4 +64,5 @@ __all__ = [
     "run_batch_inference",
     "run_inference",
     "train_model_pytorch",
+    "validate_and_collect_finite_scores",
 ]

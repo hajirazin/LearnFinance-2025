@@ -31,6 +31,7 @@ from activities.inference import (
     get_patchtst_forecast,
     infer_sac,
     record_final_weights,
+    score_halal_india_with_patchtst,
     score_halal_new_with_patchtst,
     select_rank_band_top_n,
     select_sticky_top_n,
@@ -109,6 +110,7 @@ ALL_ACTIVITIES = [
     select_sticky_top_n,
     select_rank_band_top_n,
     score_halal_new_with_patchtst,
+    score_halal_india_with_patchtst,
     record_final_weights,
     # Portfolio / orders
     get_active_symbols,

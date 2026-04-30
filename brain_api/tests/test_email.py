@@ -372,27 +372,43 @@ def mock_weekly_report_email_request():
 
 @pytest.fixture
 def mock_india_weekly_report_email_request():
-    """Valid request payload for India Alpha-HRP report email endpoint."""
+    """Valid request payload for India Alpha-HRP report email endpoint.
+
+    Mirrors the shape of the US Alpha-HRP request fixture (Stage 1
+    top-25 + sticky stats + Stage 2 HRP). India does not trade through
+    Alpaca so no ``order_results`` / ``skipped`` fields are sent --
+    those defaults to ``None`` / ``False`` on the shared
+    :class:`AlphaHRPEmailRequest` base.
+    """
     return {
         "summary": {
-            "para_1_portfolio_overview": "HRP allocated across 15 NSE stocks with moderate concentration.",
-            "para_2_concentration_analysis": "Top 3 holdings hold 31.9% combined.",
-            "para_3_risk_observations": "IT sector is overweight; watch for currency risk.",
+            "para_1_market_outlook": "Top 25 PatchTST forecasts cluster around IT services.",
+            "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
+            "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
+            "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
         },
-        "hrp": {
-            "percentage_weights": {
-                "RELIANCE.NS": 12.3,
-                "TCS.NS": 10.1,
-                "INFY.NS": 9.5,
-                "HDFCBANK.NS": 8.7,
-                "WIPRO.NS": 6.8,
-            },
+        "stage1_top_scores": [
+            {"symbol": f"NSE{i:03d}.NS", "score": 5.0 - 0.1 * i, "rank": i + 1}
+            for i in range(20)
+        ],
+        "model_version": "v2026-04-26-india",
+        "predicted_count": 200,
+        "requested_count": 210,
+        "selected_symbols": [f"NSE{i:03d}.NS" for i in range(15)],
+        "kept_count": 12,
+        "fillers_count": 3,
+        "evicted_from_previous": {"OLD1.NS": "rank_out_of_hold"},
+        "previous_year_week_used": "202617",
+        "stage2": {
+            "percentage_weights": {f"NSE{i:03d}.NS": 100.0 / 15 for i in range(15)},
             "symbols_used": 15,
             "symbols_excluded": [],
             "lookback_days": 252,
-            "as_of_date": "2026-03-02",
+            "as_of_date": "2026-04-28",
         },
-        "universe": "halal_india",
+        "universe": "halal_india_alpha",
+        "top_n": 15,
+        "hold_threshold": 30,
         "target_week_start": "2026-03-02",
         "target_week_end": "2026-03-06",
         "as_of_date": "2026-03-02",
@@ -416,7 +432,7 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
             json=mock_india_weekly_report_email_request,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["is_success"] is True
         assert "India Alpha-HRP Portfolio Analysis" in data["subject"]
@@ -426,12 +442,12 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         mock_send_email.assert_called_once()
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
-    def test_india_report_body_contains_expected_sections(
+    def test_india_report_body_contains_alpha_hrp_sections(
         self,
         mock_send_email,
         mock_india_weekly_report_email_request,
     ):
-        """India email body contains HRP + AI summary sections."""
+        """India email body contains the same Stage 1 + sticky + Stage 2 sections US has."""
         mock_send_email.return_value = True
 
         response = client.post(
@@ -443,21 +459,30 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         body = response.json()["body"]
 
         assert "India Alpha-HRP Portfolio Analysis (NSE)" in body
-        assert "Nifty 500 Shariah" in body
         assert "AI Analysis Summary" in body
-        assert "HRP allocated across 15 NSE stocks" in body
-        assert "Alpha-HRP Allocation" in body
-        assert "RELIANCE.NS" in body
-        assert "TCS.NS" in body
-        assert "LearnFinance-2025" in body
+        # 4-paragraph schema rendered.
+        assert "Market Outlook" in body
+        assert "Selection Rationale" in body
+        # Stage 1 alpha screen with top-25 context.
+        assert "Stage 1: Alpha Screen" in body
+        # Sticky stats present.
+        assert "Rank-band Sticky Selection" in body
+        # Stage 2 HRP allocation table.
+        assert "Stage 2: HRP Allocation" in body
+        # Selected symbols rendered (first one from fixture).
+        assert "NSE000.NS" in body
+        # Sticky kept count from fixture.
+        assert "12" in body  # kept_count
+        # NSE Paper-only banner instead of Alpaca.
+        assert "NSE Paper-only Reporting" in body
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
-    def test_india_report_body_does_not_contain_us_sections(
+    def test_india_report_body_does_not_contain_us_only_sections(
         self,
         mock_send_email,
         mock_india_weekly_report_email_request,
     ):
-        """India email body does NOT contain US-specific sections."""
+        """India email body does NOT contain US-only blocks."""
         mock_send_email.return_value = True
 
         response = client.post(
@@ -468,11 +493,10 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         assert response.status_code == 200
         body = response.json()["body"]
 
-        assert "SAC" not in body
-        assert "News Sentiment" not in body
-        assert "Order Execution Summary" not in body
-        assert "RL Allocations" not in body
-        assert "Price Forecasts" not in body
+        # India does not trade -> no Alpaca order execution heading.
+        assert "Alpaca Order Execution" not in body
+        # India does not have an open-orders skip path.
+        assert "Run Skipped" not in body
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
     def test_india_report_smtp_failure(
@@ -508,36 +532,21 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         assert response.status_code == 500
         assert "Gmail configuration error" in response.json()["detail"]
 
-    def test_india_report_missing_hrp_returns_422(self):
-        """Missing HRP field returns 422."""
+    def test_india_report_missing_required_fields_returns_422(self):
+        """Empty body fails Pydantic validation."""
         response = client.post(
             "/email/india-alpha-hrp-report",
-            json={
-                "summary": {"para_1": "test"},
-                "target_week_start": "2026-03-02",
-                "target_week_end": "2026-03-06",
-                "as_of_date": "2026-03-02",
-            },
+            json={},
         )
         assert response.status_code == 422
 
-    def test_india_report_missing_summary_returns_422(self):
-        """Missing summary field returns 422."""
-        response = client.post(
-            "/email/india-alpha-hrp-report",
-            json={
-                "hrp": {
-                    "percentage_weights": {"RELIANCE.NS": 12.3},
-                    "symbols_used": 1,
-                    "symbols_excluded": [],
-                    "lookback_days": 252,
-                    "as_of_date": "2026-03-02",
-                },
-                "target_week_start": "2026-03-02",
-                "target_week_end": "2026-03-06",
-                "as_of_date": "2026-03-02",
-            },
-        )
+    def test_india_report_missing_stage2_returns_422(
+        self, mock_india_weekly_report_email_request
+    ):
+        """Missing stage2 field returns 422."""
+        payload = dict(mock_india_weekly_report_email_request)
+        del payload["stage2"]
+        response = client.post("/email/india-alpha-hrp-report", json=payload)
         assert response.status_code == 422
 
 

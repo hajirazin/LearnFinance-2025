@@ -17,6 +17,7 @@ from brain_api.routes.training.models import (
 
 __all__ = [
     "AlgorithmOrderResult",
+    "AlphaHRPEmailRequest",
     "AlphaScoreItem",
     "DoubleHRPEmailRequest",
     "IndiaAlphaHRPEmailRequest",
@@ -140,22 +141,50 @@ class IndiaTrainingSummaryEmailResponse(BaseModel):
     body: str
 
 
-class IndiaAlphaHRPEmailRequest(BaseModel):
-    """Request model for POST /email/india-alpha-hrp-report.
+# =============================================================================
+# Alpha-HRP Email Models (shared across US + India)
+# =============================================================================
 
-    India weekly allocation is structurally "PatchTST top-15 alpha screen on
-    Nifty Shariah 500 (the ``halal_india`` universe) -> HRP", the India
-    counterpart of the US Alpha-HRP path. Contains the AI summary and the
-    HRP allocation data sized over the alpha-screened picks.
-    Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
+
+class AlphaHRPEmailRequest(BaseModel):
+    """Shared base for POST /email/{us,india}-alpha-hrp-report.
+
+    Both markets ship the same Stage 1 (PatchTST alpha screen) + rank-band
+    sticky + Stage 2 (HRP) data to the email template. The base owns
+    every common field; the US subclass adds Alpaca-specific
+    ``order_results`` + ``skipped`` since India does not trade.
+
+    Sticky-history partition keys: ``halal_new_alpha`` (US),
+    ``halal_india_alpha`` (India). Tradable universe label lives in
+    ``universe`` and is shown to the human reader of the email.
     """
 
-    summary: dict[str, str]  # from POST /llm/india-alpha-hrp-summary (3 paragraphs)
-    hrp: HRPAllocationResponse
-    universe: str  # e.g. "halal_india" -- passed by Temporal for reporting context
+    summary: dict[str, str]  # from POST /llm/{us,india}-alpha-hrp-summary
+    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
+    model_version: str
+    predicted_count: int
+    requested_count: int
+    selected_symbols: list[str]
+    kept_count: int = 0
+    fillers_count: int = 0
+    evicted_from_previous: dict[str, str] = {}
+    previous_year_week_used: str | None = None
+    stage2: HRPAllocationResponse  # HRP weights on the chosen top_n
+    universe: str
+    top_n: int
+    hold_threshold: int
     target_week_start: str
     target_week_end: str
     as_of_date: str
+
+
+class IndiaAlphaHRPEmailRequest(AlphaHRPEmailRequest):
+    """Request model for POST /email/india-alpha-hrp-report.
+
+    Same fields as the shared :class:`AlphaHRPEmailRequest` base. India
+    has no Alpaca paper account, so no ``order_results`` / ``skipped``
+    fields are added.
+    """
 
 
 # =============================================================================
@@ -215,7 +244,7 @@ class USDoubleHRPEmailRequest(BaseModel):
 # =============================================================================
 
 
-class USAlphaHRPEmailRequest(BaseModel):
+class USAlphaHRPEmailRequest(AlphaHRPEmailRequest):
     """Request model for POST /email/us-alpha-hrp-report.
 
     US Alpha-HRP weekly report. Stage 1 is PatchTST predicted weekly
@@ -224,29 +253,11 @@ class USAlphaHRPEmailRequest(BaseModel):
     ``hold_threshold`` (default 30); Stage 2 HRP risk-parity sizes the
     chosen names. On the skip path the template hides allocation tables
     and shows a banner about the open-orders gate.
+
+    Extends :class:`AlphaHRPEmailRequest` with Alpaca-specific fields
+    (``order_results``, ``skipped``); India does not trade so its
+    request omits these.
     """
 
-    summary: dict[str, str]  # from POST /llm/us-alpha-hrp-summary
-    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
-    model_version: str
-    predicted_count: int
-    requested_count: int
-    selected_symbols: list[str]
-    kept_count: int = 0
-    fillers_count: int = 0
-    evicted_from_previous: dict[str, str] = {}
-    previous_year_week_used: str | None = None
-    stage2: HRPAllocationResponse  # HRP weights on the chosen top_n
-    # Sticky-history partition key for this strategy. The tradable
-    # universe is still halal_new; the partition key
-    # ``halal_new_alpha`` keeps the rank-band sticky rows isolated
-    # from US Double HRP's weight-band sticky rows on the same
-    # universe (see brain_api.core.strategy_partitions).
-    universe: str
-    top_n: int
-    hold_threshold: int
-    target_week_start: str
-    target_week_end: str
-    as_of_date: str
     order_results: AlgorithmOrderResult | None = None
     skipped: bool = False

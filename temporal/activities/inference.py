@@ -1,7 +1,6 @@
 """Signals, forecasts, and allocator activities."""
 
 import logging
-import math
 
 from temporalio import activity
 
@@ -253,90 +252,103 @@ def allocate_hrp(
     return result
 
 
+def _score_with_patchtst(
+    market: str,
+    symbols: list[str],
+    as_of_date: str,
+    min_predictions: int,
+    log_prefix: str,
+) -> PatchTSTBatchScores:
+    """Thin HTTP wrapper around ``POST /inference/patchtst/score-batch``.
+
+    Both US and India alpha-screen activities funnel through this
+    helper. The math invariants (non-finite rejection, ``min_predictions``
+    floor) live in :mod:`brain_api.core.patchtst.score_validation` and
+    are enforced inside the brain_api endpoint -- this layer does not
+    re-implement them. A 422 from the endpoint is re-raised as
+    ``RuntimeError`` to preserve the existing AlphaHRP failure
+    semantics (workflow-level retry policy treats it as terminal).
+    """
+    logger.info(
+        f"{log_prefix} PatchTST batch scoring on {len(symbols)} symbols "
+        f"(market={market}, as_of_date={as_of_date})"
+    )
+    with get_client() as client:
+        response = client.post(
+            "/inference/patchtst/score-batch",
+            json={
+                "market": market,
+                "symbols": symbols,
+                "as_of_date": as_of_date,
+                "min_predictions": min_predictions,
+            },
+        )
+        if response.status_code == 422:
+            # Math invariants live behind the endpoint; surface the
+            # validation message verbatim so the workflow log captures
+            # it without re-implementing the policy here.
+            detail = response.json().get("detail", response.text)
+            raise RuntimeError(detail)
+        response.raise_for_status()
+    result = PatchTSTBatchScores(**response.json())
+    logger.info(
+        f"{log_prefix} PatchTST scores: {result.predicted_count} valid / "
+        f"{result.requested_count} requested, model_version={result.model_version}"
+    )
+    return result
+
+
 @activity.defn
 def score_halal_new_with_patchtst(
     symbols: list[str],
     as_of_date: str,
     min_predictions: int = 15,
 ) -> PatchTSTBatchScores:
-    """Run PatchTST batch inference across a fixed symbol list.
+    """Score the US halal_new universe with PatchTST (Alpha-HRP Stage 1).
 
-    The ``USAlphaHRPWorkflow`` calls this activity with the full
-    halal_new universe (~410 symbols). The returned ``scores`` map
-    contains only finite ``predicted_weekly_return_pct`` values; symbols
-    whose prediction is ``None`` (insufficient history, missing data)
-    are surfaced as ``excluded_symbols``.
-
-    Layer note (DDD): The ``min_predictions`` gate and non-finite
-    rejection are policy decisions that should ultimately live behind
-    a brain_api ``/signals/patchtst-batch-score`` endpoint so this
-    activity can be a pure HTTP wrapper. Tracked as a follow-up; the
-    math is already enforced by the rank-band selector
-    (``select_with_rank_band`` raises on non-finite scores) so the
-    invariant cannot silently break in the meantime.
+    Thin HTTP wrapper around ``POST /inference/patchtst/score-batch``
+    with ``market='us'``. The math invariants (rank-band selector
+    contract: non-finite rejection + ``min_predictions`` floor) live
+    in :mod:`brain_api.core.patchtst.score_validation` so US and India
+    cannot drift. The activity name and signature are preserved for
+    Temporal replay safety.
 
     Raises:
-        RuntimeError: If fewer than ``min_predictions`` valid scores
-            are produced or if any prediction is non-finite. Per the
-            AGENTS.md no-silent-fallback rule we surface both loudly
-            rather than picking a smaller basket / arbitrary ranks
-            and degrading the strategy invisibly.
+        RuntimeError: Re-raised from a 422 brain_api response when
+            either invariant is violated. Per AGENTS.md "no silent
+            fallbacks", this is terminal -- the operator must fix the
+            underlying batch (typically an exploded model) before
+            rerunning.
     """
-    logger.info(
-        f"[AlphaHRP] PatchTST batch inference on {len(symbols)} symbols "
-        f"(as_of_date={as_of_date})"
+    return _score_with_patchtst(
+        market="us",
+        symbols=symbols,
+        as_of_date=as_of_date,
+        min_predictions=min_predictions,
+        log_prefix="[AlphaHRP US]",
     )
-    with get_client() as client:
-        response = client.post(
-            "/inference/patchtst",
-            json={"as_of_date": as_of_date, "symbols": symbols},
-        )
-        response.raise_for_status()
-    inference = PatchTSTInferenceResponse(**response.json())
 
-    scores: dict[str, float] = {}
-    excluded: list[str] = []
-    non_finite: list[str] = []
-    for prediction in inference.predictions:
-        score = prediction.predicted_weekly_return_pct
-        if score is None:
-            excluded.append(prediction.symbol)
-        elif not math.isfinite(score):
-            # NaN / +inf / -inf break the rank-band selector's strict-weak
-            # ordering and would produce nondeterministic ranks. Surface
-            # the corruption loudly rather than silently degrading.
-            non_finite.append(prediction.symbol)
-            excluded.append(prediction.symbol)
-        else:
-            scores[prediction.symbol] = score
 
-    if non_finite:
-        raise RuntimeError(
-            f"PatchTST batch produced non-finite scores for symbols: "
-            f"{non_finite}. Refusing to feed NaN/inf into rank-band "
-            f"selection -- investigate the model output before rerunning."
-        )
+@activity.defn
+def score_halal_india_with_patchtst(
+    symbols: list[str],
+    as_of_date: str,
+    min_predictions: int = 15,
+) -> PatchTSTBatchScores:
+    """Score the India Nifty Shariah 500 universe with PatchTST.
 
-    if len(scores) < min_predictions:
-        raise RuntimeError(
-            f"PatchTST batch returned only {len(scores)} valid predictions "
-            f"for halal_new ({len(symbols)} requested), below "
-            f"min_predictions={min_predictions}. Excluded={len(excluded)}."
-        )
-
-    logger.info(
-        f"[AlphaHRP] PatchTST scores: {len(scores)} valid / "
-        f"{len(symbols)} requested, model_version={inference.model_version}"
-    )
-    return PatchTSTBatchScores(
-        scores=scores,
-        model_version=inference.model_version,
-        as_of_date=inference.as_of_date,
-        target_week_start=inference.target_week_start,
-        target_week_end=inference.target_week_end,
-        requested_count=len(symbols),
-        predicted_count=len(scores),
-        excluded_symbols=excluded,
+    Thin HTTP wrapper around ``POST /inference/patchtst/score-batch``
+    with ``market='india'``. Identical structure to the US activity --
+    same math invariants, different trained weights. The brain_api
+    endpoint resolves to ``PatchTSTIndiaModelStorage`` based on the
+    ``market`` field; the rank-band score validation policy is shared.
+    """
+    return _score_with_patchtst(
+        market="india",
+        symbols=symbols,
+        as_of_date=as_of_date,
+        min_predictions=min_predictions,
+        log_prefix="[AlphaHRP India]",
     )
 
 

@@ -23,7 +23,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - automatic replay from event history (no cache policies needed)
   - status tracking + workflow observability via Temporal UI (port 8233)
   - Runs locally via `temporal server start-dev` (SQLite persistence, survives laptop shutdown)
-  - India weekly allocation workflow (`IndiaWeeklyAllocationWorkflow`): universe validation -> HRP -> AI summary -> email
+  - India weekly allocation workflow (`IndiaWeeklyAllocationWorkflow`): full Nifty Shariah 500 universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='india'`) -> rank-band sticky selection (`halal_india_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> AI summary -> email (paper-only, no broker)
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india filtered -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
   - US weekly training workflow (`USWeeklyTrainingWorkflow`): full retrain pipeline
@@ -83,7 +83,7 @@ temporal/                         # Temporal workflow orchestration
 ├── workflows/
 │   ├── us_weekly_allocation.py   # Sell-wait-buy with durable polling
 │   ├── us_weekly_training.py     # Full US model training pipeline
-│   ├── india_weekly_allocation.py # India HRP + email
+│   ├── india_weekly_allocation.py # India Alpha-HRP (PatchTST screen + sticky + HRP + email)
 │   └── india_weekly_training.py  # India PatchTST training pipeline
 ├── activities/
 │   ├── client.py                 # Shared httpx client for brain_api
@@ -107,7 +107,9 @@ temporal/                         # Temporal workflow orchestration
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /inference/lstm` | Price predictions (symbols from model metadata) |
-| `POST /inference/patchtst` | Price predictions (symbols from model metadata) |
+| `POST /inference/patchtst` | US PatchTST price predictions (symbols from model metadata) |
+| `POST /inference/patchtst/india` | India PatchTST price predictions (loads `patchtst_india` storage) |
+| `POST /inference/patchtst/score-batch` | Batch PatchTST score endpoint (US or India) -- returns `{symbol -> predicted_weekly_return_pct}` and enforces finite-score / `min_predictions` invariants used by Alpha-HRP |
 | `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
@@ -149,10 +151,12 @@ temporal/                         # Temporal workflow orchestration
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /llm/sac-weekly-summary` | Generate AI summary of the SAC-only weekly run (US) |
-| `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST top-15 alpha screen + HRP) |
+| `POST /llm/us-alpha-hrp-summary` | Generate AI summary of US Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
+| `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
 | `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
-| `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (HRP + AI summary) via Gmail SMTP |
+| `POST /email/us-alpha-hrp-report` | Send US Alpha-HRP report email (alpha screen + sticky + HRP + Alpaca order execution) via Gmail SMTP |
+| `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (alpha screen + sticky + HRP, paper-only / no broker) via Gmail SMTP |
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
 
 **Other**:

@@ -7,6 +7,7 @@ from brain_api.core.config import resolve_cutoff_date
 from brain_api.core.lstm import compute_week_boundaries, load_prices_yfinance
 from brain_api.storage.local import (
     LocalModelStorage,
+    PatchTSTIndiaModelStorage,
     PatchTSTModelStorage,
 )
 from brain_api.storage.sac import SACLocalStorage
@@ -56,6 +57,17 @@ def get_week_boundary_computer() -> WeekBoundaryComputer:
 def get_patchtst_storage() -> PatchTSTModelStorage:
     """Get the PatchTST model storage instance."""
     return PatchTSTModelStorage()
+
+
+def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
+    """Get the India PatchTST model storage instance.
+
+    India PatchTST artifacts live under ``data/models/patchtst_india/`` --
+    distinct from US weights/scalers because they are trained on a
+    different price distribution (Nifty Shariah 500). Reusing US weights
+    on Indian symbols would be mathematically wrong.
+    """
+    return PatchTSTIndiaModelStorage()
 
 
 def get_patchtst_as_of_date(request: PatchTSTInferenceRequest) -> date:
