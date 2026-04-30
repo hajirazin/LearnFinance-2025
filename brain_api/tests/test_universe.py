@@ -1254,11 +1254,21 @@ def test_get_halal_india_returns_expected_structure():
     assert "filtered_insufficient_history" in data
     assert "top_n" in data
     assert "selection_method" in data
-    assert data["selection_method"] == "patchtst_forecast"
+    assert data["selection_method"] == "patchtst_forecast_rank_band"
     assert "model_version" in data
     assert "symbol_suffix" in data
     assert data["symbol_suffix"] == ".NS"
     assert "fetched_at" in data
+    # Rank-band sticky additive fields
+    assert data["partition"] == "halal_india_filtered_alpha"
+    assert "period_key" in data
+    assert "previous_period_key_used" in data
+    assert "kept_count" in data
+    assert "fillers_count" in data
+    assert "evicted_from_previous" in data
+    assert isinstance(data["evicted_from_previous"], dict)
+    assert data["k_in"] == 15
+    assert data["k_hold"] == 30
 
 
 def test_get_halal_india_returns_max_15_stocks():
@@ -1292,7 +1302,12 @@ def test_get_halal_india_returns_max_15_stocks():
 
 
 def test_get_halal_india_stocks_have_predicted_returns():
-    """Test that each halal_india stock has predicted_weekly_return_pct and rank."""
+    """Test that each halal_india stock has predicted_weekly_return_pct + rank + selection_reason.
+
+    Per-stock ``model_version`` was REMOVED in the rank-band sticky
+    rewrite (mirroring halal_filtered). ``model_version`` now lives at
+    the TOP level only. This test asserts the new shape.
+    """
     mock_universe = _make_mock_nifty_shariah_500_universe()
     ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
     mock_result = _make_mock_india_batch_inference(ns_symbols)
@@ -1320,9 +1335,13 @@ def test_get_halal_india_stocks_have_predicted_returns():
     for stock in data["stocks"]:
         assert "predicted_weekly_return_pct" in stock
         assert "rank" in stock
-        assert "model_version" in stock
+        assert "selection_reason" in stock
+        assert stock["selection_reason"] in ("sticky", "top_rank")
         assert stock["predicted_weekly_return_pct"] is not None
         assert stock["rank"] >= 1
+        assert "model_version" not in stock, (
+            "Per-stock model_version is removed in rank-band sticky shape"
+        )
 
 
 def test_get_halal_india_symbols_have_ns_suffix():
@@ -1395,6 +1414,392 @@ def test_get_halal_india_returns_503_on_nse_failure():
 
     assert response.status_code == 503
     assert "NSE API" in response.json()["detail"]
+
+
+# ============================================================================
+# Halal_India rank-band sticky tests (single-stage screening_history path)
+# ============================================================================
+
+
+def _make_mock_nifty_shariah_500_universe_n(count: int) -> dict:
+    """Build a synthetic ``count``-stock NiftyShariah500 universe with .NS-suffixed symbols."""
+    constituents = [
+        {"symbol": f"INSYM{i:03d}", "name": f"Stock {i}", "industry": "Synthetic"}
+        for i in range(count)
+    ]
+    stocks = [{**c, "symbol": c["symbol"] + ".NS"} for c in constituents]
+    return {
+        "stocks": stocks,
+        "source": "nifty_500_shariah",
+        "symbol_suffix": ".NS",
+        "total_stocks": len(stocks),
+        "fetched_at": "2026-01-01T00:00:00+00:00",
+    }
+
+
+def test_get_halal_india_cold_start_picks_top_15_by_score():
+    """Cold-start: empty screening_history -> chosen 15 are top by score, .NS-suffixed."""
+    from datetime import date
+
+    mock_universe = _make_mock_nifty_shariah_500_universe_n(30)
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
+    expected_top = [p.symbol for p in mock_result.predictions[:15]]
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.resolve_cutoff_date",
+            return_value=date(2026, 4, 25),
+        ),
+        patch(
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
+        ),
+        patch(
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [s["symbol"] for s in data["stocks"]] == expected_top
+    assert all(s["symbol"].endswith(".NS") for s in data["stocks"])
+    assert data["partition"] == "halal_india_filtered_alpha"
+    assert data["period_key"] == "202615"  # First Monday of April 2026 = Apr 6
+    assert data["previous_period_key_used"] is None
+    assert data["kept_count"] == 0
+    assert data["fillers_count"] == 15
+    assert data["evicted_from_previous"] == {}
+    assert all(s["selection_reason"] == "top_rank" for s in data["stocks"])
+
+
+def test_get_halal_india_warm_start_keeps_sticky_within_k_hold():
+    """Warm-start: previously-held .NS stock at rank between K_in and K_hold stays sticky."""
+    from datetime import date
+
+    from brain_api.core.screening_orchestration import persist_screening_rows
+    from brain_api.core.sticky_selection import iso_year_week_of_month_anchor
+    from brain_api.core.strategy_partitions import (
+        HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+    )
+    from brain_api.storage.screening_history import ScreeningHistoryRepository
+
+    mock_universe = _make_mock_nifty_shariah_500_universe_n(30)
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
+    scores_by_symbol = {
+        p.symbol: p.predicted_weekly_return_pct for p in mock_result.predictions
+    }
+    sorted_symbols = [p.symbol for p in mock_result.predictions]
+
+    with patch(
+        "brain_api.universe.halal_india.resolve_cutoff_date",
+        return_value=date(2026, 4, 25),
+    ):
+        repo = ScreeningHistoryRepository()
+        previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
+        # Seed previous round with a .NS symbol that ranks 21 this period
+        # (within K_hold=30 but beyond K_in=15).
+        sticky_symbol = sorted_symbols[20]
+        persist_screening_rows(
+            repo=repo,
+            partition=HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+            period_key=previous_period_key,
+            as_of_date="2026-03-13",
+            run_id="seed",
+            scores=scores_by_symbol,
+            selected_set={sticky_symbol},
+            selection_reasons={sticky_symbol: "sticky"},
+        )
+
+        with (
+            patch(
+                "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+                return_value=mock_universe,
+            ),
+            _patch_india_min_wf_days(),
+            patch(
+                "brain_api.universe.halal_india.filter_symbols_by_min_history",
+                side_effect=_mock_india_history_filter_pass_all(ns_symbols),
+            ),
+            patch(
+                "brain_api.universe.halal_india.run_batch_inference",
+                return_value=mock_result,
+            ),
+        ):
+            response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+    selected_symbols = [s["symbol"] for s in data["stocks"]]
+    assert sticky_symbol in selected_symbols
+    assert all(sym.endswith(".NS") for sym in selected_symbols)
+    sticky_entry = next(s for s in data["stocks"] if s["symbol"] == sticky_symbol)
+    assert sticky_entry["selection_reason"] == "sticky"
+    assert data["kept_count"] == 1
+    assert data["fillers_count"] == 14
+    assert data["previous_period_key_used"] == previous_period_key
+
+
+def test_get_halal_india_warm_start_evicts_dropped_from_universe():
+    """Warm-start: previously-held .NS stock missing this month -> evicted_from_previous.
+
+    ``evicted_from_previous`` is a ``dict[str, str]`` (symbol -> reason).
+    The .NS-suffixed delisted symbol must appear as a KEY with value
+    ``'dropped_from_universe'``.
+    """
+    from datetime import date
+
+    from brain_api.core.screening_orchestration import persist_screening_rows
+    from brain_api.core.sticky_selection import iso_year_week_of_month_anchor
+    from brain_api.core.strategy_partitions import (
+        HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+    )
+    from brain_api.storage.screening_history import ScreeningHistoryRepository
+
+    mock_universe = _make_mock_nifty_shariah_500_universe_n(20)
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
+    delisted = "DELISTED.NS"
+    prev_scores = {
+        p.symbol: p.predicted_weekly_return_pct for p in mock_result.predictions
+    }
+    prev_scores[delisted] = 99.0  # Previously top-ranked
+
+    with patch(
+        "brain_api.universe.halal_india.resolve_cutoff_date",
+        return_value=date(2026, 4, 25),
+    ):
+        repo = ScreeningHistoryRepository()
+        previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
+        persist_screening_rows(
+            repo=repo,
+            partition=HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+            period_key=previous_period_key,
+            as_of_date="2026-03-13",
+            run_id="seed",
+            scores=prev_scores,
+            selected_set={delisted},
+            selection_reasons={delisted: "top_rank"},
+        )
+
+        with (
+            patch(
+                "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+                return_value=mock_universe,
+            ),
+            _patch_india_min_wf_days(),
+            patch(
+                "brain_api.universe.halal_india.filter_symbols_by_min_history",
+                side_effect=_mock_india_history_filter_pass_all(ns_symbols),
+            ),
+            patch(
+                "brain_api.universe.halal_india.run_batch_inference",
+                return_value=mock_result,
+            ),
+        ):
+            response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert delisted not in [s["symbol"] for s in data["stocks"]]
+    assert delisted in data["evicted_from_previous"]
+    assert data["evicted_from_previous"][delisted] == "dropped_from_universe"
+
+
+def test_get_halal_india_empty_scores_raises():
+    """If India PatchTST returns nothing valid -> ValueError -> 503 (no fallback)."""
+    from brain_api.core.patchtst.inference import BatchInferenceResult
+
+    mock_universe = _make_mock_nifty_shariah_500_universe()
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    empty_result = BatchInferenceResult(
+        predictions=[], model_version="v2026-03-01-india123"
+    )
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
+        ),
+        patch(
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=empty_result,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    # ValueError from select_with_rank_band surfaces as 503 from the route.
+    assert response.status_code == 503
+
+
+def test_get_halal_india_fewer_than_khold_valid_scores_still_works():
+    """Rank-band tolerates fewer-than-K_hold valid scores (only top-15 is required)."""
+    from datetime import date
+
+    # 20 valid scores -- enough for K_in=15 but fewer than K_hold=30.
+    mock_universe = _make_mock_nifty_shariah_500_universe_n(20)
+    ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_india_batch_inference(ns_symbols)
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.resolve_cutoff_date",
+            return_value=date(2026, 4, 25),
+        ),
+        patch(
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_universe,
+        ),
+        _patch_india_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_india_history_filter_pass_all(ns_symbols),
+        ),
+        patch(
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["stocks"]) == 15
+    assert data["total_candidates"] == 20
+
+
+def test_get_halal_india_old_cache_shape_loads():
+    """Old-shape cached file (no rank-band fields) must still load with .NS preserved.
+
+    Pre-PR cache files have ``selection_method='patchtst_forecast'``,
+    per-stock ``model_version``, and lack rank-band fields. Downstream
+    consumers (``get_halal_india_symbols``, LLM/email handlers) read
+    ``stocks[*].symbol`` and the top-level ``model_version`` /
+    ``selection_method`` only -- those keep the same shape after this
+    PR, so old caches must not break consumers.
+    """
+    from datetime import date
+
+    from brain_api.universe.cache import load_cached_universe, save_universe_cache
+    from brain_api.universe.halal_india import get_halal_india_symbols
+
+    legacy = {
+        "stocks": [
+            {
+                "symbol": "RELIANCE.NS",
+                "predicted_weekly_return_pct": 5.0,
+                "rank": 1,
+                "model_version": "v2026-03-01-india123",
+            },
+            {
+                "symbol": "TCS.NS",
+                "predicted_weekly_return_pct": 4.0,
+                "rank": 2,
+                "model_version": "v2026-03-01-india123",
+            },
+        ],
+        "total_candidates": 2,
+        "total_universe": 200,
+        "filtered_insufficient_history": 0,
+        "top_n": 15,
+        "selection_method": "patchtst_forecast",
+        "model_version": "v2026-03-01-india123",
+        "symbol_suffix": ".NS",
+        "fetched_at": "2026-04-01T00:00:00+00:00",
+    }
+    today = date.today()
+    save_universe_cache("halal_india", legacy, today)
+
+    loaded = load_cached_universe("halal_india", today)
+    assert loaded is not None
+    assert [s["symbol"] for s in loaded["stocks"]] == ["RELIANCE.NS", "TCS.NS"]
+    assert loaded["selection_method"] == "patchtst_forecast"
+
+    # get_halal_india_symbols must still extract symbols from old shape via cache hit.
+    symbols = get_halal_india_symbols()
+    assert symbols == ["RELIANCE.NS", "TCS.NS"]
+
+
+def test_halal_india_partition_isolated_from_weekly_alpha_hrp():
+    """Cross-table isolation: weekly halal_india_alpha rows must not leak into monthly halal_india_filtered_alpha reads.
+
+    Weekly India Alpha-HRP writes to ``stage1_weight_history`` under
+    ``universe='halal_india_alpha'``. The monthly halal_india builder
+    reads from ``screening_history`` under
+    ``partition='halal_india_filtered_alpha'``. Even if the two share
+    a period_key value, the reads must not cross tables.
+    """
+    from brain_api.core.screening_orchestration import persist_screening_rows
+    from brain_api.core.strategy_partitions import (
+        HALAL_INDIA_ALPHA_PARTITION,
+        HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+    )
+    from brain_api.storage.screening_history import ScreeningHistoryRepository
+    from brain_api.storage.sticky_history import StickyHistoryRepository, WeightRow
+
+    period_key = "202615"
+    sticky_repo = StickyHistoryRepository()
+    sticky_repo.persist_stage1(
+        [
+            WeightRow(
+                universe=HALAL_INDIA_ALPHA_PARTITION,
+                year_week=period_key,
+                as_of_date="2026-04-06",
+                stock="RELIANCE.NS",
+                stage1_rank=1,
+                initial_allocation_pct=None,
+                signal_score=5.0,
+                final_allocation_pct=10.0,
+                selected_in_final=True,
+                selection_reason="top_rank",
+                run_id="weekly-test",
+            )
+        ]
+    )
+
+    screening_repo = ScreeningHistoryRepository()
+    persist_screening_rows(
+        repo=screening_repo,
+        partition=HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+        period_key=period_key,
+        as_of_date="2026-04-06",
+        run_id="monthly-test",
+        scores={"INFY.NS": 7.0, "TCS.NS": 6.0},
+        selected_set={"INFY.NS"},
+        selection_reasons={"INFY.NS": "top_rank"},
+    )
+
+    # Reading the screening_history at a later period_key must NOT see RELIANCE.NS
+    # (which only lives in stage1_weight_history).
+    prev = screening_repo.read_previous_selected_set(
+        partition=HALAL_INDIA_FILTERED_ALPHA_PARTITION,
+        current_period_key="202620",
+    )
+    assert prev is not None
+    assert prev.selected_set == {"INFY.NS"}
+    assert "RELIANCE.NS" not in prev.selected_set
+
+    # Reading sticky two-stage at the same period must NOT see the screening row.
+    sticky_prev = sticky_repo.read_previous_final_set(
+        universe=HALAL_INDIA_ALPHA_PARTITION,
+        current_year_week="202620",
+    )
+    assert sticky_prev is not None
+    assert sticky_prev.final_set == {"RELIANCE.NS"}
+    assert "INFY.NS" not in sticky_prev.final_set
 
 
 # ============================================================================

@@ -341,11 +341,11 @@ The system maintains five universe tiers — two base universes (raw scrapes), t
 | `halal_new` | ~400 stocks (varies monthly; e.g. 410 in Mar 2026, 398 in Apr 2026) | Scrape **all** holdings of 5 halal ETFs (SPUS, SPTE, SPWO from sp-funds.com; HLAL, UMMA from Wahed), merge + dedupe, then keep only Alpaca-tradable symbols (and append the 5 ETFs themselves) | US base universe |
 | `halal_filtered` | 15 stocks | `halal_new` -> drop symbols with < ~10 years of price history (`compute_min_walkforward_days`, derived from `LSTM_TRAIN_LOOKBACK_YEARS=10`) -> US PatchTST batch inference -> rank-band sticky selection (`K_in=15`, `K_hold=30`, partition `halal_filtered_alpha` in `screening_history`). **Monthly cache cadence**; cold-start (no prior month) is byte-equivalent to the legacy blanket top-15. | Default US universe for training, allocation, and SAC features |
 | `nifty_shariah_500` | ~210 stocks | Scrape full Nifty 500 Shariah constituents from NSE India; symbols carry `.NS` suffix end-to-end | India base universe |
-| `halal_india` | 15 stocks | `nifty_shariah_500` -> same min-history filter (~10 years) -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> top 15 by predicted weekly return | Default India universe |
+| `halal_india` | 15 stocks | `nifty_shariah_500` -> same min-history filter (~10 years) -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> rank-band sticky selection (`K_in=15`, `K_hold=30`, partition `halal_india_filtered_alpha` in `screening_history`). **Monthly cache cadence**; cold-start (no prior month) is byte-equivalent to the legacy blanket top-15. `.NS` suffix preserved end-to-end. | Default India universe |
 
 Notes:
 
-- **No factor scoring is used.** `halal_filtered` is produced by PatchTST predicted weekly return + rank-band sticky selection (after a min-history filter); `halal_india` is produced by PatchTST predicted weekly return blanket top-15. There is no momentum/quality/value blend, no ROE/Beta/SMA rule.
+- **No factor scoring is used.** Both `halal_filtered` (US) and `halal_india` (India) are produced by PatchTST predicted weekly return + rank-band sticky selection (after a min-history filter), in distinct partitions (`halal_filtered_alpha` and `halal_india_filtered_alpha`) of the `screening_history` table. There is no momentum/quality/value blend, no ROE/Beta/SMA rule.
 - RL/SAC requires exactly 15 stocks, so `halal_filtered` (US) and `halal_india` (India) are the only RL-eligible universes today; `halal` happens to also be ~14 but is legacy-only.
 - After top-15 selection, both LSTM and PatchTST run **again** on those 15 symbols to produce SAC's per-stock dual-forecast features.
 - Results are cached monthly (one fetch per calendar month) to avoid redundant external API calls. Cache files live under `brain_api/data/cache/universe/<name>_YYYY-MM.json`.
@@ -472,7 +472,7 @@ We store three kinds of data:
 | `GET /universe/halal_new` | US base universe (~400 stocks; full holdings of 5 halal ETFs filtered to Alpaca-tradable) |
 | `GET /universe/halal_filtered` | Top 15 from `halal_new` (~10y min history filter + US PatchTST predicted weekly return + rank-band sticky selection, monthly cache) |
 | `GET /universe/nifty_shariah_500` | India base universe (~210 stocks, full Nifty 500 Shariah constituents, `.NS`-suffixed) |
-| `GET /universe/halal_india` | Top 15 from `nifty_shariah_500` (~10y min history filter + India PatchTST predicted weekly return) |
+| `GET /universe/halal_india` | Top 15 from `nifty_shariah_500` (~10y min history filter + India PatchTST predicted weekly return + rank-band sticky selection, monthly cache, `.NS`-suffixed) |
 
 ### ETL endpoints
 

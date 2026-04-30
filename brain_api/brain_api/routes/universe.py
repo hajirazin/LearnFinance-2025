@@ -73,13 +73,21 @@ def get_halal_filtered_stocks() -> dict:
 
 @router.get("/halal_india")
 def get_halal_india_stocks() -> dict:
-    """Get the Halal_India stock universe (top 15 by PatchTST predicted return).
+    """Get the Halal_India stock universe (rank-band sticky top 15).
 
-    Takes the NiftyShariah500 base (~210 stocks), runs India PatchTST
-    inference on all, returns top 15 by predicted weekly return.
+    Takes the NiftyShariah500 base (~210 .NS-suffixed stocks), runs
+    India PatchTST inference on the qualifying subset, then applies a
+    rank-band sticky selector (K_in=15, K_hold=30) against the previous
+    monthly round under partition ``halal_india_filtered_alpha`` (in
+    the ``screening_history`` sibling table). Symbols retain the
+    ``.NS`` suffix end-to-end. Cold start (empty partition) is
+    byte-equivalent to a blanket top-15 by PatchTST score.
 
-    First call of each month runs PatchTST inference.
-    Subsequent calls in the same month are served from cache.
+    First call of each month runs PatchTST inference and rank-band
+    sticky. Subsequent calls in the same month are served from cache.
+    Cadence isolation from the weekly India Alpha-HRP partition
+    ``halal_india_alpha`` (in ``stage1_weight_history``) is by
+    different partition string AND different physical table.
     """
     from brain_api.main import shutdown_event
 

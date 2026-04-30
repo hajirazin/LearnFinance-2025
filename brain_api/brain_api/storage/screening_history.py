@@ -79,6 +79,14 @@ unique across the union of THIS table and ``stage1_weight_history``.
 it never touches the two-stage table. Symmetrically,
 ``StickyHistoryRepository`` only reads/writes ``stage1_weight_history``.
 Cross-table reads are forbidden by construction.
+
+Partitions currently served by this table:
+
+- ``halal_filtered_alpha`` -- US monthly halal_filtered universe build.
+- ``halal_india_filtered_alpha`` -- India monthly halal_india universe
+  build (Nifty Shariah 500 -> India PatchTST -> rank-band sticky -> top
+  15). The ``stock`` column stores ``.NS``-suffixed yfinance-ready
+  symbols verbatim; no normalization or stripping is applied.
 """
 
 from __future__ import annotations

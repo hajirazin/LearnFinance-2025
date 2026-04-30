@@ -46,6 +46,18 @@ Definitions:
   semantics. Physically separating the table prevents cross-cadence
   collision and removes ambiguity at read time.
 
+- ``HALAL_INDIA_FILTERED_ALPHA_PARTITION = "halal_india_filtered_alpha"``
+  -- the India counterpart of ``HALAL_FILTERED_ALPHA_PARTITION``. The
+  ``halal_india`` universe builder (India PatchTST predicted weekly
+  return on the Nifty Shariah 500 base -> rank-band sticky -> top 15)
+  uses this partition. Single-stage, **monthly cadence**, lives in the
+  ``screening_history`` sibling table -- isolated from the weekly
+  ``halal_india_alpha`` partition (which lives in
+  ``stage1_weight_history`` and is driven by the weekly India Alpha-HRP
+  workflow). Period-key follows the same first-Monday-of-month YYYYWW
+  convention. Stocks in this partition retain the ``.NS`` yfinance
+  suffix end-to-end (no append/strip transformations).
+
 DO NOT use the same partition string for two strategies; doing so would
 corrupt sticky carry-sets across strategies even when they live in
 different tables. New strategies should reserve a fresh partition key
@@ -63,6 +75,7 @@ HALAL_INDIA_ALPHA_PARTITION = "halal_india_alpha"
 
 # Single-stage screening strategies (monthly cadence; screening_history).
 HALAL_FILTERED_ALPHA_PARTITION = "halal_filtered_alpha"
+HALAL_INDIA_FILTERED_ALPHA_PARTITION = "halal_india_filtered_alpha"
 
 
 ALL_PARTITIONS: tuple[str, ...] = (
@@ -70,6 +83,7 @@ ALL_PARTITIONS: tuple[str, ...] = (
     HALAL_NEW_ALPHA_PARTITION,
     HALAL_INDIA_ALPHA_PARTITION,
     HALAL_FILTERED_ALPHA_PARTITION,
+    HALAL_INDIA_FILTERED_ALPHA_PARTITION,
 )
 
 

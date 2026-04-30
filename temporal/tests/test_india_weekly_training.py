@@ -41,11 +41,31 @@ def mock_training():
 @pytest.fixture
 def mock_india_filtered():
     return {
-        "stocks": [{"symbol": f"TOP{i}.NS", "rank": i + 1} for i in range(15)],
+        "stocks": [
+            {
+                "symbol": f"TOP{i}.NS",
+                "predicted_weekly_return_pct": 5.0 - i * 0.3,
+                "rank": i + 1,
+                "selection_reason": "top_rank",
+            }
+            for i in range(15)
+        ],
         "total_candidates": 180,
+        "total_universe": 210,
+        "filtered_insufficient_history": 30,
         "top_n": 15,
-        "selection_method": "patchtst_forecast",
+        "selection_method": "patchtst_forecast_rank_band",
         "model_version": "v2026-03-01-india123",
+        "symbol_suffix": ".NS",
+        "fetched_at": "2026-04-01T00:00:00+00:00",
+        "partition": "halal_india_filtered_alpha",
+        "period_key": "202615",
+        "previous_period_key_used": None,
+        "kept_count": 0,
+        "fillers_count": 15,
+        "evicted_from_previous": {},
+        "k_in": 15,
+        "k_hold": 30,
     }
 
 
@@ -125,7 +145,10 @@ class TestIndiaWeeklyTrainingWorkflow:
             assert result["patchtst"]["version"] == "v2026-03-01-india123"
             assert result["patchtst"]["promoted"] is True
             assert result["halal_india"]["stocks"] == 15
-            assert result["halal_india"]["selection_method"] == "patchtst_forecast"
+            assert (
+                result["halal_india"]["selection_method"]
+                == "patchtst_forecast_rank_band"
+            )
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
             assert "India" in result["email"]["subject"]
