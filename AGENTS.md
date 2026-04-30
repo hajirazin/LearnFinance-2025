@@ -350,6 +350,7 @@ If tests are added later, they should be:
 - Before writing new code, search for existing helpers, utilities, or similar implementations in the codebase
 - Best programmers factor out and reuse similar code
 - Avoid duplicating logic that already exists elsewhere
+- Reuse must never compromise per-algorithm math correctness; see "AI assistant behavioral rules" #2
 
 ### Naming conventions
 
@@ -466,7 +467,7 @@ Before merging changes that touch ML/model code:
 
 1. **Never add silent fallbacks without asking first.** Fallbacks mask real bugs and break correctness. For example, falling back to momentum when a snapshot fails to load means the system silently produces garbage instead of surfacing the error. Always raise exceptions for unexpected failures; ask the user before adding any degraded-mode fallback.
 
-2. **Never break math for clean code or code reuse.** Different models (e.g., LSTM vs PatchTST, SAC vs future RL allocators) can have different research and can use different math. Do not assume their math is the same just because it looks similar today -- do not copy one model's math into another for DRY or simplicity. Each model must be free to evolve its math independently based on research. If the math genuinely is identical (e.g., a standard formula like Sharpe ratio), sharing is fine. The rule is: research correctness comes first; never sacrifice it for code cleanliness.
+2. **Math correctness is the highest priority -- never break math to simplify code.** DRY, DDD, and clean code matter and you should factor out genuinely shared logic. The rule is about precedence, not duplication: when two algorithms have research-driven mathematical differences (even subtle ones), each must keep its own math even if the surface code looks similar. Concrete cautionary tale from this repo: PPO and SAC each have algorithm-specific mathematical steps; we once "reused" code between them for DRY and silently broke PPO's math. If the math is provably identical (e.g., a standard formula like Sharpe ratio, a generic covariance estimator, a shared data loader), share it; if there is any research-level difference, keep the implementations separate even if the code looks alike. When in doubt, ask before merging two model-specific code paths.
 
 ## AI assistant planning rules
 

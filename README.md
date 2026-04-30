@@ -297,6 +297,13 @@ RL_TRAIN_UNIVERSE=halal_filtered
 
 ## Key design decisions
 
+### Contribution principles (math vs. reuse)
+
+- Math correctness is the highest priority. Never break math to simplify code.
+- DRY, DDD, and clean code are also important -- factor out genuinely shared logic.
+- When two algorithms have research-driven math differences, keep their math separate even if the surface code looks similar (we previously broke PPO's math by over-sharing with SAC).
+- See [AGENTS.md](AGENTS.md#ai-assistant-behavioral-rules) for the full rule.
+
 ### Paper auto-submit, live manual
 
 - **Paper orders are auto-submitted** each Monday.
