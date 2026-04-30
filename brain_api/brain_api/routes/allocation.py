@@ -1,16 +1,35 @@
-"""Portfolio allocation endpoints."""
+"""Portfolio allocation endpoints.
+
+Pydantic models live in ``allocation_models.py``; this file is route
+handlers + dependency wiring only. The two sticky-selection endpoints
+(weight-band and rank-band) share their persistence scaffolding via
+``_persist_stage1_rows`` so the math layers stay independent (per
+AGENTS.md: never share math across selection policies).
+"""
 
 import logging
 from datetime import date, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
 from brain_api.core.hrp import HRPResult, compute_hrp_allocation
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.sticky_selection import (
     SelectionResult,
+    rank_by_score,
+    select_with_rank_band,
     select_with_stickiness,
+)
+from brain_api.routes.allocation_models import (
+    HRPAllocationRequest,
+    HRPAllocationResponse,
+    RankBandTopNRequest,
+    RankBandTopNResponse,
+    RecordFinalWeightsRequest,
+    RecordFinalWeightsResponse,
+    StickyTopNRequest,
+    StickyTopNResponse,
 )
 from brain_api.storage.sticky_history import (
     StickyHistoryRepository,
@@ -18,59 +37,24 @@ from brain_api.storage.sticky_history import (
     get_sticky_history_repo,
 )
 
+# Re-export response models so existing call sites
+# (``from brain_api.routes.allocation import HRPAllocationResponse``)
+# keep working.
+__all__ = [
+    "HRPAllocationRequest",
+    "HRPAllocationResponse",
+    "RankBandTopNRequest",
+    "RankBandTopNResponse",
+    "RecordFinalWeightsRequest",
+    "RecordFinalWeightsResponse",
+    "StickyTopNRequest",
+    "StickyTopNResponse",
+    "router",
+]
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# ============================================================================
-# Request / Response models
-# ============================================================================
-
-
-class HRPAllocationRequest(BaseModel):
-    """Request model for HRP allocation endpoint."""
-
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        description="List of ticker symbols to allocate (e.g. ['AAPL', 'MSFT'] or ['INFY.NS', 'TCS.NS'])",
-    )
-    lookback_days: int = Field(
-        252,
-        ge=60,
-        le=756,
-        description="Number of trading days for return calculation (60-756, default 252 = 1 year)",
-    )
-    as_of_date: str | None = Field(
-        None,
-        description="Reference date (YYYY-MM-DD). Defaults to today.",
-    )
-
-
-class HRPAllocationResponse(BaseModel):
-    """Response model for HRP allocation endpoint."""
-
-    percentage_weights: dict[str, float] = Field(
-        ...,
-        description="Target portfolio weights as percentages (sum to 100)",
-    )
-    symbols_used: int = Field(
-        ...,
-        description="Number of symbols included in allocation",
-    )
-    symbols_excluded: list[str] = Field(
-        ...,
-        description="Symbols excluded due to insufficient data",
-    )
-    lookback_days: int = Field(
-        ...,
-        description="Trading days used for return calculation",
-    )
-    as_of_date: str = Field(
-        ...,
-        description="Reference date (YYYY-MM-DD)",
-    )
 
 
 def get_as_of_date(request: HRPAllocationRequest) -> date:
@@ -80,7 +64,6 @@ def get_as_of_date(request: HRPAllocationRequest) -> date:
     return date.today()
 
 
-# Type alias for price loader dependency
 PriceLoader = type(load_prices_yfinance)
 
 
@@ -90,7 +73,70 @@ def get_price_loader() -> PriceLoader:
 
 
 # ============================================================================
-# Endpoint
+# Persistence helper (C2 + D4)
+# ============================================================================
+
+
+_StageOneColumn = Literal["initial_allocation_pct", "signal_score"]
+
+
+def _persist_stage1_rows(
+    *,
+    repo: StickyHistoryRepository,
+    universe: str,
+    year_week: str,
+    as_of_date: str,
+    run_id: str,
+    signals: dict[str, float],
+    selected_set: set[str],
+    selection_reasons: dict[str, str],
+    column: _StageOneColumn,
+) -> None:
+    """Persist Stage 1 rows for either selection policy.
+
+    Both ``select_sticky_top_n_endpoint`` and
+    ``select_rank_band_top_n_endpoint`` need to:
+
+    1. Rank every symbol by the same convention the selector uses
+       (``rank_by_score``).
+    2. Build ``WeightRow`` objects with ``stage1_rank`` matching that
+       rank.
+    3. Persist via ``repo.persist_stage1``.
+
+    The two endpoints differ only in *which* Stage 1 column the signal
+    lands in (``initial_allocation_pct`` for HRP weights vs
+    ``signal_score`` for raw forecast scores). Both are exclusive --
+    rows persist with exactly one of the two columns populated, never
+    both, never neither.
+
+    Math/DDD note: ``rank_by_score`` is used here even though the
+    weight-band primitive does NOT use rank-based math internally.
+    For *persistence* the rank serves as an audit number; the math
+    inside the two ``select_with_*`` functions remains independent.
+    """
+    rows = [
+        WeightRow(
+            universe=universe,
+            year_week=year_week,
+            as_of_date=as_of_date,
+            stock=symbol,
+            stage1_rank=rank,
+            initial_allocation_pct=value
+            if column == "initial_allocation_pct"
+            else None,
+            signal_score=value if column == "signal_score" else None,
+            final_allocation_pct=None,
+            selected_in_final=(symbol in selected_set),
+            selection_reason=selection_reasons.get(symbol),
+            run_id=run_id,
+        )
+        for symbol, rank, value in rank_by_score(signals)
+    ]
+    repo.persist_stage1(rows)
+
+
+# ============================================================================
+# /allocation/hrp
 # ============================================================================
 
 
@@ -154,123 +200,7 @@ def allocate_hrp(
 
 
 # ============================================================================
-# Sticky-selection (rebalance-band) models
-# ============================================================================
-
-
-class StickyTopNRequest(BaseModel):
-    """Request model for /allocation/sticky-top-n.
-
-    The stage 1 result is a full-universe HRP run (e.g. ~410 stocks for
-    halal_new). The endpoint persists those weights, looks up last week's
-    final selection for the same universe, and returns the top-N for this
-    week with sticky retention applied.
-    """
-
-    stage1: HRPAllocationResponse = Field(
-        ...,
-        description="Stage 1 HRP result over the full universe",
-    )
-    universe: str = Field(
-        ...,
-        min_length=1,
-        description="Universe label, e.g. 'halal_new', 'nifty_shariah_500'",
-    )
-    year_week: str = Field(
-        ...,
-        min_length=6,
-        max_length=6,
-        description="ISO year-week 'YYYYWW' (e.g. '202608')",
-    )
-    as_of_date: str = Field(
-        ...,
-        min_length=10,
-        max_length=10,
-        description="Reference date 'YYYY-MM-DD'",
-    )
-    run_id: str = Field(
-        ...,
-        min_length=1,
-        description="Run identifier (e.g. 'paper:2026-02-23')",
-    )
-    top_n: int = Field(
-        15,
-        ge=1,
-        le=100,
-        description="Target number of selected symbols",
-    )
-    stickiness_threshold_pp: float = Field(
-        1.0,
-        ge=0.0,
-        le=50.0,
-        description=(
-            "Maximum absolute pp move on stage 1 weight that still "
-            "qualifies a previously-held stock as sticky"
-        ),
-    )
-
-
-class StickyTopNResponse(BaseModel):
-    """Response model for /allocation/sticky-top-n."""
-
-    selected: list[str] = Field(
-        ...,
-        description="Selected symbols, sticky stocks first",
-    )
-    reasons: dict[str, str] = Field(
-        ...,
-        description="Per-symbol reason: 'sticky' or 'top_rank'",
-    )
-    kept_count: int = Field(
-        ...,
-        ge=0,
-        description="How many last-week holdings were retained as sticky",
-    )
-    fillers_count: int = Field(
-        ...,
-        ge=0,
-        description="How many slots filled with new top-rank stocks",
-    )
-    evicted_from_previous: dict[str, str] = Field(
-        default_factory=dict,
-        description=(
-            "Map of evicted previous-week symbols to reason: "
-            "'weight_diff' or 'dropped_from_universe'"
-        ),
-    )
-    previous_year_week_used: str | None = Field(
-        None,
-        description="Year-week used for the prior comparison, None on cold start",
-    )
-    universe: str
-    year_week: str
-
-
-class RecordFinalWeightsRequest(BaseModel):
-    """Request model for /allocation/record-final-weights.
-
-    Called after Stage 2 HRP runs on the selected symbols. Updates the
-    persisted stage 1 rows to include the final stage 2 weight.
-    """
-
-    universe: str = Field(..., min_length=1)
-    year_week: str = Field(..., min_length=6, max_length=6)
-    final_weights_pct: dict[str, float] = Field(
-        ...,
-        description="Stage 2 HRP weights (in %) keyed by symbol",
-    )
-
-
-class RecordFinalWeightsResponse(BaseModel):
-    """Response model for /allocation/record-final-weights."""
-
-    rows_updated: int = Field(..., ge=0)
-    universe: str
-    year_week: str
-
-
-# ============================================================================
-# Sticky-selection endpoints
+# /allocation/sticky-top-n  (weight-band policy)
 # ============================================================================
 
 
@@ -316,27 +246,17 @@ def select_sticky_top_n_endpoint(
         threshold_pp=request.stickiness_threshold_pp,
     )
 
-    selected_set = set(result.selected)
-    sorted_pairs = sorted(
-        current.items(),
-        key=lambda kv: (-kv[1], kv[0]),
+    _persist_stage1_rows(
+        repo=repo,
+        universe=request.universe,
+        year_week=request.year_week,
+        as_of_date=request.as_of_date,
+        run_id=request.run_id,
+        signals=current,
+        selected_set=set(result.selected),
+        selection_reasons=result.reasons,
+        column="initial_allocation_pct",
     )
-    rows = [
-        WeightRow(
-            universe=request.universe,
-            year_week=request.year_week,
-            as_of_date=request.as_of_date,
-            stock=symbol,
-            stage1_rank=rank,
-            initial_allocation_pct=weight,
-            final_allocation_pct=None,
-            selected_in_final=(symbol in selected_set),
-            selection_reason=result.reasons.get(symbol),
-            run_id=request.run_id,
-        )
-        for rank, (symbol, weight) in enumerate(sorted_pairs, start=1)
-    ]
-    repo.persist_stage1(rows)
 
     logger.info(
         "[Sticky] %s/%s: kept=%d fillers=%d prev_week=%s evicted=%d",
@@ -368,11 +288,11 @@ def record_final_weights_endpoint(
     """Record Stage 2 final weights for the just-completed week.
 
     Called after Stage 2 HRP runs on the symbols returned by
-    /allocation/sticky-top-n. Updates the corresponding stage 1 rows to
-    set ``final_allocation_pct`` and ``selected_in_final=1``. Symbols not
-    present in the persisted stage 1 set (which would be unusual but
-    possible if the workflow constructed the symbol list manually) are
-    silently ignored.
+    /allocation/sticky-top-n or /allocation/rank-band-top-n. Updates
+    the corresponding stage 1 rows to set ``final_allocation_pct`` and
+    ``selected_in_final=1``. Symbols not present in the persisted
+    stage 1 set (which would be unusual but possible if the workflow
+    constructed the symbol list manually) are silently ignored.
     """
     rows_updated = repo.update_final_weights(
         universe=request.universe,
@@ -389,4 +309,107 @@ def record_final_weights_endpoint(
         rows_updated=rows_updated,
         universe=request.universe,
         year_week=request.year_week,
+    )
+
+
+# ============================================================================
+# /allocation/rank-band-top-n  (rank-band policy)
+# ============================================================================
+
+
+@router.post("/rank-band-top-n", response_model=RankBandTopNResponse)
+def select_rank_band_top_n_endpoint(
+    request: RankBandTopNRequest,
+    repo: StickyHistoryRepository = Depends(get_sticky_history_repo),
+) -> RankBandTopNResponse:
+    """Persist current scores and return top-N with rank-band stickiness.
+
+    Asymmetric rank-band turnover damper for ranked-alpha screening:
+    a previously-held stock is retained as long as its current rank is
+    inside ``hold_threshold`` (``K_hold``), even if it slipped out of
+    the entry zone ``top_n`` (``K_in``). Remaining slots are filled
+    from this week's highest-ranked non-held names.
+
+    The persisted ``signal_score`` column stores the raw numeric
+    signal (e.g. PatchTST predicted weekly return %) for audit;
+    ``initial_allocation_pct`` stays NULL because rank-band selection
+    is not weight-based and that column's documented unit is "Stage 1
+    HRP weight in %" (Σ ≈ 100% across the universe).
+
+    On a cold start (no prior week for this universe), the endpoint
+    falls back to plain top-N by current score, persists the row set,
+    and returns ``previous_year_week_used=None``.
+    """
+    current = request.current_scores
+
+    if not current:
+        raise HTTPException(
+            status_code=400,
+            detail="current_scores must not be empty",
+        )
+
+    if request.hold_threshold < request.top_n:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"hold_threshold ({request.hold_threshold}) must be >= "
+                f"top_n ({request.top_n})"
+            ),
+        )
+
+    previous = repo.read_previous_final_set(
+        universe=request.universe,
+        current_year_week=request.year_week,
+    )
+    previous_final_set = previous.final_set if previous is not None else None
+    previous_year_week_used = previous.year_week if previous is not None else None
+
+    try:
+        result: SelectionResult = select_with_rank_band(
+            current_scores=current,
+            previous_selected_set=previous_final_set,
+            top_n=request.top_n,
+            hold_threshold=request.hold_threshold,
+        )
+    except ValueError as exc:
+        # Non-finite scores or other validation failures must surface
+        # as a 422 rather than a generic 500; they indicate caller
+        # input that violates the rank-band contract.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _persist_stage1_rows(
+        repo=repo,
+        universe=request.universe,
+        year_week=request.year_week,
+        as_of_date=request.as_of_date,
+        run_id=request.run_id,
+        signals=current,
+        selected_set=set(result.selected),
+        selection_reasons=result.reasons,
+        column="signal_score",
+    )
+
+    logger.info(
+        "[RankBand] %s/%s: top_n=%d hold=%d kept=%d fillers=%d prev_week=%s evicted=%d",
+        request.universe,
+        request.year_week,
+        request.top_n,
+        request.hold_threshold,
+        result.kept_count,
+        result.fillers_count,
+        previous_year_week_used,
+        len(result.evicted_from_previous),
+    )
+
+    return RankBandTopNResponse(
+        selected=result.selected,
+        reasons=result.reasons,
+        kept_count=result.kept_count,
+        fillers_count=result.fillers_count,
+        evicted_from_previous=result.evicted_from_previous,
+        previous_year_week_used=previous_year_week_used,
+        universe=request.universe,
+        year_week=request.year_week,
+        top_n=request.top_n,
+        hold_threshold=request.hold_threshold,
     )

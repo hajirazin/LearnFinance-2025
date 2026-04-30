@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 
 from brain_api.routes.allocation import HRPAllocationResponse
+from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
     LSTMInferenceResponse,
     PatchTSTInferenceResponse,
@@ -17,6 +18,19 @@ from brain_api.routes.training.models import (
     PatchTSTTrainResponse,
     SACTrainResponse,
 )
+
+__all__ = [
+    "AlphaScoreItem",
+    "DoubleHRPSummaryRequest",
+    "IndiaTrainingSummaryRequest",
+    "IndiaWeeklySummaryRequest",
+    "TrainingSummaryRequest",
+    "TrainingSummaryResponse",
+    "USAlphaHRPSummaryRequest",
+    "USDoubleHRPSummaryRequest",
+    "WeeklySummaryRequest",
+    "WeeklySummaryResponse",
+]
 
 # =============================================================================
 # Training Summary Models
@@ -126,3 +140,37 @@ class USDoubleHRPSummaryRequest(BaseModel):
     stage2: HRPAllocationResponse  # selected 15, 252d lookback
     universe: str  # e.g. "halal_new"
     top_n: int  # e.g. 15
+
+
+# =============================================================================
+# US Alpha-HRP Summary Models
+# =============================================================================
+
+
+class USAlphaHRPSummaryRequest(BaseModel):
+    """Request model for POST /llm/us-alpha-hrp-summary.
+
+    Stage 1 = PatchTST predicted weekly returns over halal_new
+    (~410 stocks); rank-band sticky selection picks ``top_n`` (default
+    15) with hold threshold ``hold_threshold`` (default 30); Stage 2
+    HRP risk-parity sizes the chosen names. The LLM gets the top-25
+    Stage 1 scores, the rank-band sticky stats (kept/fillers/evicted),
+    and the final HRP weights.
+    """
+
+    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
+    model_version: str  # PatchTST model version used for stage 1
+    predicted_count: int  # how many of requested_count produced valid scores
+    requested_count: int  # full halal_new size sent into PatchTST
+    selected_symbols: list[str]  # final top_n chosen
+    kept_count: int
+    fillers_count: int
+    evicted_from_previous: dict[str, str] = {}
+    previous_year_week_used: str | None = None
+    stage2: HRPAllocationResponse  # HRP weights on the chosen top_n
+    # Sticky-history partition key (e.g. "halal_new_alpha"). Keeps
+    # rank-band sticky rows isolated from US Double HRP's weight-band
+    # rows on the same tradable universe.
+    universe: str
+    top_n: int  # K_in (entry threshold)
+    hold_threshold: int  # K_hold (sticky retention threshold)

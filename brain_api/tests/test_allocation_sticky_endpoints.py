@@ -43,6 +43,26 @@ def _stage1_payload(weights: dict[str, float]) -> dict:
     }
 
 
+def _finalize_week(
+    client: TestClient, *, universe: str, year_week: str, selected: list[str]
+) -> None:
+    """Mimic Stage 2 by writing equal final weights for ``selected`` stocks.
+
+    Post-M1 the sticky carry-set reflects Stage 2 reality
+    (``final_allocation_pct IS NOT NULL``), so any test that primes a
+    "previous week" must explicitly finalize it.
+    """
+    weight = round(100.0 / len(selected), 4)
+    client.post(
+        "/allocation/record-final-weights",
+        json={
+            "universe": universe,
+            "year_week": year_week,
+            "final_weights_pct": dict.fromkeys(selected, weight),
+        },
+    )
+
+
 # ----------------------------------------------------------------------------
 # /allocation/sticky-top-n
 # ----------------------------------------------------------------------------
@@ -96,6 +116,12 @@ class TestStickyTopNEndpoint:
                 "top_n": 3,
             },
         )
+        _finalize_week(
+            client,
+            universe="halal_new",
+            year_week="202608",
+            selected=["AAPL", "MSFT", "GOOG"],
+        )
 
         # This week: GOOG slipped slightly (3.0 -> 2.7), AAPL stable (5.0 -> 5.2).
         # MSFT dropped a lot (4.0 -> 1.0). New stock TSLA appears at 4.5.
@@ -146,6 +172,12 @@ class TestStickyTopNEndpoint:
                 "top_n": 2,
             },
         )
+        _finalize_week(
+            client,
+            universe="halal_new",
+            year_week="202608",
+            selected=["AAPL", "MSFT"],
+        )
 
         # MSFT no longer in the universe this week.
         response = client.post(
@@ -175,6 +207,12 @@ class TestStickyTopNEndpoint:
                 "run_id": "paper:2026-02-16",
                 "top_n": 2,
             },
+        )
+        _finalize_week(
+            client,
+            universe="halal_new",
+            year_week="202608",
+            selected=["A", "B"],
         )
         response = client.post(
             "/allocation/sticky-top-n",

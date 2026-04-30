@@ -10,7 +10,9 @@ from models import (
     HRPAllocationResponse,
     LSTMInferenceResponse,
     NewsSignalResponse,
+    PatchTSTBatchScores,
     PatchTSTInferenceResponse,
+    RankBandTopNResponse,
     SACInferenceResponse,
     SkippedAllocation,
     SkippedSubmitResponse,
@@ -307,4 +309,134 @@ def send_us_double_hrp_email(
         response.raise_for_status()
     result = WeeklyReportEmailResponse(**response.json())
     logger.info(f"US Double HRP email sent: {result.subject}")
+    return result
+
+
+def _alpha_top_scores(scores: PatchTSTBatchScores, top_k: int = 25) -> list[dict]:
+    """Return the top ``top_k`` PatchTST scores as ``[{symbol, score, rank}]``.
+
+    Sorted by score descending with symbol-asc tie-break -- the same
+    ordering ``brain_api.core.sticky_selection.rank_by_score`` uses, so
+    the ranks shown in the email/LLM payload match the ranks the
+    rank-band selector actually saw. The convention is duplicated here
+    only because Temporal activities cannot import brain_api Python
+    modules; the duplication is one short sort, not policy logic.
+    """
+    sorted_pairs = sorted(scores.scores.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [
+        {"symbol": symbol, "score": score, "rank": rank}
+        for rank, (symbol, score) in enumerate(sorted_pairs[:top_k], start=1)
+    ]
+
+
+def _build_us_alpha_hrp_report_payload(
+    scores: PatchTSTBatchScores,
+    sticky: RankBandTopNResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+    hold_threshold: int,
+) -> dict:
+    """Common JSON shape for US Alpha-HRP LLM-summary and email payloads.
+
+    Both /llm/us-alpha-hrp-summary and /email/us-alpha-hrp-report take
+    the same Stage 1 + sticky + Stage 2 fields. Centralising the shape
+    here keeps the two activities from drifting (e.g. one starts using
+    ``top_n`` while the other uses ``stage2.symbols_used``) and means
+    only one place needs touching when the prompt template changes.
+    """
+    return {
+        "stage1_top_scores": _alpha_top_scores(scores),
+        "model_version": scores.model_version,
+        "predicted_count": scores.predicted_count,
+        "requested_count": scores.requested_count,
+        "selected_symbols": sticky.selected,
+        "kept_count": sticky.kept_count,
+        "fillers_count": sticky.fillers_count,
+        "evicted_from_previous": sticky.evicted_from_previous,
+        "previous_year_week_used": sticky.previous_year_week_used,
+        "stage2": stage2.model_dump(),
+        "universe": universe,
+        "top_n": top_n,
+        "hold_threshold": hold_threshold,
+    }
+
+
+@activity.defn
+def generate_us_alpha_hrp_summary(
+    scores: PatchTSTBatchScores,
+    sticky: RankBandTopNResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+    hold_threshold: int,
+) -> WeeklySummaryResponse:
+    """Generate LLM summary of the US Alpha-HRP weekly run.
+
+    Stage 1 is PatchTST predicted weekly returns over halal_new (alpha
+    screen); Stage 2 is HRP risk-parity sizing on the chosen ``top_n``.
+    The LLM gets the top-25 alpha scores (for market-outlook narrative)
+    and the rank-band sticky stats (kept/fillers/evicted) along with
+    the final HRP weights.
+    """
+    logger.info("Generating US Alpha-HRP LLM summary...")
+    with get_client() as client:
+        response = client.post(
+            "/llm/us-alpha-hrp-summary",
+            json=_build_us_alpha_hrp_report_payload(
+                scores, sticky, stage2, universe, top_n, hold_threshold
+            ),
+        )
+        response.raise_for_status()
+    result = WeeklySummaryResponse(**response.json())
+    logger.info(
+        f"Generated US Alpha-HRP summary via {result.provider} ({result.model_used})"
+    )
+    return result
+
+
+@activity.defn
+def send_us_alpha_hrp_email(
+    summary: WeeklySummaryResponse,
+    scores: PatchTSTBatchScores,
+    sticky: RankBandTopNResponse,
+    stage2: HRPAllocationResponse,
+    universe: str,
+    top_n: int,
+    hold_threshold: int,
+    target_week_start: str,
+    target_week_end: str,
+    as_of_date: str,
+    order_results: SubmitOrdersResponse | SkippedSubmitResponse | None = None,
+    skipped: bool = False,
+) -> WeeklyReportEmailResponse:
+    """Send the US Alpha-HRP weekly report email.
+
+    On the skip path (``skipped=True`` or a :class:`SkippedSubmitResponse`),
+    the template hides the allocation/orders tables and shows a short
+    banner explaining why the week was skipped (last week's hrp-account
+    orders still open). The summary is still produced so the operator
+    receives an explanation.
+    """
+    logger.info("Sending US Alpha-HRP report email...")
+    payload: dict = {
+        "summary": summary.summary,
+        **_build_us_alpha_hrp_report_payload(
+            scores, sticky, stage2, universe, top_n, hold_threshold
+        ),
+        "target_week_start": target_week_start,
+        "target_week_end": target_week_end,
+        "as_of_date": as_of_date,
+        "skipped": skipped,
+    }
+    if order_results is not None:
+        payload["order_results"] = _submit_to_dict(order_results)
+    with get_client() as client:
+        response = client.post(
+            "/email/us-alpha-hrp-report",
+            json=payload,
+        )
+        response.raise_for_status()
+    result = WeeklyReportEmailResponse(**response.json())
+    logger.info(f"US Alpha-HRP email sent: {result.subject}")
     return result

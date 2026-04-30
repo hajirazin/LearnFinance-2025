@@ -1,5 +1,6 @@
 """Pydantic models for brain_api requests and responses."""
 
+from models.alpha_screen import PatchTSTBatchScores
 from models.email import TrainingSummaryEmailResponse
 from models.etl import RefreshTrainingDataRequest, RefreshTrainingDataResponse
 from models.forecast_email import (
@@ -26,7 +27,11 @@ from models.forecast_email import (
     WeeklySummaryResponse,
 )
 from models.llm import TrainingSummaryResponse
-from models.sticky import RecordFinalWeightsResponse, StickyTopNResponse
+from models.sticky import (
+    RankBandTopNResponse,
+    RecordFinalWeightsResponse,
+    StickyTopNResponse,
+)
 from models.training import TrainingResponse
 from models.universe import ActiveSymbolsResponse
 
@@ -65,4 +70,6 @@ __all__ = [
     # Sticky-selection
     "StickyTopNResponse",
     "RecordFinalWeightsResponse",
+    "RankBandTopNResponse",
+    "PatchTSTBatchScores",
 ]

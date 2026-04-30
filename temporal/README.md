@@ -26,10 +26,11 @@ devbox run temporal:run:us-double-hrp
 
 | Workflow | Schedule | Description |
 |----------|----------|-------------|
-| USWeeklyAllocation | Monday 11:00 UTC | Allocation + sell-wait-buy + email |
+| USWeeklyAllocation | Monday 11:00 UTC | SAC-only allocation + sell-wait-buy + email (naive HRP retired; `hrp` account now driven by USAlphaHRP) |
 | IndiaWeeklyAllocation | Monday 03:30 UTC | India HRP allocation + email |
 | IndiaDoubleHRP | Monday 04:00 UTC | Two-stage HRP (Nifty Shariah 500 → top 15) + email |
 | USDoubleHRP | Monday 11:30 UTC | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
+| USAlphaHRP | Monday 12:00 UTC | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
 | USWeeklyTraining | Sunday 11:00 UTC | Full US model training (not in `SCHEDULES` by default) |
 | IndiaWeeklyTraining | Sunday 04:30 UTC | India PatchTST training (not in `SCHEDULES` by default) |
 
@@ -41,9 +42,9 @@ updating)` and exits 0. This means the docker-compose `temporal-schedules-init`
 one-shot service can safely run on every `docker compose up -d --build` without
 side effects.
 
-Four cron schedules are registered by default: US weekly allocation, India
-weekly allocation, India Double HRP, and US Double HRP (see `SCHEDULES` in
-`schedules.py`). Training schedules are preserved as a commented `SCHEDULES_MAC`
+Five cron schedules are registered by default: US weekly allocation, India
+weekly allocation, India Double HRP, US Double HRP, and US Alpha-HRP (see
+`SCHEDULES` in `schedules.py`). Training schedules are preserved as a commented `SCHEDULES_MAC`
 block for future use on a beefier host.
 
 ## Changing a schedule on the Pi

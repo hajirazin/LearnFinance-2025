@@ -1,17 +1,24 @@
-"""US weekly allocation workflow with durable sell-wait-buy.
+"""US weekly allocation workflow (SAC-only) with durable sell-wait-buy.
 
-Runs every Monday at 18:00 IST (11:00 UTC). Single workflow replaces the
-3-flow Prefect hack (sells flow + monitor cron + buys flow).
+Runs every Monday at 18:00 IST (11:00 UTC).
 
-Phases:
-0. Get active symbols + Alpaca portfolios (parallel)
+History note (post-refactor): this workflow used to run a "naive HRP"
+allocator side-by-side with SAC on SAC's 15-stock universe. That naive
+HRP path has been **retired** in favor of the dedicated
+``USAlphaHRPWorkflow`` (PatchTST alpha screen on the full halal_new
+universe -> rank-band sticky -> HRP). The HRP Alpaca paper account is
+unchanged; only the strategy that produces its weekly weights changed.
+
+Phases (SAC-only):
+0. Get active symbols + SAC portfolio (parallel)
 1. Get signals + forecasts (parallel)
-2. Run allocators: SAC, HRP (parallel, conditional on open orders)
-3. Generate orders + store experience
-4. Per-algorithm sell-wait-buy (parallel per account, each independently
-   submits sells -> polls until terminal -> submits buys)
-5. Get order history + update execution
-6. Generate LLM summary + send email
+2. Run SAC allocator (skipped if open orders on sac account)
+3. Generate SAC orders + store SAC experience
+4. SAC sell-wait-buy
+5. Get SAC order history + update execution
+6. Generate LLM summary + send email (HRP fields are empty placeholders
+   so the existing /llm/weekly-summary and /email/weekly-report payload
+   schemas continue to work without breaking changes)
 """
 
 import asyncio
@@ -28,13 +35,11 @@ from workflows._order_execution import (
 
 with workflow.unsafe.imports_passed_through():
     from activities.execution import (
-        generate_orders_hrp,
         generate_orders_sac,
         store_experience_sac,
         update_execution_sac,
     )
     from activities.inference import (
-        allocate_hrp,
         get_fundamentals,
         get_lstm_forecast,
         get_news_sentiment,
@@ -43,24 +48,45 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.portfolio import (
         get_active_symbols,
-        get_hrp_portfolio,
         get_order_history_sac,
         get_sac_portfolio,
         resolve_next_attempt,
-        submit_orders_hrp,
         submit_orders_sac,
     )
     from activities.reporting import generate_summary, send_weekly_email
-    from models import SkippedAllocation
+    from models import HRPAllocationResponse, SkippedAllocation, SkippedSubmitResponse
 
-# Must be greater than the httpx read timeout in temporal/activities/client.py
-# (currently 15 min) so httpx times out before Temporal does, allowing clean
-# retries. Pi FinBERT sentiment is the slowest activity at 5-6 min.
 INFERENCE_TIMEOUT = timedelta(minutes=20)
+
+
+def _empty_hrp_placeholder(as_of_date: str) -> HRPAllocationResponse:
+    """Empty HRP allocation used to keep the summary/email schemas stable.
+
+    The ``naive HRP`` allocator that this workflow used to run has been
+    retired (see ``USAlphaHRPWorkflow``). The downstream LLM/email
+    routes still accept an ``hrp`` field, so we pass an empty
+    placeholder. The Jinja templates already branch on
+    ``hrp.symbols_used == 0``-style guards in their existing skip
+    paths.
+    """
+    return HRPAllocationResponse(
+        percentage_weights={},
+        symbols_used=0,
+        symbols_excluded=[],
+        lookback_days=0,
+        as_of_date=as_of_date,
+    )
 
 
 @workflow.defn
 class USWeeklyAllocationWorkflow:
+    """SAC-only US weekly allocation workflow.
+
+    Naive HRP was retired in favor of ``USAlphaHRPWorkflow``; this class
+    name is preserved to avoid downstream renames in the schedule and
+    worker registry.
+    """
+
     @workflow.run
     async def run(self) -> dict:
         now_ist = workflow.now().astimezone()
@@ -74,35 +100,25 @@ class USWeeklyAllocationWorkflow:
         )
 
         workflow.logger.info(
-            f"Starting US weekly allocation pipeline (attempt={attempt})..."
+            f"Starting US weekly allocation pipeline (SAC-only, attempt={attempt})..."
         )
 
-        # Phase 0: Get active symbols + portfolios (parallel)
-        (
-            active_symbols,
-            sac_portfolio,
-            hrp_portfolio,
-        ) = await asyncio.gather(
+        # Phase 0: Get active symbols + SAC portfolio (parallel)
+        active_symbols, sac_portfolio = await asyncio.gather(
             workflow.execute_activity(
                 get_active_symbols, start_to_close_timeout=SHORT_TIMEOUT
             ),
             workflow.execute_activity(
                 get_sac_portfolio, start_to_close_timeout=SHORT_TIMEOUT
             ),
-            workflow.execute_activity(
-                get_hrp_portfolio, start_to_close_timeout=SHORT_TIMEOUT
-            ),
         )
 
         symbols = active_symbols.symbols
         run_sac = sac_portfolio.open_orders_count == 0
-        run_hrp = hrp_portfolio.open_orders_count == 0
 
         skipped_algorithms = []
         if not run_sac:
             skipped_algorithms.append("SAC")
-        if not run_hrp:
-            skipped_algorithms.append("HRP")
 
         # Phase 1: Get signals + forecasts (parallel)
         fundamentals, news, lstm, patchtst = await asyncio.gather(
@@ -135,84 +151,57 @@ class USWeeklyAllocationWorkflow:
         target_week_start = lstm.target_week_start or as_of_date
         target_week_end = lstm.target_week_end or as_of_date
 
-        # Phase 2: Run allocators (parallel, conditional)
-        alloc_futures = []
+        # Phase 2: SAC allocator (skipped if open orders on sac account).
         if run_sac:
-            alloc_futures.append(
-                workflow.execute_activity(
-                    infer_sac,
-                    args=[sac_portfolio, as_of_date],
-                    start_to_close_timeout=INFERENCE_TIMEOUT,
-                )
+            sac_alloc = await workflow.execute_activity(
+                infer_sac,
+                args=[sac_portfolio, as_of_date],
+                start_to_close_timeout=INFERENCE_TIMEOUT,
             )
-        if run_hrp:
-            alloc_futures.append(
-                workflow.execute_activity(
-                    allocate_hrp,
-                    args=[symbols, as_of_date],
-                    start_to_close_timeout=INFERENCE_TIMEOUT,
-                )
-            )
+        else:
+            sac_alloc = SkippedAllocation(algorithm="sac")
 
-        alloc_results = await asyncio.gather(*alloc_futures) if alloc_futures else []
+        # Empty HRP placeholder; naive HRP was retired in favor of
+        # USAlphaHRPWorkflow, but the existing weekly-summary/email
+        # routes still accept an ``hrp`` field.
+        hrp_alloc = _empty_hrp_placeholder(as_of_date)
 
-        idx = 0
-        sac_alloc = (
-            alloc_results[idx] if run_sac else SkippedAllocation(algorithm="sac")
-        )
-        if run_sac:
-            idx += 1
-        hrp_alloc = (
-            alloc_results[idx] if run_hrp else SkippedAllocation(algorithm="hrp")
+        # Phase 3: Generate SAC orders.
+        sac_orders = await workflow.execute_activity(
+            generate_orders_sac,
+            args=[sac_alloc, sac_portfolio, run_id, attempt],
+            start_to_close_timeout=SHORT_TIMEOUT,
         )
 
-        # Phase 3: Generate orders + store experience (parallel)
-        sac_orders, hrp_orders = await asyncio.gather(
-            workflow.execute_activity(
-                generate_orders_sac,
-                args=[sac_alloc, sac_portfolio, run_id, attempt],
+        # Store experience (fire-and-forget for SAC RL).
+        if run_sac:
+            await workflow.execute_activity(
+                store_experience_sac,
+                args=[
+                    run_id,
+                    target_week_start,
+                    target_week_end,
+                    sac_alloc,
+                    sac_portfolio,
+                    news,
+                    fundamentals,
+                    lstm,
+                    patchtst,
+                ],
                 start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-            workflow.execute_activity(
-                generate_orders_hrp,
-                args=[hrp_alloc, hrp_portfolio, run_id, attempt],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            ),
-        )
-
-        # Store experience (fire and forget for RL algorithms)
-        experience_futures = []
-        if run_sac:
-            experience_futures.append(
-                workflow.execute_activity(
-                    store_experience_sac,
-                    args=[
-                        run_id,
-                        target_week_start,
-                        target_week_end,
-                        sac_alloc,
-                        sac_portfolio,
-                        news,
-                        fundamentals,
-                        lstm,
-                        patchtst,
-                    ],
-                    start_to_close_timeout=SHORT_TIMEOUT,
-                )
             )
-        if experience_futures:
-            await asyncio.gather(*experience_futures)
 
-        # Phase 4: Per-algorithm sell-wait-buy (parallel per account)
+        # Phase 4: SAC sell-wait-buy.
         sac_sells, sac_buys = split_orders_by_side(sac_orders)
-        hrp_sells, hrp_buys = split_orders_by_side(hrp_orders)
-
-        sac_submit, hrp_submit = await asyncio.gather(
-            sell_wait_buy("sac", sac_sells, sac_buys, sac_orders, submit_orders_sac),
-            sell_wait_buy("hrp", hrp_sells, hrp_buys, hrp_orders, submit_orders_hrp),
+        sac_submit = await sell_wait_buy(
+            "sac", sac_sells, sac_buys, sac_orders, submit_orders_sac
         )
 
-        # Phase 5: Get order history + update execution
+        # HRP placeholder submit response so downstream schemas stay
+        # the same shape (both algorithms reported, hrp is "skipped").
+        hrp_submit = SkippedSubmitResponse(account="hrp", skipped=True)
+
+        # Phase 5: Get SAC order history + update execution.
         if run_sac:
             sac_history = await workflow.execute_activity(
                 get_order_history_sac,
@@ -260,10 +249,6 @@ class USWeeklyAllocationWorkflow:
             "sac": {
                 "orders_submitted": getattr(sac_submit, "orders_submitted", 0),
                 "skipped": not run_sac,
-            },
-            "hrp": {
-                "orders_submitted": getattr(hrp_submit, "orders_submitted", 0),
-                "skipped": not run_hrp,
             },
             "email": {
                 "is_success": email_result.is_success,

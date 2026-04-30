@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from .models import (
     DoubleHRPSummaryRequest,
     IndiaWeeklySummaryRequest,
+    USAlphaHRPSummaryRequest,
     USDoubleHRPSummaryRequest,
     WeeklySummaryRequest,
     WeeklySummaryResponse,
@@ -233,6 +234,75 @@ def generate_us_double_hrp_summary(
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
         summary = {
             "para_1_screening_overview": "Unable to generate AI summary. Please check the logs for details.",
+            "raw_response": llm_response.content[:500],
+        }
+
+    return WeeklySummaryResponse(
+        summary=summary,
+        provider=provider.name,
+        model_used=llm_response.model,
+        tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/us-alpha-hrp-summary", response_model=WeeklySummaryResponse)
+def generate_us_alpha_hrp_summary(
+    request: USAlphaHRPSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> WeeklySummaryResponse:
+    """Generate an LLM summary of US Alpha-HRP weekly results.
+
+    Stage 1 is PatchTST predicted weekly returns over halal_new (alpha
+    screen); rank-band sticky selection picks 15 with K_hold=30; Stage 2
+    HRP risk-parity sizes the chosen names. The summary frames the
+    alpha-then-risk pipeline for the human reviewer of the ``hrp``
+    Alpaca paper account.
+    """
+    logger.info(f"Generating US Alpha-HRP summary using provider={provider.name}")
+
+    try:
+        env = get_jinja_env()
+        template = env.get_template("us_alpha_hrp_summary_prompt.j2")
+    except TemplateNotFound as e:
+        logger.error(f"Template not found: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Template not found: us_alpha_hrp_summary_prompt.j2",
+        ) from e
+
+    prompt = template.render(
+        stage1_top_scores=[item.model_dump() for item in request.stage1_top_scores],
+        model_version=request.model_version,
+        predicted_count=request.predicted_count,
+        requested_count=request.requested_count,
+        selected_symbols=request.selected_symbols,
+        kept_count=request.kept_count,
+        fillers_count=request.fillers_count,
+        evicted_from_previous=request.evicted_from_previous,
+        previous_year_week_used=request.previous_year_week_used,
+        stage2=request.stage2.model_dump(),
+        universe=request.universe,
+        top_n=request.top_n,
+        hold_threshold=request.hold_threshold,
+    )
+
+    logger.debug(f"Generated US Alpha-HRP prompt length: {len(prompt)} chars")
+
+    try:
+        llm_response = provider.generate(prompt)
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM service unavailable: {e}",
+        ) from e
+
+    try:
+        summary = parse_json_response(llm_response.content)
+    except ValueError as e:
+        logger.warning(f"Failed to parse LLM response as JSON: {e}")
+        summary = {
+            "para_1_market_outlook": "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],
         }
 

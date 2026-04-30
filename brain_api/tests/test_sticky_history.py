@@ -270,12 +270,15 @@ class TestReadPreviousFinalSet:
 
     def test_returns_most_recent_prior_week(self, repo: StickyHistoryRepository):
         # Three weeks of data; query for 202609 should return 202608.
+        # Post-M1 ``final_set`` reflects Stage 2 reality, so we must
+        # populate ``final_allocation_pct`` via ``update_final_weights``.
         repo.persist_stage1(
             [
                 _row(year_week="202607", stock="A", selected_in_final=True),
                 _row(year_week="202607", stock="B", selected_in_final=False),
             ]
         )
+        repo.update_final_weights("halal_new", "202607", {"A": 100.0})
         repo.persist_stage1(
             [
                 _row(
@@ -292,6 +295,7 @@ class TestReadPreviousFinalSet:
                 ),
             ]
         )
+        repo.update_final_weights("halal_new", "202608", {"A": 60.0, "C": 40.0})
 
         prev = repo.read_previous_final_set("halal_new", "202609")
         assert prev is not None

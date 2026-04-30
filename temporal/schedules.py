@@ -1,8 +1,9 @@
 """Register cron schedules with Temporal.
 
 Default ``SCHEDULES`` entries (see list below): ``us-weekly-allocate``,
-``india-weekly-allocate``, ``india-double-hrp``, ``us-double-hrp``. Run
-``devbox run temporal:schedule`` once per environment after deploy.
+``india-weekly-allocate``, ``india-double-hrp``, ``us-double-hrp``,
+``us-alpha-hrp``. Run ``devbox run temporal:schedule`` once per
+environment after deploy.
 
 Idempotent: safe to run repeatedly (e.g. as a docker compose init service).
 If a schedule already exists, the run logs a loud SKIP and moves on -- it does
@@ -33,6 +34,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 
 from workflows.india_double_hrp import IndiaDoubleHRPWorkflow
 from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
+from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 
@@ -69,6 +71,16 @@ SCHEDULES = [
         # not race for brain_api time slots; both still hit Monday close.
         "cron": "30 11 * * 1",  # Monday 11:30 UTC (17:00 IST)
         "description": "US Double HRP (halal_new -> sticky top 15) Monday 5 PM IST",
+    },
+    {
+        "id": "us-alpha-hrp",
+        "workflow": USAlphaHRPWorkflow,
+        "workflow_id": "us-alpha-hrp",
+        # 30 minutes after us-double-hrp so the three US Monday strategies
+        # do not contend for brain_api time slots while still hitting the
+        # post-close evidence window.
+        "cron": "0 12 * * 1",  # Monday 12:00 UTC (17:30 IST)
+        "description": "US Alpha-HRP (PatchTST -> top 15 -> HRP) Monday 17:30 IST",
     },
 ]
 

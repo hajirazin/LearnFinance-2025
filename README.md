@@ -173,7 +173,7 @@ Create 2 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
 | SAC | SAC | Off-policy RL with dual forecasts (LSTM + PatchTST) |
-| HRP | HRP | Risk parity baseline |
+| HRP | Alpha-HRP | PatchTST alpha screen on `halal_new` -> rank-band sticky top 15 -> HRP (replaces retired naive HRP allocator on the same `hrp` Alpaca account) |
 
 **OpenAI (for LLM summaries):**
 ```bash

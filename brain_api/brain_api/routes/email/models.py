@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 
 from brain_api.routes.allocation import HRPAllocationResponse
+from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
     LSTMInferenceResponse,
     PatchTSTInferenceResponse,
@@ -13,6 +14,22 @@ from brain_api.routes.training.models import (
     PatchTSTTrainResponse,
     SACTrainResponse,
 )
+
+__all__ = [
+    "AlgorithmOrderResult",
+    "AlphaScoreItem",
+    "DoubleHRPEmailRequest",
+    "IndiaTrainingSummaryEmailRequest",
+    "IndiaTrainingSummaryEmailResponse",
+    "IndiaWeeklyReportEmailRequest",
+    "OrderResultsData",
+    "TrainingSummaryEmailRequest",
+    "TrainingSummaryEmailResponse",
+    "USAlphaHRPEmailRequest",
+    "USDoubleHRPEmailRequest",
+    "WeeklyReportEmailRequest",
+    "WeeklyReportEmailResponse",
+]
 
 # =============================================================================
 # Training Summary Email Models
@@ -188,3 +205,45 @@ class USDoubleHRPEmailRequest(BaseModel):
     sticky_kept_count: int = 0
     sticky_fillers_count: int = 0
     previous_year_week_used: str | None = None
+
+
+# =============================================================================
+# US Alpha-HRP Email Models
+# =============================================================================
+
+
+class USAlphaHRPEmailRequest(BaseModel):
+    """Request model for POST /email/us-alpha-hrp-report.
+
+    US Alpha-HRP weekly report. Stage 1 is PatchTST predicted weekly
+    returns over halal_new (alpha screen); rank-band sticky selection
+    picks the top ``top_n`` (default 15) with hold threshold
+    ``hold_threshold`` (default 30); Stage 2 HRP risk-parity sizes the
+    chosen names. On the skip path the template hides allocation tables
+    and shows a banner about the open-orders gate.
+    """
+
+    summary: dict[str, str]  # from POST /llm/us-alpha-hrp-summary
+    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
+    model_version: str
+    predicted_count: int
+    requested_count: int
+    selected_symbols: list[str]
+    kept_count: int = 0
+    fillers_count: int = 0
+    evicted_from_previous: dict[str, str] = {}
+    previous_year_week_used: str | None = None
+    stage2: HRPAllocationResponse  # HRP weights on the chosen top_n
+    # Sticky-history partition key for this strategy. The tradable
+    # universe is still halal_new; the partition key
+    # ``halal_new_alpha`` keeps the rank-band sticky rows isolated
+    # from US Double HRP's weight-band sticky rows on the same
+    # universe (see brain_api.core.strategy_partitions).
+    universe: str
+    top_n: int
+    hold_threshold: int
+    target_week_start: str
+    target_week_end: str
+    as_of_date: str
+    order_results: AlgorithmOrderResult | None = None
+    skipped: bool = False

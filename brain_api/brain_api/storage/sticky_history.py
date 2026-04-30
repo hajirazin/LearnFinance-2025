@@ -36,14 +36,27 @@ Schema
     year_week             TEXT     NOT NULL    -- "YYYYWW"
     as_of_date            TEXT     NOT NULL    -- "YYYY-MM-DD"
     stock                 TEXT     NOT NULL
-    stage1_rank           INTEGER  NOT NULL    -- 1 = highest stage 1 weight that week
-    initial_allocation_pct REAL    NOT NULL    -- stage 1 HRP weight in %
-    final_allocation_pct  REAL                 -- stage 2 HRP weight in %, NULL if not selected
+    stage1_rank           INTEGER  NOT NULL    -- 1 = highest signal that week
+    initial_allocation_pct REAL                -- stage 1 HRP weight in %
+                                                -- (weight-band selection only;
+                                                -- NULL for rank-band selection)
+    signal_score          REAL                 -- raw stage 1 signal score
+                                                -- (rank-band selection only;
+                                                -- NULL for weight-band selection)
+    final_allocation_pct  REAL                 -- stage 2 HRP weight in %, NULL
+                                                -- if not selected or HRP dropped
     selected_in_final     INTEGER  NOT NULL DEFAULT 0
     selection_reason      TEXT                 -- "sticky" | "top_rank" | NULL
     run_id                TEXT     NOT NULL
     created_at            TEXT     NOT NULL DEFAULT (datetime('now'))
     PRIMARY KEY (universe, year_week, stock)
+
+The two stage-1 columns (``initial_allocation_pct`` and ``signal_score``)
+are mutually exclusive per row -- which one is populated depends on the
+selection policy that wrote the row. Mixing them in a single column
+would corrupt downstream consumers that assume the column units
+(percent allocation Σ ≈ 100%) -- see ``select_with_rank_band`` in
+``brain_api/core/sticky_selection.py`` for the rank-band signal contract.
 
 Multi-universe
 --------------
@@ -71,7 +84,8 @@ CREATE TABLE IF NOT EXISTS stage1_weight_history (
   as_of_date            TEXT     NOT NULL,
   stock                 TEXT     NOT NULL,
   stage1_rank           INTEGER  NOT NULL,
-  initial_allocation_pct REAL    NOT NULL,
+  initial_allocation_pct REAL,
+  signal_score          REAL,
   final_allocation_pct  REAL,
   selected_in_final     INTEGER  NOT NULL DEFAULT 0,
   selection_reason      TEXT,
@@ -83,6 +97,44 @@ CREATE INDEX IF NOT EXISTS idx_universe_yearweek
   ON stage1_weight_history(universe, year_week);
 """
 
+# Recreate-table migration for legacy DBs whose
+# ``initial_allocation_pct`` column was created with NOT NULL (before the
+# rank-band signal_score split). SQLite has no ALTER COLUMN so we copy
+# rows into a new table with the relaxed schema.
+_LEGACY_RECREATE_SQL = """
+BEGIN;
+CREATE TABLE _stage1_weight_history_new (
+  universe              TEXT     NOT NULL,
+  year_week             TEXT     NOT NULL,
+  as_of_date            TEXT     NOT NULL,
+  stock                 TEXT     NOT NULL,
+  stage1_rank           INTEGER  NOT NULL,
+  initial_allocation_pct REAL,
+  signal_score          REAL,
+  final_allocation_pct  REAL,
+  selected_in_final     INTEGER  NOT NULL DEFAULT 0,
+  selection_reason      TEXT,
+  run_id                TEXT     NOT NULL,
+  created_at            TEXT     NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (universe, year_week, stock)
+);
+INSERT INTO _stage1_weight_history_new (
+  universe, year_week, as_of_date, stock, stage1_rank,
+  initial_allocation_pct, signal_score, final_allocation_pct,
+  selected_in_final, selection_reason, run_id, created_at
+)
+SELECT
+  universe, year_week, as_of_date, stock, stage1_rank,
+  initial_allocation_pct, NULL, final_allocation_pct,
+  selected_in_final, selection_reason, run_id, created_at
+FROM stage1_weight_history;
+DROP TABLE stage1_weight_history;
+ALTER TABLE _stage1_weight_history_new RENAME TO stage1_weight_history;
+CREATE INDEX IF NOT EXISTS idx_universe_yearweek
+  ON stage1_weight_history(universe, year_week);
+COMMIT;
+"""
+
 
 @dataclass(frozen=True)
 class WeightRow:
@@ -91,7 +143,12 @@ class WeightRow:
     ``selected_in_final`` and ``selection_reason`` reflect the sticky
     selection outcome. ``final_allocation_pct`` is filled in later by
     :meth:`StickyHistoryRepository.update_final_weights` once stage 2 has
-    run.
+    run. Exactly one of ``initial_allocation_pct`` (weight-band
+    selection) or ``signal_score`` (rank-band selection) is populated;
+    the other stays ``None``. Mixing the two would let a rank-band
+    score (e.g. PatchTST predicted return) leak into a column whose
+    semantics is "Stage 1 HRP weight in %" and break consumers that
+    assume Σ ≈ 100% across the universe.
     """
 
     universe: str
@@ -99,11 +156,12 @@ class WeightRow:
     as_of_date: str
     stock: str
     stage1_rank: int
-    initial_allocation_pct: float
+    initial_allocation_pct: float | None
     final_allocation_pct: float | None
     selected_in_final: bool
     selection_reason: str | None
     run_id: str
+    signal_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +170,12 @@ class PreviousWeekSnapshot:
 
     Returned by :meth:`StickyHistoryRepository.read_previous_final_set` to
     drive sticky-selection logic without exposing repository internals.
+
+    ``initial_allocation_by_stock`` is keyed only by stocks that wrote a
+    Stage 1 HRP weight (weight-band selection); rank-band rows are
+    omitted because their Stage 1 column carries scores, not weights.
+    Rank-band stickiness only needs ``final_set``, so omitting them
+    here also avoids leaking score values into a "weight" map.
     """
 
     year_week: str
@@ -131,7 +195,30 @@ class StickyHistoryRepository:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            self._migrate_schema(conn)
             conn.commit()
+
+    @staticmethod
+    def _migrate_schema(conn: sqlite3.Connection) -> None:
+        """Apply idempotent schema migrations for legacy DBs.
+
+        Adds the ``signal_score`` column when missing and, if
+        ``initial_allocation_pct`` was created with NOT NULL (pre
+        rank-band schema), copies the table into a new shape that
+        relaxes that constraint. SQLite has no ``ALTER COLUMN`` so the
+        latter requires a temporary table.
+        """
+        info = conn.execute("PRAGMA table_info(stage1_weight_history)").fetchall()
+        cols_by_name = {row["name"]: row for row in info}
+        if "signal_score" not in cols_by_name:
+            conn.execute(
+                "ALTER TABLE stage1_weight_history ADD COLUMN signal_score REAL"
+            )
+            info = conn.execute("PRAGMA table_info(stage1_weight_history)").fetchall()
+            cols_by_name = {row["name"]: row for row in info}
+        initial_col = cols_by_name.get("initial_allocation_pct")
+        if initial_col is not None and initial_col["notnull"] == 1:
+            conn.executescript(_LEGACY_RECREATE_SQL)
 
     def _connect(self) -> sqlite3.Connection:
         """Open a short-lived connection. Caller is responsible for closing.
@@ -167,6 +254,7 @@ class StickyHistoryRepository:
                 r.stock,
                 r.stage1_rank,
                 r.initial_allocation_pct,
+                r.signal_score,
                 r.final_allocation_pct,
                 int(r.selected_in_final),
                 r.selection_reason,
@@ -188,10 +276,10 @@ class StickyHistoryRepository:
                 """
                 INSERT INTO stage1_weight_history (
                     universe, year_week, as_of_date, stock, stage1_rank,
-                    initial_allocation_pct, final_allocation_pct,
+                    initial_allocation_pct, signal_score, final_allocation_pct,
                     selected_in_final, selection_reason, run_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 records,
             )
@@ -238,7 +326,7 @@ class StickyHistoryRepository:
             rows = conn.execute(
                 """
                 SELECT universe, year_week, as_of_date, stock, stage1_rank,
-                       initial_allocation_pct, final_allocation_pct,
+                       initial_allocation_pct, signal_score, final_allocation_pct,
                        selected_in_final, selection_reason, run_id
                 FROM stage1_weight_history
                 WHERE universe = ? AND year_week = ?
@@ -254,6 +342,7 @@ class StickyHistoryRepository:
                 stock=r["stock"],
                 stage1_rank=r["stage1_rank"],
                 initial_allocation_pct=r["initial_allocation_pct"],
+                signal_score=r["signal_score"],
                 final_allocation_pct=r["final_allocation_pct"],
                 selected_in_final=bool(r["selected_in_final"]),
                 selection_reason=r["selection_reason"],
@@ -272,6 +361,21 @@ class StickyHistoryRepository:
         ``previous`` means the largest ``year_week`` strictly less than
         ``current_year_week`` for the given universe. Returns ``None`` if
         no such week exists (cold start).
+
+        Math invariant -- ``final_set`` membership:
+
+        ``final_set`` contains exactly the symbols that received a
+        non-null Stage 2 weight (``final_allocation_pct IS NOT NULL``).
+        We do NOT use ``selected_in_final`` because Stage 1 may flag a
+        symbol as "selected" before HRP runs, and HRP can drop symbols
+        for missing covariance / data alignment. The asymmetric K_in /
+        K_hold rebalance band is Markov in the *realized* Stage 2
+        portfolio, so feeding it the Stage-1-selected superset would
+        bias retention vs eviction. If Stage 2 never ran (workflow
+        crashed before ``record_final_weights``), the carry set is
+        correctly empty -- the strategy effectively starts from a
+        cold-start the next week, which matches reality on the
+        Alpaca account.
         """
         with self._connect() as conn:
             prev_yw = conn.execute(
@@ -288,7 +392,8 @@ class StickyHistoryRepository:
 
             rows = conn.execute(
                 """
-                SELECT stock, initial_allocation_pct, selected_in_final
+                SELECT stock, initial_allocation_pct, signal_score,
+                       final_allocation_pct
                 FROM stage1_weight_history
                 WHERE universe = ? AND year_week = ?
                 """,
@@ -298,8 +403,10 @@ class StickyHistoryRepository:
         initial_by_stock: dict[str, float] = {}
         final_set: set[str] = set()
         for r in rows:
-            initial_by_stock[r["stock"]] = r["initial_allocation_pct"]
-            if r["selected_in_final"]:
+            initial = r["initial_allocation_pct"]
+            if initial is not None:
+                initial_by_stock[r["stock"]] = initial
+            if r["final_allocation_pct"] is not None:
                 final_set.add(r["stock"])
 
         return PreviousWeekSnapshot(

@@ -102,6 +102,33 @@ def generate_orders_dhrp(
     )
 
 
+@activity.defn
+def generate_orders_alpha_hrp(
+    allocation: HRPAllocationResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Generate orders for the US Alpha-HRP allocation.
+
+    The strategy runs PatchTST as Stage 1 alpha screen on halal_new and
+    HRP as Stage 2 sizing on the chosen 15. Stage 2 output is a
+    standard ``HRPAllocationResponse``, so the percentage->fraction
+    conversion is identical to other HRP-style allocators.
+
+    Tagged with ``algorithm='alpha_hrp'`` so brain_api persists orders
+    against the new strategy bucket; the underlying Alpaca paper
+    account is still ``hrp`` (same submitter).
+    """
+    return _generate_orders_from_hrp(
+        allocation=allocation,
+        portfolio=portfolio,
+        run_id=run_id,
+        attempt=attempt,
+        algorithm="alpha_hrp",
+    )
+
+
 def _generate_orders_from_hrp(
     *,
     allocation: HRPAllocationResponse | SkippedAllocation,
