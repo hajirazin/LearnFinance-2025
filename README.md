@@ -1,20 +1,10 @@
 # LearnFinance-2025
 
-A **learning-focused** weekly paper-trading portfolio system for **halal Nasdaq-500 stocks**. The goal is to **compare multiple approaches side-by-side** — not to pick a single "best" method.
+A **learning-focused** weekly paper-trading portfolio system for **halal stocks across US and India markets** (US: 5-ETF halal universe; India: Nifty 500 Shariah). The goal is to **compare multiple approaches side-by-side** — not to pick a single "best" method.
 
 ## What it does
 
-Every Monday **6:00 PM IST** (pre US open), the system orchestrates:
-
-1. **Universe & Signals**: Fetch halal universe, collect signals (news sentiment, fundamentals)
-2. **Price Forecasting**: Run LSTM (pure price) and PatchTST (OHLCV 5-channel) — both produce direct 5-day daily return forecasts
-3. **Portfolio Allocation**: Run multiple allocators for comparison:
-   - **HRP** (Hierarchical Risk Parity) — math baseline
-   - **SAC** — off-policy RL agent (dual LSTM + PatchTST forecasts)
-4. **LLM Summary**: OpenAI/GPT synthesizes all signals into market insights
-5. **Email**: Send comparison tables with all approaches for learning
-
-The email shows **all allocations side-by-side** so you can learn which approach performs best over time.
+Each Monday the system runs five independent Temporal workflows that each pick 15 halal stocks and allocate weights using a different strategy. Across all workflows, the brain_api collects the same building blocks (universe scrape, news/fundamentals signals, LSTM + PatchTST price forecasters, HRP/SAC/Alpha-HRP/Double-HRP allocators) and emails a per-strategy report so you can compare outcomes over time.
 
 ### What it does NOT do
 
@@ -23,31 +13,23 @@ The email shows **all allocations side-by-side** so you can learn which approach
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  temporal[Temporal_orchestrator] -->|schedule_Mon_18_IST| runApi[brain_api_FastAPI]
+**Components:**
 
-  subgraph brain[python_brain]
-    runApi --> universe[universe_service]
-    runApi --> signals[signal_service]
-    runApi --> forecasters[forecasters_LSTM_PatchTST]
-    runApi --> allocators[allocators_HRP_SAC]
-  end
+- **Temporal** is the sole orchestrator. Each workflow is registered as its own Temporal schedule (see [temporal/schedules.py](temporal/schedules.py)) and runs independently — there is no fan-out or shared "Monday flow".
+- **brain_api** (FastAPI) owns all business logic: universe scraping, signal collection, price forecasting (LSTM + PatchTST, US + India), allocation (HRP, SAC, Alpha-HRP, Double-HRP), Alpaca paper trading, OpenAI/LLM summaries, and Gmail SMTP delivery.
+- Storage: local Postgres for run records, local SQLite (`data/allocation/sticky_history.db`) for sticky-selection history, filesystem for raw evidence + model artifacts.
 
-  signals --> raw[raw_evidence_store]
-  forecasters --> db[run_db_Postgres]
-  allocators --> db
+**Workflows (5 independent schedules):**
 
-  runApi -->|LLM_summary| openai[OpenAI_GPT]
-  runApi -->|send_comparison_email| email[Gmail_SMTP]
-  runApi -->|submit_limit_orders| alpaca[alpaca_paper_api]
-```
+| Workflow | Schedule (UTC / IST) | Market | Strategy | Key brain_api endpoints |
+|----------|----------------------|--------|----------|-------------------------|
+| `us-weekly-allocate` (`USWeeklyAllocationWorkflow`) | Mon 11:00 UTC / 18:00 IST | US | SAC (RL with LSTM + PatchTST forecasts) | `/universe/halal_filtered`, `/alpaca/portfolio`, `/signals/{news,fundamentals}`, `/inference/{lstm,patchtst,sac}`, `/orders/generate`, `/alpaca/submit-orders`, `/llm/sac-weekly-summary`, `/email/sac-weekly-report` |
+| `us-double-hrp` (`USDoubleHRPWorkflow`) | Mon 11:30 UTC / 17:00 IST | US | Stage-1 HRP on `halal_new` -> sticky top-15 -> Stage-2 HRP | `/universe/halal_new`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/us-double-hrp-summary`, `/email/us-double-hrp-report` |
+| `us-alpha-hrp` (`USAlphaHRPWorkflow`) | Mon 12:00 UTC / 17:30 IST | US | PatchTST alpha screen -> rank-band sticky top-15 -> HRP | `/universe/halal_new`, `/inference/patchtst/score-batch`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/us-alpha-hrp-summary`, `/email/us-alpha-hrp-report` |
+| `india-weekly-allocate` (`IndiaWeeklyAllocationWorkflow`) | Mon 03:30 UTC / 09:00 IST | India | PatchTST alpha screen -> rank-band sticky top-15 -> HRP (paper-only, no broker) | `/universe/nifty_shariah_500`, `/inference/patchtst/score-batch?market=india`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/india-alpha-hrp-summary`, `/email/india-alpha-hrp-report` |
+| `india-double-hrp` (`IndiaDoubleHRPWorkflow`) | Mon 04:00 UTC / 09:30 IST | India | Stage-1 HRP on `nifty_shariah_500` -> sticky top-15 -> Stage-2 HRP | `/universe/nifty_shariah_500`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/india-double-hrp-summary`, `/email/india-double-hrp-report` |
 
-**Architecture overview:**
-
-- **Temporal** for scheduling/orchestration (triggers brain_api endpoints)
-- **brain_api** handles all integrations: Alpaca trading, OpenAI/LLM summaries, Gmail SMTP
-- A Python "AI brain" for price forecasting, allocation, and signal collection
+Training schedules (US weekly training, India PatchTST weekly training) are defined in `schedules.py` but are intentionally not registered on the default (Raspberry Pi) host — they require a beefier machine.
 
 ## Model hierarchy
 
@@ -80,28 +62,30 @@ This repo compares multiple approaches at each stage:
 | Fundamentals (historical) | ✅ Active | `/signals/fundamentals/historical` |
 | Twitter/Social sentiment | 🔜 To build | — |
 
-### Signal state vector (for RL allocators)
+### Signal state vector (for SAC allocator)
 
-Per stock (x15 stocks):
+**9 features per stock** (x15 stocks selected by `halal_filtered`) = 7 signals + 2 forecasts:
 
 | Feature | Source |
 |---------|--------|
-| LSTM predicted return | `/inference/lstm` |
-| PatchTST predicted return | `/inference/patchtst` |
-| News sentiment score | `/signals/news` |
+| News sentiment score | `/signals/news` (FinBERT) |
 | Gross margin | `/signals/fundamentals` |
 | Operating margin | `/signals/fundamentals` |
 | Net margin | `/signals/fundamentals` |
 | Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
-| Fundamental data age | Days since last update |
+| Fundamental data age | Days since last fundamentals update |
+| LSTM predicted return | `/inference/lstm` (re-run on the chosen 15) |
+| PatchTST predicted return | `/inference/patchtst` (re-run on the chosen 15) |
 
-Portfolio-level:
+Plus portfolio-level features:
 
 | Feature | Source |
 |---------|--------|
-| Current weight per stock | Portfolio state |
-| Cash available | Portfolio state |
+| Current weight per stock (15) | Portfolio state |
+| Current cash weight | Portfolio state (CASH slot in weight vector) |
+
+Total state dimension for 15 stocks: 15 stocks × 9 = 135 stock features + 16 portfolio weights (15 stocks + CASH) = **151** (see [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py)).
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
@@ -213,7 +197,9 @@ The Temporal workflow runs every Monday at 18:00 IST.
 devbox run temporal:schedule
 ```
 
-### Workflow flow
+### Workflow flow (US SAC weekly workflow)
+
+The diagram below is specific to the `us-weekly-allocate` (SAC) workflow. The other four workflows (US Alpha-HRP, US Double-HRP, India Alpha-HRP, India Double-HRP) follow analogous shapes but hit different brain_api endpoints — see the workflow table above and the workflow source under [temporal/workflows/](temporal/workflows/).
 
 ```mermaid
 sequenceDiagram
@@ -237,9 +223,9 @@ sequenceDiagram
   Brain->>Email: Send via SMTP
 ```
 
-### 7-Phase execution architecture
+### 7-Phase execution architecture (US SAC weekly workflow)
 
-The Temporal workflow executes in 7 phases with parallel tasks where possible:
+This 7-phase shape applies to the SAC US workflow only. Alpha-HRP / Double-HRP variants compress these into fewer phases (no SAC inference, no LSTM, sticky selection inserted between Stage 1 and Stage 2). The Temporal workflow executes in 7 phases with parallel tasks where possible:
 
 ```mermaid
 flowchart TD
@@ -340,18 +326,22 @@ On submit:
 
 ### Universe types
 
-The system supports three universe tiers, each building on the previous:
+The system maintains five universe tiers — two base universes (raw scrapes), two PatchTST top-15 universes derived from them, and the original yfinance halal universe kept for backwards compatibility:
 
-| Universe | Size | Source | Purpose |
-|----------|------|--------|---------|
-| `halal` | ~14 stocks | SPUS, HLAL, SPTE intersection | Original small universe |
-| `halal_new` | ~410 stocks | 5 halal ETFs (SPUS, SPTE, SPWO, HLAL, UMMA), Alpaca-tradable | Expanded universe |
-| `halal_filtered` | 15 stocks | Factor-scored from halal_new (ROE>0, Price>SMA200, Beta<2) | Default for training and inference |
-| `halal_india` | 15 stocks | Factor-scored from Nifty 500 Shariah (NSE India, no junk filter) | India market universe |
+| Universe | Size | Pipeline | Purpose |
+|----------|------|----------|---------|
+| `halal` | ~14 stocks | yfinance top holdings of SPUS, HLAL, SPTE | Original small universe (legacy) |
+| `halal_new` | ~400 stocks (varies monthly; e.g. 410 in Mar 2026, 398 in Apr 2026) | Scrape **all** holdings of 5 halal ETFs (SPUS, SPTE, SPWO from sp-funds.com; HLAL, UMMA from Wahed), merge + dedupe, then keep only Alpaca-tradable symbols (and append the 5 ETFs themselves) | US base universe |
+| `halal_filtered` | 15 stocks | `halal_new` -> drop symbols with < ~10 years of price history (`compute_min_walkforward_days`, derived from `LSTM_TRAIN_LOOKBACK_YEARS=10`) -> US PatchTST batch inference -> top 15 by predicted weekly return | Default US universe for training, allocation, and SAC features |
+| `nifty_shariah_500` | ~210 stocks | Scrape full Nifty 500 Shariah constituents from NSE India; symbols carry `.NS` suffix end-to-end | India base universe |
+| `halal_india` | 15 stocks | `nifty_shariah_500` -> same min-history filter (~10 years) -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> top 15 by predicted weekly return | Default India universe |
 
-Factor scoring: 0.4 x Momentum + 0.3 x Quality + 0.3 x Value. RL allocators require exactly 15 stocks, so `halal` and `halal_filtered` are the only valid RL universes.
+Notes:
 
-Results are cached monthly (one fetch per calendar month) to avoid redundant external API calls.
+- **No factor scoring is used.** `halal_filtered` and `halal_india` are produced purely by PatchTST predicted weekly return (after a min-history filter). There is no momentum/quality/value blend, no ROE/Beta/SMA rule.
+- RL/SAC requires exactly 15 stocks, so `halal_filtered` (US) and `halal_india` (India) are the only RL-eligible universes today; `halal` happens to also be ~14 but is legacy-only.
+- After top-15 selection, both LSTM and PatchTST run **again** on those 15 symbols to produce SAC's per-stock dual-forecast features.
+- Results are cached monthly (one fetch per calendar month) to avoid redundant external API calls. Cache files live under `brain_api/data/cache/universe/<name>_YYYY-MM.json`.
 
 ### RL reward design
 
@@ -398,12 +388,14 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /inference/lstm` | LSTM 5-day return predictions (pure price) |
-| `POST /inference/patchtst` | PatchTST 5-day return predictions (OHLCV) |
-| ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ | (Retired) |
-| `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts) |
+| `POST /inference/lstm` | LSTM 5-day return predictions (US, pure price OHLCV-close) |
+| `POST /inference/patchtst` | PatchTST 5-day return predictions (US, OHLCV 5-channel) |
+| `POST /inference/patchtst/india` | PatchTST 5-day return predictions (India, OHLCV 5-channel, `PatchTSTIndiaModelStorage`) |
+| `POST /inference/patchtst/score-batch` | Batch PatchTST alpha screen (US or India via `market` param) -> `{symbol -> predicted_weekly_return_pct}` |
+| ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ (Retired) |
+| `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts on the chosen 15 stocks) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
-| `POST /allocation/sticky-top-n` | Persist Stage 1 weights and select top-N with sticky retention |
+| `POST /allocation/sticky-top-n` | Persist Stage 1 weights and select top-N with rank-band sticky retention |
 | `POST /allocation/record-final-weights` | Record Stage 2 final weights for the just-completed week |
 
 ### Order generation endpoints
@@ -425,21 +417,24 @@ We store three kinds of data:
 
 | Endpoint | Purpose | Trigger |
 |----------|---------|---------|
-| `POST /train/lstm` | Full LSTM retrain | Monthly (manual) |
-| `POST /train/patchtst` | Full PatchTST retrain | Monthly (manual) |
+| `POST /train/lstm` | Full LSTM retrain (US) | Monthly (manual) |
+| `POST /train/patchtst` | Full PatchTST retrain (US) | Monthly (manual) |
+| `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) | Weekly (cron, beefier host only) |
 | ~~`POST /train/ppo/full`~~ | ~~Full PPO retrain (dual forecasts)~~ | ~~Monthly (manual)~~ |
 | ~~`POST /train/ppo/finetune`~~ | ~~PPO fine-tune on experience buffer~~ | ~~Weekly (cron)~~ |
 | `POST /train/sac/full` | Full SAC retrain (dual forecasts) | Monthly (manual) |
-| `POST /train/sac/finetune` | SAC fine-tune on experience buffer | Weekly (cron) |
+| `POST /train/sac/finetune` | SAC fine-tune on experience buffer | Weekly (cron, beefier host only) |
 
 ### LLM endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /llm/sac-weekly-summary` | Generate AI summary of the SAC-only weekly run (US) |
-| `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST top-15 alpha screen + HRP) |
+| `POST /llm/us-alpha-hrp-summary` | Generate AI summary of US Alpha-HRP (PatchTST alpha screen + rank-band sticky + HRP) |
+| `POST /llm/us-double-hrp-summary` | Generate AI summary of US Double HRP (`halal_new` + sticky selection) |
+| `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP (PatchTST top-15 alpha screen + HRP) |
 | `POST /llm/india-double-hrp-summary` | Generate AI summary of India two-stage HRP allocation |
-| `POST /llm/us-double-hrp-summary` | Generate AI summary of US Double HRP (halal_new + sticky selection) |
+| `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
 | `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
 
 ### Email endpoints
@@ -447,10 +442,12 @@ We store three kinds of data:
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
-| `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (HRP + AI summary) via Gmail SMTP |
-| `POST /email/india-double-hrp-report` | Send India Double HRP report (Stage 1 + Stage 2 + AI summary) |
+| `POST /email/us-alpha-hrp-report` | Send US Alpha-HRP report email (alpha screen + sticky + HRP + Alpaca order execution) |
 | `POST /email/us-double-hrp-report` | Send US Double HRP report (Stage 1 + Stage 2 + Alpaca order results + sticky stats) |
-| `POST /email/training-summary` | Send training summary email |
+| `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (paper-only, no broker) via Gmail SMTP |
+| `POST /email/india-double-hrp-report` | Send India Double HRP report (Stage 1 + Stage 2 + AI summary) |
+| `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
+| `POST /email/training-summary` | Send US training summary email |
 
 ### Alpaca endpoints
 
@@ -464,10 +461,11 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /universe/halal` | Original halal universe (~14 stocks from SPUS/HLAL/SPTE) |
-| `GET /universe/halal_new` | Expanded universe (~410 stocks from 5 halal ETFs) |
-| `GET /universe/halal_filtered` | Top 15 factor-scored stocks from halal_new (ROE>0, Price>SMA200, Beta<2) |
-| `GET /universe/halal_india` | Top 15 factor-scored stocks from Nifty 500 Shariah (NSE India) |
+| `GET /universe/halal` | Legacy halal universe (~14 stocks from yfinance top holdings of SPUS/HLAL/SPTE) |
+| `GET /universe/halal_new` | US base universe (~400 stocks; full holdings of 5 halal ETFs filtered to Alpaca-tradable) |
+| `GET /universe/halal_filtered` | Top 15 from `halal_new` (~10y min history filter + US PatchTST predicted weekly return) |
+| `GET /universe/nifty_shariah_500` | India base universe (~210 stocks, full Nifty 500 Shariah constituents, `.NS`-suffixed) |
+| `GET /universe/halal_india` | Top 15 from `nifty_shariah_500` (~10y min history filter + India PatchTST predicted weekly return) |
 
 ### ETL endpoints
 
@@ -535,9 +533,10 @@ Monday inference runs **do not retrain** models. Training happens separately.
 
 | When | What | Trigger |
 |------|------|---------|
-| Monthly (Saturday) | Full retrain all models | Manual |
-| Weekly (Sunday) | Fine-tune SAC variant | Cron (Temporal) |
-| Monday 6 PM IST | Inference only (all models) | Cron (Temporal) |
+| Monthly (Saturday) | Full retrain all US models (LSTM, PatchTST, SAC) | Manual |
+| Weekly (Sunday 11:00 UTC) | Full SAC retrain / fine-tune (US) | Cron (Temporal, beefier host only) |
+| Weekly (Sunday 04:30 UTC / 10:00 IST) | Full PatchTST retrain (India NiftyShariah500) | Cron (Temporal, beefier host only) |
+| Monday (multiple slots Mon 03:30 - 12:00 UTC) | Inference + allocation across 5 workflows | Cron (Temporal) |
 
 ### Training workflow
 
@@ -566,9 +565,11 @@ data/models/
 │   │   └── metadata.json           # training date, data window, metrics
 │   ├── snapshot-2025-12-31/        # point-in-time snapshots
 │   └── current                     # text file with active version string
-└── patchtst/
-    └── (same structure)
+├── patchtst/                       # US PatchTST artifacts (same structure as lstm/)
+└── patchtst_india/                 # India PatchTST artifacts (independent current pointer)
 ```
+
+`patchtst/` and `patchtst_india/` are independently versioned — promoting a new India PatchTST does not touch the US `current` pointer.
 
 **What's in a model artifact:**
 
@@ -682,7 +683,7 @@ brain_api/brain_api/
 │   ├── sac/
 │   ├── datasets/
 │   └── forecaster_snapshots/
-├── universe/                  # halal.py, halal_new.py, halal_filtered.py, scrapers/
+├── universe/                  # halal.py, halal_new.py, halal_filtered.py, nifty_shariah_500.py, halal_india.py, scrapers/ (incl. nse.py)
 ├── etl/                       # pipeline.py, gap_detection.py, gap_fill.py, dataset.py
 └── templates/                 # Jinja2 templates for LLM prompts and emails
 ```
@@ -690,7 +691,7 @@ brain_api/brain_api/
 ## Repo docs
 
 - `README.md`: overview + architecture + setup
-- `CLAUDE.md`: working agreement for contributors/AI (coding rules, invariants, testing policy)
+- `AGENTS.md`: working agreement for contributors/AI (coding rules, invariants, testing policy)
 
 ## License
 

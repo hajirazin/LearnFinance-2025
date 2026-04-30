@@ -192,15 +192,34 @@ When migrating an endpoint to GCP:
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
 4. Update `BRAIN_API_URL` in Temporal to use Cloud Function URL
 
+## Universe pipeline (invariants)
+
+Universes are produced by `brain_api.universe`. The pipeline is fixed; agents must not reintroduce factor scoring, momentum/quality/value blends, or ROE/Beta/SMA rules.
+
+| Universe | Source code | How it is built |
+|----------|-------------|------------------|
+| `halal` | [`universe/halal.py`](brain_api/brain_api/universe/halal.py) | Legacy yfinance top-holdings of SPUS, HLAL, SPTE (~14 stocks). Kept for backwards compatibility only. |
+| `halal_new` | [`universe/halal_new.py`](brain_api/brain_api/universe/halal_new.py) | Scrape **all** holdings from 5 ETFs (`SPUS`, `SPTE`, `SPWO` from sp-funds.com; `HLAL`, `UMMA` from Wahed Google Sheets), merge + dedupe, filter to Alpaca-tradable, append the 5 ETFs themselves. Size varies monthly (~400 stocks). US base universe. |
+| `halal_filtered` | [`universe/halal_filtered.py`](brain_api/brain_api/universe/halal_filtered.py) | `halal_new` -> `filter_symbols_by_min_history` (~10 years of trading data, derived from `LSTM_TRAIN_LOOKBACK_YEARS=10` via `compute_min_walkforward_days`) -> US PatchTST batch inference -> top 15 by `predicted_weekly_return_pct`. **No factor scoring.** |
+| `nifty_shariah_500` | [`universe/nifty_shariah_500.py`](brain_api/brain_api/universe/nifty_shariah_500.py) | Full Nifty 500 Shariah constituents from NSE India (~210 stocks). Symbols carry `.NS` suffix end-to-end. India base universe. |
+| `halal_india` | [`universe/halal_india.py`](brain_api/brain_api/universe/halal_india.py) | `nifty_shariah_500` -> same min-history filter -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> top 15 by `predicted_weekly_return_pct`. **No factor scoring.** |
+
+Invariants:
+
+- The PatchTST top-15 selection rule is the ONLY ranking step for `halal_filtered` and `halal_india`. Adding a momentum/quality/value layer requires explicit research approval; do not add silent fallbacks.
+- `halal_india` symbols MUST keep `.NS` suffix throughout (storage, training, inference, allocation, email, sticky_history).
+- US PatchTST and India PatchTST are independently versioned; promoting one MUST NOT touch the other's `current` pointer.
+- Universe scrapes are cached monthly under `brain_api/data/cache/universe/<name>_YYYY-MM.json`. A new month auto-invalidates the cache.
+
 ## Model hierarchy
 
 ### Price Forecasters
 
 | Model | Market | Input | Output |
 |-------|--------|-------|--------|
-| LSTM | US | OHLCV only (pure price) | Weekly return prediction |
-| PatchTST | US | OHLCV + All signals | Weekly return prediction |
-| PatchTST India | India (NiftyShariah500) | OHLCV (5-channel) | Weekly return prediction |
+| LSTM | US | Close-only log returns (pure price) | Weekly return prediction |
+| PatchTST | US | OHLCV (5-channel log returns) | Weekly return prediction |
+| PatchTST India | India (NiftyShariah500) | OHLCV (5-channel log returns) | Weekly return prediction |
 
 ### Portfolio Allocators
 
@@ -209,25 +228,38 @@ When migrating an endpoint to GCP:
 | HRP | Covariance matrix | Allocation weights |
 | SAC | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
 
-### Signal state vector (for RL and PatchTST)
+### Signal state vector (for SAC)
+
+SAC consumes a flat state vector composed of **per-stock features** and **portfolio-level features**. Source of truth: `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
+
+**Per-stock features (9 per stock, x `n_stocks`):**
 
 | Feature | Source |
 |---------|--------|
-| LSTM predicted return | `/inference/lstm` |
-| News sentiment score | `/signals/news` |
+| News sentiment score | `/signals/news` (FinBERT) |
 | Gross margin | `/signals/fundamentals` |
 | Operating margin | `/signals/fundamentals` |
 | Net margin | `/signals/fundamentals` |
 | Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
-| Current portfolio weight | Portfolio state |
-| Cash available | Portfolio state |
+| Fundamental data age | Days since last fundamentals update |
+| LSTM predicted weekly return | `/inference/lstm` (US, re-run on the chosen 15) |
+| PatchTST predicted weekly return | `/inference/patchtst` (US, re-run on the chosen 15) |
+
+**Portfolio-level features (`n_stocks + 1`):**
+
+| Feature | Source |
+|---------|--------|
+| Current weight per stock | Portfolio state |
+| Current cash weight (CASH slot) | Portfolio state |
+
+For `n_stocks = 15` -> `state_dim = 15*7 + 15*2 + 16 = 151`. Both LSTM and PatchTST run **on the 15-name slate** chosen by `halal_filtered` so that SAC's dual-forecast features cover the same symbols as its action space.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
-- **PatchTST** = OHLCV forecaster (5-channel: open, high, low, close, volume log returns, US)
-- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning)
-- **SAC** = RL allocator (receives signals + dual forecaster output, US only)
+- **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
+- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_india/`)
+- **SAC** = RL allocator that receives the 9-per-stock features (including dual LSTM + PatchTST forecasts) plus portfolio weights, US only
 
 ## Data storage rules
 
