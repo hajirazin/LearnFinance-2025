@@ -4,9 +4,9 @@ This file is the **working agreement** for humans + AI assistants contributing t
 
 ## Project intent (north star)
 
-Build a **learning-focused** weekly paper-trading portfolio system for halal Nasdaq-500 stocks that **compares multiple approaches side-by-side**:
+Build a **learning-focused** weekly portfolio system (paper by default, per-account live opt-in via env) for halal Nasdaq-500 stocks that **compares multiple approaches side-by-side**:
 
-- **Safe-by-default** (paper auto-submit only; reruns cannot duplicate orders)
+- **Safe-by-default** (paper auto-submit; live requires explicit per-account env opt-in; reruns cannot duplicate orders)
 - **Audit-friendly** (every run reproducible and explainable)
 - **Learning-focused** (compare LSTM vs PatchTST, SAC, all vs HRP baseline)
 - **Cloud-ready** (local-first design that can migrate to Cloud Functions / HuggingFace Hub)
@@ -143,7 +143,7 @@ temporal/                         # Temporal workflow orchestration
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /alpaca/portfolio` | Get account positions, cash, open orders count |
-| `POST /alpaca/submit-orders` | Submit orders to Alpaca paper trading |
+| `POST /alpaca/submit-orders` | Submit orders to Alpaca (paper by default, live when `ALPACA_{ACCOUNT}_URL` overrides the host) |
 | `GET /alpaca/order-history` | Get order execution history |
 
 **LLM & Email** (called by Monday run via Temporal for reporting):
@@ -376,6 +376,7 @@ If tests are added later, they should be:
 - `attempt` starts at `1`
 - **Rerun is read-only** if the latest attempt has any order not in a terminal canceled/expired/rejected state
 - To allow a new submission: user cancels paper orders manually in Alpaca, then rerun creates `attempt += 1`
+- The `paper:` literal in `run_id` and `client_order_id` is a static audit-string prefix; it does NOT reflect the actual Alpaca host being used. To check whether a run hit live, inspect `ALPACA_{ACCOUNT}_URL` env at run time or the Alpaca dashboard.
 
 ### Order idempotency
 
@@ -390,8 +391,10 @@ The system must:
 
 ### Trading mode
 
-- **Paper auto-submit** is allowed
-- **Live trading is out of scope** unless explicitly added with additional safety controls
+- **Paper is the default.** With no Alpaca URL env vars set, every account uses `https://paper-api.alpaca.markets`.
+- **Per-account live override.** Setting `ALPACA_{ACCOUNT}_URL=https://api.alpaca.markets` plus the matching live API key/secret flips that one account to live. Other accounts remain on paper.
+- **Live mode runs without the full AGENTS.md safety stack.** The deferred safety gaps (limit orders, max turnover cap, max orders cap, DB pre-submit dedup, 48h sells-stuck auto-buy fallback) still apply on live runs. Treat live as a manual smoke-test capability until those gaps close. Do not register a live schedule in production.
+- The `run_id` and `client_order_id` audit prefix stays `paper:` regardless of the actual broker host -- this is a known cosmetic mismatch in the smoke-test scope.
 
 ### Default execution choices
 
@@ -453,6 +456,7 @@ Before merging changes that touch trading logic:
 - [ ] Confirm rerun behavior is still read-only after any submission
 - [ ] Confirm `client_order_id` format unchanged (or migration handled)
 - [ ] Confirm safety caps exist and are enforced (max turnover, max orders, cash buffer)
+- [ ] If touching live trading: confirm that paper accounts (any with no `ALPACA_{ACCOUNT}_URL` set) still hit the paper host
 
 Before merging changes that touch ML/model code:
 

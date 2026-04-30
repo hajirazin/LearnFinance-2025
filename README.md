@@ -1,6 +1,6 @@
 # LearnFinance-2025
 
-A **learning-focused** weekly paper-trading portfolio system for **halal stocks across US and India markets** (US: 5-ETF halal universe; India: Nifty 500 Shariah). The goal is to **compare multiple approaches side-by-side** — not to pick a single "best" method.
+A **learning-focused** weekly portfolio system (paper by default, per-account live opt-in) for **halal stocks across US and India markets** (US: 5-ETF halal universe; India: Nifty 500 Shariah). The goal is to **compare multiple approaches side-by-side** — not to pick a single "best" method.
 
 ## What it does
 
@@ -8,7 +8,7 @@ Each Monday the system runs five independent Temporal workflows that each pick 1
 
 ### What it does NOT do
 
-- It does **not** execute live trades (you can later add that with additional guardrails).
+- It defaults to paper trading. Per-account live execution is opt-in via env (`ALPACA_{ACCOUNT}_URL` + live keys); safety caps for live are still pending — treat live as a manual smoke test today, not a scheduled production run.
 - It is **not** financial advice.
 
 ## Architecture
@@ -16,7 +16,7 @@ Each Monday the system runs five independent Temporal workflows that each pick 1
 **Components:**
 
 - **Temporal** is the sole orchestrator. Each workflow is registered as its own Temporal schedule (see [temporal/schedules.py](temporal/schedules.py)) and runs independently — there is no fan-out or shared "Monday flow".
-- **brain_api** (FastAPI) owns all business logic: universe scraping, signal collection, price forecasting (LSTM + PatchTST, US + India), allocation (HRP, SAC, Alpha-HRP, Double-HRP), Alpaca paper trading, OpenAI/LLM summaries, and Gmail SMTP delivery.
+- **brain_api** (FastAPI) owns all business logic: universe scraping, signal collection, price forecasting (LSTM + PatchTST, US + India), allocation (HRP, SAC, Alpha-HRP, Double-HRP), Alpaca trading (paper by default, live opt-in), OpenAI/LLM summaries, and Gmail SMTP delivery.
 - Storage: local Postgres for run records, local SQLite (`data/allocation/sticky_history.db`, two sibling tables -- `stage1_weight_history` for two-stage HRP strategies on weekly cadence, `screening_history` for single-stage screening strategies on monthly cadence) for sticky-selection history, filesystem for raw evidence + model artifacts.
 
 **Workflows (5 independent schedules):**
@@ -98,7 +98,7 @@ Total state dimension for 15 stocks: 15 stocks × 9 = 135 stock features + 16 po
 - **Python 3.11+** with `uv` package manager
 - **Temporal CLI** (for workflow orchestration)
 - Gmail app password (for email notifications)
-- Alpaca paper trading accounts (for order execution)
+- Alpaca trading accounts (paper required; live optional per account)
 
 ## Quick Start
 
@@ -141,7 +141,7 @@ To get a Gmail app password:
 3. Go to **App passwords** → Generate a new app password for "Mail"
 4. Copy the 16-character password (no spaces)
 
-**Alpaca Paper Trading (for order execution):**
+**Alpaca trading (for order execution; paper by default):**
 ```bash
 # SAC account
 ALPACA_SAC_KEY=your-sac-api-key
@@ -152,7 +152,7 @@ ALPACA_HRP_KEY=your-hrp-api-key
 ALPACA_HRP_SECRET=your-hrp-api-secret
 ```
 
-Create 2 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API keys from each dashboard.
+Create 2 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API keys from each dashboard. To flip an account to live later, also set `ALPACA_{ACCOUNT}_URL=https://api.alpaca.markets` and use that account's live key/secret.
 
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
@@ -205,7 +205,7 @@ The diagram below is specific to the `us-weekly-allocate` (SAC) workflow. The ot
 sequenceDiagram
   participant Temporal as Temporal
   participant Brain as brain_api
-  participant Alpaca as alpaca_paper
+  participant Alpaca as alpaca_broker
   participant DB as run_db
   participant Email as Gmail_SMTP
 
@@ -304,10 +304,20 @@ RL_TRAIN_UNIVERSE=halal_filtered
 - When two algorithms have research-driven math differences, keep their math separate even if the surface code looks similar (we previously broke PPO's math by over-sharing with SAC).
 - See [AGENTS.md](AGENTS.md#ai-assistant-behavioral-rules) for the full rule.
 
-### Paper auto-submit, live manual
+### Paper by default, per-account live opt-in
 
-- **Paper orders are auto-submitted** each Monday.
-- Live trading is intentionally out of scope until safety, monitoring, and backtesting maturity is higher.
+- **Paper is the default.** All Alpaca accounts hit `paper-api.alpaca.markets` unless explicitly overridden.
+- **Live opt-in is per account, env-driven.** Set 3 env vars on the brain_api process to flip a single account live:
+
+  ```bash
+  ALPACA_SAC_URL=https://api.alpaca.markets
+  ALPACA_SAC_KEY=<live key>
+  ALPACA_SAC_SECRET=<live secret>
+  ```
+
+  Restart brain_api. Revert by clearing the URL (or pointing it back at the paper host) and restoring paper key/secret. HRP and DHRP stay on paper unless their own URL+keys are also flipped.
+- **Audit prefix is cosmetic.** `run_id` and `client_order_id` always start with `paper:` — this is a static audit-string label and does not reflect the actual Alpaca host. Use the Alpaca dashboard or env inspection to confirm which broker a run actually hit.
+- **Live still has open safety gaps:** market orders (not limit), no max turnover/order cap in `/orders/generate`, no DB pre-submit dedup in `/alpaca/submit-orders`, 48h sells-stuck auto-buy fallback in the sell-wait-buy loop. Treat live as a manual smoke test only; do not register live schedules in production until these are closed.
 
 ### Run identity & rerun behavior
 
@@ -317,7 +327,7 @@ RL_TRAIN_UNIVERSE=halal_filtered
 
 **Rerun is read-only** if the latest attempt has any order that is not canceled/expired/rejected.
 
-If you manually cancel all active paper orders in Alpaca, the next run can create **attempt=2** and submit new orders.
+If you manually cancel all active orders in Alpaca, the next run can create **attempt=2** and submit new orders.
 
 ### Order idempotency (no accidental duplicates)
 
@@ -325,6 +335,8 @@ Every order uses a deterministic `client_order_id`:
 
 - `paper:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>`
 - Example: `paper:2025-12-29:attempt-1:AAPL:BUY`
+
+The `paper:` literal is a static audit-string prefix; it does NOT reflect the actual Alpaca host being used. To check whether a run hit live, inspect `ALPACA_{ACCOUNT}_URL` env at run time or the Alpaca dashboard.
 
 On submit:
 
@@ -366,7 +378,7 @@ Transaction costs are computed in log space. This encourages risk-adjusted retur
 
 ### Safety caps (recommended defaults)
 
-Even for paper, enforce hard limits (config):
+Enforce hard limits regardless of paper or live (config):
 
 - Max turnover (% of portfolio value traded)
 - Max number of orders
@@ -461,7 +473,7 @@ We store three kinds of data:
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /alpaca/portfolio` | Get account positions, cash, and open orders count |
-| `POST /alpaca/submit-orders` | Submit orders to Alpaca paper trading |
+| `POST /alpaca/submit-orders` | Submit orders to Alpaca (paper by default; live when `ALPACA_{ACCOUNT}_URL` is set) |
 | `GET /alpaca/order-history` | Get order execution history |
 
 ### Universe endpoints

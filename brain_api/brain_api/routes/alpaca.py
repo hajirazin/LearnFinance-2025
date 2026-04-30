@@ -1,6 +1,10 @@
-"""Alpaca paper trading endpoints.
+"""Alpaca trading endpoints (paper by default, per-account live override via env).
 
-Provides endpoints to interact with Alpaca paper trading accounts:
+Provides endpoints to interact with Alpaca accounts. The base URL is resolved
+per account from ``ALPACA_{ACCOUNT}_URL`` env (empty/whitespace falls back to
+the paper host); credentials come from ``ALPACA_{ACCOUNT}_KEY`` /
+``ALPACA_{ACCOUNT}_SECRET``.
+
 - GET /alpaca/portfolio: Fetch account, positions, and open orders count
 - POST /alpaca/submit-orders: Submit an array of orders
 - GET /alpaca/order-history: Fetch order history for a date range
@@ -18,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Alpaca Paper Trading API base URL
-ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
+# Default Alpaca host (used when ALPACA_{ACCOUNT}_URL env var is unset or blank).
+PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 
 # Timeout settings for Alpaca API calls
 ALPACA_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
@@ -31,7 +35,7 @@ ALPACA_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 
 
 class AlpacaAccount(str, Enum):
-    """Supported Alpaca paper trading accounts.
+    """Supported Alpaca trading accounts (paper by default; live opt-in per-account).
 
     - sac: SAC RL allocator (US, halal universe)
     - hrp: HRP baseline allocator (US, halal universe)
@@ -130,6 +134,17 @@ class OrderHistoryItem(BaseModel):
 # ============================================================================
 
 
+def get_alpaca_base_url(account: AlpacaAccount) -> str:
+    """Resolve Alpaca base URL for an account.
+
+    Reads ``ALPACA_{ACCOUNT}_URL``; returns the paper host when unset, empty,
+    or whitespace. Setting the env var to ``https://api.alpaca.markets`` (with
+    matching live API key + secret) flips that one account to live.
+    """
+    raw = os.environ.get(f"ALPACA_{account.value.upper()}_URL", "")
+    return raw.strip() or PAPER_BASE_URL
+
+
 def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
     """Get Alpaca API credentials for a specific account.
 
@@ -199,7 +214,9 @@ def get_portfolio(
 
     try:
         with httpx.Client(
-            base_url=ALPACA_BASE_URL, headers=headers, timeout=ALPACA_TIMEOUT
+            base_url=get_alpaca_base_url(account),
+            headers=headers,
+            timeout=ALPACA_TIMEOUT,
         ) as client:
             # Fetch account data
             account_response = client.get("/v2/account")
@@ -288,7 +305,9 @@ def submit_orders(request: SubmitOrdersRequest) -> SubmitOrdersResponse:
     orders_failed = 0
 
     with httpx.Client(
-        base_url=ALPACA_BASE_URL, headers=headers, timeout=ALPACA_TIMEOUT
+        base_url=get_alpaca_base_url(request.account),
+        headers=headers,
+        timeout=ALPACA_TIMEOUT,
     ) as client:
         sorted_orders = sorted(
             request.orders, key=lambda o: (o.side != "sell", o.symbol)
@@ -399,7 +418,9 @@ def get_order_history(
 
     try:
         with httpx.Client(
-            base_url=ALPACA_BASE_URL, headers=headers, timeout=ALPACA_TIMEOUT
+            base_url=get_alpaca_base_url(account),
+            headers=headers,
+            timeout=ALPACA_TIMEOUT,
         ) as client:
             response = client.get(
                 "/v2/orders",

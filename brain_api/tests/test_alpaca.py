@@ -1,9 +1,10 @@
-"""Tests for Alpaca paper trading endpoints.
+"""Tests for Alpaca trading endpoints (paper by default, live opt-in).
 
 This module tests:
 - GET /alpaca/portfolio - fetch account, positions, open orders
 - POST /alpaca/submit-orders - submit orders to Alpaca
 - GET /alpaca/order-history - fetch order history
+- Per-account base-URL resolution via ALPACA_{ACCOUNT}_URL env override
 """
 
 from unittest.mock import MagicMock, patch
@@ -521,3 +522,163 @@ class TestDHRPAccount:
 
         kwargs = mock_client_class.call_args.kwargs
         assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-dhrp-key"
+
+
+# =============================================================================
+# Per-account base-URL resolution (paper default, live opt-in via env)
+# =============================================================================
+
+
+PAPER_HOST = "https://paper-api.alpaca.markets"
+LIVE_HOST = "https://api.alpaca.markets"
+
+
+class TestPerAccountBaseUrl:
+    """Cover the get_alpaca_base_url resolver behaviour end-to-end.
+
+    The resolver reads ``ALPACA_{ACCOUNT}_URL`` and falls back to the paper
+    host when the env var is missing, empty, or whitespace-only. Setting it
+    to the live host (with matching live API key/secret) flips that single
+    account to live without affecting the others.
+    """
+
+    @staticmethod
+    def _mock_portfolio_client(mock_client_class):
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__.return_value = mock_client
+        mock_client.get.side_effect = [
+            MagicMock(json=lambda: {"cash": "100.00"}, raise_for_status=lambda: None),
+            MagicMock(json=list, raise_for_status=lambda: None),
+            MagicMock(json=list, raise_for_status=lambda: None),
+        ]
+        return mock_client
+
+    def test_portfolio_uses_paper_url_when_env_unset(
+        self, client, mock_alpaca_credentials
+    ):
+        """No ALPACA_SAC_URL env -> request goes to paper host."""
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            self._mock_portfolio_client(mock_client_class)
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == PAPER_HOST
+
+    def test_portfolio_uses_paper_url_when_env_blank(
+        self, client, mock_alpaca_credentials
+    ):
+        """Whitespace-only ALPACA_SAC_URL -> request still goes to paper host."""
+        with (
+            patch.dict("os.environ", {"ALPACA_SAC_URL": "   "}),
+            patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class,
+        ):
+            self._mock_portfolio_client(mock_client_class)
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == PAPER_HOST
+
+    def test_portfolio_uses_live_url_when_env_set(
+        self, client, mock_alpaca_credentials
+    ):
+        """ALPACA_SAC_URL set to live host -> request goes to live host."""
+        with (
+            patch.dict("os.environ", {"ALPACA_SAC_URL": LIVE_HOST}),
+            patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class,
+        ):
+            self._mock_portfolio_client(mock_client_class)
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+
+    def test_portfolio_strips_whitespace_around_url(
+        self, client, mock_alpaca_credentials
+    ):
+        """Surrounding whitespace on ALPACA_SAC_URL is stripped before use."""
+        with (
+            patch.dict("os.environ", {"ALPACA_SAC_URL": f"  {LIVE_HOST}  "}),
+            patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class,
+        ):
+            self._mock_portfolio_client(mock_client_class)
+            response = client.get("/alpaca/portfolio", params={"account": "sac"})
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+
+    def test_submit_orders_uses_live_url_when_env_set(
+        self, client, mock_alpaca_credentials
+    ):
+        """POST /alpaca/submit-orders honours ALPACA_{ACCOUNT}_URL override."""
+        with (
+            patch.dict("os.environ", {"ALPACA_SAC_URL": LIVE_HOST}),
+            patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class,
+        ):
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.post.return_value = MagicMock(
+                json=lambda: {"id": "live-order-1", "status": "accepted"},
+                raise_for_status=lambda: None,
+            )
+
+            response = client.post(
+                "/alpaca/submit-orders",
+                json={
+                    "account": "sac",
+                    "orders": [
+                        {
+                            "symbol": "AAPL",
+                            "qty": 1,
+                            "side": "buy",
+                            "type": "limit",
+                            "time_in_force": "day",
+                            "limit_price": 175.0,
+                            "client_order_id": "paper:2026-05-04:attempt-1:AAPL:BUY",
+                        }
+                    ],
+                },
+            )
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+
+    def test_order_history_uses_live_url_when_env_set(
+        self, client, mock_alpaca_credentials
+    ):
+        """GET /alpaca/order-history honours ALPACA_{ACCOUNT}_URL override."""
+        with (
+            patch.dict("os.environ", {"ALPACA_SAC_URL": LIVE_HOST}),
+            patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class,
+        ):
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.get.return_value = MagicMock(
+                json=list, raise_for_status=lambda: None
+            )
+
+            response = client.get(
+                "/alpaca/order-history",
+                params={"account": "sac", "after": "2026-05-01"},
+            )
+
+        assert response.status_code == 200
+        assert mock_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+
+    def test_per_account_url_isolation(self, client, mock_alpaca_credentials):
+        """Setting ALPACA_SAC_URL must not leak into other accounts' calls."""
+        with patch.dict("os.environ", {"ALPACA_SAC_URL": LIVE_HOST}):
+            with patch("brain_api.routes.alpaca.httpx.Client") as sac_client_class:
+                self._mock_portfolio_client(sac_client_class)
+                sac_response = client.get(
+                    "/alpaca/portfolio", params={"account": "sac"}
+                )
+            with patch("brain_api.routes.alpaca.httpx.Client") as hrp_client_class:
+                self._mock_portfolio_client(hrp_client_class)
+                hrp_response = client.get(
+                    "/alpaca/portfolio", params={"account": "hrp"}
+                )
+
+        assert sac_response.status_code == 200
+        assert hrp_response.status_code == 200
+        assert sac_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+        assert hrp_client_class.call_args.kwargs["base_url"] == PAPER_HOST
