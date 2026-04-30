@@ -635,9 +635,17 @@ def test_get_halal_filtered_returns_expected_structure():
     assert "filtered_insufficient_history" in data
     assert "top_n" in data
     assert "selection_method" in data
-    assert data["selection_method"] == "patchtst_forecast"
+    assert data["selection_method"] == "patchtst_forecast_rank_band"
     assert "model_version" in data
     assert "fetched_at" in data
+    assert data["partition"] == "halal_filtered_alpha"
+    assert "period_key" in data
+    assert data["k_in"] == 15
+    assert data["k_hold"] == 30
+    assert data["previous_period_key_used"] is None
+    assert data["kept_count"] == 0
+    assert data["fillers_count"] == len(data["stocks"])
+    assert data["evicted_from_previous"] == {}
 
 
 def test_get_halal_filtered_returns_max_15_stocks():
@@ -920,8 +928,17 @@ def test_get_halal_filtered_short_history_count_in_response():
     assert data["total_universe"] == 10
 
 
-def test_get_halal_filtered_all_short_history_returns_empty():
-    """Test that if all symbols are excluded, result has 0 stocks."""
+def test_get_halal_filtered_all_short_history_raises():
+    """Test that if all symbols are excluded, the build raises (no silent fallback).
+
+    With rank-band sticky selection, an empty ``current_scores`` map
+    cannot be selected from -- the selector raises ``ValueError`` and
+    the route surfaces it as 503. This is the correct behaviour per
+    AGENTS.md AI rule 1 (no silent fallbacks): a fully-empty PatchTST
+    score map indicates a real upstream failure (e.g. PatchTST broken,
+    halal_new shrank to nothing eligible) and must not be served as a
+    silently-empty universe.
+    """
     from brain_api.core.patchtst.inference import BatchInferenceResult
 
     mock_universe = _make_mock_halal_new_universe(count=5)
@@ -948,10 +965,182 @@ def test_get_halal_filtered_all_short_history_returns_empty():
     ):
         response = client.get("/universe/halal_filtered")
 
+    assert response.status_code == 503
+
+
+def test_get_halal_filtered_cold_start_matches_legacy_top15_for_unique_scores():
+    """Cold-start rank-band selection on unique scores must match legacy top-15.
+
+    Math invariant: when ``previous_selected_set is None`` and every
+    score is unique, ``select_with_rank_band`` falls through to top-K_in
+    by score desc -- the same ordering the legacy ``valid[:15]``
+    blanket-top-15 produced. This is the safety property guaranteeing
+    the first deploy is non-disruptive.
+    """
+    mock_universe = _make_mock_halal_new_universe(count=20)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
+    legacy_top15 = [p.symbol for p in mock_result.predictions[:15]]
+
+    with (
+        patch(
+            "brain_api.universe.halal_filtered.get_halal_new_universe",
+            return_value=mock_universe,
+        ),
+        _patch_min_wf_days(),
+        patch(
+            "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(symbols),
+        ),
+        patch(
+            "brain_api.universe.halal_filtered.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_filtered")
+
+    assert response.status_code == 200
     data = response.json()
-    assert len(data["stocks"]) == 0
-    assert data["total_candidates"] == 0
-    assert data["filtered_insufficient_history"] == 5
+
+    selected = [s["symbol"] for s in data["stocks"]]
+    assert selected == legacy_top15
+    assert all(s["selection_reason"] == "top_rank" for s in data["stocks"])
+    assert data["kept_count"] == 0
+    assert data["fillers_count"] == 15
+
+
+def test_get_halal_filtered_warm_start_keeps_held_stock_in_hold_band():
+    """Warm-start: a previously-held stock whose rank slipped to <= K_hold is kept.
+
+    Seeds the screening repository with a previous month's selected set
+    that includes a symbol the next month ranks below K_in (=15) but
+    within K_hold (=30). The second build must keep that symbol with
+    ``selection_reason='sticky'`` and add fillers from this month's top
+    of the rank.
+    """
+    from datetime import date
+
+    from brain_api.core.screening_orchestration import persist_screening_rows
+    from brain_api.core.sticky_selection import iso_year_week_of_month_anchor
+    from brain_api.core.strategy_partitions import HALAL_FILTERED_ALPHA_PARTITION
+    from brain_api.storage.screening_history import ScreeningHistoryRepository
+
+    mock_universe = _make_mock_halal_new_universe(count=30)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
+    scores_by_symbol = {
+        p.symbol: p.predicted_weekly_return_pct for p in mock_result.predictions
+    }
+
+    with patch(
+        "brain_api.universe.halal_filtered.resolve_cutoff_date",
+        return_value=date(2026, 4, 25),
+    ):
+        repo = ScreeningHistoryRepository()
+        previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
+        prev_selected = {symbols[20]}
+        prev_scores = scores_by_symbol
+        persist_screening_rows(
+            repo=repo,
+            partition=HALAL_FILTERED_ALPHA_PARTITION,
+            period_key=previous_period_key,
+            as_of_date="2026-03-13",
+            run_id="seed",
+            scores=prev_scores,
+            selected_set=prev_selected,
+            selection_reasons={symbols[20]: "sticky"},
+        )
+
+        with (
+            patch(
+                "brain_api.universe.halal_filtered.get_halal_new_universe",
+                return_value=mock_universe,
+            ),
+            _patch_min_wf_days(),
+            patch(
+                "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+                side_effect=_mock_history_filter_pass_all(symbols),
+            ),
+            patch(
+                "brain_api.universe.halal_filtered.run_batch_inference",
+                return_value=mock_result,
+            ),
+        ):
+            response = client.get("/universe/halal_filtered")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    selected = [s["symbol"] for s in data["stocks"]]
+    assert symbols[20] in selected
+    sticky_entry = next(s for s in data["stocks"] if s["symbol"] == symbols[20])
+    assert sticky_entry["selection_reason"] == "sticky"
+    assert data["kept_count"] == 1
+    assert data["fillers_count"] == 14
+    assert data["previous_period_key_used"] == previous_period_key
+
+
+def test_get_halal_filtered_warm_start_evicts_dropped_from_universe():
+    """Warm-start: previously-held stock missing from this month's scores evicts.
+
+    Eviction reason should be ``dropped_from_universe`` and reported in
+    ``evicted_from_previous``. Filler picks the next best symbol.
+    """
+    from datetime import date
+
+    from brain_api.core.screening_orchestration import persist_screening_rows
+    from brain_api.core.sticky_selection import iso_year_week_of_month_anchor
+    from brain_api.core.strategy_partitions import HALAL_FILTERED_ALPHA_PARTITION
+    from brain_api.storage.screening_history import ScreeningHistoryRepository
+
+    mock_universe = _make_mock_halal_new_universe(count=20)
+    symbols = [s["symbol"] for s in mock_universe["stocks"]]
+    mock_result = _make_mock_batch_inference_result(symbols)
+    delisted = "DELISTED_SYM"
+    prev_scores = {
+        p.symbol: p.predicted_weekly_return_pct for p in mock_result.predictions
+    }
+    prev_scores[delisted] = 99.0
+
+    with patch(
+        "brain_api.universe.halal_filtered.resolve_cutoff_date",
+        return_value=date(2026, 4, 25),
+    ):
+        repo = ScreeningHistoryRepository()
+        previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
+        persist_screening_rows(
+            repo=repo,
+            partition=HALAL_FILTERED_ALPHA_PARTITION,
+            period_key=previous_period_key,
+            as_of_date="2026-03-13",
+            run_id="seed",
+            scores=prev_scores,
+            selected_set={delisted},
+            selection_reasons={delisted: "top_rank"},
+        )
+
+        with (
+            patch(
+                "brain_api.universe.halal_filtered.get_halal_new_universe",
+                return_value=mock_universe,
+            ),
+            _patch_min_wf_days(),
+            patch(
+                "brain_api.universe.halal_filtered.filter_symbols_by_min_history",
+                side_effect=_mock_history_filter_pass_all(symbols),
+            ),
+            patch(
+                "brain_api.universe.halal_filtered.run_batch_inference",
+                return_value=mock_result,
+            ),
+        ):
+            response = client.get("/universe/halal_filtered")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert delisted not in [s["symbol"] for s in data["stocks"]]
+    assert delisted in data["evicted_from_previous"]
+    assert data["evicted_from_previous"][delisted] == "dropped_from_universe"
 
 
 # ============================================================================

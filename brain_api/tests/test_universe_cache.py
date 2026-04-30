@@ -34,6 +34,75 @@ def test_load_returns_none_when_dir_missing():
     assert load_cached_universe("halal_filtered", date(2099, 1, 1)) is None
 
 
+def test_load_legacy_halal_filtered_shape_still_extracts_symbols():
+    """Backward-compat: an old halal_filtered cache (pre-rank-band-sticky) must keep working.
+
+    Files written before this PR lack ``partition``, ``period_key``,
+    ``selection_reason`` etc. Downstream consumers
+    (``get_halal_filtered_symbols``) only read ``stocks[*].symbol``,
+    so the absence of new fields must NOT cause a load error or
+    extraction error.
+    """
+    legacy = {
+        "stocks": [
+            {"symbol": "AAPL", "predicted_weekly_return_pct": 5.0, "rank": 1},
+            {"symbol": "MSFT", "predicted_weekly_return_pct": 4.0, "rank": 2},
+        ],
+        "total_candidates": 2,
+        "total_universe": 100,
+        "filtered_insufficient_history": 0,
+        "top_n": 15,
+        "selection_method": "patchtst_forecast",
+        "model_version": "v2026-03-01-abc123",
+        "fetched_at": "2026-04-01T00:00:00+00:00",
+    }
+    save_universe_cache("halal_filtered", legacy, date(2026, 4, 5))
+
+    loaded = load_cached_universe("halal_filtered", date(2026, 4, 5))
+    assert loaded is not None
+    assert [s["symbol"] for s in loaded["stocks"]] == ["AAPL", "MSFT"]
+    assert loaded["selection_method"] == "patchtst_forecast"
+
+
+def test_save_and_load_new_halal_filtered_shape_roundtrips():
+    """A freshly-written sticky-aware cache must round-trip JSON cleanly."""
+    new_shape = {
+        "stocks": [
+            {
+                "symbol": "AAPL",
+                "predicted_weekly_return_pct": 5.0,
+                "rank": 1,
+                "selection_reason": "sticky",
+            },
+            {
+                "symbol": "MSFT",
+                "predicted_weekly_return_pct": 4.0,
+                "rank": 2,
+                "selection_reason": "top_rank",
+            },
+        ],
+        "total_candidates": 2,
+        "total_universe": 100,
+        "filtered_insufficient_history": 0,
+        "top_n": 15,
+        "selection_method": "patchtst_forecast_rank_band",
+        "model_version": "v2026-03-01-abc123",
+        "fetched_at": "2026-04-06T00:00:00+00:00",
+        "partition": "halal_filtered_alpha",
+        "period_key": "202615",
+        "previous_period_key_used": "202611",
+        "kept_count": 1,
+        "fillers_count": 1,
+        "evicted_from_previous": {"NVDA": "rank_out_of_hold"},
+        "k_in": 15,
+        "k_hold": 30,
+    }
+    save_universe_cache("halal_filtered", new_shape, date(2026, 4, 5))
+
+    loaded = load_cached_universe("halal_filtered", date(2026, 4, 5))
+    assert loaded == new_shape
+
+
 # ============================================================================
 # save + load roundtrip
 # ============================================================================

@@ -3,22 +3,31 @@
 Pydantic models live in ``allocation_models.py``; this file is route
 handlers + dependency wiring only. The two sticky-selection endpoints
 (weight-band and rank-band) share their persistence scaffolding via
-``_persist_stage1_rows`` so the math layers stay independent (per
-AGENTS.md: never share math across selection policies).
+``persist_stage1_rows`` (in ``brain_api.core.rank_band_orchestration``)
+so the math layers stay independent (per AGENTS.md: never share math
+across selection policies).
+
+The rank-band endpoint here is a thin HTTP wrapper over
+``select_rank_band_with_persistence``; the same orchestration helper is
+testable without FastAPI and is exclusively for the **two-stage**
+``stage1_weight_history`` table. Single-stage screening callers (e.g.
+``halal_filtered``) use the parallel ``screening_orchestration`` module
+against the sibling ``screening_history`` table -- never this endpoint.
 """
 
 import logging
 from datetime import date, timedelta
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.hrp import HRPResult, compute_hrp_allocation
 from brain_api.core.lstm import load_prices_yfinance
+from brain_api.core.rank_band_orchestration import (
+    persist_stage1_rows,
+    select_rank_band_with_persistence,
+)
 from brain_api.core.sticky_selection import (
     SelectionResult,
-    rank_by_score,
-    select_with_rank_band,
     select_with_stickiness,
 )
 from brain_api.routes.allocation_models import (
@@ -33,7 +42,6 @@ from brain_api.routes.allocation_models import (
 )
 from brain_api.storage.sticky_history import (
     StickyHistoryRepository,
-    WeightRow,
     get_sticky_history_repo,
 )
 
@@ -70,69 +78,6 @@ PriceLoader = type(load_prices_yfinance)
 def get_price_loader() -> PriceLoader:
     """Get the price loading function."""
     return load_prices_yfinance
-
-
-# ============================================================================
-# Persistence helper (C2 + D4)
-# ============================================================================
-
-
-_StageOneColumn = Literal["initial_allocation_pct", "signal_score"]
-
-
-def _persist_stage1_rows(
-    *,
-    repo: StickyHistoryRepository,
-    universe: str,
-    year_week: str,
-    as_of_date: str,
-    run_id: str,
-    signals: dict[str, float],
-    selected_set: set[str],
-    selection_reasons: dict[str, str],
-    column: _StageOneColumn,
-) -> None:
-    """Persist Stage 1 rows for either selection policy.
-
-    Both ``select_sticky_top_n_endpoint`` and
-    ``select_rank_band_top_n_endpoint`` need to:
-
-    1. Rank every symbol by the same convention the selector uses
-       (``rank_by_score``).
-    2. Build ``WeightRow`` objects with ``stage1_rank`` matching that
-       rank.
-    3. Persist via ``repo.persist_stage1``.
-
-    The two endpoints differ only in *which* Stage 1 column the signal
-    lands in (``initial_allocation_pct`` for HRP weights vs
-    ``signal_score`` for raw forecast scores). Both are exclusive --
-    rows persist with exactly one of the two columns populated, never
-    both, never neither.
-
-    Math/DDD note: ``rank_by_score`` is used here even though the
-    weight-band primitive does NOT use rank-based math internally.
-    For *persistence* the rank serves as an audit number; the math
-    inside the two ``select_with_*`` functions remains independent.
-    """
-    rows = [
-        WeightRow(
-            universe=universe,
-            year_week=year_week,
-            as_of_date=as_of_date,
-            stock=symbol,
-            stage1_rank=rank,
-            initial_allocation_pct=value
-            if column == "initial_allocation_pct"
-            else None,
-            signal_score=value if column == "signal_score" else None,
-            final_allocation_pct=None,
-            selected_in_final=(symbol in selected_set),
-            selection_reason=selection_reasons.get(symbol),
-            run_id=run_id,
-        )
-        for symbol, rank, value in rank_by_score(signals)
-    ]
-    repo.persist_stage1(rows)
 
 
 # ============================================================================
@@ -246,7 +191,7 @@ def select_sticky_top_n_endpoint(
         threshold_pp=request.stickiness_threshold_pp,
     )
 
-    _persist_stage1_rows(
+    persist_stage1_rows(
         repo=repo,
         universe=request.universe,
         year_week=request.year_week,
@@ -357,17 +302,14 @@ def select_rank_band_top_n_endpoint(
             ),
         )
 
-    previous = repo.read_previous_final_set(
-        universe=request.universe,
-        current_year_week=request.year_week,
-    )
-    previous_final_set = previous.final_set if previous is not None else None
-    previous_year_week_used = previous.year_week if previous is not None else None
-
     try:
-        result: SelectionResult = select_with_rank_band(
+        result, previous_year_week_used = select_rank_band_with_persistence(
+            repo=repo,
+            universe=request.universe,
+            year_week=request.year_week,
+            as_of_date=request.as_of_date,
+            run_id=request.run_id,
             current_scores=current,
-            previous_selected_set=previous_final_set,
             top_n=request.top_n,
             hold_threshold=request.hold_threshold,
         )
@@ -376,18 +318,6 @@ def select_rank_band_top_n_endpoint(
         # as a 422 rather than a generic 500; they indicate caller
         # input that violates the rank-band contract.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    _persist_stage1_rows(
-        repo=repo,
-        universe=request.universe,
-        year_week=request.year_week,
-        as_of_date=request.as_of_date,
-        run_id=request.run_id,
-        signals=current,
-        selected_set=set(result.selected),
-        selection_reasons=result.reasons,
-        column="signal_score",
-    )
 
     logger.info(
         "[RankBand] %s/%s: top_n=%d hold=%d kept=%d fillers=%d prev_week=%s evicted=%d",

@@ -143,6 +143,44 @@ def iso_year_week(d: date | datetime) -> str:
     return d.strftime("%G%V")
 
 
+def iso_year_week_of_month_anchor(d: date | datetime) -> str:
+    """Return ISO ``YYYYWW`` of the first Monday of ``d``'s calendar month.
+
+    Period-key convention for **monthly-cadence** sticky strategies (e.g.
+    the ``halal_filtered_alpha`` partition driven by the monthly universe
+    cache). Anchoring every day in a calendar month to the same ISO
+    year-week keeps the persisted ``period_key`` column always-ISO-week
+    (so lex-ordering stays correct across year boundaries) while letting
+    a monthly cache write a single deterministic row per month.
+
+    Determinism: the anchor depends only on ``d.year`` and ``d.month``,
+    so any two dates within the same calendar month return the same
+    string. A rerun of a monthly universe build inside the same month
+    therefore targets the same primary-key bucket and is correctly
+    handled by the screening repository's delete-then-insert.
+
+    Math invariant: this helper does NOT participate in any selection
+    math; it is purely a partition/period-key convention. The
+    ``select_with_rank_band`` and ``select_with_stickiness`` selectors
+    remain independent of it.
+
+    Examples:
+        >>> from datetime import date
+        >>> iso_year_week_of_month_anchor(date(2026, 4, 1))   # 1st is Wed; first Mon = Apr 6
+        '202615'
+        >>> iso_year_week_of_month_anchor(date(2026, 4, 30))  # any April date -> same anchor
+        '202615'
+        >>> iso_year_week_of_month_anchor(date(2026, 6, 1))   # 1st is itself a Monday
+        '202623'
+        >>> iso_year_week_of_month_anchor(date(2026, 1, 15))  # first Mon of Jan = Jan 5
+        '202602'
+    """
+    first_of_month = date(d.year, d.month, 1)
+    days_until_monday = (7 - first_of_month.weekday()) % 7
+    first_monday = date.fromordinal(first_of_month.toordinal() + days_until_monday)
+    return first_monday.strftime("%G%V")
+
+
 def rank_by_score(scores: dict[str, float]) -> list[tuple[str, int, float]]:
     """Return ``[(symbol, rank, score), ...]`` ordered by rank ascending.
 

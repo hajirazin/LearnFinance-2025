@@ -28,7 +28,7 @@ def mock_filtered():
         "stocks": [{"symbol": f"TOP{i}", "rank": i + 1} for i in range(15)],
         "total_candidates": 380,
         "top_n": 15,
-        "selection_method": "patchtst_forecast",
+        "selection_method": "patchtst_forecast_rank_band",
         "model_version": "v2026-03-01-abc123",
     }
 
@@ -163,7 +163,9 @@ class TestUSWeeklyTrainingWorkflow:
             assert result["lstm"]["promoted"] is True
             assert result["patchtst"]["version"] == "v1.0.0"
             assert result["filtered"]["stocks"] == 15
-            assert result["filtered"]["selection_method"] == "patchtst_forecast"
+            assert (
+                result["filtered"]["selection_method"] == "patchtst_forecast_rank_band"
+            )
             assert result["refresh"]["sentiment_gaps_filled"] == 10
             assert result["refresh"]["fundamentals_refreshed"] == 2
             assert result["sac"]["version"] == "v1.0.0"

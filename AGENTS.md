@@ -200,16 +200,17 @@ Universes are produced by `brain_api.universe`. The pipeline is fixed; agents mu
 |----------|-------------|------------------|
 | `halal` | [`universe/halal.py`](brain_api/brain_api/universe/halal.py) | Legacy yfinance top-holdings of SPUS, HLAL, SPTE (~14 stocks). Kept for backwards compatibility only. |
 | `halal_new` | [`universe/halal_new.py`](brain_api/brain_api/universe/halal_new.py) | Scrape **all** holdings from 5 ETFs (`SPUS`, `SPTE`, `SPWO` from sp-funds.com; `HLAL`, `UMMA` from Wahed Google Sheets), merge + dedupe, filter to Alpaca-tradable, append the 5 ETFs themselves. Size varies monthly (~400 stocks). US base universe. |
-| `halal_filtered` | [`universe/halal_filtered.py`](brain_api/brain_api/universe/halal_filtered.py) | `halal_new` -> `filter_symbols_by_min_history` (~10 years of trading data, derived from `LSTM_TRAIN_LOOKBACK_YEARS=10` via `compute_min_walkforward_days`) -> US PatchTST batch inference -> top 15 by `predicted_weekly_return_pct`. **No factor scoring.** |
+| `halal_filtered` | [`universe/halal_filtered.py`](brain_api/brain_api/universe/halal_filtered.py) | `halal_new` -> `filter_symbols_by_min_history` (~10 years of trading data, derived from `LSTM_TRAIN_LOOKBACK_YEARS=10` via `compute_min_walkforward_days`) -> US PatchTST batch inference -> rank-band sticky selection (`K_in=15`, `K_hold=30`, partition `halal_filtered_alpha` in the sibling `screening_history` table). Cold-start (no prior month) is byte-equivalent to the legacy blanket top-15. **Monthly cache cadence; no factor scoring.** |
 | `nifty_shariah_500` | [`universe/nifty_shariah_500.py`](brain_api/brain_api/universe/nifty_shariah_500.py) | Full Nifty 500 Shariah constituents from NSE India (~210 stocks). Symbols carry `.NS` suffix end-to-end. India base universe. |
-| `halal_india` | [`universe/halal_india.py`](brain_api/brain_api/universe/halal_india.py) | `nifty_shariah_500` -> same min-history filter -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> top 15 by `predicted_weekly_return_pct`. **No factor scoring.** |
+| `halal_india` | [`universe/halal_india.py`](brain_api/brain_api/universe/halal_india.py) | `nifty_shariah_500` -> same min-history filter -> India PatchTST batch inference (`PatchTSTIndiaModelStorage`) -> top 15 by `predicted_weekly_return_pct`. **No factor scoring.** Out-of-scope for the `halal_filtered_alpha` rank-band sticky migration; a follow-up plan will mirror the change here under partition `halal_india_filtered_alpha` in the `screening_history` table. |
 
 Invariants:
 
-- The PatchTST top-15 selection rule is the ONLY ranking step for `halal_filtered` and `halal_india`. Adding a momentum/quality/value layer requires explicit research approval; do not add silent fallbacks.
+- For `halal_filtered`, PatchTST predicted weekly return + rank-band sticky (`K_in=15`, `K_hold=30`) is the ONLY ranking step (cold-start = top-K_in by score). For `halal_india`, PatchTST predicted weekly return blanket top-15 is the ONLY ranking step (a follow-up plan will mirror the rank-band sticky change there). Adding a momentum/quality/value layer requires explicit research approval; do not add silent fallbacks.
 - `halal_india` symbols MUST keep `.NS` suffix throughout (storage, training, inference, allocation, email, sticky_history).
 - US PatchTST and India PatchTST are independently versioned; promoting one MUST NOT touch the other's `current` pointer.
 - Universe scrapes are cached monthly under `brain_api/data/cache/universe/<name>_YYYY-MM.json`. A new month auto-invalidates the cache.
+- Sticky carry-set isolation: every strategy that reads/writes sticky history MUST own a unique `partition` string (see `brain_api/core/strategy_partitions.py`). Two-stage strategies (HRP-backed) live in `stage1_weight_history`; single-stage screening strategies live in the sibling `screening_history` table. Reusing a partition across strategies even when they sit in different tables corrupts the carry-set.
 
 ## Model hierarchy
 
@@ -267,8 +268,10 @@ Store three classes of data:
 
 - **Structured DB** (local Postgres via Docker)
   - runs, screening decisions, signals, decisions, orders
-- **Local SQLite** (single file at `data/allocation/sticky_history.db`)
-  - Stage 1 weight history + sticky-selection audit trail (multi-universe). Used by US Double HRP and reusable for any future Double HRP variant. See `brain_api/storage/sticky_history.py` for rerun semantics (delete-then-insert per `(universe, year_week)`).
+- **Local SQLite** (single file at `data/allocation/sticky_history.db`, two sibling tables)
+  - `stage1_weight_history` -- two-stage strategies (HRP-backed, **weekly cadence**). Partitions: `halal_new` (US Double HRP), `halal_new_alpha` (US Alpha-HRP), `halal_india_alpha` (India Alpha-HRP). See `brain_api/storage/sticky_history.py` for rerun semantics (delete-then-insert per `(universe, year_week)`).
+  - `screening_history` -- single-stage screening strategies (no Stage 2 HRP, **monthly cadence**). Partitions: `halal_filtered_alpha` (monthly halal_filtered builder, period_key anchored to first-Monday-of-month YYYYWW). See `brain_api/storage/screening_history.py` for rerun semantics (delete-then-insert per `(partition, period_key)`).
+  - Partition strings MUST be unique across the union of both tables (see `brain_api/core/strategy_partitions.py`).
 - **Raw evidence snapshots** (filesystem)
   - `data/raw/<run_id>/<attempt>/<source>/<symbol>.json`
 - **Feature snapshots**
@@ -462,6 +465,7 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm PatchTST/SAC receive correct signal state vector
 - [ ] Confirm India PatchTST uses `patchtst_india` storage (not US `patchtst`)
 - [ ] Confirm India symbols retain `.NS` suffix throughout the pipeline
+- [ ] Confirm sticky carry-set isolation: no two strategies share a `partition` string in `brain_api/core/strategy_partitions.py` (uniqueness across `stage1_weight_history` AND `screening_history`)
 
 ## AI assistant behavioral rules
 

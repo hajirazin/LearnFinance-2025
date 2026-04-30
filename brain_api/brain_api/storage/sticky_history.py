@@ -28,6 +28,20 @@ ISO year-week is stored as a 6-character string ``YYYYWW`` (e.g.
 ordering across year boundaries because the year prefix dominates
 (``"202552" < "202601"``).
 
+Cadence convention
+------------------
+Every two-stage strategy persisted in this table runs on a **weekly**
+cadence and stores the calendar ISO week of its run. Single-stage
+screening strategies that run on a **monthly** cadence (currently the
+``halal_filtered_alpha`` partition) do NOT live in this table -- they
+live in the sibling ``screening_history`` table (see
+``brain_api.storage.screening_history``) and anchor their period_key
+to the YYYYWW of the calendar month's first Monday (helper
+``iso_year_week_of_month_anchor`` in
+``brain_api.core.sticky_selection``). Splitting the two cadences across
+two tables removes any need to interpret ``year_week`` differently per
+partition.
+
 Schema
 ------
 ``stage1_weight_history`` — one row per (universe, year_week, stock):
@@ -58,12 +72,27 @@ would corrupt downstream consumers that assume the column units
 (percent allocation Σ ≈ 100%) -- see ``select_with_rank_band`` in
 ``brain_api/core/sticky_selection.py`` for the rank-band signal contract.
 
-Multi-universe
---------------
-The same DB file holds rows for every universe (``halal_new``,
-``nifty_shariah_500``, ...). The ``universe`` column scopes every read.
+Multi-universe / multi-strategy
+-------------------------------
+The same DB file holds rows for every universe AND -- via the sibling
+``screening_history`` table -- every single-stage screening strategy.
+The ``universe`` column scopes every read in this table.
 ``read_previous_final_set`` is universe-aware: it never returns rows from
 a different universe even if their year_week is closer.
+
+Partitions per table (must be unique across the union):
+
+- ``stage1_weight_history`` (this table, two-stage):
+    * ``halal_new`` -- US Double HRP (weight-band)
+    * ``halal_new_alpha`` -- US Alpha-HRP (rank-band)
+    * ``halal_india_alpha`` -- India Alpha-HRP (rank-band)
+- ``screening_history`` (sibling table, single-stage):
+    * ``halal_filtered_alpha`` -- monthly halal_filtered builder
+
+A new strategy added to either table must reserve a fresh partition
+key in ``brain_api.core.strategy_partitions``; reusing an existing key
+across tables would still corrupt carry-sets because partition strings
+are how callers identify "previous round".
 """
 
 from __future__ import annotations

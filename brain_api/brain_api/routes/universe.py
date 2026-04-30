@@ -47,13 +47,20 @@ def get_halal_new_stocks() -> dict:
 
 @router.get("/halal_filtered")
 def get_halal_filtered_stocks() -> dict:
-    """Get the Halal_Filtered stock universe (top 15 by PatchTST predicted return).
+    """Get the Halal_Filtered stock universe (rank-band sticky top 15 on PatchTST).
 
-    Takes the halal_new base (~410 stocks), runs PatchTST inference on all,
-    returns top 15 by predicted weekly return.
+    Takes the halal_new base (~410 stocks), runs PatchTST inference on
+    qualifying symbols, then applies rank-band sticky selection
+    (K_in=15, K_hold=30) against last month's selected set under the
+    ``halal_filtered_alpha`` partition (``screening_history`` table).
+    Cold start (no prior round) is byte-equivalent to the legacy
+    blanket top-15 by predicted weekly return.
 
-    First call of each month runs PatchTST inference (may take several minutes).
-    Subsequent calls in the same month are served from cache.
+    Cadence: monthly cache (one entry per ISO YYYY-MM). First call of
+    each calendar month runs PatchTST inference (may take several
+    minutes) and writes a new screening row to ``screening_history``;
+    subsequent calls in the same month are served from cache and do
+    NOT re-run rank-band.
     """
     from brain_api.main import shutdown_event
 

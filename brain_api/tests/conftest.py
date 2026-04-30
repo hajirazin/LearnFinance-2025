@@ -47,3 +47,26 @@ def isolate_universe_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "brain_api.universe.cache.UNIVERSE_CACHE_DIR", tmp_path / "universe_cache"
     )
+
+
+@pytest.fixture(autouse=True)
+def isolate_sticky_history_db(tmp_path, monkeypatch):
+    """Route the sticky/screening history DB defaults to a temp file.
+
+    Both ``StickyHistoryRepository`` and ``ScreeningHistoryRepository``
+    use ``DEFAULT_DB_PATH`` when no path is passed. Universe builders
+    (e.g. ``halal_filtered``) instantiate the repository directly rather
+    than via FastAPI dependency injection, so test isolation has to
+    happen at the constant level rather than the fixture level. Tests
+    that explicitly pass a ``db_path`` (the dedicated repo unit tests)
+    are unaffected because the constructor argument wins over the
+    module default.
+    """
+    monkeypatch.setattr(
+        "brain_api.storage.sticky_history.DEFAULT_DB_PATH",
+        tmp_path / "sticky_history.db",
+    )
+    monkeypatch.setattr(
+        "brain_api.storage.screening_history.DEFAULT_DB_PATH",
+        tmp_path / "sticky_history.db",
+    )
