@@ -1,4 +1,13 @@
-"""Shared dependency injection for training endpoints."""
+"""Shared dependency injection for training endpoints.
+
+Universe selection now lives in the per-bucket registry
+(``brain_api.core.model_buckets``) -- training endpoints take the
+``universe`` from the request body and resolve symbols in-process via
+``BucketConfig.symbols_resolver``. The old env-var dispatchers
+(``get_forecaster_training_symbols`` / ``get_rl_training_symbols`` /
+``get_top15_symbols``) were removed because they could not support two
+parallel workflows hitting the same endpoint with different universes.
+"""
 
 from collections.abc import Callable
 from typing import Any
@@ -34,12 +43,16 @@ from brain_api.core.patchtst import (
 from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
-    LocalModelStorage,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    LSTMHalalNewModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTNiftyShariah500ModelStorage,
 )
-from brain_api.storage.sac import SACLocalStorage
+from brain_api.storage.sac import SACHalalFilteredModelStorage
 from brain_api.universe import get_halal_universe
+
+# ``get_halal_universe`` is still used by the ETL symbol resolver below;
+# imports kept for backward compatibility.
+_ = get_halal_universe
 
 # ============================================================================
 # Type aliases for dependency injection
@@ -57,75 +70,18 @@ PatchTSTTrainer = Callable[[Any, Any, Any, PatchTSTConfig], PatchTSTTrainingResu
 
 
 # ============================================================================
-# Shared dependencies
+# ETL symbol resolver (separate from training; ETL_UNIVERSE env still in use)
 # ============================================================================
-
-
-def get_forecaster_training_symbols() -> list[str]:
-    """Get symbols for forecaster training (LSTM + PatchTST) based on config.
-
-    Reads FORECASTER_TRAIN_UNIVERSE env var to determine which universe to use.
-    Default is UniverseType.HALAL. Accepts all universe types.
-
-    Returns:
-        List of symbols for forecaster training.
-    """
-    from brain_api.core.config import UniverseType, get_forecaster_train_universe
-
-    universe_type = get_forecaster_train_universe()
-
-    if universe_type == UniverseType.SP500:
-        from brain_api.universe.sp500 import get_sp500_symbols
-
-        return get_sp500_symbols()
-    elif universe_type == UniverseType.HALAL_NEW:
-        from brain_api.universe.halal_new import get_halal_new_symbols
-
-        return get_halal_new_symbols()
-    elif universe_type == UniverseType.HALAL_FILTERED:
-        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
-
-        return get_halal_filtered_symbols()
-    elif universe_type == UniverseType.NIFTY_SHARIAH_500:
-        from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
-
-        return get_nifty_shariah_500_symbols()
-    else:  # Default: HALAL
-        universe = get_halal_universe()
-        return [stock["symbol"] for stock in universe["stocks"]]
-
-
-def get_rl_training_symbols() -> list[str]:
-    """Get symbols for RL training (SAC) and HRP allocation based on config.
-
-    Reads RL_TRAIN_UNIVERSE env var (restricted to halal and halal_filtered).
-    Both produce exactly 15 stocks, matching n_stocks=15 in SAC config.
-
-    Returns:
-        List of 15 symbols for RL training / HRP allocation.
-    """
-    from brain_api.core.config import UniverseType, get_rl_train_universe
-
-    universe_type = get_rl_train_universe()
-
-    if universe_type == UniverseType.HALAL_FILTERED:
-        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
-
-        return get_halal_filtered_symbols()
-    else:  # HALAL: top 15 by ETF weight
-        universe = get_halal_universe()
-        stocks = universe["stocks"][:15]
-        return [stock["symbol"] for stock in stocks]
 
 
 def get_etl_symbols() -> list[str]:
     """Get symbols for ETL pipelines based on config.
 
-    Reads ETL_UNIVERSE env var to determine which universe to use.
-    Default is UniverseType.HALAL_FILTERED.
-
-    Returns:
-        List of symbols for ETL data refresh.
+    Reads ``ETL_UNIVERSE`` env var to determine which universe to use.
+    Default is ``UniverseType.HALAL_FILTERED``. Unlike the training
+    pipelines, ETL is not part of the universe-keyed bucket registry
+    -- it remains env-var driven because there is no concurrent A/B
+    requirement for the ETL refresh job.
     """
     from brain_api.core.config import UniverseType, get_etl_universe
 
@@ -152,16 +108,6 @@ def get_etl_symbols() -> list[str]:
         return [stock["symbol"] for stock in universe["stocks"]]
 
 
-def get_top15_symbols() -> list[str]:
-    """Get top 15 symbols by liquidity from halal universe.
-
-    Kept for backward compatibility. New code should use get_rl_training_symbols().
-    """
-    universe = get_halal_universe()
-    stocks = universe["stocks"][:15]
-    return [stock["symbol"] for stock in stocks]
-
-
 def snapshots_available(forecaster_type: str) -> bool:
     """Check if forecaster snapshots are available for walk-forward inference.
 
@@ -181,9 +127,14 @@ def snapshots_available(forecaster_type: str) -> bool:
 # ============================================================================
 
 
-def get_storage() -> LocalModelStorage:
-    """Get the model storage instance."""
-    return LocalModelStorage()
+def get_storage() -> LSTMHalalNewModelStorage:
+    """Get the LSTM model storage instance for the halal_new bucket.
+
+    Retained for tests that still inject the LSTM storage via FastAPI
+    ``Depends`` overrides; production code paths now look up the
+    storage via the bucket registry inside the endpoint.
+    """
+    return LSTMHalalNewModelStorage()
 
 
 def get_config() -> LSTMConfig:
@@ -211,9 +162,9 @@ def get_trainer() -> Trainer:
 # ============================================================================
 
 
-def get_patchtst_storage() -> PatchTSTModelStorage:
-    """Get the PatchTST model storage instance."""
-    return PatchTSTModelStorage()
+def get_patchtst_storage() -> PatchTSTHalalNewModelStorage:
+    """Get the PatchTST model storage instance for the halal_new bucket."""
+    return PatchTSTHalalNewModelStorage()
 
 
 def get_patchtst_config() -> PatchTSTConfig:
@@ -241,9 +192,9 @@ def get_patchtst_trainer() -> PatchTSTTrainer:
 # ============================================================================
 
 
-def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
-    """Get the India PatchTST model storage instance."""
-    return PatchTSTIndiaModelStorage()
+def get_patchtst_india_storage() -> PatchTSTNiftyShariah500ModelStorage:
+    """Get the India PatchTST model storage instance for the nifty_shariah_500 bucket."""
+    return PatchTSTNiftyShariah500ModelStorage()
 
 
 # ============================================================================
@@ -251,9 +202,9 @@ def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
 # ============================================================================
 
 
-def get_sac_storage() -> SACLocalStorage:
-    """Get the SAC storage instance."""
-    return SACLocalStorage()
+def get_sac_storage() -> SACHalalFilteredModelStorage:
+    """Get the SAC storage instance for the halal_filtered bucket."""
+    return SACHalalFilteredModelStorage()
 
 
 def get_sac_config() -> SACConfig:

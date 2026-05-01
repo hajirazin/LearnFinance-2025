@@ -18,12 +18,21 @@ in core.
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
+    list_universes_for,
+)
 from brain_api.core.patchtst import validate_and_collect_finite_scores
 from brain_api.core.patchtst.inference import run_batch_inference
-from brain_api.storage.local import PatchTSTIndiaModelStorage, PatchTSTModelStorage
+from brain_api.storage.local import (
+    PatchTSTHalalNewModelStorage,
+    PatchTSTNiftyShariah500ModelStorage,
+)
 
 from .dependencies import (
     get_patchtst_as_of_date,
@@ -43,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def _run_patchtst_inference(
     request: PatchTSTInferenceRequest,
-    storage: PatchTSTModelStorage,
+    storage: PatchTSTHalalNewModelStorage,
     log_prefix: str,
 ) -> PatchTSTInferenceResponse:
     """Run a single-market PatchTST inference and shape the response.
@@ -113,10 +122,78 @@ def _run_patchtst_inference(
     )
 
 
+def _resolve_patchtst_us_storage(
+    universe: str | None,
+    default_storage: PatchTSTHalalNewModelStorage,
+) -> PatchTSTHalalNewModelStorage:
+    """Resolve the US PatchTST storage backend for an optional universe override.
+
+    When ``universe`` is ``None`` we keep the FastAPI-injected default so
+    that test ``dependency_overrides`` continue to work. Otherwise we
+    look up the bucket via the registry; this lets future US PatchTST
+    buckets (e.g. ``patchtst_halal``) be selected without changing the
+    endpoint signature.
+    """
+    if universe is None:
+        return default_storage
+    try:
+        bucket = get_bucket(ModelType.PATCHTST, universe)
+    except UnknownBucketError as exc:
+        allowed = sorted(list_universes_for(ModelType.PATCHTST))
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Unknown universe '{universe}' for PatchTST. Allowed: {allowed}"),
+        ) from exc
+    if bucket.local_storage_class is PatchTSTNiftyShariah500ModelStorage:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Universe '{universe}' is an India bucket; use "
+                "POST /inference/patchtst/india instead."
+            ),
+        )
+    return bucket.local_storage_class()
+
+
+def _resolve_patchtst_india_storage(
+    universe: str | None,
+    default_storage: PatchTSTNiftyShariah500ModelStorage,
+) -> PatchTSTNiftyShariah500ModelStorage:
+    """Resolve the India PatchTST storage backend for an optional universe override."""
+    if universe is None:
+        return default_storage
+    try:
+        bucket = get_bucket(ModelType.PATCHTST, universe)
+    except UnknownBucketError as exc:
+        allowed = sorted(list_universes_for(ModelType.PATCHTST))
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Unknown universe '{universe}' for PatchTST. Allowed: {allowed}"),
+        ) from exc
+    if bucket.local_storage_class is not PatchTSTNiftyShariah500ModelStorage:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Universe '{universe}' is not an India bucket; use "
+                "POST /inference/patchtst instead."
+            ),
+        )
+    return bucket.local_storage_class()
+
+
 @router.post("/patchtst", response_model=PatchTSTInferenceResponse)
 def infer_patchtst(
     request: PatchTSTInferenceRequest,
-    storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
+    universe: str | None = Query(
+        default=None,
+        description=(
+            "Optional bucket override. Defaults to the only registered US "
+            "PatchTST universe (`halal_new`). Use this to point inference "
+            "at a future bucket (e.g. `halal`) without breaking existing "
+            "callers."
+        ),
+    ),
+    storage: PatchTSTHalalNewModelStorage = Depends(get_patchtst_storage),
 ) -> PatchTSTInferenceResponse:
     """Predict weekly returns using the current US PatchTST model.
 
@@ -126,34 +203,48 @@ def infer_patchtst(
 
     Raises:
         HTTPException 400: if no current model version is available
+        HTTPException 422: if ``universe`` is unknown or refers to an India bucket
         HTTPException 503: if model artifacts cannot be loaded
     """
-    return _run_patchtst_inference(request, storage, log_prefix="[PatchTST]")
+    selected = _resolve_patchtst_us_storage(universe, storage)
+    return _run_patchtst_inference(request, selected, log_prefix="[PatchTST]")
 
 
 @router.post("/patchtst/india", response_model=PatchTSTInferenceResponse)
 def infer_patchtst_india(
     request: PatchTSTInferenceRequest,
-    storage: PatchTSTIndiaModelStorage = Depends(get_patchtst_india_storage),
+    universe: str | None = Query(
+        default=None,
+        description=(
+            "Optional bucket override. Defaults to the only registered "
+            "India PatchTST universe (`nifty_shariah_500`)."
+        ),
+    ),
+    storage: PatchTSTNiftyShariah500ModelStorage = Depends(get_patchtst_india_storage),
 ) -> PatchTSTInferenceResponse:
     """Predict weekly returns using the current India PatchTST model.
 
     Same forward-pass math as the US route; the only difference is the
-    storage backend (``data/models/patchtst_india/``). Symbols default to
-    the India model's training metadata when not provided.
+    storage backend (``data/models/patchtst_nifty_shariah_500/``).
+    Symbols default to the India model's training metadata when not
+    provided.
 
     Raises:
         HTTPException 400: if no current India model version is available
+        HTTPException 422: if ``universe`` is unknown or refers to a US bucket
         HTTPException 503: if model artifacts cannot be loaded
     """
-    return _run_patchtst_inference(request, storage, log_prefix="[PatchTST India]")
+    selected = _resolve_patchtst_india_storage(universe, storage)
+    return _run_patchtst_inference(request, selected, log_prefix="[PatchTST India]")
 
 
 @router.post("/patchtst/score-batch", response_model=PatchTSTScoreBatchResponse)
 def patchtst_score_batch(
     request: PatchTSTScoreBatchRequest,
-    us_storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
-    india_storage: PatchTSTIndiaModelStorage = Depends(get_patchtst_india_storage),
+    us_storage: PatchTSTHalalNewModelStorage = Depends(get_patchtst_storage),
+    india_storage: PatchTSTNiftyShariah500ModelStorage = Depends(
+        get_patchtst_india_storage
+    ),
 ) -> PatchTSTScoreBatchResponse:
     """Run PatchTST batch inference and apply rank-band score validation.
 

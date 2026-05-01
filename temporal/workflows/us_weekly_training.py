@@ -49,12 +49,14 @@ class USWeeklyTrainingWorkflow:
         # Steps 2-3: Train forecasters on all ~410 halal_new symbols
         lstm_result = await workflow.execute_activity(
             train_lstm,
+            args=["halal_new"],
             start_to_close_timeout=TRAINING_TIMEOUT,
             heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
         patchtst_result = await workflow.execute_activity(
             train_patchtst,
+            args=["halal_new"],
             start_to_close_timeout=TRAINING_TIMEOUT,
             heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
@@ -77,6 +79,7 @@ class USWeeklyTrainingWorkflow:
         # Step 6: Train SAC allocator on filtered 15
         sac_result = await workflow.execute_activity(
             train_sac,
+            args=["halal_filtered"],
             start_to_close_timeout=TRAINING_TIMEOUT,
             heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),

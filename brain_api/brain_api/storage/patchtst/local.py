@@ -30,25 +30,30 @@ class PatchTSTArtifacts:
     version: str
 
 
-class PatchTSTModelStorage(
+class PatchTSTHalalNewModelStorage(
     BaseLocalModelStorage["PatchTSTConfig", "PatchTSTForPrediction", PatchTSTArtifacts]
 ):
-    """Local filesystem storage for PatchTST model artifacts.
+    """Local filesystem storage for PatchTST trained on the halal_new universe.
 
     Artifacts are stored under:
-        {base_path}/models/patchtst/{version}/
+        {base_path}/models/patchtst_halal_new/{version}/
             - weights.pt            (PyTorch model weights)
             - feature_scaler.pkl    (sklearn StandardScaler for input features)
             - config.json           (model hyperparameters)
             - metadata.json         (training info, metrics, data window)
 
     The current version pointer is stored at:
-        {base_path}/models/patchtst/current
+        {base_path}/models/patchtst_halal_new/current
+
+    The bucket name encodes ``(model, universe)``; adding a new
+    PatchTST universe (e.g. ``halal_filtered`` for an A/B comparison)
+    means a new sibling subclass with its own ``model_type``. See
+    ``brain_api.core.model_buckets``.
     """
 
     @property
     def model_type(self) -> str:
-        return "patchtst"
+        return "patchtst_halal_new"
 
     def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
         from brain_api.core.patchtst import PatchTSTConfig
@@ -76,14 +81,23 @@ class PatchTSTModelStorage(
         )
 
 
-class PatchTSTIndiaModelStorage(PatchTSTModelStorage):
-    """India PatchTST model storage at data/models/patchtst_india/.
+class PatchTSTNiftyShariah500ModelStorage(PatchTSTHalalNewModelStorage):
+    """PatchTST storage for the Indian ``nifty_shariah_500`` universe.
 
-    Inherits all PatchTST storage behavior; only the model_type changes
-    so artifacts are written to a separate directory with an independent
-    ``current`` pointer.
+    Artifacts live under ``data/models/patchtst_nifty_shariah_500/``
+    with an independent ``current`` pointer. India PatchTST is trained
+    on ~210 ``.NS``-suffixed Nifty 500 Shariah constituents (the broad
+    forecaster universe), distinct from the sticky-15 ``halal_india``
+    bucket that future India SAC training will use.
     """
 
     @property
     def model_type(self) -> str:
-        return "patchtst_india"
+        return "patchtst_nifty_shariah_500"
+
+
+# Backward compatibility aliases. Existing callers that pre-date the
+# {model}_{universe} naming continue to work; new code should use the
+# explicit names so the bucket identity is visible at the import site.
+PatchTSTModelStorage = PatchTSTHalalNewModelStorage
+PatchTSTIndiaModelStorage = PatchTSTNiftyShariah500ModelStorage

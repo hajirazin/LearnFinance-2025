@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -9,16 +10,15 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training import (
-    get_forecaster_training_symbols,
     get_patchtst_dataset_builder,
     get_patchtst_price_loader,
-    get_patchtst_storage,
     get_patchtst_trainer,
 )
-from brain_api.storage.local import PatchTSTModelStorage
+from brain_api.storage.local import PatchTSTHalalNewModelStorage
 
 # ============================================================================
 # Test fixtures and mocks
@@ -34,10 +34,7 @@ def mock_price_loader(symbols, start_date, end_date):
     """Return mock price data for testing."""
     import pandas as pd
 
-    # Create minimal fake price data for each symbol
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")[
-        :100
-    ]  # 100 business days
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]
     prices = {}
     for symbol in symbols:
         prices[symbol] = pd.DataFrame(
@@ -55,9 +52,6 @@ def mock_price_loader(symbols, start_date, end_date):
 
 def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
     """Return a mock dataset result for 5-channel OHLCV multi-task prediction."""
-    # Return non-empty arrays to pass validation checks
-    # X: (n_samples, context_length, 5) -- 5 OHLCV channels
-    # y: (n_samples, 5, 5) -- 5 days x 5 channels (multi-task targets)
     n_samples = 10
     return DatasetResult(
         X=np.random.randn(n_samples, config.context_length, 5),
@@ -75,7 +69,7 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
         config=config,
         train_loss=0.01,
-        val_loss=0.02,  # Better than baseline (0.05)
+        val_loss=0.02,
         baseline_loss=0.05,
     )
 
@@ -91,7 +85,7 @@ def mock_trainer_worse_than_baseline(
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
         config=config,
         train_loss=0.10,
-        val_loss=0.10,  # Worse than baseline (0.05)
+        val_loss=0.10,
         baseline_loss=0.05,
     )
 
@@ -100,29 +94,48 @@ def mock_trainer_worse_than_baseline(
 def temp_storage():
     """Create a temporary storage directory for tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield PatchTSTModelStorage(base_path=tmpdir)
+        yield PatchTSTHalalNewModelStorage(base_path=tmpdir)
+
+
+def _override_us_patchtst_bucket(monkeypatch, temp_storage, symbols_fn=mock_symbols):
+    """Swap the ``(PATCHTST, halal_new)`` registry entry for tests.
+
+    Symbol resolution and storage are now driven by the bucket registry
+    rather than ``Depends`` overrides; tests therefore monkey-patch the
+    bucket entry itself so the production registry stays untouched
+    between tests.
+    """
+    from brain_api.core import model_buckets
+
+    original = get_bucket(ModelType.PATCHTST, "halal_new")
+    patched = replace(
+        original,
+        local_storage_class=lambda: temp_storage,
+        symbols_resolver=symbols_fn,
+    )
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.PATCHTST, "halal_new"),
+        patched,
+    )
 
 
 @pytest.fixture
-def client_with_mocks(temp_storage):
+def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies."""
-    # Override dependencies
-    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+    _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
-    # Set fixed window for deterministic tests
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
     client = TestClient(app)
     yield client
 
-    # Cleanup
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
@@ -148,6 +161,28 @@ def test_train_patchtst_no_body_returns_202(client_with_mocks):
     assert response.status_code == 202
 
 
+def test_train_patchtst_explicit_universe_returns_202(client_with_mocks):
+    """POST /train/patchtst with the registered US universe returns 202."""
+    response = client_with_mocks.post(TRAIN_URL, json={"universe": "halal_new"})
+    assert response.status_code == 202
+
+
+def test_train_patchtst_unknown_universe_returns_422(client_with_mocks):
+    """Unknown universe in the request body must be rejected with 422."""
+    response = client_with_mocks.post(TRAIN_URL, json={"universe": "halal_filtered"})
+    assert response.status_code == 422
+    assert "halal_filtered" in response.text
+
+
+def test_train_patchtst_us_endpoint_rejects_india_universe(client_with_mocks):
+    """The US endpoint must reject the India universe even though it is
+    registered for the PatchTST family. Each market gets its own route.
+    """
+    response = client_with_mocks.post(TRAIN_URL, json={"universe": "nifty_shariah_500"})
+    assert response.status_code == 422
+    assert "nifty_shariah_500" in response.text
+
+
 def test_train_patchtst_returns_resolved_window(client_with_mocks):
     """POST /train/patchtst returns Friday-anchored data_window_end from config."""
     response1 = client_with_mocks.post(TRAIN_URL, json={})
@@ -159,10 +194,8 @@ def test_train_patchtst_returns_resolved_window(client_with_mocks):
     assert "data_window_start" in data
     assert "data_window_end" in data
 
-    # Verify window is Friday-anchored.
-    # Env config sets end_date to 2025-01-01 (Wednesday), which anchors to 2024-12-27 (Friday)
     assert data["data_window_end"] == "2024-12-27"
-    assert data["data_window_start"] == "2014-01-01"  # 10 years before 2024
+    assert data["data_window_start"] == "2014-01-01"
 
 
 def test_train_patchtst_returns_required_fields(client_with_mocks):
@@ -181,12 +214,9 @@ def test_train_patchtst_returns_required_fields(client_with_mocks):
     assert "num_input_channels" in data
     assert "signals_used" in data
 
-    # Check metrics structure
     assert isinstance(data["metrics"], dict)
 
-    # Check PatchTST-specific fields
-    # 5 channels: OHLCV only (open_ret, high_ret, low_ret, close_ret, volume_ret)
-    assert data["num_input_channels"] == 5  # Default config
+    assert data["num_input_channels"] == 5
     assert data["signals_used"] == ["ohlcv"]
 
 
@@ -215,18 +245,15 @@ def test_train_patchtst_idempotent_does_not_change_current(
     client_with_mocks, temp_storage
 ):
     """Rerunning training does not change 'current' pointer if already promoted."""
-    # First call - 202 (training runs in background)
     response1 = client_with_mocks.post(TRAIN_URL, json={})
     assert response1.status_code == 202
 
-    # Second call - 200 (cached result)
     response2 = client_with_mocks.post(TRAIN_URL, json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
     current_after_first = temp_storage.read_current_version()
 
-    # Third call - 200 (cached, same version)
     response3 = client_with_mocks.post(TRAIN_URL, json={})
     assert response3.status_code == 200
     version3 = response3.json()["version"]
@@ -253,16 +280,14 @@ def test_train_patchtst_first_model_always_promoted(client_with_mocks):
     assert data["promoted"] is True
 
 
-def test_train_patchtst_not_promoted_when_worse_than_prior():
+def test_train_patchtst_not_promoted_when_worse_than_prior(monkeypatch):
     """Model is NOT promoted when worse than prior model."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        fresh_storage = PatchTSTModelStorage(base_path=tmpdir)
+        fresh_storage = PatchTSTHalalNewModelStorage(base_path=tmpdir)
 
         app.dependency_overrides.clear()
 
-        # First, create a good model that gets promoted
-        app.dependency_overrides[get_patchtst_storage] = lambda: fresh_storage
-        app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+        _override_us_patchtst_bucket(monkeypatch, fresh_storage)
         app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
         app.dependency_overrides[get_patchtst_dataset_builder] = (
             lambda: mock_dataset_builder
@@ -270,14 +295,11 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
         app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
-            "2025-06-15"  # Sunday -> June 13 (Fri)
-        )
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
 
         client = TestClient(app)
 
         try:
-            # Train first model - 202 then 200 (first model always promoted)
             train_url = "/train/patchtst?skip_snapshot=true"
             response1 = client.post(train_url, json={})
             assert response1.status_code == 202
@@ -286,9 +308,6 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
             first_version = response1b.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
-            # Now train a worse model with different date (to generate new version)
-            # June 23, 2025 is Monday -> anchors to June 20 (Fri), different from June 13
-            # mock_trainer_worse_than_baseline returns val_loss=0.10, which is > 0.02 (prior)
             app.dependency_overrides[get_patchtst_trainer] = (
                 lambda: mock_trainer_worse_than_baseline
             )
@@ -300,10 +319,8 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
             assert response2b.status_code == 200
 
             data = response2b.json()
-            # Mock trainer returns val_loss=0.10 > prior=0.02
             assert data["promoted"] is False
 
-            # Current should still point to the first version
             current = fresh_storage.read_current_version()
             assert current == first_version
         finally:
@@ -312,13 +329,11 @@ def test_train_patchtst_not_promoted_when_worse_than_prior():
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
+def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage, monkeypatch):
     """The 'current' pointer is unchanged when promotion fails."""
     app.dependency_overrides.clear()
 
-    # First, create a good model that gets promoted
-    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+    _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: mock_dataset_builder
@@ -326,7 +341,7 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"  # Wed -> Dec 27, 2024 (Fri)
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
     client = TestClient(app)
 
@@ -337,12 +352,9 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     assert response1b.status_code == 200
     promoted_version = response1b.json()["version"]
 
-    # Verify it was promoted
     current_before = temp_storage.read_current_version()
     assert current_before == promoted_version
 
-    # Now try with a different window that produces worse results
-    # Jan 13, 2025 is Monday -> anchors to Jan 10 (Fri), different from Dec 27
     app.dependency_overrides[get_patchtst_trainer] = (
         lambda: mock_trainer_worse_than_baseline
     )
@@ -354,14 +366,11 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage):
     assert response2b.status_code == 200
     data2 = response2b.json()
 
-    # Should not be promoted (worse than prior)
     assert data2["promoted"] is False
 
-    # Current should still point to the first version
     current_after = temp_storage.read_current_version()
     assert current_after == promoted_version
 
-    # Cleanup
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)

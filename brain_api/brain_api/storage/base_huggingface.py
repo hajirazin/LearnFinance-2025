@@ -17,7 +17,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from brain_api.core.config import get_hf_lstm_model_repo, get_hf_token
+from brain_api.core.config import get_hf_lstm_halal_new_model_repo, get_hf_token
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +69,14 @@ class BaseHuggingFaceModelStorage(
 
         Args:
             repo_id: HuggingFace repo ID (e.g., 'username/learnfinance-model').
-                     Defaults to HF_LSTM_MODEL_REPO env var for LSTM.
+                     The default fallback (LSTM halal_new repo) only
+                     matters for the LSTM bucket; PatchTST/SAC subclasses
+                     override the default in their own ``__init__``.
             token: HuggingFace API token. If None, uses HF_TOKEN env var or
                    cached token from `huggingface-cli login`.
             local_cache: Optional local storage for caching downloaded models.
         """
-        self.repo_id = repo_id or get_hf_lstm_model_repo()
+        self.repo_id = repo_id or get_hf_lstm_halal_new_model_repo()
         self.token = token or get_hf_token()
         self.local_cache = local_cache or self._create_local_storage()
         self.api = HfApi(token=self.token)

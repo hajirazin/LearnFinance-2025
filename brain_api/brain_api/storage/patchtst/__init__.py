@@ -2,20 +2,28 @@
 
 from brain_api.storage.metadata import create_training_metadata
 from brain_api.storage.patchtst.huggingface import (
-    PatchTSTHuggingFaceModelStorage,
-    PatchTSTIndiaHuggingFaceModelStorage,
+    PatchTSTHalalNewHuggingFaceModelStorage,
+    PatchTSTHuggingFaceModelStorage,  # Backward compatibility alias
+    PatchTSTIndiaHuggingFaceModelStorage,  # Backward compatibility alias
+    PatchTSTNiftyShariah500HuggingFaceModelStorage,
 )
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTIndiaModelStorage,  # Backward compatibility alias
+    PatchTSTModelStorage,  # Backward compatibility alias
+    PatchTSTNiftyShariah500ModelStorage,
 )
 
 __all__ = [
     "PatchTSTArtifacts",
-    "PatchTSTHuggingFaceModelStorage",
-    "PatchTSTIndiaHuggingFaceModelStorage",
-    "PatchTSTIndiaModelStorage",
-    "PatchTSTModelStorage",
+    "PatchTSTHalalNewHuggingFaceModelStorage",
+    "PatchTSTHalalNewModelStorage",
+    "PatchTSTHuggingFaceModelStorage",  # Backward compatibility alias
+    "PatchTSTIndiaHuggingFaceModelStorage",  # Backward compatibility alias
+    "PatchTSTIndiaModelStorage",  # Backward compatibility alias
+    "PatchTSTModelStorage",  # Backward compatibility alias
+    "PatchTSTNiftyShariah500HuggingFaceModelStorage",
+    "PatchTSTNiftyShariah500ModelStorage",
     "create_training_metadata",
 ]

@@ -10,21 +10,25 @@ from brain_api.storage.base import DEFAULT_DATA_PATH
 from brain_api.storage.lstm.local import (
     LocalModelStorage,  # Backward compatibility alias
     LSTMArtifacts,
-    LSTMLocalStorage,
+    LSTMHalalNewModelStorage,
+    LSTMLocalStorage,  # Backward compatibility alias
 )
 from brain_api.storage.metadata import create_training_metadata
 
 # PatchTST storage
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTIndiaModelStorage,  # Backward compatibility alias
+    PatchTSTModelStorage,  # Backward compatibility alias
+    PatchTSTNiftyShariah500ModelStorage,
 )
 
 # SAC storage (unified with dual forecasts)
 from brain_api.storage.sac.local import (
     SACArtifacts,
-    SACLocalStorage,
+    SACHalalFilteredModelStorage,
+    SACLocalStorage,  # Backward compatibility alias
     create_sac_metadata,
 )
 
@@ -43,7 +47,7 @@ def create_metadata(
 ) -> dict:
     """Create metadata dict for LSTM training run (backward compatibility wrapper)."""
     return create_training_metadata(
-        model_type="lstm",
+        model_type="lstm_halal_new",
         version=version,
         data_window_start=data_window_start,
         data_window_end=data_window_end,
@@ -71,7 +75,7 @@ def create_patchtst_metadata(
 ) -> dict:
     """Create metadata dict for PatchTST training run (backward compatibility wrapper)."""
     return create_training_metadata(
-        model_type="patchtst",
+        model_type="patchtst_halal_new",
         version=version,
         data_window_start=data_window_start,
         data_window_end=data_window_end,
@@ -90,15 +94,19 @@ __all__ = [
     "DEFAULT_DATA_PATH",
     # LSTM
     "LSTMArtifacts",
-    "LSTMLocalStorage",
+    "LSTMHalalNewModelStorage",
+    "LSTMLocalStorage",  # Backward compatibility alias
     "LocalModelStorage",  # Backward compatibility alias
     # PatchTST
     "PatchTSTArtifacts",
-    "PatchTSTIndiaModelStorage",
-    "PatchTSTModelStorage",
+    "PatchTSTHalalNewModelStorage",
+    "PatchTSTIndiaModelStorage",  # Backward compatibility alias
+    "PatchTSTModelStorage",  # Backward compatibility alias
+    "PatchTSTNiftyShariah500ModelStorage",
     # SAC (unified with dual forecasts)
     "SACArtifacts",
-    "SACLocalStorage",
+    "SACHalalFilteredModelStorage",
+    "SACLocalStorage",  # Backward compatibility alias
     "create_metadata",
     "create_patchtst_metadata",
     "create_sac_metadata",

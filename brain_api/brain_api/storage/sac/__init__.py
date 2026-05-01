@@ -6,14 +6,16 @@ from brain_api.storage.sac.huggingface import (
 )
 from brain_api.storage.sac.local import (
     SACArtifacts,
-    SACLocalStorage,
+    SACHalalFilteredModelStorage,
+    SACLocalStorage,  # Backward compatibility alias
     create_sac_metadata,
 )
 
 __all__ = [
     "HFModelInfo",
     "SACArtifacts",
+    "SACHalalFilteredModelStorage",
     "SACHuggingFaceModelStorage",
-    "SACLocalStorage",
+    "SACLocalStorage",  # Backward compatibility alias
     "create_sac_metadata",
 ]

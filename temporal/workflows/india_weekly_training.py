@@ -40,9 +40,10 @@ class IndiaWeeklyTrainingWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
 
-        # Step 2: Train India PatchTST
+        # Step 2: Train India PatchTST on the full Nifty Shariah 500 universe
         patchtst_result = await workflow.execute_activity(
             train_india_patchtst,
+            args=["nifty_shariah_500"],
             start_to_close_timeout=TRAINING_TIMEOUT,
             heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),

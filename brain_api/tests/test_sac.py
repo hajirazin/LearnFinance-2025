@@ -8,12 +8,14 @@ Tests focus on:
 
 import os
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pytest
 import torch
 from fastapi.testclient import TestClient
 
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac import (
@@ -23,11 +25,34 @@ from brain_api.core.sac import (
 from brain_api.main import app
 from brain_api.routes.inference import get_sac_storage as get_inference_storage
 from brain_api.routes.training import (
-    get_rl_training_symbols,
     get_sac_config,
     get_sac_storage,
 )
-from brain_api.storage.sac import SACLocalStorage, create_sac_metadata
+from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
+
+
+def _override_sac_bucket(monkeypatch, temp_storage, symbols_fn):
+    """Swap the ``(SAC, halal_filtered)`` registry entry for tests.
+
+    SAC training resolves storage and symbols inside the endpoint via
+    the bucket registry, so tests mutate the registry rather than using
+    ``Depends`` overrides. ``monkeypatch.setitem`` restores the original
+    bucket at teardown.
+    """
+    from brain_api.core import model_buckets
+
+    original = get_bucket(ModelType.SAC, "halal_filtered")
+    patched = replace(
+        original,
+        local_storage_class=lambda: temp_storage,
+        symbols_resolver=symbols_fn,
+    )
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.SAC, "halal_filtered"),
+        patched,
+    )
+
 
 # ============================================================================
 # Test fixtures and mocks
@@ -110,14 +135,14 @@ def create_mock_training_result(config: SACConfig) -> SACTrainingResult:
 def temp_storage():
     """Create a temporary storage directory for tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield SACLocalStorage(base_path=tmpdir)
+        yield SACHalalFilteredModelStorage(base_path=tmpdir)
 
 
 @pytest.fixture
 def trained_model_storage():
     """Create storage with a pre-trained model for inference tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = SACLocalStorage(base_path=tmpdir)
+        storage = SACHalalFilteredModelStorage(base_path=tmpdir)
         config = mock_config()
         result = create_mock_training_result(config)
 
@@ -309,7 +334,6 @@ class TestSACLSTMFinetune:
         """Test that finetune without prior model returns 400."""
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
@@ -346,7 +370,6 @@ class TestSACLSTMFinetune:
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
@@ -383,8 +406,7 @@ class TestSACFullTraining:
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
 
         app.dependency_overrides.clear()
-        app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
@@ -413,8 +435,7 @@ class TestSACFullTraining:
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
 
         app.dependency_overrides.clear()
-        app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_rl_training_symbols] = mock_symbols
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
         app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
@@ -432,6 +453,50 @@ class TestSACFullTraining:
             version3 = response3.json()["version"]
 
             assert version2 == version3
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_unknown_universe_returns_422(
+        self, temp_storage, monkeypatch
+    ):
+        """Unknown universe in body must be rejected with 422."""
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+        app.dependency_overrides[get_sac_config] = mock_config
+
+        client = TestClient(app)
+        try:
+            response = client.post(
+                "/train/sac/full", json={"universe": "not_a_universe"}
+            )
+            assert response.status_code == 422
+            assert "not_a_universe" in response.text
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_n_stocks_mismatch_returns_422(
+        self, temp_storage, monkeypatch
+    ):
+        """SAC requires len(symbols) == config.n_stocks; mismatch -> 422.
+
+        SAC's network architecture and state vector are wired to a fixed
+        ``n_stocks``. Resolving a universe with a different size silently
+        would corrupt the action space, so the endpoint surfaces this as
+        422 (per AGENTS.md rule #1: no silent fallbacks).
+        """
+        app.dependency_overrides.clear()
+
+        def _too_few_symbols() -> list[str]:
+            return ["AAPL", "MSFT"]  # 2 != 5
+
+        _override_sac_bucket(monkeypatch, temp_storage, _too_few_symbols)
+        app.dependency_overrides[get_sac_config] = mock_config
+
+        client = TestClient(app)
+        try:
+            response = client.post("/train/sac/full")
+            assert response.status_code == 422
+            assert "n_stocks" in response.text or "5" in response.text
         finally:
             app.dependency_overrides.clear()
 

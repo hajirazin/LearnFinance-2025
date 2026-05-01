@@ -102,17 +102,20 @@ def fetch_halal_india_universe() -> dict:
 
 def _poll_training_job(
     endpoint: str,
+    json_body: dict | None = None,
     poll_interval: float = 60.0,
 ) -> TrainingResponse:
     """Start a training job via POST and poll until completion.
 
-    1. POST to endpoint: if 200, return result (idempotent cache hit)
+    1. POST to endpoint with ``json_body`` (carries the ``universe``
+       selector for universe-keyed buckets): if 200, return result
+       (idempotent cache hit)
     2. If 202, extract job_id and poll GET /train/status/{job_id}
     3. Heartbeat on each poll cycle to keep Temporal informed
     4. Return TrainingResponse on completion, raise on failure/cancel
     """
     with get_training_client() as client:
-        response = client.post(endpoint)
+        response = client.post(endpoint, json=json_body)
         response.raise_for_status()
 
         if response.status_code == 200:
@@ -144,31 +147,40 @@ def _poll_training_job(
 
 
 @activity.defn
-def train_lstm() -> TrainingResponse:
-    """Train the LSTM pure-price forecaster model."""
-    logger.info("Starting LSTM training...")
-    return _poll_training_job("/train/lstm")
+def train_lstm(universe: str) -> TrainingResponse:
+    """Train the LSTM pure-price forecaster model on the given universe.
+
+    ``universe`` selects the universe-keyed bucket (e.g. ``halal_new``)
+    so that two parallel workflows can hit the same endpoint with
+    different universes without colliding on storage.
+    """
+    logger.info(f"Starting LSTM training on universe={universe}...")
+    return _poll_training_job("/train/lstm", json_body={"universe": universe})
 
 
 @activity.defn
-def train_patchtst() -> TrainingResponse:
-    """Train the PatchTST OHLCV forecaster model."""
-    logger.info("Starting PatchTST training...")
-    return _poll_training_job("/train/patchtst")
+def train_patchtst(universe: str) -> TrainingResponse:
+    """Train the US PatchTST OHLCV forecaster on the given universe."""
+    logger.info(f"Starting PatchTST training on universe={universe}...")
+    return _poll_training_job("/train/patchtst", json_body={"universe": universe})
 
 
 @activity.defn
-def train_sac() -> TrainingResponse:
-    """Train the SAC reinforcement learning allocator."""
-    logger.info("Starting SAC training...")
-    return _poll_training_job("/train/sac/full")
+def train_sac(universe: str) -> TrainingResponse:
+    """Train the SAC reinforcement-learning allocator on the given universe.
+
+    ``universe`` MUST resolve to exactly ``n_stocks`` symbols
+    (currently 15) -- the API enforces this invariant.
+    """
+    logger.info(f"Starting SAC training on universe={universe}...")
+    return _poll_training_job("/train/sac/full", json_body={"universe": universe})
 
 
 @activity.defn
-def train_india_patchtst() -> TrainingResponse:
-    """Train the India PatchTST OHLCV forecaster model on NiftyShariah500."""
-    logger.info("Starting India PatchTST training...")
-    return _poll_training_job("/train/patchtst/india")
+def train_india_patchtst(universe: str) -> TrainingResponse:
+    """Train the India PatchTST OHLCV forecaster on the given universe."""
+    logger.info(f"Starting India PatchTST training on universe={universe}...")
+    return _poll_training_job("/train/patchtst/india", json_body={"universe": universe})
 
 
 @activity.defn

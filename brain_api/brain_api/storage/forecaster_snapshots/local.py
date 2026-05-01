@@ -15,7 +15,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar
 
 import torch
 from huggingface_hub import HfApi, snapshot_download
@@ -23,9 +23,9 @@ from huggingface_hub.utils import RepositoryNotFoundError
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.config import (
-    get_hf_lstm_model_repo,
-    get_hf_patchtst_india_model_repo,
-    get_hf_patchtst_model_repo,
+    get_hf_lstm_halal_new_model_repo,
+    get_hf_patchtst_halal_new_model_repo,
+    get_hf_patchtst_nifty_shariah_500_model_repo,
     get_hf_token,
 )
 from brain_api.storage.base import DEFAULT_DATA_PATH
@@ -93,36 +93,79 @@ class SnapshotLocalStorage:
         - Snapshot branches: snapshot-2024-12-31
     """
 
+    # Backwards-compat aliases mapping the legacy short forecaster name
+    # (still passed by SAC walk-forward code) to the canonical
+    # ``{model}_{universe}`` bucket name. SAC's only US bucket today
+    # (``sac_halal_filtered``) trains on the top-15 of ``halal_new``, so
+    # its forecaster snapshots come from the ``halal_new`` LSTM/PatchTST
+    # buckets. When SAC gets a second universe (e.g. ``halal_india``)
+    # this mapping will need to become bucket-aware -- for now keep it
+    # explicit so a wrong universe surfaces as a key error rather than
+    # silently writing to the wrong directory (AGENTS.md rule #1).
+    _LEGACY_FORECASTER_ALIASES: ClassVar[dict[str, str]] = {
+        "lstm": "lstm_halal_new",
+        "patchtst": "patchtst_halal_new",
+    }
+
     def __init__(
         self,
-        forecaster_type: Literal["lstm", "patchtst", "patchtst_india"],
+        forecaster_type: str,
         base_path: Path | str | None = None,
         hf_token: str | None = None,
     ):
         """Initialize storage.
 
         Args:
-            forecaster_type: "lstm" or "patchtst"
+            forecaster_type: Bucket name in ``{model}_{universe}`` form
+                (e.g. ``"lstm_halal_new"``, ``"patchtst_halal_new"``,
+                ``"patchtst_nifty_shariah_500"``). This is also the
+                disk subdirectory under ``data/models/`` so snapshots
+                live as siblings of main model versions for that
+                bucket. Distinct buckets MUST never share a folder.
+                Legacy short names (``"lstm"``, ``"patchtst"``) are
+                accepted as aliases for the corresponding
+                ``halal_new`` bucket -- this matches the SAC
+                walk-forward entrypoint that still passes the short
+                name and points to the only forecaster bucket SAC
+                currently consumes.
             base_path: Base path for data storage. Defaults to 'data/'.
             hf_token: HuggingFace API token. If None, uses HF_TOKEN env var.
         """
         if base_path is None:
             base_path = DEFAULT_DATA_PATH
         self.base_path = Path(base_path)
-        self.forecaster_type = forecaster_type
+        self.forecaster_type = self._LEGACY_FORECASTER_ALIASES.get(
+            forecaster_type, forecaster_type
+        )
+        if self.forecaster_type not in {
+            "lstm_halal_new",
+            "patchtst_halal_new",
+            "patchtst_nifty_shariah_500",
+        }:
+            raise ValueError(
+                f"Unknown forecaster snapshot bucket {forecaster_type!r}. "
+                "Expected one of: lstm_halal_new, patchtst_halal_new, "
+                "patchtst_nifty_shariah_500 (or legacy aliases 'lstm', "
+                "'patchtst')."
+            )
         self._hf_token = hf_token
         # Models directory where both main versions and snapshots live as siblings
-        self._models_path = self.base_path / "models" / forecaster_type
+        self._models_path = self.base_path / "models" / self.forecaster_type
         self._hf_missing: set[date] = set()
 
     def _get_hf_repo(self) -> str | None:
-        """Get the HuggingFace repo ID for this forecaster type."""
-        if self.forecaster_type == "lstm":
-            return get_hf_lstm_model_repo()
-        elif self.forecaster_type == "patchtst_india":
-            return get_hf_patchtst_india_model_repo()
-        else:
-            return get_hf_patchtst_model_repo()
+        """Get the HuggingFace repo ID for this forecaster bucket."""
+        if self.forecaster_type == "lstm_halal_new":
+            return get_hf_lstm_halal_new_model_repo()
+        if self.forecaster_type == "patchtst_nifty_shariah_500":
+            return get_hf_patchtst_nifty_shariah_500_model_repo()
+        if self.forecaster_type == "patchtst_halal_new":
+            return get_hf_patchtst_halal_new_model_repo()
+        raise ValueError(
+            f"Unknown snapshot forecaster_type: {self.forecaster_type!r}. "
+            "Expected one of: lstm_halal_new, patchtst_halal_new, "
+            "patchtst_nifty_shariah_500."
+        )
 
     def _get_hf_token(self) -> str | None:
         """Get HF token from instance or environment."""
@@ -257,7 +300,7 @@ class SnapshotLocalStorage:
         # Load model
         weights_path = snapshot_dir / "weights.pt"
 
-        if self.forecaster_type == "lstm":
+        if self.forecaster_type.startswith("lstm"):
             from brain_api.core.lstm import LSTMConfig, LSTMModel
 
             config = LSTMConfig(**config_dict)

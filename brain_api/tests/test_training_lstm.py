@@ -1,7 +1,14 @@
-"""API-level tests for LSTM training endpoint."""
+"""API-level tests for LSTM training endpoint.
+
+The endpoint resolves training symbols and storage from the per-bucket
+registry (``brain_api.core.model_buckets``); these tests inject a
+temporary in-memory bucket override so the production registry stays
+untouched while still exercising the full request/response path.
+"""
 
 import os
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -9,15 +16,14 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.lstm import DatasetResult, LSTMModel, TrainingResult
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.main import app
 from brain_api.routes.training import (
     get_dataset_builder,
-    get_forecaster_training_symbols,
     get_price_loader,
-    get_storage,
     get_trainer,
 )
-from brain_api.storage.local import LocalModelStorage
+from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
 
 # ============================================================================
 # Test fixtures and mocks
@@ -33,10 +39,7 @@ def mock_price_loader(symbols, start_date, end_date):
     """Return mock price data for testing."""
     import pandas as pd
 
-    # Create minimal fake price data for each symbol
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")[
-        :100
-    ]  # 100 business days
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]
     prices = {}
     for symbol in symbols:
         prices[symbol] = pd.DataFrame(
@@ -54,11 +57,10 @@ def mock_price_loader(symbols, start_date, end_date):
 
 def mock_dataset_builder(prices, config) -> DatasetResult:
     """Return a mock dataset result for direct 5-day close-return prediction."""
-    # Return non-empty arrays to pass validation checks
     n_samples = 10
     return DatasetResult(
         X=np.random.randn(n_samples, config.sequence_length, config.input_size),
-        y=np.random.randn(n_samples, 5),  # 5 close log returns per sample
+        y=np.random.randn(n_samples, 5),
         feature_scaler=StandardScaler(),
     )
 
@@ -71,7 +73,7 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
         config=config,
         train_loss=0.01,
-        val_loss=0.02,  # Better than baseline (0.05)
+        val_loss=0.02,
         baseline_loss=0.05,
     )
 
@@ -86,7 +88,7 @@ def mock_trainer_worse_than_baseline(
         feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
         config=config,
         train_loss=0.10,
-        val_loss=0.10,  # Worse than baseline (0.05)
+        val_loss=0.10,
         baseline_loss=0.05,
     )
 
@@ -95,27 +97,48 @@ def mock_trainer_worse_than_baseline(
 def temp_storage():
     """Create a temporary storage directory for tests."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield LocalModelStorage(base_path=tmpdir)
+        yield LSTMHalalNewModelStorage(base_path=tmpdir)
+
+
+def _override_lstm_halal_new_bucket(monkeypatch, temp_storage, symbols_fn=mock_symbols):
+    """Swap the ``(LSTM, halal_new)`` registry entry to use the test
+    storage and symbol resolver. Restored automatically by ``monkeypatch``.
+
+    Symbol resolution + storage instantiation now happen inside the
+    endpoint via the bucket registry (the old ``Depends(get_storage)``
+    seam was deliberately removed so two parallel workflows can hit the
+    same endpoint with different universes). Tests therefore mutate the
+    bucket itself; the override is per-test thanks to ``monkeypatch``.
+    """
+    from brain_api.core import model_buckets
+
+    original = get_bucket(ModelType.LSTM, "halal_new")
+    patched = replace(
+        original,
+        local_storage_class=lambda: temp_storage,
+        symbols_resolver=symbols_fn,
+    )
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.LSTM, "halal_new"),
+        patched,
+    )
 
 
 @pytest.fixture
-def client_with_mocks(temp_storage):
+def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies."""
-    # Override dependencies
-    app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+    _override_lstm_halal_new_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
     app.dependency_overrides[get_trainer] = lambda: mock_trainer
 
-    # Set fixed window for deterministic tests
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
     client = TestClient(app)
     yield client
 
-    # Cleanup
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
@@ -138,12 +161,26 @@ def test_train_lstm_no_body_returns_202(client_with_mocks):
     assert response.status_code == 202
 
 
+def test_train_lstm_explicit_universe_returns_202(client_with_mocks):
+    """POST /train/lstm with explicit universe field returns 202 on first call."""
+    response = client_with_mocks.post("/train/lstm", json={"universe": "halal_new"})
+    assert response.status_code == 202
+
+
+def test_train_lstm_unknown_universe_returns_422(client_with_mocks):
+    """Unknown universe in the request body must be rejected with 422."""
+    response = client_with_mocks.post(
+        "/train/lstm", json={"universe": "not_a_universe"}
+    )
+    assert response.status_code == 422
+    assert "not_a_universe" in response.text
+
+
 def test_train_lstm_returns_resolved_window(client_with_mocks):
     """POST /train/lstm returns Friday-anchored data_window_end from config."""
     response1 = client_with_mocks.post("/train/lstm", json={})
     assert response1.status_code == 202
 
-    # Second call returns cached result
     response = client_with_mocks.post("/train/lstm", json={})
     assert response.status_code == 200
 
@@ -168,9 +205,7 @@ def test_train_lstm_returns_required_fields(client_with_mocks):
     assert "data_window_end" in data
     assert "metrics" in data
     assert "promoted" in data
-    # prior_version can be None
 
-    # Check metrics structure
     assert isinstance(data["metrics"], dict)
 
 
@@ -197,18 +232,15 @@ def test_train_lstm_idempotent_version(client_with_mocks):
 
 def test_train_lstm_idempotent_does_not_change_current(client_with_mocks, temp_storage):
     """Rerunning training does not change 'current' pointer if already promoted."""
-    # First call - returns 202, background task promotes
     response1 = client_with_mocks.post("/train/lstm", json={})
     assert response1.status_code == 202
 
-    # Second call - returns 200 cached result
     response2 = client_with_mocks.post("/train/lstm", json={})
     assert response2.status_code == 200
     version2 = response2.json()["version"]
 
     current_after_first = temp_storage.read_current_version()
 
-    # Third call - should return same version without changing current
     response3 = client_with_mocks.post("/train/lstm", json={})
     assert response3.status_code == 200
     version3 = response3.json()["version"]
@@ -236,31 +268,24 @@ def test_train_lstm_first_model_always_promoted(client_with_mocks):
     assert data["promoted"] is True
 
 
-def test_train_lstm_not_promoted_when_worse_than_prior():
+def test_train_lstm_not_promoted_when_worse_than_prior(monkeypatch):
     """Model is NOT promoted when worse than prior model."""
-    # Use a fresh temp storage to avoid conflicts with other tests
     with tempfile.TemporaryDirectory() as tmpdir:
-        fresh_storage = LocalModelStorage(base_path=tmpdir)
+        fresh_storage = LSTMHalalNewModelStorage(base_path=tmpdir)
 
-        # Clear any leftover overrides from previous tests
         app.dependency_overrides.clear()
 
-        # First, create a good model that gets promoted (first model always promoted)
-        app.dependency_overrides[get_storage] = lambda: fresh_storage
-        app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+        _override_lstm_halal_new_bucket(monkeypatch, fresh_storage)
         app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
         app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
         app.dependency_overrides[get_trainer] = lambda: mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
-            "2025-06-15"  # Sunday -> June 13 (Fri)
-        )
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
 
         client = TestClient(app)
 
         try:
-            # Train first model - first call 202, second call 200 cached
             response1 = client.post("/train/lstm", json={})
             assert response1.status_code == 202
 
@@ -269,9 +294,6 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
             first_version = response2.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
-            # Now train a worse model with different date (to generate new version)
-            # June 23, 2025 is Monday -> anchors to June 20 (Fri), different from June 13
-            # mock_trainer_worse_than_baseline returns val_loss=0.10, which is > 0.02 (prior)
             app.dependency_overrides[get_trainer] = (
                 lambda: mock_trainer_worse_than_baseline
             )
@@ -284,10 +306,8 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
             assert response4.status_code == 200
 
             data = response4.json()
-            # Mock trainer returns val_loss=0.10 > prior=0.02
             assert data["promoted"] is False
 
-            # Current should still point to the first version (worse model not promoted)
             current = fresh_storage.read_current_version()
             assert current == first_version
         finally:
@@ -296,14 +316,11 @@ def test_train_lstm_not_promoted_when_worse_than_prior():
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
+def test_train_lstm_current_unchanged_when_not_promoted(temp_storage, monkeypatch):
     """The 'current' pointer is unchanged when promotion fails."""
-    # Clear any leftover overrides from previous tests
     app.dependency_overrides.clear()
 
-    # First, create a good model that gets promoted
-    app.dependency_overrides[get_storage] = lambda: temp_storage
-    app.dependency_overrides[get_forecaster_training_symbols] = mock_symbols
+    _override_lstm_halal_new_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
     app.dependency_overrides[get_trainer] = lambda: mock_trainer
@@ -320,17 +337,11 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
     assert response2.status_code == 200
     promoted_version = response2.json()["version"]
 
-    # Verify it was promoted
     current_before = temp_storage.read_current_version()
     assert current_before == promoted_version
 
-    # Now try with a different window that produces worse results
-    # Use a date that anchors to a DIFFERENT Friday (Jan 10, 2025 = Friday -> Dec 27, 2024)
-    # but Jan 13, 2025 = Monday -> Jan 10, 2025 (Friday) which is different from Dec 27
     app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = (
-        "2025-01-13"  # Monday -> anchors to Jan 10 (Friday), different from Dec 27
-    )
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
 
     response3 = client.post("/train/lstm", json={})
     assert response3.status_code == 202
@@ -339,14 +350,11 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage):
     assert response4.status_code == 200
     data4 = response4.json()
 
-    # Should not be promoted (worse than prior)
     assert data4["promoted"] is False
 
-    # Current should still point to the first version
     current_after = temp_storage.read_current_version()
     assert current_after == promoted_version
 
-    # Cleanup
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)

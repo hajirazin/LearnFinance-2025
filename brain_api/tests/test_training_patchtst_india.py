@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -9,20 +10,29 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
 from brain_api.routes.training.dependencies import (
     get_patchtst_dataset_builder,
-    get_patchtst_india_storage,
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
-from brain_api.routes.training.patchtst_india import _get_india_symbols
-from brain_api.storage.patchtst.local import PatchTSTIndiaModelStorage
+from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 
 
 def _mock_india_symbols() -> list[str]:
     return ["INFY.NS", "TCS.NS"]
+
+
+def _mock_india_symbols_missing_suffix() -> list[str]:
+    """Bad universe resolver -- returns non-NSE symbols.
+
+    Triggers the per-bucket symbol validator that raises 422 to prevent
+    silently fetching the wrong instruments from yfinance (per AGENTS.md
+    rule #1: no silent fallbacks).
+    """
+    return ["INFY", "TCS"]
 
 
 def _mock_price_loader(symbols, start_date, end_date):
@@ -84,13 +94,35 @@ def _mock_trainer_worse(
 @pytest.fixture
 def temp_india_storage():
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield PatchTSTIndiaModelStorage(base_path=tmpdir)
+        yield PatchTSTNiftyShariah500ModelStorage(base_path=tmpdir)
+
+
+def _override_india_patchtst_bucket(
+    monkeypatch, temp_storage, symbols_fn=_mock_india_symbols
+):
+    """Swap the ``(PATCHTST, nifty_shariah_500)`` registry entry.
+
+    Keeps the production validator (``_validate_ns_suffix``) wired so
+    suffix-enforcement tests still exercise that code path.
+    """
+    from brain_api.core import model_buckets
+
+    original = get_bucket(ModelType.PATCHTST, "nifty_shariah_500")
+    patched = replace(
+        original,
+        local_storage_class=lambda: temp_storage,
+        symbols_resolver=symbols_fn,
+    )
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.PATCHTST, "nifty_shariah_500"),
+        patched,
+    )
 
 
 @pytest.fixture
-def client_india(temp_india_storage):
-    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
-    app.dependency_overrides[_get_india_symbols] = _mock_india_symbols
+def client_india(temp_india_storage, monkeypatch):
+    _override_india_patchtst_bucket(monkeypatch, temp_india_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: _mock_dataset_builder
@@ -115,6 +147,50 @@ def test_train_patchtst_india_returns_202(client_india):
     """POST /train/patchtst/india returns 202 (training runs in background)."""
     response = client_india.post(TRAIN_INDIA_URL)
     assert response.status_code == 202
+
+
+def test_train_patchtst_india_explicit_universe_returns_202(client_india):
+    """POST /train/patchtst/india with explicit registered universe returns 202."""
+    response = client_india.post(
+        TRAIN_INDIA_URL, json={"universe": "nifty_shariah_500"}
+    )
+    assert response.status_code == 202
+
+
+def test_train_patchtst_india_unknown_universe_returns_422(client_india):
+    """Unknown universe in request body must be rejected with 422."""
+    response = client_india.post(TRAIN_INDIA_URL, json={"universe": "halal_new"})
+    assert response.status_code == 422
+    assert "halal_new" in response.text
+
+
+def test_train_patchtst_india_rejects_missing_ns_suffix(
+    temp_india_storage, monkeypatch
+):
+    """Symbol resolver returning non-NSE tickers must trip the bucket
+    validator and surface as 422 (no silent fallback).
+    """
+    _override_india_patchtst_bucket(
+        monkeypatch, temp_india_storage, symbols_fn=_mock_india_symbols_missing_suffix
+    )
+    app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
+    app.dependency_overrides[get_patchtst_dataset_builder] = (
+        lambda: _mock_dataset_builder
+    )
+    app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+    try:
+        response = client.post(TRAIN_INDIA_URL)
+        assert response.status_code == 422
+        assert ".NS" in response.text
+    finally:
+        app.dependency_overrides.clear()
+        os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+        os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
 def test_train_patchtst_india_returns_required_fields(client_india):
@@ -156,14 +232,13 @@ def test_train_patchtst_india_first_model_always_promoted(client_india):
     assert response.json()["promoted"] is True
 
 
-def test_train_patchtst_india_not_promoted_when_worse():
+def test_train_patchtst_india_not_promoted_when_worse(monkeypatch):
     """India PatchTST model is NOT promoted when worse than prior."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        storage = PatchTSTIndiaModelStorage(base_path=tmpdir)
+        storage = PatchTSTNiftyShariah500ModelStorage(base_path=tmpdir)
 
         app.dependency_overrides.clear()
-        app.dependency_overrides[get_patchtst_india_storage] = lambda: storage
-        app.dependency_overrides[_get_india_symbols] = _mock_india_symbols
+        _override_india_patchtst_bucket(monkeypatch, storage)
         app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
         app.dependency_overrides[get_patchtst_dataset_builder] = (
             lambda: _mock_dataset_builder
@@ -200,7 +275,7 @@ def test_train_patchtst_india_not_promoted_when_worse():
 
 
 def test_train_patchtst_india_uses_india_storage(client_india, temp_india_storage):
-    """India PatchTST uses patchtst_india storage directory."""
+    """India PatchTST uses the patchtst_nifty_shariah_500 storage directory."""
     response1 = client_india.post(TRAIN_INDIA_URL)
     assert response1.status_code == 202
     response = client_india.post(TRAIN_INDIA_URL)
@@ -208,7 +283,7 @@ def test_train_patchtst_india_uses_india_storage(client_india, temp_india_storag
 
     version = response.json()["version"]
     assert temp_india_storage.version_exists(version)
-    assert temp_india_storage.model_type == "patchtst_india"
+    assert temp_india_storage.model_type == "patchtst_nifty_shariah_500"
 
 
 def test_train_patchtst_india_version_differs_from_us():

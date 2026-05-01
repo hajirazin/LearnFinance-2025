@@ -6,11 +6,11 @@ from pathlib import Path
 from brain_api.core.config import resolve_cutoff_date
 from brain_api.core.lstm import compute_week_boundaries, load_prices_yfinance
 from brain_api.storage.local import (
-    LocalModelStorage,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    LSTMHalalNewModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTNiftyShariah500ModelStorage,
 )
-from brain_api.storage.sac import SACLocalStorage
+from brain_api.storage.sac import SACHalalFilteredModelStorage
 
 from .models import (
     LSTMInferenceRequest,
@@ -28,9 +28,9 @@ WeekBoundaryComputer = type(compute_week_boundaries)
 # ============================================================================
 
 
-def get_storage() -> LocalModelStorage:
-    """Get the model storage instance."""
-    return LocalModelStorage()
+def get_storage() -> LSTMHalalNewModelStorage:
+    """Get the LSTM model storage instance for the halal_new bucket."""
+    return LSTMHalalNewModelStorage()
 
 
 def get_as_of_date(request: LSTMInferenceRequest) -> date:
@@ -54,20 +54,20 @@ def get_week_boundary_computer() -> WeekBoundaryComputer:
 # ============================================================================
 
 
-def get_patchtst_storage() -> PatchTSTModelStorage:
-    """Get the PatchTST model storage instance."""
-    return PatchTSTModelStorage()
+def get_patchtst_storage() -> PatchTSTHalalNewModelStorage:
+    """Get the PatchTST model storage instance for the halal_new bucket."""
+    return PatchTSTHalalNewModelStorage()
 
 
-def get_patchtst_india_storage() -> PatchTSTIndiaModelStorage:
+def get_patchtst_india_storage() -> PatchTSTNiftyShariah500ModelStorage:
     """Get the India PatchTST model storage instance.
 
-    India PatchTST artifacts live under ``data/models/patchtst_india/`` --
+    India PatchTST artifacts live under ``data/models/patchtst_nifty_shariah_500/`` --
     distinct from US weights/scalers because they are trained on a
     different price distribution (Nifty Shariah 500). Reusing US weights
     on Indian symbols would be mathematically wrong.
     """
-    return PatchTSTIndiaModelStorage()
+    return PatchTSTNiftyShariah500ModelStorage()
 
 
 def get_patchtst_as_of_date(request: PatchTSTInferenceRequest) -> date:
@@ -87,9 +87,9 @@ def get_sentiment_parquet_path() -> Path:
 # ============================================================================
 
 
-def get_sac_storage() -> SACLocalStorage:
-    """Get the SAC storage instance."""
-    return SACLocalStorage()
+def get_sac_storage() -> SACHalalFilteredModelStorage:
+    """Get the SAC storage instance for the halal_filtered bucket."""
+    return SACHalalFilteredModelStorage()
 
 
 def get_sac_as_of_date(request: SACInferenceRequest) -> date:

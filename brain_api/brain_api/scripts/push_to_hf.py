@@ -42,23 +42,23 @@ def push_model(version: str, make_current: bool = False) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    from brain_api.core.config import get_hf_lstm_model_repo
+    from brain_api.core.config import get_hf_lstm_halal_new_model_repo
     from brain_api.storage.huggingface import HuggingFaceModelStorage
-    from brain_api.storage.local import LocalModelStorage
+    from brain_api.storage.local import LSTMHalalNewModelStorage
 
     # Check HF repo is configured
-    hf_repo = get_hf_lstm_model_repo()
+    hf_repo = get_hf_lstm_halal_new_model_repo()
     if not hf_repo:
-        print("Error: HF_LSTM_MODEL_REPO environment variable not set")
+        print("Error: HF_LSTM_HALAL_NEW_MODEL_REPO environment variable not set")
         return 1
 
     # Load local storage
-    local_storage = LocalModelStorage()
+    local_storage = LSTMHalalNewModelStorage()
 
     # Check version exists locally
     if not local_storage.version_exists(version):
         print(f"Error: Model version '{version}' not found locally")
-        print(f"       Expected at: data/models/lstm/{version}/")
+        print(f"       Expected at: data/models/lstm_halal_new/{version}/")
         return 1
 
     print(f"Loading model version: {version}")
@@ -169,9 +169,9 @@ def list_local_models() -> int:
     Returns:
         Exit code (0 for success)
     """
-    from brain_api.storage.local import LocalModelStorage
+    from brain_api.storage.local import LSTMHalalNewModelStorage
 
-    local_storage = LocalModelStorage()
+    local_storage = LSTMHalalNewModelStorage()
     lstm_path = local_storage.lstm_path
 
     if not lstm_path.exists():

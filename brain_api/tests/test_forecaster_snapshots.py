@@ -24,17 +24,22 @@ class TestSnapshotLocalStorage:
     """Tests for SnapshotLocalStorage class."""
 
     def test_init_creates_storage(self, tmp_path):
-        """Test storage initialization."""
+        """Test storage initialization.
+
+        Legacy short forecaster type ``"lstm"`` is normalised to the
+        canonical bucket name ``"lstm_halal_new"`` so SAC's existing
+        walk-forward callers keep working without a code change.
+        """
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
-        assert storage.forecaster_type == "lstm"
+        assert storage.forecaster_type == "lstm_halal_new"
         assert storage.base_path == tmp_path
 
     def test_snapshot_path(self, tmp_path):
         """Test snapshot path generation (flat structure, sibling to main versions)."""
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        # New flat structure: models/lstm/snapshot-2019-12-31 (not in snapshots/ subfolder)
-        expected = tmp_path / "models" / "lstm" / "snapshot-2019-12-31"
+        # Flat structure under the canonical bucket directory.
+        expected = tmp_path / "models" / "lstm_halal_new" / "snapshot-2019-12-31"
         assert storage._snapshot_path(cutoff) == expected
 
     def test_snapshot_exists_false(self, tmp_path):
@@ -224,6 +229,16 @@ class TestWalkForwardForecasts:
                 "brain_api.storage.forecaster_snapshots.local.DEFAULT_DATA_PATH",
                 tmp_path,
             ),
+            # Block the HuggingFace fallback -- the developer's local
+            # ``.env`` may set ``HF_LSTM_HALAL_NEW_MODEL_REPO`` (it does in
+            # this repo), and a populated remote repo would otherwise
+            # satisfy the snapshot lookup and mask the missing-snapshot
+            # error this test is meant to assert.
+            patch.object(
+                SnapshotLocalStorage,
+                "_get_hf_repo",
+                return_value=None,
+            ),
             pytest.raises(SnapshotUnavailableError),
         ):
             build_forecast_features(
@@ -317,6 +332,7 @@ class TestBackfillSnapshotRange:
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
         mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.forecaster_type = "lstm_halal_new"
 
         mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
         mock_dataset = MagicMock()
@@ -423,6 +439,7 @@ class TestBackfillSnapshotRange:
         from brain_api.routes.training.lstm import _backfill_lstm_snapshots
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
+        mock_storage.forecaster_type = "lstm_halal_new"
 
         # Simulate: 2015-12-31 exists, all others don't
         def exists_side_effect(cutoff_date, check_hf=False):
@@ -477,6 +494,7 @@ class TestBackfillSnapshotRange:
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
         mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.forecaster_type = "lstm_halal_new"
 
         mock_prices = {"AAPL": MagicMock()}
         mock_dataset = MagicMock()
@@ -528,19 +546,29 @@ class TestPatchTSTSnapshots:
     """Tests specific to PatchTST snapshot handling."""
 
     def test_patchtst_storage_type(self, tmp_path):
-        """Test PatchTST storage is properly typed."""
+        """Legacy ``"patchtst"`` resolves to the canonical bucket name."""
         storage = SnapshotLocalStorage("patchtst", base_path=tmp_path)
-        assert storage.forecaster_type == "patchtst"
-        # New flat structure: models path where snapshots live as siblings to main versions
-        expected = tmp_path / "models" / "patchtst"
+        assert storage.forecaster_type == "patchtst_halal_new"
+        expected = tmp_path / "models" / "patchtst_halal_new"
         assert storage._models_path == expected
+
+    def test_patchtst_india_storage_type(self, tmp_path):
+        """India PatchTST snapshots live under their own bucket directory."""
+        storage = SnapshotLocalStorage("patchtst_nifty_shariah_500", base_path=tmp_path)
+        assert storage.forecaster_type == "patchtst_nifty_shariah_500"
+        expected = tmp_path / "models" / "patchtst_nifty_shariah_500"
+        assert storage._models_path == expected
+
+    def test_unknown_forecaster_type_raises(self, tmp_path):
+        """Unknown bucket names fail fast (no silent fallback)."""
+        with pytest.raises(ValueError):
+            SnapshotLocalStorage("not_a_bucket", base_path=tmp_path)
 
     def test_patchtst_snapshot_path(self, tmp_path):
         """Test PatchTST snapshot path generation (flat structure)."""
         storage = SnapshotLocalStorage("patchtst", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        # New flat structure: models/patchtst/snapshot-2019-12-31 (not in snapshots/ subfolder)
-        expected = tmp_path / "models" / "patchtst" / "snapshot-2019-12-31"
+        expected = tmp_path / "models" / "patchtst_halal_new" / "snapshot-2019-12-31"
         assert storage._snapshot_path(cutoff) == expected
 
 

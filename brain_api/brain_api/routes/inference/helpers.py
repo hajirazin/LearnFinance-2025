@@ -6,8 +6,8 @@ from datetime import date
 from fastapi import HTTPException
 
 from brain_api.core.config import (
-    get_hf_lstm_model_repo,
-    get_hf_patchtst_model_repo,
+    get_hf_lstm_halal_new_model_repo,
+    get_hf_patchtst_halal_new_model_repo,
     get_storage_backend,
 )
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
@@ -176,19 +176,19 @@ def _load_model_artifacts(storage: LocalModelStorage) -> LSTMArtifacts:
     from brain_api.storage.huggingface import HuggingFaceModelStorage
 
     return _load_model_artifacts_generic(
-        "LSTM", storage, HuggingFaceModelStorage, get_hf_lstm_model_repo()
+        "LSTM", storage, HuggingFaceModelStorage, get_hf_lstm_halal_new_model_repo()
     )
 
 
 def _load_patchtst_model_artifacts(storage: PatchTSTModelStorage) -> PatchTSTArtifacts:
     """Load PatchTST model artifacts with HuggingFace fallback."""
-    from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
+    from brain_api.storage.huggingface import PatchTSTHalalNewHuggingFaceModelStorage
 
     return _load_model_artifacts_generic(
         "PatchTST",
         storage,
-        PatchTSTHuggingFaceModelStorage,
-        get_hf_patchtst_model_repo(),
+        PatchTSTHalalNewHuggingFaceModelStorage,
+        get_hf_patchtst_halal_new_model_repo(),
     )
 
 

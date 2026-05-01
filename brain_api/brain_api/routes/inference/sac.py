@@ -4,12 +4,18 @@ import logging
 import time
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
+    list_universes_for,
+)
 from brain_api.core.sac import run_sac_inference
 from brain_api.core.training_utils import get_device
-from brain_api.storage.sac import SACLocalStorage
+from brain_api.storage.sac import SACHalalFilteredModelStorage
 
 from .dependencies import get_sac_as_of_date, get_sac_storage
 from .models import SACInferenceRequest, SACInferenceResponse, WeightChange
@@ -21,7 +27,15 @@ logger = logging.getLogger(__name__)
 @router.post("/sac", response_model=SACInferenceResponse)
 def infer_sac(
     request: SACInferenceRequest,
-    storage: SACLocalStorage = Depends(get_sac_storage),
+    universe: str | None = Query(
+        default=None,
+        description=(
+            "Optional bucket override. Defaults to the only registered SAC "
+            "universe (`halal_filtered`). Future buckets (e.g. `halal`) can "
+            "be selected without breaking existing callers."
+        ),
+    ),
+    storage: SACHalalFilteredModelStorage = Depends(get_sac_storage),
 ) -> SACInferenceResponse:
     """Get target portfolio weights from SAC policy.
 
@@ -40,6 +54,17 @@ def infer_sac(
     """
     t_start = time.time()
     logger.info("[SAC] Starting inference")
+
+    if universe is not None:
+        try:
+            bucket = get_bucket(ModelType.SAC, universe)
+        except UnknownBucketError as exc:
+            allowed = sorted(list_universes_for(ModelType.SAC))
+            raise HTTPException(
+                status_code=422,
+                detail=(f"Unknown universe '{universe}' for SAC. Allowed: {allowed}"),
+            ) from exc
+        storage = bucket.local_storage_class()
 
     # Get cutoff date (always a Friday)
     cutoff_date = get_sac_as_of_date(request)

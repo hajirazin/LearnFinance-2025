@@ -8,13 +8,18 @@ from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_hf_patchtst_model_repo,
     get_storage_backend,
     resolve_training_window,
+)
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
 )
 from brain_api.core.patchtst import PatchTSTConfig, align_multivariate_data
 from brain_api.core.patchtst import (
@@ -37,17 +42,16 @@ from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
 )
-from brain_api.storage.local import PatchTSTModelStorage, create_patchtst_metadata
+from brain_api.storage.local import create_patchtst_metadata
+from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
 
 from .dependencies import (
     PatchTSTDatasetBuilder,
     PatchTSTPriceLoader,
     PatchTSTTrainer,
-    get_forecaster_training_symbols,
     get_patchtst_config,
     get_patchtst_dataset_builder,
     get_patchtst_price_loader,
-    get_patchtst_storage,
     get_patchtst_trainer,
 )
 from .helpers import get_prior_version_info
@@ -63,10 +67,28 @@ from .models import PatchTSTTrainResponse, TrainingJobResponse
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Universes the US PatchTST endpoint accepts. India PatchTST is served
+# by ``/train/patchtst/india`` (see patchtst_india.py); each market gets
+# its own endpoint per product policy, even though the registry knows
+# about both PatchTST buckets.
+_PATCHTST_US_ALLOWED_UNIVERSES: frozenset[str] = frozenset({"halal_new"})
+
+
+class PatchTSTTrainRequest(BaseModel):
+    """Body for POST /train/patchtst (US)."""
+
+    universe: str = Field(
+        default="halal_new",
+        description=(
+            "Universe to train on. Must be one of the registered US "
+            f"PatchTST buckets: {sorted(_PATCHTST_US_ALLOWED_UNIVERSES)}."
+        ),
+    )
+
 
 def _train_patchtst_core(
     symbols: list[str],
-    storage: PatchTSTModelStorage,
+    storage: PatchTSTHalalNewModelStorage,
     hf_storage_class: type,
     hf_model_repo_getter: Callable[[], str | None],
     snapshot_forecaster_type: str,
@@ -86,10 +108,12 @@ def _train_patchtst_core(
 
     Args:
         symbols: Stock symbols to train on.
-        storage: Local model storage instance.
-        hf_storage_class: HuggingFace storage class for this market.
+        storage: Local model storage instance for the bucket.
+        hf_storage_class: HuggingFace storage class for this bucket.
         hf_model_repo_getter: Callable returning HF repo ID.
-        snapshot_forecaster_type: "patchtst" or "patchtst_india".
+        snapshot_forecaster_type: Bucket name (e.g.
+            ``"patchtst_halal_new"``) used as the snapshot subdirectory
+            and HF dispatch key.
         skip_snapshot: Skip saving snapshots.
         config: PatchTST training configuration.
         price_loader: Function to load price data.
@@ -244,7 +268,7 @@ def _train_patchtst_core(
 
     if storage_backend == "hf" and hf_model_repo:
         try:
-            hf_storage = hf_storage_class(repo_id=hf_model_repo)
+            hf_storage = hf_storage_class(repo_id=hf_model_repo, local_cache=storage)
             hf_has_main = hf_storage.get_current_version() is not None
             should_make_current = promoted or not hf_has_main
             logger.info(
@@ -331,12 +355,11 @@ def _train_patchtst_core(
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
     background_tasks: BackgroundTasks,
+    request: PatchTSTTrainRequest = PatchTSTTrainRequest(),
     skip_snapshot: bool = Query(
         False,
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
-    storage: PatchTSTModelStorage = Depends(get_patchtst_storage),
-    symbols: list[str] = Depends(get_forecaster_training_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
@@ -348,9 +371,31 @@ def train_patchtst(
     Returns 202 with job_id if training is started in the background.
     Poll GET /train/status/{job_id} for progress and final result.
     """
+    if request.universe not in _PATCHTST_US_ALLOWED_UNIVERSES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe {request.universe!r} for /train/patchtst. "
+                f"Valid options: {sorted(_PATCHTST_US_ALLOWED_UNIVERSES)}."
+            ),
+        )
+    try:
+        bucket = get_bucket(ModelType.PATCHTST, request.universe)
+    except UnknownBucketError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    symbols = bucket.symbols_resolver()
+    if bucket.symbol_validator is not None:
+        try:
+            bucket.symbol_validator(symbols)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    storage: PatchTSTHalalNewModelStorage = bucket.local_storage_class()
+
     start_date, end_date = resolve_training_window()
     version = patchtst_compute_version(start_date, end_date, symbols, config)
-    logger.info(f"[PatchTST] Computed version: {version}")
+    logger.info(f"[PatchTST] Computed version: {version} (bucket={bucket.bucket_name})")
 
     if storage.version_exists(version):
         logger.info(f"[PatchTST] Version {version} already exists (idempotent)")
@@ -379,16 +424,14 @@ def train_patchtst(
             ).model_dump(),
         )
 
-    from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
-
     background_tasks.add_task(
         _run_patchtst_training,
         job_id=job.job_id,
         symbols=symbols,
         storage=storage,
-        hf_storage_class=PatchTSTHuggingFaceModelStorage,
-        hf_model_repo_getter=get_hf_patchtst_model_repo,
-        snapshot_forecaster_type="patchtst",
+        hf_storage_class=bucket.hf_storage_class,
+        hf_model_repo_getter=bucket.hf_repo_getter,
+        snapshot_forecaster_type=bucket.bucket_name,
         skip_snapshot=skip_snapshot,
         config=config,
         price_loader=price_loader,
@@ -412,7 +455,7 @@ def _run_patchtst_training(
     *,
     job_id: str,
     symbols: list[str],
-    storage: PatchTSTModelStorage,
+    storage: PatchTSTHalalNewModelStorage,
     hf_storage_class: type,
     hf_model_repo_getter: Callable[[], str | None],
     snapshot_forecaster_type: str,

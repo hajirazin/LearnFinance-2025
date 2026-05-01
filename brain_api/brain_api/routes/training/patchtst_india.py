@@ -1,26 +1,31 @@
 """India PatchTST training endpoint.
 
-Trains a PatchTST model on NiftyShariah500 (.NS-suffixed) symbols,
-storing artifacts separately under data/models/patchtst_india/.
-Reuses the shared _train_patchtst_core() so no training logic is duplicated.
+Trains a PatchTST model on the ``nifty_shariah_500`` universe (~210
+``.NS``-suffixed Indian Shariah constituents). Artifacts live in their
+own bucket (``data/models/patchtst_nifty_shariah_500/``) with an
+independent ``current`` pointer; promoting India PatchTST MUST NOT
+touch the US ``patchtst_halal_new`` pointer.
+
+Per AGENTS.md, the broad universe is the right tier for forecaster
+training. The sticky-15 ``halal_india`` slate is for future India SAC
+training (separate endpoint), not for PatchTST itself.
 """
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
-from brain_api.core.config import (
-    get_hf_patchtst_india_model_repo,
-    resolve_training_window,
+from brain_api.core.config import resolve_training_window
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
 )
 from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import compute_version as patchtst_compute_version
-from brain_api.storage.patchtst.huggingface import (
-    PatchTSTIndiaHuggingFaceModelStorage,
-)
-from brain_api.storage.patchtst.local import PatchTSTIndiaModelStorage
-from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
+from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 
 from .dependencies import (
     PatchTSTDatasetBuilder,
@@ -28,7 +33,6 @@ from .dependencies import (
     PatchTSTTrainer,
     get_patchtst_config,
     get_patchtst_dataset_builder,
-    get_patchtst_india_storage,
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
@@ -39,21 +43,32 @@ from .patchtst import _run_patchtst_training
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# India PatchTST is single-bucket today; an A/B universe (e.g. a
+# liquid-only India slate) would be added by registering a new bucket
+# and extending this allowlist.
+_PATCHTST_INDIA_ALLOWED_UNIVERSES: frozenset[str] = frozenset({"nifty_shariah_500"})
 
-def _get_india_symbols() -> list[str]:
-    """Get NiftyShariah500 symbols for India PatchTST training."""
-    return get_nifty_shariah_500_symbols()
+
+class PatchTSTIndiaTrainRequest(BaseModel):
+    """Body for POST /train/patchtst/india."""
+
+    universe: str = Field(
+        default="nifty_shariah_500",
+        description=(
+            "India PatchTST universe. Must be one of: "
+            f"{sorted(_PATCHTST_INDIA_ALLOWED_UNIVERSES)}."
+        ),
+    )
 
 
 @router.post("/patchtst/india", response_model=PatchTSTTrainResponse)
 def train_patchtst_india(
     background_tasks: BackgroundTasks,
+    request: PatchTSTIndiaTrainRequest = PatchTSTIndiaTrainRequest(),
     skip_snapshot: bool = Query(
         False,
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
-    storage: PatchTSTIndiaModelStorage = Depends(get_patchtst_india_storage),
-    symbols: list[str] = Depends(_get_india_symbols),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
@@ -65,9 +80,36 @@ def train_patchtst_india(
     Returns 202 with job_id if training is started in the background.
     Poll GET /train/status/{job_id} for progress and final result.
     """
+    if request.universe not in _PATCHTST_INDIA_ALLOWED_UNIVERSES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe {request.universe!r} for /train/patchtst/india. "
+                f"Valid options: {sorted(_PATCHTST_INDIA_ALLOWED_UNIVERSES)}."
+            ),
+        )
+    try:
+        bucket = get_bucket(ModelType.PATCHTST, request.universe)
+    except UnknownBucketError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    symbols = bucket.symbols_resolver()
+    # India bucket has the .NS-suffix validator wired in the registry;
+    # raise as 422 if the upstream universe builder ever returns a
+    # mistakenly-stripped symbol (per AGENTS.md no silent fallback).
+    if bucket.symbol_validator is not None:
+        try:
+            bucket.symbol_validator(symbols)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    storage: PatchTSTNiftyShariah500ModelStorage = bucket.local_storage_class()
+
     start_date, end_date = resolve_training_window()
     version = patchtst_compute_version(start_date, end_date, symbols, config)
-    logger.info(f"[PatchTST India] Computed version: {version}")
+    logger.info(
+        f"[PatchTST India] Computed version: {version} (bucket={bucket.bucket_name})"
+    )
 
     if storage.version_exists(version):
         logger.info(f"[PatchTST India] Version {version} already exists (idempotent)")
@@ -101,9 +143,9 @@ def train_patchtst_india(
         job_id=job.job_id,
         symbols=symbols,
         storage=storage,
-        hf_storage_class=PatchTSTIndiaHuggingFaceModelStorage,
-        hf_model_repo_getter=get_hf_patchtst_india_model_repo,
-        snapshot_forecaster_type="patchtst_india",
+        hf_storage_class=bucket.hf_storage_class,
+        hf_model_repo_getter=bucket.hf_repo_getter,
+        snapshot_forecaster_type=bucket.bucket_name,
         skip_snapshot=skip_snapshot,
         config=config,
         price_loader=price_loader,

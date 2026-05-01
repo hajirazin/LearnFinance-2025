@@ -7,17 +7,24 @@ from enum import Enum
 # Environment variable names
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
-ENV_FORECASTER_TRAIN_UNIVERSE = "FORECASTER_TRAIN_UNIVERSE"
 ENV_ETL_UNIVERSE = "ETL_UNIVERSE"
-ENV_RL_TRAIN_UNIVERSE = "RL_TRAIN_UNIVERSE"
 ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
+#
+# Per-bucket HF repos. The naming convention is
+# ``HF_{MODEL}_{UNIVERSE}_MODEL_REPO`` so that adding a new bucket
+# (e.g. ``sac_halal`` or ``sac_halal_india`` for an A/B comparison)
+# is one new env var without disturbing existing buckets. Each bucket
+# has an independent ``current`` pointer on HF; promoting one MUST NOT
+# touch another.
 ENV_HF_TOKEN = "HF_TOKEN"
-ENV_HF_LSTM_MODEL_REPO = "HF_LSTM_MODEL_REPO"  # LSTM forecaster
-ENV_HF_PATCHTST_MODEL_REPO = "HF_PATCHTST_MODEL_REPO"  # PatchTST forecaster
-ENV_HF_SAC_MODEL_REPO = "HF_SAC_MODEL_REPO"  # SAC allocator (dual forecasts)
-ENV_HF_PATCHTST_INDIA_MODEL_REPO = "HF_PATCHTST_INDIA_MODEL_REPO"  # India PatchTST
+ENV_HF_LSTM_HALAL_NEW_MODEL_REPO = "HF_LSTM_HALAL_NEW_MODEL_REPO"
+ENV_HF_PATCHTST_HALAL_NEW_MODEL_REPO = "HF_PATCHTST_HALAL_NEW_MODEL_REPO"
+ENV_HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO = (
+    "HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO"
+)
+ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO = "HF_SAC_HALAL_FILTERED_MODEL_REPO"
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
@@ -32,10 +39,17 @@ DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
 
 
 class UniverseType(str, Enum):
-    """Stock universe types for training models.
+    """Stock universe types for training models and ETL.
 
     Each universe represents a different set of stocks to train on.
     Using str as base class allows direct string comparison and serialization.
+
+    Universe selection for *training* now flows through the per-bucket
+    registry (see ``brain_api.core.model_buckets``) instead of an env
+    var, so a workflow can A/B-test two universes against the same
+    endpoint concurrently. ``UniverseType`` is retained for ETL
+    selection only; the training endpoints accept the universe as a
+    request body field instead.
     """
 
     HALAL = "halal"  # Halal ETF universe (~14 stocks from SPUS/HLAL/SPTE)
@@ -46,17 +60,7 @@ class UniverseType(str, Enum):
     NIFTY_SHARIAH_500 = "nifty_shariah_500"  # All ~210 Nifty 500 Shariah constituents
 
 
-DEFAULT_FORECASTER_TRAIN_UNIVERSE = UniverseType.HALAL_NEW
 DEFAULT_ETL_UNIVERSE = UniverseType.HALAL_FILTERED
-DEFAULT_RL_TRAIN_UNIVERSE = UniverseType.HALAL_FILTERED
-
-# RL allocators require exactly 15 stocks. Only these universes produce 15.
-RL_ALLOWED_UNIVERSES: frozenset[UniverseType] = frozenset(
-    {
-        UniverseType.HALAL,  # top 15 from halal ETF holdings
-        UniverseType.HALAL_FILTERED,  # top 15 from factor-scored halal_new
-    }
-)
 
 
 def get_hf_token() -> str | None:
@@ -64,24 +68,24 @@ def get_hf_token() -> str | None:
     return os.environ.get(ENV_HF_TOKEN)
 
 
-def get_hf_lstm_model_repo() -> str | None:
-    """Get HuggingFace LSTM model repository name (e.g., 'username/learnfinance-lstm')."""
-    return os.environ.get(ENV_HF_LSTM_MODEL_REPO)
+def get_hf_lstm_halal_new_model_repo() -> str | None:
+    """Get HF repo for LSTM trained on the ``halal_new`` universe."""
+    return os.environ.get(ENV_HF_LSTM_HALAL_NEW_MODEL_REPO)
 
 
-def get_hf_patchtst_model_repo() -> str | None:
-    """Get HuggingFace PatchTST model repository name."""
-    return os.environ.get(ENV_HF_PATCHTST_MODEL_REPO)
+def get_hf_patchtst_halal_new_model_repo() -> str | None:
+    """Get HF repo for PatchTST trained on the ``halal_new`` universe."""
+    return os.environ.get(ENV_HF_PATCHTST_HALAL_NEW_MODEL_REPO)
 
 
-def get_hf_patchtst_india_model_repo() -> str | None:
-    """Get HuggingFace India PatchTST model repository name."""
-    return os.environ.get(ENV_HF_PATCHTST_INDIA_MODEL_REPO)
+def get_hf_patchtst_nifty_shariah_500_model_repo() -> str | None:
+    """Get HF repo for PatchTST trained on the ``nifty_shariah_500`` universe (India)."""
+    return os.environ.get(ENV_HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO)
 
 
-def get_hf_sac_model_repo() -> str | None:
-    """Get HuggingFace SAC model repository name (unified with dual forecasts)."""
-    return os.environ.get(ENV_HF_SAC_MODEL_REPO)
+def get_hf_sac_halal_filtered_model_repo() -> str | None:
+    """Get HF repo for SAC trained on the ``halal_filtered`` universe."""
+    return os.environ.get(ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO)
 
 
 def get_hf_news_sentiment_repo() -> str | None:
@@ -97,33 +101,6 @@ def get_hf_twitter_sentiment_repo() -> str | None:
 def get_storage_backend() -> str:
     """Get the storage backend to use ('local' or 'hf')."""
     return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
-
-
-def get_forecaster_train_universe() -> UniverseType:
-    """Get forecaster training universe from environment.
-
-    Controls which stock universe LSTM and PatchTST are trained on.
-    Different universes produce different model versions (symbols are
-    included in version hash).
-
-    Returns:
-        UniverseType enum value.
-
-    Raises:
-        ValueError: If FORECASTER_TRAIN_UNIVERSE env var has an invalid value.
-    """
-    env_value = os.environ.get(ENV_FORECASTER_TRAIN_UNIVERSE, "")
-    if not env_value:
-        return DEFAULT_FORECASTER_TRAIN_UNIVERSE
-
-    try:
-        return UniverseType(env_value.lower())
-    except ValueError as err:
-        valid_options = [e.value for e in UniverseType]
-        raise ValueError(
-            f"Invalid FORECASTER_TRAIN_UNIVERSE='{env_value}'. "
-            f"Valid options: {valid_options}"
-        ) from err
 
 
 def get_etl_universe() -> UniverseType:
@@ -149,40 +126,6 @@ def get_etl_universe() -> UniverseType:
         raise ValueError(
             f"Invalid ETL_UNIVERSE='{env_value}'. Valid options: {valid_options}"
         ) from err
-
-
-def get_rl_train_universe() -> UniverseType:
-    """Get RL/HRP training universe from environment.
-
-    Controls which stock universe SAC and HRP are trained on.
-    Restricted to RL_ALLOWED_UNIVERSES (halal, halal_filtered) because
-    RL allocators require exactly 15 stocks.
-
-    Returns:
-        UniverseType enum value (always in RL_ALLOWED_UNIVERSES).
-
-    Raises:
-        ValueError: If RL_TRAIN_UNIVERSE env var is invalid or not in allowlist.
-    """
-    env_value = os.environ.get(ENV_RL_TRAIN_UNIVERSE, "")
-    if not env_value:
-        return DEFAULT_RL_TRAIN_UNIVERSE
-
-    try:
-        universe = UniverseType(env_value.lower())
-    except ValueError as err:
-        valid_options = sorted(e.value for e in RL_ALLOWED_UNIVERSES)
-        raise ValueError(
-            f"Invalid RL_TRAIN_UNIVERSE='{env_value}'. Valid options: {valid_options}"
-        ) from err
-
-    if universe not in RL_ALLOWED_UNIVERSES:
-        valid_options = sorted(e.value for e in RL_ALLOWED_UNIVERSES)
-        raise ValueError(
-            f"RL_TRAIN_UNIVERSE='{env_value}' is not allowed for RL. "
-            f"RL requires exactly 15 stocks. Valid options: {valid_options}"
-        )
-    return universe
 
 
 def resolve_cutoff_date(reference_date: date | None = None) -> date:

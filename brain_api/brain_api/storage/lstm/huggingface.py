@@ -27,7 +27,7 @@ class HuggingFaceModelStorage(
 
     @property
     def model_type(self) -> str:
-        return "lstm"
+        return "lstm_halal_new"
 
     def _create_local_storage(self) -> LocalModelStorage:
         return LocalModelStorage()

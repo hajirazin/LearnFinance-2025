@@ -83,11 +83,13 @@ def _make_us_training_activities(
         return halal_new
 
     @activity.defn(name="train_lstm")
-    def mock_lstm():
+    def mock_lstm(universe: str):
+        assert universe == "halal_new"
         return training
 
     @activity.defn(name="train_patchtst")
-    def mock_ptst():
+    def mock_ptst(universe: str):
+        assert universe == "halal_new"
         return training
 
     @activity.defn(name="fetch_halal_filtered_universe")
@@ -99,7 +101,8 @@ def _make_us_training_activities(
         return refresh
 
     @activity.defn(name="train_sac")
-    def mock_sac():
+    def mock_sac(universe: str):
+        assert universe == "halal_filtered"
         return training
 
     @activity.defn(name="generate_training_summary")

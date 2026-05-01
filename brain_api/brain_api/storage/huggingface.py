@@ -14,7 +14,10 @@ from brain_api.storage.lstm.huggingface import (
 
 # PatchTST HuggingFace storage
 from brain_api.storage.patchtst.huggingface import (
-    PatchTSTHuggingFaceModelStorage,
+    PatchTSTHalalNewHuggingFaceModelStorage,
+    PatchTSTHuggingFaceModelStorage,  # Backward compatibility alias
+    PatchTSTIndiaHuggingFaceModelStorage,  # Backward compatibility alias
+    PatchTSTNiftyShariah500HuggingFaceModelStorage,
 )
 
 # SAC HuggingFace storage (unified with dual forecasts)
@@ -29,7 +32,10 @@ __all__ = [
     # LSTM
     "HuggingFaceModelStorage",
     # PatchTST
-    "PatchTSTHuggingFaceModelStorage",
+    "PatchTSTHalalNewHuggingFaceModelStorage",
+    "PatchTSTHuggingFaceModelStorage",  # Backward compatibility alias
+    "PatchTSTIndiaHuggingFaceModelStorage",  # Backward compatibility alias
+    "PatchTSTNiftyShariah500HuggingFaceModelStorage",
     # SAC (unified with dual forecasts)
     "SACHuggingFaceModelStorage",
 ]

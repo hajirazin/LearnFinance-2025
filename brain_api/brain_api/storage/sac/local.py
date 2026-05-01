@@ -44,11 +44,11 @@ class SACArtifacts:
     version: str
 
 
-class SACLocalStorage:
-    """Local filesystem storage for SAC model artifacts.
+class SACHalalFilteredModelStorage:
+    """Local filesystem storage for SAC trained on the halal_filtered universe.
 
     Artifacts are stored under:
-        {base_path}/models/sac/{version}/
+        {base_path}/models/sac_halal_filtered/{version}/
             - actor.pt              (Actor network weights)
             - critic.pt             (Twin critic weights)
             - critic_target.pt      (Target critic weights)
@@ -59,7 +59,12 @@ class SACLocalStorage:
             - metadata.json         (training info, metrics, data window)
 
     The current version pointer is stored at:
-        {base_path}/models/sac/current
+        {base_path}/models/sac_halal_filtered/current
+
+    The bucket name encodes ``(model, universe)``; an A/B comparison
+    SAC bucket on a different universe (e.g. ``sac_halal``) would be a
+    sibling subclass with its own ``current`` pointer. See
+    ``brain_api.core.model_buckets``.
     """
 
     def __init__(self, base_path: Path | str | None = None):
@@ -71,12 +76,12 @@ class SACLocalStorage:
         if base_path is None:
             base_path = DEFAULT_DATA_PATH
         self.base_path = Path(base_path)
-        self._model_path = self.base_path / "models" / "sac"
+        self._model_path = self.base_path / "models" / "sac_halal_filtered"
 
     @property
     def model_type(self) -> str:
         """Return model type identifier."""
-        return "sac"
+        return "sac_halal_filtered"
 
     def _version_path(self, version: str) -> Path:
         """Get the path for a specific version."""
@@ -336,6 +341,11 @@ class SACLocalStorage:
         return self.load_artifacts(version)
 
 
+# Backward compatibility alias for callers that pre-date the
+# {model}_{universe} naming convention.
+SACLocalStorage = SACHalalFilteredModelStorage
+
+
 def create_sac_metadata(
     version: str,
     data_window_start: str,
@@ -374,7 +384,7 @@ def create_sac_metadata(
         Metadata dictionary.
     """
     return {
-        "model_type": "sac",
+        "model_type": "sac_halal_filtered",
         "version": version,
         "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {

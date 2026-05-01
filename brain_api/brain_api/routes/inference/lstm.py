@@ -4,7 +4,7 @@ import logging
 import time
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.lstm import (
@@ -12,7 +12,13 @@ from brain_api.core.lstm import (
     build_inference_features,
     run_inference,
 )
-from brain_api.storage.local import LocalModelStorage
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
+    list_universes_for,
+)
+from brain_api.storage.local import LSTMHalalNewModelStorage
 
 from .dependencies import (
     PriceLoader,
@@ -30,7 +36,15 @@ logger = logging.getLogger(__name__)
 @router.post("/lstm", response_model=LSTMInferenceResponse)
 def infer_lstm(
     request: LSTMInferenceRequest,
-    storage: LocalModelStorage = Depends(get_storage),
+    universe: str | None = Query(
+        default=None,
+        description=(
+            "Optional bucket override. Defaults to the only registered LSTM "
+            "universe (`halal_new`). Use this to point inference at a future "
+            "bucket without breaking existing callers."
+        ),
+    ),
+    storage: LSTMHalalNewModelStorage = Depends(get_storage),
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> LSTMInferenceResponse:
     """Predict weekly returns using the current LSTM model.
@@ -43,9 +57,21 @@ def infer_lstm(
 
     Raises:
         HTTPException 400: if no current model version is available
+        HTTPException 422: if ``universe`` is not a registered LSTM bucket
         HTTPException 503: if model artifacts cannot be loaded
     """
     t_start = time.time()
+
+    if universe is not None:
+        try:
+            bucket = get_bucket(ModelType.LSTM, universe)
+        except UnknownBucketError as exc:
+            allowed = sorted(list_universes_for(ModelType.LSTM))
+            raise HTTPException(
+                status_code=422,
+                detail=(f"Unknown universe '{universe}' for LSTM. Allowed: {allowed}"),
+            ) from exc
+        storage = bucket.local_storage_class()
 
     version = storage.read_current_version()
     if not version:

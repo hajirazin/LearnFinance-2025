@@ -98,7 +98,8 @@ def _make_india_training_activities(
         return nifty
 
     @activity.defn(name="train_india_patchtst")
-    def mock_train():
+    def mock_train(universe: str):
+        assert universe == "nifty_shariah_500"
         return training
 
     @activity.defn(name="fetch_halal_india_universe")

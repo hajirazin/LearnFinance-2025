@@ -16,7 +16,7 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
-from brain_api.core.config import get_hf_sac_model_repo, get_hf_token
+from brain_api.core.config import get_hf_sac_halal_filtered_model_repo, get_hf_token
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac.config import SACConfig
@@ -65,11 +65,12 @@ class SACHuggingFaceModelStorage:
         """Initialize SAC HuggingFace model storage.
 
         Args:
-            repo_id: HuggingFace repo ID. Defaults to HF_SAC_MODEL_REPO env var.
+            repo_id: HuggingFace repo ID. Defaults to
+                ``HF_SAC_HALAL_FILTERED_MODEL_REPO`` env var.
             token: HuggingFace API token.
             local_cache: Optional local storage for caching downloaded models.
         """
-        self.repo_id = repo_id or get_hf_sac_model_repo()
+        self.repo_id = repo_id or get_hf_sac_halal_filtered_model_repo()
         self.token = token or get_hf_token()
         self.local_cache = local_cache or SACLocalStorage()
         self.api = HfApi(token=self.token)
@@ -77,12 +78,13 @@ class SACHuggingFaceModelStorage:
         if not self.repo_id:
             raise ValueError(
                 "HuggingFace SAC model repo not configured. "
-                "Set HF_SAC_MODEL_REPO environment variable or pass repo_id."
+                "Set HF_SAC_HALAL_FILTERED_MODEL_REPO environment variable "
+                "or pass repo_id."
             )
 
     @property
     def model_type(self) -> str:
-        return "sac"
+        return "sac_halal_filtered"
 
     def _ensure_repo_exists(self) -> None:
         """Create the HF repo if it doesn't exist."""

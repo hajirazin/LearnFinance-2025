@@ -22,11 +22,15 @@ from brain_api.storage.huggingface import (
 )
 from brain_api.storage.local import (
     DEFAULT_DATA_PATH,
-    LocalModelStorage,
+    LocalModelStorage,  # Backward compatibility alias
     LSTMArtifacts,
+    LSTMHalalNewModelStorage,
     PatchTSTArtifacts,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTIndiaModelStorage,  # Backward compatibility alias
+    PatchTSTModelStorage,  # Backward compatibility alias
+    PatchTSTNiftyShariah500ModelStorage,
+    SACHalalFilteredModelStorage,
     create_metadata,
     create_patchtst_metadata,
 )
@@ -39,10 +43,14 @@ __all__ = [
     "HuggingFaceDatasetStorage",
     "HuggingFaceModelStorage",
     "LSTMArtifacts",
-    "LocalModelStorage",
+    "LSTMHalalNewModelStorage",
+    "LocalModelStorage",  # Backward compatibility alias
     "PatchTSTArtifacts",
-    "PatchTSTIndiaModelStorage",
-    "PatchTSTModelStorage",
+    "PatchTSTHalalNewModelStorage",
+    "PatchTSTIndiaModelStorage",  # Backward compatibility alias
+    "PatchTSTModelStorage",  # Backward compatibility alias
+    "PatchTSTNiftyShariah500ModelStorage",
+    "SACHalalFilteredModelStorage",
     "create_metadata",
     "create_patchtst_metadata",
 ]

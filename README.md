@@ -289,11 +289,23 @@ flowchart TD
 # Brain API URL (for Temporal to call)
 BRAIN_API_URL=http://localhost:8000
 
-# Universe overrides (default: halal_filtered)
+# ETL universe (still env-driven; ETL is single-tenant)
 ETL_UNIVERSE=halal_filtered
-FORECASTER_TRAIN_UNIVERSE=halal_filtered
-RL_TRAIN_UNIVERSE=halal_filtered
+
+# Per-bucket HuggingFace repos. Each (model, universe) bucket has its
+# own repo so two parallel A/B workflows can promote independently.
+HF_LSTM_HALAL_NEW_MODEL_REPO=hajirazin/learnfinance-models-lstm
+HF_PATCHTST_HALAL_NEW_MODEL_REPO=hajirazin/learnfinance-models-patchtst
+HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO=hajirazin/learnfinance-models-patchtst-india
+HF_SAC_HALAL_FILTERED_MODEL_REPO=hajirazin/learnfinance-models-sac
 ```
+
+Forecaster / SAC universe selection is no longer env-driven. Training
+endpoints take `{"universe": "<name>"}` in the request body and resolve
+symbols + storage via the per-bucket registry in
+[brain_api/brain_api/core/model_buckets.py](brain_api/brain_api/core/model_buckets.py).
+This is what lets two Temporal workflows hit `/train/sac/full` with
+different universes in parallel without colliding.
 
 ## Key design decisions
 

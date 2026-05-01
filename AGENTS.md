@@ -259,7 +259,7 @@ For `n_stocks = 15` -> `state_dim = 15*7 + 15*2 + 16 = 151`. Both LSTM and Patch
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
 - **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
-- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_india/`)
+- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
 - **SAC** = RL allocator that receives the 9-per-stock features (including dual LSTM + PatchTST forecasts) plus portfolio weights, US only
 
 ## Data storage rules
@@ -282,29 +282,49 @@ Every persisted record must include:
 - `run_id`, `attempt`
 - an `as_of` timestamp for time-sensitive signals
 
-### Model storage
+### Model storage (universe-keyed buckets)
 
-Models are stored under `data/models/{lstm,patchtst,patchtst_india}/<version>/`:
+Each `(model_type, universe)` pair is its own *bucket*. The bucket name
+is `{model}_{universe}` and drives both the on-disk path and the
+HuggingFace repo, so two parallel A/B workflows (e.g. `sac_halal` vs
+`sac_halal_filtered`) never collide on the `current` pointer.
 
 ```
 data/models/
-├── lstm/
+├── lstm_halal_new/
 │   ├── v2026-01-09-a4fecab1bdcc/   # versioned artifact
 │   │   ├── weights.pt
 │   │   ├── feature_scaler.pkl
 │   │   ├── config.json
 │   │   └── metadata.json
-│   ├── snapshot-2025-12-31/        # point-in-time snapshots
+│   ├── snapshot-2025-12-31/        # point-in-time snapshots (siblings)
 │   └── current                     # text file with active version
-├── patchtst/
-│   └── (same structure)
-└── patchtst_india/
-    └── (same structure, independent current pointer)
+├── patchtst_halal_new/
+│   └── (same structure, US PatchTST trained on halal_new)
+├── patchtst_nifty_shariah_500/
+│   └── (same structure, India PatchTST; independent current pointer)
+└── sac_halal_filtered/
+    └── (same structure, SAC trained on top-15 halal_filtered)
 ```
 
-- Active version tracked by `data/models/{model}/current` (text file with version string)
-- RL experience buffer stored under `data/experience/<run_id>.json`
-- All model artifacts must include `metadata.json` with: training timestamp, data window, config hash, eval metrics
+- Active version per bucket: `data/models/{bucket_name}/current`.
+- RL experience buffer: `data/experience/<run_id>.json`.
+- All model artifacts must include `metadata.json` with: training timestamp, data window, config hash, eval metrics.
+
+The bucket registry lives in
+[brain_api/brain_api/core/model_buckets.py](brain_api/brain_api/core/model_buckets.py).
+Each `BucketConfig` records the local storage class, HF storage class,
+HF repo getter, in-process symbol resolver, and an optional symbol
+validator (e.g. `.NS` suffix enforcement for India). Training endpoints
+take `{"universe": "<name>"}` in the request body, look up the bucket
+via `get_bucket(model_type, universe)`, and dispatch to the existing
+core training functions -- there is **no env-var-driven universe
+selection** for forecasters or SAC. ETL still uses `ETL_UNIVERSE`
+because there is no concurrent A/B requirement for the ETL job.
+
+Adding a new bucket is one `_register(BucketConfig(...))` call plus a
+sibling local-storage subclass and a new HF repo env var. No other
+endpoint, workflow, or test edits should be required.
 
 ## Agent workflow rules
 

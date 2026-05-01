@@ -7,11 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from brain_api.core.config import (
-    RL_ALLOWED_UNIVERSES,
     UniverseType,
     get_etl_universe,
-    get_forecaster_train_universe,
-    get_rl_train_universe,
     resolve_cutoff_date,
     resolve_training_window,
 )
@@ -184,91 +181,14 @@ class TestUniverseType:
             UniverseType("invalid")
 
 
-class TestGetForecasterTrainUniverse:
-    """Tests for get_forecaster_train_universe function."""
-
-    def test_default_returns_halal_new(self) -> None:
-        """Default should be HALAL_NEW when no env var set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_NEW
-
-    def test_halal_from_env(self) -> None:
-        """FORECASTER_TRAIN_UNIVERSE=halal returns HALAL."""
-        with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "halal"}, clear=True):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL
-
-    def test_sp500_from_env(self) -> None:
-        """FORECASTER_TRAIN_UNIVERSE=sp500 returns SP500."""
-        with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "sp500"}, clear=True):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.SP500
-
-    def test_halal_new_from_env(self) -> None:
-        """FORECASTER_TRAIN_UNIVERSE=halal_new returns HALAL_NEW."""
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "halal_new"}, clear=True
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_NEW
-
-    def test_halal_filtered_from_env(self) -> None:
-        """FORECASTER_TRAIN_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "halal_filtered"}, clear=True
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-    def test_nifty_shariah_500_from_env(self) -> None:
-        """FORECASTER_TRAIN_UNIVERSE=nifty_shariah_500 returns NIFTY_SHARIAH_500."""
-        with patch.dict(
-            os.environ,
-            {"FORECASTER_TRAIN_UNIVERSE": "nifty_shariah_500"},
-            clear=True,
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.NIFTY_SHARIAH_500
-
-    def test_case_insensitive(self) -> None:
-        """Environment variable is case-insensitive."""
-        with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL"}, clear=True):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL
-
-        with patch.dict(os.environ, {"FORECASTER_TRAIN_UNIVERSE": "SP500"}, clear=True):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.SP500
-
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL_NEW"}, clear=True
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_NEW
-
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "HALAL_FILTERED"}, clear=True
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "NIFTY_SHARIAH_500"}, clear=True
-        ):
-            result = get_forecaster_train_universe()
-        assert result == UniverseType.NIFTY_SHARIAH_500
-
-    def test_invalid_value_raises_error(self) -> None:
-        """Invalid FORECASTER_TRAIN_UNIVERSE value raises ValueError."""
-        with patch.dict(
-            os.environ, {"FORECASTER_TRAIN_UNIVERSE": "invalid"}, clear=True
-        ):
-            with pytest.raises(ValueError) as exc_info:
-                get_forecaster_train_universe()
-            assert "invalid" in str(exc_info.value).lower()
-            assert "halal" in str(exc_info.value).lower()
-            assert "sp500" in str(exc_info.value).lower()
+# NOTE: ``get_forecaster_train_universe`` and ``get_rl_train_universe``
+# were removed when forecaster/SAC training switched to the per-bucket
+# registry (``brain_api.core.model_buckets``). Universe selection now
+# comes from the request body ``{universe: ...}`` so two parallel
+# Temporal workflows can hit the same training endpoint with different
+# universes -- env vars cannot support that. Endpoint-level allowlist /
+# unknown-universe behaviour is now exercised in
+# ``tests/test_training_*.py`` (rejection -> 422).
 
 
 class TestGetEtlUniverse:
@@ -336,69 +256,10 @@ class TestGetEtlUniverse:
             assert "sp500" in str(exc_info.value).lower()
 
 
-class TestGetRlTrainUniverse:
-    """Tests for get_rl_train_universe function."""
-
-    def test_default_returns_halal_filtered(self) -> None:
-        """Default should be HALAL_FILTERED when no env var set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_rl_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-    def test_halal_from_env(self) -> None:
-        """RL_TRAIN_UNIVERSE=halal returns HALAL."""
-        with patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "halal"}, clear=True):
-            result = get_rl_train_universe()
-        assert result == UniverseType.HALAL
-
-    def test_halal_filtered_from_env(self) -> None:
-        """RL_TRAIN_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
-        with patch.dict(
-            os.environ, {"RL_TRAIN_UNIVERSE": "halal_filtered"}, clear=True
-        ):
-            result = get_rl_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-    def test_sp500_raises_not_allowed(self) -> None:
-        """RL_TRAIN_UNIVERSE=sp500 raises ValueError (not in allowlist)."""
-        with (
-            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "sp500"}, clear=True),
-            pytest.raises(ValueError, match="not allowed for RL"),
-        ):
-            get_rl_train_universe()
-
-    def test_halal_new_raises_not_allowed(self) -> None:
-        """RL_TRAIN_UNIVERSE=halal_new raises ValueError (not in allowlist)."""
-        with (
-            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "halal_new"}, clear=True),
-            pytest.raises(ValueError, match="not allowed for RL"),
-        ):
-            get_rl_train_universe()
-
-    def test_invalid_value_raises_error(self) -> None:
-        """Invalid RL_TRAIN_UNIVERSE value raises ValueError."""
-        with (
-            patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "invalid"}, clear=True),
-            pytest.raises(ValueError, match="Invalid RL_TRAIN_UNIVERSE"),
-        ):
-            get_rl_train_universe()
-
-    def test_case_insensitive(self) -> None:
-        """Environment variable is case-insensitive."""
-        with patch.dict(os.environ, {"RL_TRAIN_UNIVERSE": "HALAL"}, clear=True):
-            result = get_rl_train_universe()
-        assert result == UniverseType.HALAL
-
-        with patch.dict(
-            os.environ, {"RL_TRAIN_UNIVERSE": "HALAL_FILTERED"}, clear=True
-        ):
-            result = get_rl_train_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-    def test_allowed_universes_contains_halal_and_filtered(self) -> None:
-        """RL_ALLOWED_UNIVERSES should contain exactly halal and halal_filtered."""
-        assert UniverseType.HALAL in RL_ALLOWED_UNIVERSES
-        assert UniverseType.HALAL_FILTERED in RL_ALLOWED_UNIVERSES
-        assert UniverseType.SP500 not in RL_ALLOWED_UNIVERSES
-        assert UniverseType.HALAL_NEW not in RL_ALLOWED_UNIVERSES
-        assert len(RL_ALLOWED_UNIVERSES) == 2
+# NOTE: ``get_rl_train_universe`` and ``RL_ALLOWED_UNIVERSES`` were
+# removed for the same reason as ``get_forecaster_train_universe``: SAC
+# now resolves its universe from the request body via the bucket
+# registry. The ``len(symbols) == config.n_stocks`` invariant that
+# ``RL_ALLOWED_UNIVERSES`` indirectly protected is now enforced by the
+# ``/train/sac/full`` endpoint and exercised in tests/test_sac.py
+# (``test_full_training_n_stocks_mismatch_returns_422``).

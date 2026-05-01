@@ -1,19 +1,26 @@
 """SAC training endpoints with dual forecasts (LSTM + PatchTST)."""
 
 import logging
+from collections.abc import Callable
 from datetime import timedelta
 
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_hf_sac_model_repo,
     get_storage_backend,
     resolve_cutoff_date,
     resolve_training_window,
 )
 from brain_api.core.lstm import load_prices_yfinance
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
+    list_universes_for,
+)
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
 from brain_api.core.portfolio_rl.walkforward import (
@@ -31,10 +38,9 @@ from brain_api.core.sac import (
     compute_version as sac_compute_version,
 )
 from brain_api.core.training_utils import TrainingCancelledError
-from brain_api.storage.sac import SACLocalStorage, create_sac_metadata
+from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
 
 from .dependencies import (
-    get_rl_training_symbols,
     get_sac_config,
     get_sac_storage,
 )
@@ -54,11 +60,35 @@ logger = logging.getLogger(__name__)
 MIN_PROMOTION_CAGR = 0.12
 
 
+def _sac_us_allowed_universes() -> frozenset[str]:
+    """Universes the US SAC endpoint accepts.
+
+    Pulled live from the registry so adding a new bucket
+    (e.g. ``(SAC, halal)`` for an A/B comparison vs ``halal_filtered``)
+    becomes a one-line addition in ``model_buckets.py`` -- no edit
+    needed here. Future India SAC will get its own router file with
+    its own allowlist.
+    """
+    return list_universes_for(ModelType.SAC)
+
+
+class SACTrainRequest(BaseModel):
+    """Body for POST /train/sac/full."""
+
+    universe: str = Field(
+        default="halal_filtered",
+        description=(
+            "Universe to train on. Two parallel workflows can hit this "
+            "endpoint with different ``universe`` values for an A/B "
+            "comparison; each writes to its own bucket."
+        ),
+    )
+
+
 @router.post("/sac/full", response_model=SACTrainResponse)
 def train_sac_endpoint(
     background_tasks: BackgroundTasks,
-    storage: SACLocalStorage = Depends(get_sac_storage),
-    symbols: list[str] = Depends(get_rl_training_symbols),
+    request: SACTrainRequest = SACTrainRequest(),
     config: SACConfig = Depends(get_sac_config),
 ) -> SACTrainResponse | JSONResponse:
     """Train SAC portfolio allocator using dual forecasts.
@@ -67,8 +97,49 @@ def train_sac_endpoint(
     Returns 202 with job_id if training is started in the background.
     Poll GET /train/status/{job_id} for progress and final result.
     """
+    allowed = _sac_us_allowed_universes()
+    if request.universe not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe {request.universe!r} for /train/sac/full. "
+                f"Valid options: {sorted(allowed)}."
+            ),
+        )
+    try:
+        bucket = get_bucket(ModelType.SAC, request.universe)
+    except UnknownBucketError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    symbols = bucket.symbols_resolver()
+    if bucket.symbol_validator is not None:
+        try:
+            bucket.symbol_validator(symbols)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    # SAC actor/critic dimensions are baked at training time from
+    # ``config.n_stocks``; mismatched symbol counts would build the
+    # wrong-sized network and silently produce garbage allocations.
+    # Per AGENTS.md rule #1, raise instead of trimming/padding.
+    if len(symbols) != config.n_stocks:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"SAC bucket {bucket.bucket_name!r} requires "
+                f"len(symbols) == n_stocks={config.n_stocks}, but "
+                f"resolver for universe {request.universe!r} returned "
+                f"{len(symbols)} symbols."
+            ),
+        )
+
+    storage: SACHalalFilteredModelStorage = bucket.local_storage_class()
+
     start_date, end_date = resolve_training_window()
-    logger.info(f"[SAC] Starting training for {len(symbols)} symbols")
+    logger.info(
+        f"[SAC] Starting training for {len(symbols)} symbols "
+        f"(bucket={bucket.bucket_name})"
+    )
     version = sac_compute_version(start_date, end_date, symbols, config)
 
     if storage.version_exists(version):
@@ -102,6 +173,8 @@ def train_sac_endpoint(
         symbols=symbols,
         config=config,
         storage=storage,
+        hf_repo_getter=bucket.hf_repo_getter,
+        hf_storage_class=bucket.hf_storage_class,
     )
     logger.info(f"[SAC] Background training started: {job.job_id}")
 
@@ -120,7 +193,9 @@ def _run_sac_full_training(
     job_id: str,
     symbols: list[str],
     config: SACConfig,
-    storage: SACLocalStorage,
+    storage: SACHalalFilteredModelStorage,
+    hf_repo_getter: Callable[[], str | None],
+    hf_storage_class: type,
 ) -> None:
     """Background task that runs the full SAC training pipeline."""
     from brain_api.main import shutdown_event
@@ -235,12 +310,10 @@ def _run_sac_full_training(
         )
 
         update_progress(job_id, {"phase": "promotion_check"})
-        from brain_api.storage.sac import SACHuggingFaceModelStorage
-
-        hf_model_repo = get_hf_sac_model_repo()
+        hf_model_repo = hf_repo_getter()
         prior_info = get_prior_version_info(
             local_storage=storage,
-            hf_storage_class=SACHuggingFaceModelStorage,
+            hf_storage_class=hf_storage_class,
             hf_model_repo=hf_model_repo,
         )
         prior_version = prior_info.version
@@ -289,7 +362,9 @@ def _run_sac_full_training(
 
         if storage_backend == "hf" and hf_model_repo:
             try:
-                hf_storage = SACHuggingFaceModelStorage(repo_id=hf_model_repo)
+                hf_storage = hf_storage_class(
+                    repo_id=hf_model_repo, local_cache=storage
+                )
                 hf_has_main = hf_storage.get_current_version() is not None
                 should_make_current = promoted or not hf_has_main
 
@@ -344,7 +419,7 @@ def _run_sac_full_training(
 @router.post("/sac/finetune", response_model=SACTrainResponse)
 def finetune_sac_endpoint(
     background_tasks: BackgroundTasks,
-    storage: SACLocalStorage = Depends(get_sac_storage),
+    storage: SACHalalFilteredModelStorage = Depends(get_sac_storage),
 ) -> SACTrainResponse | JSONResponse:
     """Fine-tune SAC on recent data.
 
@@ -414,7 +489,7 @@ def finetune_sac_endpoint(
 def _run_sac_finetune(
     *,
     job_id: str,
-    storage: SACLocalStorage,
+    storage: SACHalalFilteredModelStorage,
     prior_version: str,
 ) -> None:
     """Background task that runs SAC fine-tuning."""
@@ -589,13 +664,17 @@ def _run_sac_finetune(
         hf_repo = None
         hf_url = None
         storage_backend = get_storage_backend()
-        hf_model_repo_ft = get_hf_sac_model_repo()
+        from brain_api.core.config import get_hf_sac_halal_filtered_model_repo
+
+        hf_model_repo_ft = get_hf_sac_halal_filtered_model_repo()
 
         if storage_backend == "hf" and hf_model_repo_ft:
             try:
                 from brain_api.storage.sac import SACHuggingFaceModelStorage
 
-                hf_storage = SACHuggingFaceModelStorage(repo_id=hf_model_repo_ft)
+                hf_storage = SACHuggingFaceModelStorage(
+                    repo_id=hf_model_repo_ft, local_cache=storage
+                )
                 hf_has_main = hf_storage.get_current_version() is not None
                 should_make_current = promoted or not hf_has_main
 

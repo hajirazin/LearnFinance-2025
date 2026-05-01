@@ -7,11 +7,11 @@ from datetime import date
 
 import pandas as pd
 import torch
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_hf_lstm_model_repo,
     get_storage_backend,
     resolve_training_window,
 )
@@ -23,12 +23,18 @@ from brain_api.core.lstm import (
     load_prices_yfinance,
     train_model_pytorch,
 )
+from brain_api.core.model_buckets import (
+    ModelType,
+    UnknownBucketError,
+    get_bucket,
+)
 from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
 )
-from brain_api.storage.local import LocalModelStorage, create_metadata
+from brain_api.storage.local import create_metadata
+from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
 
 from .dependencies import (
     DatasetBuilder,
@@ -36,9 +42,7 @@ from .dependencies import (
     Trainer,
     get_config,
     get_dataset_builder,
-    get_forecaster_training_symbols,
     get_price_loader,
-    get_storage,
     get_trainer,
 )
 from .helpers import get_prior_version_info
@@ -54,16 +58,39 @@ from .models import LSTMTrainResponse, TrainingJobResponse
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Universes the US LSTM endpoint accepts. Future India / other-market
+# LSTM endpoints get their own router file with their own allowlist;
+# the registry (``brain_api.core.model_buckets``) is the source of
+# truth for which buckets exist, but each endpoint applies its own
+# market policy on top.
+_LSTM_US_ALLOWED_UNIVERSES: frozenset[str] = frozenset({"halal_new"})
+
+
+class LSTMTrainRequest(BaseModel):
+    """Body for POST /train/lstm.
+
+    ``universe`` selects the bucket (and therefore the symbol resolver
+    + storage path + HF repo). Two parallel workflows can hit this
+    endpoint with different ``universe`` values without colliding.
+    """
+
+    universe: str = Field(
+        default="halal_new",
+        description=(
+            "Universe to train on. Must be one of the registered LSTM "
+            f"buckets exposed by this endpoint: {sorted(_LSTM_US_ALLOWED_UNIVERSES)}."
+        ),
+    )
+
 
 @router.post("/lstm", response_model=LSTMTrainResponse)
 def train_lstm(
     background_tasks: BackgroundTasks,
+    request: LSTMTrainRequest = LSTMTrainRequest(),
     skip_snapshot: bool = Query(
         False,
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
-    storage: LocalModelStorage = Depends(get_storage),
-    symbols: list[str] = Depends(get_forecaster_training_symbols),
     config: LSTMConfig = Depends(get_config),
     price_loader: PriceLoader = Depends(get_price_loader),
     dataset_builder: DatasetBuilder = Depends(get_dataset_builder),
@@ -75,8 +102,33 @@ def train_lstm(
     Returns 202 with job_id if training is started in the background.
     Poll GET /train/status/{job_id} for progress and final result.
     """
+    if request.universe not in _LSTM_US_ALLOWED_UNIVERSES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe {request.universe!r} for /train/lstm. "
+                f"Valid options: {sorted(_LSTM_US_ALLOWED_UNIVERSES)}."
+            ),
+        )
+    try:
+        bucket = get_bucket(ModelType.LSTM, request.universe)
+    except UnknownBucketError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    symbols = bucket.symbols_resolver()
+    if bucket.symbol_validator is not None:
+        try:
+            bucket.symbol_validator(symbols)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+
+    storage: LSTMHalalNewModelStorage = bucket.local_storage_class()
+
     start_date, end_date = resolve_training_window()
-    logger.info(f"[LSTM] Starting training for {len(symbols)} symbols")
+    logger.info(
+        f"[LSTM] Starting training for {len(symbols)} symbols "
+        f"(bucket={bucket.bucket_name})"
+    )
     logger.info(f"[LSTM] Data window: {start_date} to {end_date}")
 
     version = compute_version(start_date, end_date, symbols, config)
@@ -113,6 +165,9 @@ def train_lstm(
         symbols=symbols,
         config=config,
         storage=storage,
+        bucket_name=bucket.bucket_name,
+        hf_repo_getter=bucket.hf_repo_getter,
+        hf_storage_class=bucket.hf_storage_class,
         price_loader=price_loader,
         dataset_builder=dataset_builder,
         trainer=trainer,
@@ -135,7 +190,10 @@ def _run_lstm_training(
     job_id: str,
     symbols: list[str],
     config: LSTMConfig,
-    storage: LocalModelStorage,
+    storage: LSTMHalalNewModelStorage,
+    bucket_name: str,
+    hf_repo_getter,
+    hf_storage_class: type,
     price_loader: PriceLoader,
     dataset_builder: DatasetBuilder,
     trainer: Trainer,
@@ -188,12 +246,10 @@ def _run_lstm_training(
         )
 
         update_progress(job_id, {"phase": "promotion_check"})
-        from brain_api.storage.huggingface import HuggingFaceModelStorage
-
-        hf_model_repo = get_hf_lstm_model_repo()
+        hf_model_repo = hf_repo_getter()
         prior_info = get_prior_version_info(
             local_storage=storage,
-            hf_storage_class=HuggingFaceModelStorage,
+            hf_storage_class=hf_storage_class,
             hf_model_repo=hf_model_repo,
         )
         prior_version = prior_info.version
@@ -240,9 +296,9 @@ def _run_lstm_training(
 
         if storage_backend == "hf" and hf_model_repo:
             try:
-                from brain_api.storage.huggingface import HuggingFaceModelStorage
-
-                hf_storage = HuggingFaceModelStorage(repo_id=hf_model_repo)
+                hf_storage = hf_storage_class(
+                    repo_id=hf_model_repo, local_cache=storage
+                )
                 hf_has_main = hf_storage.get_current_version() is not None
                 should_make_current = promoted or not hf_has_main
 
@@ -262,14 +318,14 @@ def _run_lstm_training(
 
         if not skip_snapshot:
             update_progress(job_id, {"phase": "snapshots"})
-            snapshot_storage = SnapshotLocalStorage("lstm")
+            snapshot_storage = SnapshotLocalStorage(bucket_name)
             check_hf = storage_backend == "hf"
 
             if not snapshot_storage.snapshot_exists_anywhere(
                 end_date, check_hf=check_hf
             ):
                 snapshot_metadata = create_snapshot_metadata(
-                    forecaster_type="lstm",
+                    forecaster_type=snapshot_storage.forecaster_type,
                     cutoff_date=end_date,
                     data_window_start=start_date.isoformat(),
                     data_window_end=end_date.isoformat(),
@@ -438,7 +494,7 @@ def _backfill_lstm_snapshots(
         )
 
         metadata = create_snapshot_metadata(
-            forecaster_type="lstm",
+            forecaster_type=snapshot_storage.forecaster_type,
             cutoff_date=cutoff_date,
             data_window_start=snapshot_data_start.isoformat(),
             data_window_end=cutoff_date.isoformat(),

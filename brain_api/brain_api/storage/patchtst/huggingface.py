@@ -3,14 +3,14 @@
 from typing import TYPE_CHECKING, Any
 
 from brain_api.core.config import (
-    get_hf_patchtst_india_model_repo,
-    get_hf_patchtst_model_repo,
+    get_hf_patchtst_halal_new_model_repo,
+    get_hf_patchtst_nifty_shariah_500_model_repo,
 )
 from brain_api.storage.base_huggingface import BaseHuggingFaceModelStorage, HFModelInfo
 from brain_api.storage.patchtst.local import (
     PatchTSTArtifacts,
-    PatchTSTIndiaModelStorage,
-    PatchTSTModelStorage,
+    PatchTSTHalalNewModelStorage,
+    PatchTSTNiftyShariah500ModelStorage,
 )
 
 if TYPE_CHECKING:
@@ -21,20 +21,22 @@ if TYPE_CHECKING:
 # Re-export HFModelInfo for backward compatibility
 __all__ = [
     "HFModelInfo",
+    "PatchTSTHalalNewHuggingFaceModelStorage",
     "PatchTSTHuggingFaceModelStorage",
     "PatchTSTIndiaHuggingFaceModelStorage",
+    "PatchTSTNiftyShariah500HuggingFaceModelStorage",
 ]
 
 
-class PatchTSTHuggingFaceModelStorage(
+class PatchTSTHalalNewHuggingFaceModelStorage(
     BaseHuggingFaceModelStorage[
         "PatchTSTConfig",
         "PatchTSTForPrediction",
         PatchTSTArtifacts,
-        PatchTSTModelStorage,
+        PatchTSTHalalNewModelStorage,
     ]
 ):
-    """HuggingFace Hub storage for PatchTST model artifacts.
+    """HuggingFace Hub storage for PatchTST trained on the halal_new universe.
 
     Stores model artifacts as files in a HuggingFace Model repository:
         - weights.pt            (PyTorch model weights)
@@ -50,26 +52,26 @@ class PatchTSTHuggingFaceModelStorage(
         self,
         repo_id: str | None = None,
         token: str | None = None,
-        local_cache: PatchTSTModelStorage | None = None,
+        local_cache: PatchTSTHalalNewModelStorage | None = None,
     ):
-        """Initialize PatchTST HuggingFace model storage.
+        """Initialize PatchTST halal_new HuggingFace storage.
 
         Args:
-            repo_id: HuggingFace repo ID. Defaults to HF_PATCHTST_MODEL_REPO env var.
+            repo_id: HuggingFace repo ID. Defaults to
+                ``HF_PATCHTST_HALAL_NEW_MODEL_REPO`` env var.
             token: HuggingFace API token.
-            local_cache: Optional local storage for caching downloaded models.
+            local_cache: Optional local storage for caching downloads.
         """
-        # Use PatchTST-specific repo if no explicit repo_id provided
         if repo_id is None:
-            repo_id = get_hf_patchtst_model_repo()
+            repo_id = get_hf_patchtst_halal_new_model_repo()
         super().__init__(repo_id=repo_id, token=token, local_cache=local_cache)
 
     @property
     def model_type(self) -> str:
-        return "patchtst"
+        return "patchtst_halal_new"
 
-    def _create_local_storage(self) -> PatchTSTModelStorage:
-        return PatchTSTModelStorage()
+    def _create_local_storage(self) -> PatchTSTHalalNewModelStorage:
+        return PatchTSTHalalNewModelStorage()
 
     def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
         from brain_api.core.patchtst import PatchTSTConfig
@@ -133,38 +135,45 @@ OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
 ## Usage
 
 ```python
-from brain_api.storage.huggingface import PatchTSTHuggingFaceModelStorage
+from brain_api.storage.huggingface import PatchTSTHalalNewHuggingFaceModelStorage
 
-storage = PatchTSTHuggingFaceModelStorage(repo_id="{self.repo_id}")
+storage = PatchTSTHalalNewHuggingFaceModelStorage(repo_id="{self.repo_id}")
 artifacts = storage.download_model(version="{version}")
 ```
 """
 
 
-class PatchTSTIndiaHuggingFaceModelStorage(
-    PatchTSTHuggingFaceModelStorage,
+class PatchTSTNiftyShariah500HuggingFaceModelStorage(
+    PatchTSTHalalNewHuggingFaceModelStorage,
 ):
     """HuggingFace Hub storage for India PatchTST models.
 
-    Uses the India-specific HF repo and local cache directory
-    (``data/models/patchtst_india/``).
+    Uses the India-specific HF repo
+    (``HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO``) and the
+    ``data/models/patchtst_nifty_shariah_500/`` local cache directory.
     """
 
     def __init__(
         self,
         repo_id: str | None = None,
         token: str | None = None,
-        local_cache: PatchTSTIndiaModelStorage | None = None,
+        local_cache: PatchTSTNiftyShariah500ModelStorage | None = None,
     ):
         if repo_id is None:
-            repo_id = get_hf_patchtst_india_model_repo()
+            repo_id = get_hf_patchtst_nifty_shariah_500_model_repo()
         if local_cache is None:
-            local_cache = PatchTSTIndiaModelStorage()
+            local_cache = PatchTSTNiftyShariah500ModelStorage()
         super().__init__(repo_id=repo_id, token=token, local_cache=local_cache)
 
     @property
     def model_type(self) -> str:
-        return "patchtst_india"
+        return "patchtst_nifty_shariah_500"
 
-    def _create_local_storage(self) -> PatchTSTIndiaModelStorage:
-        return PatchTSTIndiaModelStorage()
+    def _create_local_storage(self) -> PatchTSTNiftyShariah500ModelStorage:
+        return PatchTSTNiftyShariah500ModelStorage()
+
+
+# Backward compatibility aliases. Existing callers and the snapshot
+# subsystem continue to import the old names while we migrate.
+PatchTSTHuggingFaceModelStorage = PatchTSTHalalNewHuggingFaceModelStorage
+PatchTSTIndiaHuggingFaceModelStorage = PatchTSTNiftyShariah500HuggingFaceModelStorage

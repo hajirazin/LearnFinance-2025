@@ -26,18 +26,24 @@ class LSTMArtifacts:
     version: str
 
 
-class LSTMLocalStorage(BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifacts]):
-    """Local filesystem storage for LSTM model artifacts.
+class LSTMHalalNewModelStorage(
+    BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifacts]
+):
+    """Local filesystem storage for LSTM model trained on the halal_new universe.
 
     Artifacts are stored under:
-        {base_path}/models/lstm/{version}/
+        {base_path}/models/lstm_halal_new/{version}/
             - weights.pt            (PyTorch model weights)
             - feature_scaler.pkl    (sklearn StandardScaler for input features)
             - config.json           (model hyperparameters)
             - metadata.json         (training info, metrics, data window)
 
     The current version pointer is stored at:
-        {base_path}/models/lstm/current
+        {base_path}/models/lstm_halal_new/current
+
+    The bucket name encodes ``(model, universe)``; adding new LSTM
+    universes (e.g. India) means adding a new sibling storage class with
+    its own ``model_type`` value. See ``brain_api.core.model_buckets``.
 
     Note: The model predicts weekly returns directly, so no price_scaler
     is needed for denormalization.
@@ -45,7 +51,7 @@ class LSTMLocalStorage(BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifact
 
     @property
     def model_type(self) -> str:
-        return "lstm"
+        return "lstm_halal_new"
 
     def _load_config(self, config_dict: dict[str, Any]) -> LSTMConfig:
         return LSTMConfig(**config_dict)
@@ -68,5 +74,8 @@ class LSTMLocalStorage(BaseLocalModelStorage[LSTMConfig, LSTMModel, LSTMArtifact
         )
 
 
-# Backward compatibility alias
-LocalModelStorage = LSTMLocalStorage
+# Backward compatibility aliases for callers that pre-date the
+# {model}_{universe} naming convention. Both point at the only LSTM
+# bucket that exists today (lstm_halal_new).
+LSTMLocalStorage = LSTMHalalNewModelStorage
+LocalModelStorage = LSTMHalalNewModelStorage
