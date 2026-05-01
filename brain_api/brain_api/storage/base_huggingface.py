@@ -74,11 +74,24 @@ class BaseHuggingFaceModelStorage(
                      override the default in their own ``__init__``.
             token: HuggingFace API token. If None, uses HF_TOKEN env var or
                    cached token from `huggingface-cli login`.
-            local_cache: Optional local storage for caching downloaded models.
+            local_cache: Required local storage instance for caching
+                downloaded artifacts back into the matching bucket
+                directory. The storage-policy helper always threads
+                ``bucket.local_storage_class()`` explicitly so the SAC
+                bucket-isolation regression (audit Bug 4) cannot
+                silently re-cache artifacts into the wrong directory.
+                Pass an explicit instance from the matching bucket;
+                ``None`` raises ``TypeError`` at construction time.
         """
+        if local_cache is None:
+            raise TypeError(
+                f"local_cache is required for {type(self).__name__}: "
+                f"pass an instance of the bucket's local storage class "
+                f"so HF downloads cache into the matching directory."
+            )
         self.repo_id = repo_id or get_hf_lstm_halal_new_model_repo()
         self.token = token or get_hf_token()
-        self.local_cache = local_cache or self._create_local_storage()
+        self.local_cache = local_cache
         self.api = HfApi(token=self.token)
 
         if not self.repo_id:

@@ -1,6 +1,7 @@
 """API-level tests for LSTM inference endpoint."""
 
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
@@ -8,11 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 
+from brain_api.core import model_buckets
 from brain_api.core.lstm import DEFAULT_CONFIG, LSTMConfig, LSTMModel
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.main import app
 from brain_api.routes.inference import (
     get_price_loader,
-    get_storage,
 )
 from brain_api.storage.local import LocalModelStorage
 
@@ -113,17 +115,30 @@ def temp_storage():
         yield storage
 
 
+def _override_lstm_bucket(monkeypatch, storage):
+    """Swap the ``(LSTM, halal_new)`` registry entry to use the test
+    storage. Inference now resolves storage via the bucket registry,
+    so this is the right seam for test isolation. Restored
+    automatically by ``monkeypatch``.
+    """
+    original = get_bucket(ModelType.LSTM, "halal_new")
+    patched = replace(original, local_storage_class=lambda: storage)
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.LSTM, "halal_new"),
+        patched,
+    )
+
+
 @pytest.fixture
-def client_with_mocks(temp_storage):
+def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies."""
-    # Override dependencies
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
 
     client = TestClient(app)
     yield client
 
-    # Cleanup
     app.dependency_overrides.clear()
 
 
@@ -236,10 +251,9 @@ def test_inference_lstm_returns_daily_returns_field(client_with_mocks):
         assert isinstance(r, int | float)
 
 
-def test_inference_lstm_no_data_returns_insufficient_history(temp_storage):
+def test_inference_lstm_no_data_returns_insufficient_history(temp_storage, monkeypatch):
     """Symbols in model metadata with no price data get has_enough_history=False."""
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
 
     client = TestClient(app)
@@ -264,12 +278,11 @@ def test_inference_lstm_no_data_returns_insufficient_history(temp_storage):
 # ============================================================================
 
 
-def test_inference_lstm_cutoff_always_friday(temp_storage):
+def test_inference_lstm_cutoff_always_friday(temp_storage, monkeypatch):
     """Response as_of_date should always be a Friday, regardless of input."""
     from datetime import date as dt_date
 
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
 
     client = TestClient(app)
@@ -300,10 +313,9 @@ def test_inference_lstm_cutoff_always_friday(temp_storage):
         app.dependency_overrides.clear()
 
 
-def test_inference_lstm_target_week_is_after_cutoff(temp_storage):
+def test_inference_lstm_target_week_is_after_cutoff(temp_storage, monkeypatch):
     """Target week should be the Mon-Fri AFTER the cutoff Friday."""
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
 
     client = TestClient(app)
@@ -324,10 +336,9 @@ def test_inference_lstm_target_week_is_after_cutoff(temp_storage):
         app.dependency_overrides.clear()
 
 
-def test_inference_lstm_real_good_friday_holiday(temp_storage):
+def test_inference_lstm_real_good_friday_holiday(temp_storage, monkeypatch):
     """Test with actual exchange calendar for Good Friday 2025 (April 18)."""
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
 
     client = TestClient(app)
@@ -354,24 +365,23 @@ def test_inference_lstm_real_good_friday_holiday(temp_storage):
 # ============================================================================
 
 
-def test_inference_lstm_no_model_returns_400():
-    """POST /inference/lstm returns 400 when no model is trained."""
+def test_inference_lstm_no_model_returns_400(monkeypatch):
+    """POST /inference/lstm returns 503 when no model is trained.
+
+    Storage-policy contract: missing artifacts under ``local_first``
+    with no HF repo configured surface as 503, not 400. Test name kept
+    for git history.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_storage = LocalModelStorage(base_path=tmpdir)
-
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_storage] = lambda: empty_storage
+        _override_lstm_bucket(monkeypatch, empty_storage)
         app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
 
         client = TestClient(app)
-
         try:
-            response = client.post(
-                "/inference/lstm",
-                json={},
-            )
-            assert response.status_code == 400
-            assert "No current LSTM model" in response.json()["detail"]
+            response = client.post("/inference/lstm", json={})
+            assert response.status_code == 503
+            assert "LSTM" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 
@@ -381,10 +391,9 @@ def test_inference_lstm_no_model_returns_400():
 # ============================================================================
 
 
-def test_inference_lstm_no_price_data(temp_storage):
+def test_inference_lstm_no_price_data(temp_storage, monkeypatch):
     """Symbols from model metadata with no price data return has_enough_history=False."""
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_no_data
 
     client = TestClient(app)
@@ -478,7 +487,7 @@ def test_inference_lstm_predictions_sorted_by_return_desc(client_with_mocks):
     assert valid_returns == sorted(valid_returns, reverse=True)
 
 
-def test_inference_lstm_partial_data_sorted(temp_storage):
+def test_inference_lstm_partial_data_sorted(temp_storage, monkeypatch):
     """Symbols with data appear first, insufficient history at the end."""
 
     def mock_price_loader_aapl_only(symbols, start_date, end_date):
@@ -510,8 +519,7 @@ def test_inference_lstm_partial_data_sorted(temp_storage):
 
         return prices
 
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_storage] = lambda: temp_storage
+    _override_lstm_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_price_loader] = lambda: mock_price_loader_aapl_only
 
     client = TestClient(app)

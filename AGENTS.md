@@ -26,6 +26,9 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India weekly allocation workflow (`IndiaWeeklyAllocationWorkflow`): full Nifty Shariah 500 universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='india'`) -> rank-band sticky selection (`halal_india_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> AI summary -> email (paper-only, no broker)
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india rank-band sticky top 15 (`halal_india_filtered_alpha` partition in `screening_history`, monthly cadence) -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
+  - US Alpha-HRP workflow (`USAlphaHRPWorkflow`): halal_new universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='us'`) -> rank-band sticky selection (`halal_new_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> sell-wait-buy via the `hrp` Alpaca account (orders tagged `algorithm='alpha_hrp'`) -> AI summary -> email. Replaced the retired naive-HRP path that used to run inside `USWeeklyAllocationWorkflow`.
+  - US Double HRP workflow (`USDoubleHRPWorkflow`): halal_new universe -> Stage 1 HRP (lookback=756d) -> sticky top 15 (`halal_new` partition in `stage1_weight_history`, K_in=15, stickiness threshold 1.0pp) -> Stage 2 HRP (lookback=252d) on the chosen 15 -> record final weights -> sell-wait-buy via the dedicated `dhrp` Alpaca account (orders tagged `algorithm='dhrp'`) -> AI summary -> email.
+  - India Double HRP workflow (`IndiaDoubleHRPWorkflow`): full Nifty Shariah 500 universe -> Stage 1 HRP (lookback=756d) -> top 15 by Stage 1 weight -> Stage 2 HRP (lookback=252d) on the chosen 15 -> AI summary -> email (paper-only, no broker; no sticky persistence -- Stage 1 weights are not retained across weeks).
   - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
   - US SAC training workflow (`USSACTrainingWorkflow`): runs 6 hours after the forecasters workflow on the same first-Sunday-of-month slot (06:01 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email. Serialization guarantee: the Mac training worker runs with `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`, so even if the forecasters run overshoots 6h this activity waits for it to finish rather than starting in parallel.
   - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 6 hours later on the same first-Sunday-of-month slot (12:01 UTC) on the legacy yfinance halal universe (variable size, ~12-15 stocks); refresh signals -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`. Same single-activity serialization applies via the training worker's concurrency cap.
@@ -195,7 +198,13 @@ temporal/                         # Temporal workflow orchestration
 When migrating an endpoint to GCP:
 
 1. Extract core function call into `main.py` with `def handler(request):`
-2. Set `STORAGE_BACKEND=huggingface` environment variable
+2. Set `STORAGE_BACKEND=hf_first` environment variable. Cold start
+   (HF `main` missing) on Cloud Functions surfaces as a 503 for
+   inference and as an inaugural promotion for training -- writes
+   always go to local AND HF whenever the bucket has an HF repo
+   configured, so the first successful training run populates HF
+   `main` for subsequent inference invocations. ETL (news / twitter
+   sentiment datasets) is intentionally out of policy gating.
 3. Deploy: `gcloud functions deploy <name> --runtime python311 --trigger-http`
 4. Update `BRAIN_API_URL` in Temporal to use Cloud Function URL
 

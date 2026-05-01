@@ -150,6 +150,9 @@ class BucketConfig:
     model_type: ModelType
     universe: str
     bucket_name: str  # e.g. "patchtst_halal_new"; matches storage model_type
+    model_label: (
+        str  # human-readable, e.g. "LSTM halal_new"; used in 503 detail strings
+    )
     local_storage_class: type
     hf_storage_class: type
     hf_repo_getter: Callable[[], str | None]
@@ -215,6 +218,7 @@ _register(
         model_type=ModelType.LSTM,
         universe="halal_new",
         bucket_name="lstm_halal_new",
+        model_label="LSTM halal_new",
         local_storage_class=LSTMHalalNewModelStorage,
         hf_storage_class=HuggingFaceModelStorage,
         hf_repo_getter=get_hf_lstm_halal_new_model_repo,
@@ -227,6 +231,7 @@ _register(
         model_type=ModelType.PATCHTST,
         universe="halal_new",
         bucket_name="patchtst_halal_new",
+        model_label="PatchTST halal_new",
         local_storage_class=PatchTSTHalalNewModelStorage,
         hf_storage_class=PatchTSTHalalNewHuggingFaceModelStorage,
         hf_repo_getter=get_hf_patchtst_halal_new_model_repo,
@@ -239,6 +244,7 @@ _register(
         model_type=ModelType.PATCHTST,
         universe="nifty_shariah_500",
         bucket_name="patchtst_nifty_shariah_500",
+        model_label="PatchTST nifty_shariah_500",
         local_storage_class=PatchTSTNiftyShariah500ModelStorage,
         hf_storage_class=PatchTSTNiftyShariah500HuggingFaceModelStorage,
         hf_repo_getter=get_hf_patchtst_nifty_shariah_500_model_repo,
@@ -252,6 +258,7 @@ _register(
         model_type=ModelType.SAC,
         universe="halal_filtered",
         bucket_name="sac_halal_filtered",
+        model_label="SAC halal_filtered",
         local_storage_class=SACHalalFilteredModelStorage,
         hf_storage_class=SACHuggingFaceModelStorage,
         hf_repo_getter=get_hf_sac_halal_filtered_model_repo,
@@ -270,6 +277,7 @@ _register(
         model_type=ModelType.SAC,
         universe="halal",
         bucket_name="sac_halal",
+        model_label="SAC halal",
         local_storage_class=SACHalalModelStorage,
         hf_storage_class=SACHuggingFaceModelStorage,
         hf_repo_getter=get_hf_sac_halal_model_repo,

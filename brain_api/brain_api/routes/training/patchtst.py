@@ -4,7 +4,6 @@ import gc
 import logging
 import threading
 import time
-from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
@@ -13,10 +12,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_storage_backend,
     resolve_training_window,
 )
 from brain_api.core.model_buckets import (
+    BucketConfig,
     ModelType,
     UnknownBucketError,
     get_bucket,
@@ -44,6 +43,10 @@ from brain_api.storage.forecaster_snapshots import (
 )
 from brain_api.storage.local import create_patchtst_metadata
 from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
+from brain_api.storage.policy import (
+    StoragePolicyError,
+    get_prior_metadata_for_bucket,
+)
 
 from .dependencies import (
     PatchTSTDatasetBuilder,
@@ -54,7 +57,6 @@ from .dependencies import (
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
-from .helpers import get_prior_version_info
 from .job_registry import (
     cancel_job,
     complete_job,
@@ -89,9 +91,7 @@ class PatchTSTTrainRequest(BaseModel):
 def _train_patchtst_core(
     symbols: list[str],
     storage: PatchTSTHalalNewModelStorage,
-    hf_storage_class: type,
-    hf_model_repo_getter: Callable[[], str | None],
-    snapshot_forecaster_type: str,
+    bucket: BucketConfig,
     skip_snapshot: bool,
     config: PatchTSTConfig,
     price_loader: PatchTSTPriceLoader,
@@ -101,6 +101,9 @@ def _train_patchtst_core(
     shutdown_event: threading.Event | None = None,
     job_id: str | None = None,
 ) -> PatchTSTTrainResponse:
+    hf_storage_class = bucket.hf_storage_class
+    hf_model_repo_getter = bucket.hf_repo_getter
+    snapshot_forecaster_type = bucket.bucket_name
     """Core PatchTST training logic shared by US and India endpoints.
 
     Handles: version check -> load prices -> align -> build dataset -> train ->
@@ -212,15 +215,19 @@ def _train_patchtst_core(
     )
 
     hf_model_repo = hf_model_repo_getter()
-    prior_info = get_prior_version_info(
-        local_storage=storage,
-        hf_storage_class=hf_storage_class,
-        hf_model_repo=hf_model_repo,
-    )
-    prior_version = prior_info.version
-    prior_val_loss = prior_info.val_loss
-
-    if prior_version:
+    try:
+        prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
+    except StoragePolicyError as exc:
+        logger.warning(
+            f"{log_prefix} hf_first prior fetch failed for bucket "
+            f"{bucket.bucket_name}: {exc}; treating as inaugural"
+        )
+        prior_metadata = None
+    prior_version: str | None = None
+    prior_val_loss: float | None = None
+    if prior_metadata is not None:
+        prior_version = prior_metadata.get("version")
+        prior_val_loss = prior_metadata.get("metrics", {}).get("val_loss")
         logger.info(
             f"{log_prefix} Prior version: {prior_version}, val_loss: {prior_val_loss}"
         )
@@ -264,9 +271,10 @@ def _train_patchtst_core(
 
     hf_repo = None
     hf_url = None
-    storage_backend = get_storage_backend()
 
-    if storage_backend == "hf" and hf_model_repo:
+    # Writes ignore the read policy: upload whenever the bucket has an
+    # HF repo configured. Closes audit Bug 6.
+    if hf_model_repo:
         try:
             hf_storage = hf_storage_class(repo_id=hf_model_repo, local_cache=storage)
             hf_has_main = hf_storage.get_current_version() is not None
@@ -292,7 +300,8 @@ def _train_patchtst_core(
 
     if not skip_snapshot:
         snapshot_storage = SnapshotLocalStorage(snapshot_forecaster_type)
-        check_hf = storage_backend == "hf"
+        snapshot_hf_repo = snapshot_storage._get_hf_repo()
+        check_hf = snapshot_hf_repo is not None
 
         if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
             snapshot_metadata = create_snapshot_metadata(
@@ -314,7 +323,7 @@ def _train_patchtst_core(
             )
             logger.info(f"{log_prefix} Saved snapshot for cutoff {end_date}")
 
-            if storage_backend == "hf":
+            if snapshot_hf_repo:
                 try:
                     snapshot_storage.upload_snapshot_to_hf(end_date)
                     logger.info(
@@ -330,7 +339,6 @@ def _train_patchtst_core(
             start_date,
             end_date,
             snapshot_storage,
-            storage_backend,
             log_prefix=log_prefix,
         )
 
@@ -429,9 +437,7 @@ def train_patchtst(
         job_id=job.job_id,
         symbols=symbols,
         storage=storage,
-        hf_storage_class=bucket.hf_storage_class,
-        hf_model_repo_getter=bucket.hf_repo_getter,
-        snapshot_forecaster_type=bucket.bucket_name,
+        bucket=bucket,
         skip_snapshot=skip_snapshot,
         config=config,
         price_loader=price_loader,
@@ -456,9 +462,7 @@ def _run_patchtst_training(
     job_id: str,
     symbols: list[str],
     storage: PatchTSTHalalNewModelStorage,
-    hf_storage_class: type,
-    hf_model_repo_getter: Callable[[], str | None],
-    snapshot_forecaster_type: str,
+    bucket: BucketConfig,
     skip_snapshot: bool,
     config: PatchTSTConfig,
     price_loader: PatchTSTPriceLoader,
@@ -473,9 +477,7 @@ def _run_patchtst_training(
         response = _train_patchtst_core(
             symbols=symbols,
             storage=storage,
-            hf_storage_class=hf_storage_class,
-            hf_model_repo_getter=hf_model_repo_getter,
-            snapshot_forecaster_type=snapshot_forecaster_type,
+            bucket=bucket,
             skip_snapshot=skip_snapshot,
             config=config,
             price_loader=price_loader,
@@ -560,7 +562,6 @@ def _backfill_patchtst_snapshots(
     start_date: date,
     end_date: date,
     snapshot_storage: SnapshotLocalStorage,
-    storage_backend: str = "local",
     log_prefix: str = "[PatchTST Backfill]",
 ) -> None:
     """Backfill PatchTST snapshots for all years that RL walk-forward training needs.
@@ -573,13 +574,16 @@ def _backfill_patchtst_snapshots(
     Optimization: Loads prices ONCE for the extended window and filters
     incrementally by cutoff instead of re-downloading for each snapshot.
 
+    Snapshot uploads are gated on whether the bucket has an HF repo
+    configured (``snapshot_storage._get_hf_repo()``) rather than on a
+    process-wide policy. Closes audit Bug 7.
+
     Args:
         symbols: List of stock symbols
         config: PatchTST configuration
         start_date: RL training data start date (from resolve_training_window)
         end_date: Training data end date
         snapshot_storage: Storage instance
-        storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
         log_prefix: Logging prefix string
     """
     backfill_prefix = (
@@ -588,7 +592,8 @@ def _backfill_patchtst_snapshots(
     start_year = start_date.year
     end_year = end_date.year
     bootstrap_years = 4
-    check_hf = storage_backend == "hf"
+    snapshot_hf_repo = snapshot_storage._get_hf_repo()
+    check_hf = snapshot_hf_repo is not None
 
     first_snapshot_year = start_year - 1
     snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
@@ -679,7 +684,7 @@ def _backfill_patchtst_snapshots(
             f"[{backfill_prefix}] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
         )
 
-        if storage_backend == "hf":
+        if snapshot_hf_repo:
             try:
                 snapshot_storage.upload_snapshot_to_hf(cutoff_date)
                 logger.info(

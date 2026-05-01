@@ -7,7 +7,7 @@ This document describes the yearly LSTM and PatchTST snapshot system, enabling w
 **Key Design Decisions:**
 1. **Integrated Training**: Snapshots are created automatically during `/train/lstm` and `/train/patchtst` - no separate endpoints needed
 2. **Same HF Repo**: Snapshots use the same HuggingFace repo as main models, but with different branch naming
-3. **Local + HF**: Local storage is always used. When `STORAGE_BACKEND=hf`, snapshots are also uploaded to HuggingFace
+3. **Local + HF**: Local storage is always used. Snapshot uploads to HuggingFace happen whenever the bucket's HF repo env var is set, regardless of the `STORAGE_BACKEND` read policy (writes are no longer gated by the policy).
 
 ## Architecture
 
@@ -16,8 +16,8 @@ flowchart TB
     subgraph training [Training Endpoints]
         A[POST /train/lstm] --> B[Train LSTM + Auto-save snapshot]
         C[POST /train/patchtst] --> D[Train PatchTST + Auto-save snapshot]
-        B --> E[Upload to HF if STORAGE_BACKEND=hf]
-        D --> F[Upload to HF if STORAGE_BACKEND=hf]
+        B --> E[Upload to HF if bucket HF repo configured]
+        D --> F[Upload to HF if bucket HF repo configured]
     end
     
     subgraph storage [Storage]
@@ -300,7 +300,7 @@ No additional env vars needed. Snapshots use existing model repos:
 | `HF_LSTM_MODEL_REPO` | LSTM main model + snapshots |
 | `HF_PATCHTST_MODEL_REPO` | PatchTST main model + snapshots |
 | `HF_TOKEN` | Authentication for HF operations |
-| `STORAGE_BACKEND` | `local` or `hf` (if `hf`, uploads snapshots to HF) |
+| `STORAGE_BACKEND` | `local_first` (default) or `hf_first`. Read policy only -- snapshot uploads happen whenever the bucket's HF repo env var is set, regardless of this value. |
 
 ---
 

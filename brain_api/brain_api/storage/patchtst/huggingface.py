@@ -135,9 +135,13 @@ OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
 ## Usage
 
 ```python
-from brain_api.storage.huggingface import PatchTSTHalalNewHuggingFaceModelStorage
+from brain_api.storage.patchtst.huggingface import PatchTSTHalalNewHuggingFaceModelStorage
+from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
 
-storage = PatchTSTHalalNewHuggingFaceModelStorage(repo_id="{self.repo_id}")
+storage = PatchTSTHalalNewHuggingFaceModelStorage(
+    repo_id="{self.repo_id}",
+    local_cache=PatchTSTHalalNewModelStorage(),
+)
 artifacts = storage.download_model(version="{version}")
 ```
 """

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -274,6 +274,7 @@ def run_batch_inference(
     symbols: list[str],
     cutoff_date: date,
     storage: PatchTSTModelStorage | None = None,
+    artifacts: Any = None,
 ) -> BatchInferenceResult:
     """Run PatchTST inference on arbitrary symbols (OHLCV only).
 
@@ -283,25 +284,33 @@ def run_batch_inference(
     Args:
         symbols: Ticker symbols to run inference on.
         cutoff_date: Friday cutoff date. Target week is the week AFTER this Friday.
-        storage: Optional PatchTST storage (defaults to PatchTSTModelStorage()).
+        storage: Optional PatchTST storage. Used only when ``artifacts``
+            is not supplied. Defaults to ``PatchTSTModelStorage()`` so
+            legacy callers keep working.
+        artifacts: Optional pre-loaded ``PatchTSTArtifacts``. When set,
+            we skip the storage read entirely. Routes that go through
+            the storage-policy helper pass artifacts directly so
+            ``hf_first`` callers don't double-touch HuggingFace.
 
     Returns:
         BatchInferenceResult with sorted predictions and model version.
 
     Raises:
-        ValueError: If no current PatchTST model is promoted.
+        ValueError: If no current PatchTST model is promoted (only
+            when ``artifacts`` is not supplied).
     """
     from brain_api.core.prices import load_prices_yfinance
     from brain_api.storage.local import PatchTSTModelStorage as _DefaultStorage
 
-    if storage is None:
-        storage = _DefaultStorage()
+    if artifacts is None:
+        if storage is None:
+            storage = _DefaultStorage()
 
-    version = storage.read_current_version()
-    if not version:
-        raise ValueError("No current PatchTST model version available")
+        version = storage.read_current_version()
+        if not version:
+            raise ValueError("No current PatchTST model version available")
 
-    artifacts = storage.load_current_artifacts()
+        artifacts = storage.load_current_artifacts()
     config = artifacts.config
 
     week_boundaries = compute_week_from_cutoff(cutoff_date)

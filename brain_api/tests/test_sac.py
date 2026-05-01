@@ -23,7 +23,6 @@ from brain_api.core.sac import (
     SACTrainingResult,
 )
 from brain_api.main import app
-from brain_api.routes.inference import get_sac_storage as get_inference_storage
 from brain_api.routes.training import (
     get_sac_storage,
 )
@@ -192,10 +191,25 @@ def trained_model_storage():
 
 
 @pytest.fixture
-def inference_client(trained_model_storage):
-    """Create test client with trained model for inference tests."""
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_inference_storage] = lambda: trained_model_storage
+def inference_client(trained_model_storage, monkeypatch):
+    """Create test client with trained model for inference tests.
+
+    SAC inference now resolves storage via the bucket registry, so the
+    test seam is :func:`_override_sac_bucket` (replaces the
+    ``(SAC, halal_filtered)`` registry entry with a tmpdir-backed
+    storage that has mock artifacts written into it). The legacy
+    ``app.dependency_overrides[get_inference_storage]`` no longer has
+    any effect on the live route.
+    """
+
+    def _trained_symbols() -> list[str]:
+        return list(
+            trained_model_storage.read_metadata(
+                trained_model_storage.read_current_version()
+            )["symbols"]
+        )
+
+    _override_sac_bucket(monkeypatch, trained_model_storage, _trained_symbols)
 
     client = TestClient(app)
     yield client
@@ -281,10 +295,16 @@ class TestSACLSTMInference:
             if symbol != "CASH":
                 assert weight <= 0.20 + 0.01, f"{symbol} weight {weight} > 20%"
 
-    def test_inference_without_model_returns_503(self, temp_storage):
-        """Test that inference without a trained model returns 503."""
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_inference_storage] = lambda: temp_storage
+    def test_inference_without_model_returns_503(self, temp_storage, monkeypatch):
+        """Test that inference without a trained model returns 503.
+
+        Inference resolves storage via the bucket registry now, so the
+        test override goes through ``_override_sac_bucket`` rather than
+        the legacy ``get_inference_storage`` ``Depends`` shim. The empty
+        ``temp_storage`` has no ``current`` pointer, which the
+        ``local_first`` policy surfaces as 503 (no local + no HF).
+        """
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
 
         client = TestClient(app)
         response = client.post(
@@ -298,7 +318,6 @@ class TestSACLSTMInference:
         )
 
         assert response.status_code == 503
-        app.dependency_overrides.clear()
 
     def test_inference_invalid_payload_returns_422(self, inference_client):
         """Test that invalid request payload returns 422."""
@@ -341,23 +360,34 @@ def mock_price_loader(symbols, start_date, end_date):
 class TestSACLSTMFinetune:
     """Tests for /train/sac/finetune endpoint."""
 
-    def test_finetune_without_prior_returns_400(self, temp_storage):
-        """Test that finetune without prior model returns 400."""
-        app.dependency_overrides.clear()
+    def test_finetune_without_prior_returns_400(self, temp_storage, monkeypatch):
+        """Test that finetune without prior model returns 400.
+
+        Finetune resolves the prior version via
+        ``get_prior_metadata_for_bucket(bucket=halal_filtered)`` and
+        also keeps the legacy ``Depends(get_sac_storage)`` shim for the
+        post-finetune persistence step. Both seams point at the same
+        bucket / storage class, so we cover both: ``_override_sac_bucket``
+        for the registry read and the ``Depends`` override for the
+        in-route handle. With ``temp_storage`` empty, the policy helper
+        returns ``None`` and the endpoint surfaces the 400 contract.
+        """
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
-        client = TestClient(app)
-        response = client.post("/train/sac/finetune")
+        try:
+            client = TestClient(app)
+            response = client.post("/train/sac/finetune")
 
-        assert response.status_code == 400
-        assert "No prior SAC model" in response.json()["detail"]
-
-        app.dependency_overrides.clear()
-        os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-        os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+            assert response.status_code == 400
+            assert "No prior SAC model" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
     def test_finetune_end_date_is_always_friday(
         self, trained_model_storage, monkeypatch

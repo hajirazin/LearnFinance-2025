@@ -17,7 +17,6 @@ from temporalio.worker import Worker
 from activities.execution import (
     generate_orders_alpha_hrp,
     generate_orders_dhrp,
-    generate_orders_hrp,
     generate_orders_sac,
     store_experience_sac,
     update_execution_sac,
@@ -25,7 +24,6 @@ from activities.execution import (
 from activities.inference import (
     allocate_hrp,
     get_fundamentals,
-    get_halal_india_universe,
     get_lstm_forecast,
     get_news_sentiment,
     get_patchtst_forecast,
@@ -114,7 +112,6 @@ ALL_ACTIVITIES = [
     get_news_sentiment,
     get_lstm_forecast,
     get_patchtst_forecast,
-    get_halal_india_universe,
     infer_sac,
     allocate_hrp,
     select_sticky_top_n,
@@ -135,7 +132,6 @@ ALL_ACTIVITIES = [
     resolve_next_attempt,
     # Execution / experience
     generate_orders_sac,
-    generate_orders_hrp,
     generate_orders_dhrp,
     generate_orders_alpha_hrp,
     store_experience_sac,

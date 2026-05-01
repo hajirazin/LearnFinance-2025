@@ -15,9 +15,12 @@ import pickle
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
+
+if TYPE_CHECKING:
+    from brain_api.storage.policy import StoragePolicy
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.utils import RepositoryNotFoundError
 from sklearn.preprocessing import StandardScaler
@@ -189,7 +192,10 @@ class SnapshotLocalStorage:
         """Check if snapshot exists locally OR on HuggingFace (if check_hf=True).
 
         This is useful when deciding whether to create a new snapshot during training.
-        When STORAGE_BACKEND=hf, we should check HF to avoid redundant training.
+        Callers pass ``check_hf=True`` whenever the bucket has an HF
+        repo configured (see ``snapshot_storage._get_hf_repo()`` in the
+        training routes); the read policy itself never gates HF checks
+        here, only the bucket's HF repo presence does.
 
         Args:
             cutoff_date: The snapshot cutoff date to check
@@ -518,29 +524,61 @@ class SnapshotLocalStorage:
             self._hf_missing.add(cutoff_date)
             return False
 
-    def ensure_snapshot_available(self, cutoff_date: date) -> bool:
+    def ensure_snapshot_available(
+        self,
+        cutoff_date: date,
+        policy: "StoragePolicy | None" = None,
+    ) -> bool:
         """Ensure a snapshot is available locally, downloading from HF if needed.
 
-        This is the main method to use when loading snapshots - it will:
-        1. Return True immediately if snapshot exists locally
-        2. Skip HF download if a previous attempt already returned 404
-        3. Try to download from HF if not available locally
-        4. Return False if neither local nor HF has the snapshot
+        Snapshots are content-addressed by ``cutoff_date`` (year-end)
+        and do not have version drift the way main-branch artifacts do,
+        so both ``local_first`` and ``hf_first`` behave the same on the
+        happy path: prefer local, fall back to HF download. The
+        ``policy`` knob exists for two reasons:
+
+        1. ``hf_first`` requires the bucket's HF repo env to be set;
+           we surface that as a loud :class:`StoragePolicyError` so a
+           misconfigured ephemeral host doesn't silently work in
+           local-only mode.
+        2. Every storage read in the codebase flows through one
+           policy-aware helper so behavior is auditable from one place.
 
         Args:
             cutoff_date: The snapshot cutoff date
+            policy: Override; when ``None``, reads ``STORAGE_BACKEND``
+                via :func:`get_storage_policy`.
 
         Returns:
             True if snapshot is available locally (after potential download),
-            False otherwise
+            False otherwise.
+
+        Raises:
+            StoragePolicyError: when ``hf_first`` is active but the
+                forecaster bucket has no HF repo configured.
         """
+        from brain_api.storage.policy import (
+            StoragePolicy,
+            StoragePolicyError,
+            get_storage_policy,
+        )
+
+        if policy is None:
+            policy = get_storage_policy()
+
         if self.snapshot_exists(cutoff_date):
             return True
+
+        hf_repo = self._get_hf_repo()
+        if policy is StoragePolicy.HF_FIRST and not hf_repo:
+            raise StoragePolicyError(
+                f"hf_first policy requires HF repo for snapshot bucket "
+                f"{self.forecaster_type!r}; got none."
+            )
 
         if cutoff_date in self._hf_missing:
             return False
 
-        # Try downloading from HF
         return self.download_snapshot_from_hf(cutoff_date)
 
     def list_hf_snapshots(self) -> list[date]:

@@ -1,7 +1,6 @@
 """SAC training endpoints with dual forecasts (LSTM + PatchTST)."""
 
 import logging
-from collections.abc import Callable
 from datetime import timedelta
 
 import numpy as np
@@ -10,12 +9,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_storage_backend,
     resolve_cutoff_date,
     resolve_training_window,
 )
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import (
+    BucketConfig,
     ModelType,
     UnknownBucketError,
     get_bucket,
@@ -40,6 +39,10 @@ from brain_api.core.sac import (
     compute_version as sac_compute_version,
 )
 from brain_api.core.training_utils import TrainingCancelledError
+from brain_api.storage.policy import (
+    StoragePolicyError,
+    get_prior_metadata_for_bucket,
+)
 from brain_api.storage.sac import (
     SACHalalFilteredModelStorage,
     SACHalalModelStorage,
@@ -49,7 +52,6 @@ from brain_api.storage.sac import (
 from .dependencies import (
     get_sac_storage,
 )
-from .helpers import get_prior_version_info
 from .job_registry import (
     cancel_job,
     complete_job,
@@ -177,9 +179,7 @@ def train_sac_endpoint(
         symbols=symbols,
         config=config,
         storage=storage,
-        bucket_name=bucket.bucket_name,
-        hf_repo_getter=bucket.hf_repo_getter,
-        hf_storage_class=bucket.hf_storage_class,
+        bucket=bucket,
     )
     logger.info(f"[SAC] Background training started: {job.job_id}")
 
@@ -199,17 +199,21 @@ def _run_sac_full_training(
     symbols: list[str],
     config: SACConfig,
     storage: SACHalalFilteredModelStorage | SACHalalModelStorage,
-    bucket_name: str,
-    hf_repo_getter: Callable[[], str | None],
-    hf_storage_class: type,
+    bucket: BucketConfig,
 ) -> None:
     """Background task that runs the full SAC training pipeline.
 
-    ``bucket_name`` is threaded through to ``create_sac_metadata`` so
-    each parallel A/B bucket's metadata identifies its own bucket on
-    disk and on HF (vital for telling the two ``current`` artifacts
-    apart when they share the SAC HuggingFace storage class).
+    ``bucket`` carries the bucket-specific HF repo getter and storage
+    class. ``bucket.bucket_name`` is threaded through to
+    ``create_sac_metadata`` so each parallel A/B bucket's metadata
+    identifies its own bucket on disk and on HF (vital for telling
+    the two ``current`` artifacts apart when they share the SAC
+    HuggingFace storage class).
     """
+    bucket_name = bucket.bucket_name
+    hf_repo_getter = bucket.hf_repo_getter
+    hf_storage_class = bucket.hf_storage_class
+
     from brain_api.main import shutdown_event
 
     try:
@@ -323,12 +327,17 @@ def _run_sac_full_training(
 
         update_progress(job_id, {"phase": "promotion_check"})
         hf_model_repo = hf_repo_getter()
-        prior_info = get_prior_version_info(
-            local_storage=storage,
-            hf_storage_class=hf_storage_class,
-            hf_model_repo=hf_model_repo,
+        try:
+            prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
+        except StoragePolicyError as exc:
+            logger.warning(
+                f"[SAC] hf_first prior fetch failed for bucket "
+                f"{bucket.bucket_name}: {exc}; treating as inaugural"
+            )
+            prior_metadata = None
+        prior_version: str | None = (
+            prior_metadata.get("version") if prior_metadata is not None else None
         )
-        prior_version = prior_info.version
 
         promoted = prior_version is None or result.eval_cagr > MIN_PROMOTION_CAGR
         logger.info(
@@ -371,9 +380,10 @@ def _run_sac_full_training(
 
         hf_repo = None
         hf_url = None
-        storage_backend = get_storage_backend()
 
-        if storage_backend == "hf" and hf_model_repo:
+        # Writes ignore the read policy: upload whenever the bucket
+        # has an HF repo configured. Closes audit Bug 6.
+        if hf_model_repo:
             try:
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo, local_cache=storage
@@ -439,16 +449,45 @@ def finetune_sac_endpoint(
     Returns 200 with cached result if version already exists (idempotent).
     Returns 202 with job_id if fine-tuning is started in the background.
     Poll GET /train/status/{job_id} for progress and final result.
+
+    Finetune is hard-pinned to the ``sac_halal_filtered`` bucket per
+    AGENTS.md known limitation. The storage policy still applies: under
+    ``hf_first`` the prior model can come from HF if local is empty.
     """
-    prior_version = storage.read_current_version()
+    finetune_bucket = get_bucket(ModelType.SAC, "halal_filtered")
+    try:
+        prior_metadata = get_prior_metadata_for_bucket(bucket=finetune_bucket)
+    except StoragePolicyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"[SAC Finetune] hf_first prior fetch failed for bucket "
+                f"{finetune_bucket.bucket_name}: {exc}"
+            ),
+        ) from exc
+    if prior_metadata is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No prior SAC model. Train with POST /train/sac/full first",
+        )
+    prior_version = prior_metadata.get("version")
     if prior_version is None:
         raise HTTPException(
             status_code=400,
             detail="No prior SAC model. Train with POST /train/sac/full first",
         )
 
-    symbols = storage.load_symbol_order(prior_version)
-    prior_config = storage.load_current_artifacts().config
+    # Pull the prior artifacts via the policy helper so hf_first hosts
+    # download from HF + cache locally before we ask SAC for the
+    # symbol order / config (which only exist on disk).
+    from brain_api.storage.policy import load_current_artifacts_for_bucket
+
+    prior_artifacts_preview = load_current_artifacts_for_bucket(
+        bucket=finetune_bucket,
+        model_label=finetune_bucket.model_label,
+    )
+    symbols = list(prior_artifacts_preview.symbol_order)
+    prior_config = prior_artifacts_preview.config
 
     finetune_config = SACFinetuneConfig()
     end_date = resolve_cutoff_date()
@@ -505,16 +544,27 @@ def _run_sac_finetune(
     storage: SACHalalFilteredModelStorage,
     prior_version: str,
 ) -> None:
-    """Background task that runs SAC fine-tuning."""
+    """Background task that runs SAC fine-tuning.
+
+    Finetune is hard-pinned to the ``sac_halal_filtered`` bucket per
+    AGENTS.md known limitation. The prior artifacts come through the
+    storage policy helper so ``hf_first`` hosts download from HF +
+    cache locally before the rest of the pipeline reads them.
+    """
     from brain_api.main import shutdown_event
+    from brain_api.storage.policy import load_current_artifacts_for_bucket
+
+    finetune_bucket = get_bucket(ModelType.SAC, "halal_filtered")
 
     try:
-        symbols = storage.load_symbol_order(prior_version)
+        prior_artifacts = load_current_artifacts_for_bucket(
+            bucket=finetune_bucket,
+            model_label=finetune_bucket.model_label,
+        )
+        symbols = list(prior_artifacts.symbol_order)
         logger.info(
             f"[SAC Finetune] Using {len(symbols)} symbols from model {prior_version}"
         )
-
-        prior_artifacts = storage.load_current_artifacts()
         prior_config = prior_artifacts.config
 
         finetune_config = SACFinetuneConfig()
@@ -679,12 +729,13 @@ def _run_sac_finetune(
 
         hf_repo = None
         hf_url = None
-        storage_backend = get_storage_backend()
         from brain_api.core.config import get_hf_sac_halal_filtered_model_repo
 
         hf_model_repo_ft = get_hf_sac_halal_filtered_model_repo()
 
-        if storage_backend == "hf" and hf_model_repo_ft:
+        # Writes ignore the read policy: upload whenever the bucket
+        # has an HF repo configured. Closes audit Bug 6 for finetune.
+        if hf_model_repo_ft:
             try:
                 from brain_api.storage.sac import SACHuggingFaceModelStorage
 

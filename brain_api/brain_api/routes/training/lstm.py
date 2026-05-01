@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
-    get_storage_backend,
     resolve_training_window,
 )
 from brain_api.core.lstm import (
@@ -35,6 +34,10 @@ from brain_api.storage.forecaster_snapshots import (
 )
 from brain_api.storage.local import create_metadata
 from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
+from brain_api.storage.policy import (
+    StoragePolicyError,
+    get_prior_metadata_for_bucket,
+)
 
 from .dependencies import (
     DatasetBuilder,
@@ -45,7 +48,6 @@ from .dependencies import (
     get_price_loader,
     get_trainer,
 )
-from .helpers import get_prior_version_info
 from .job_registry import (
     cancel_job,
     complete_job,
@@ -165,9 +167,7 @@ def train_lstm(
         symbols=symbols,
         config=config,
         storage=storage,
-        bucket_name=bucket.bucket_name,
-        hf_repo_getter=bucket.hf_repo_getter,
-        hf_storage_class=bucket.hf_storage_class,
+        bucket=bucket,
         price_loader=price_loader,
         dataset_builder=dataset_builder,
         trainer=trainer,
@@ -191,15 +191,25 @@ def _run_lstm_training(
     symbols: list[str],
     config: LSTMConfig,
     storage: LSTMHalalNewModelStorage,
-    bucket_name: str,
-    hf_repo_getter,
-    hf_storage_class: type,
+    bucket,
     price_loader: PriceLoader,
     dataset_builder: DatasetBuilder,
     trainer: Trainer,
     skip_snapshot: bool,
 ) -> None:
-    """Background task that runs the full LSTM training pipeline."""
+    """Background task that runs the full LSTM training pipeline.
+
+    Args:
+        bucket: Resolved ``BucketConfig`` from the registry. The
+            background task pulls ``hf_repo_getter`` and
+            ``hf_storage_class`` from the bucket so HF uploads land on
+            the matching repo and snapshots/main-artifacts share one
+            source of truth.
+    """
+    bucket_name = bucket.bucket_name
+    hf_repo_getter = bucket.hf_repo_getter
+    hf_storage_class = bucket.hf_storage_class
+
     from brain_api.main import shutdown_event
 
     try:
@@ -247,13 +257,26 @@ def _run_lstm_training(
 
         update_progress(job_id, {"phase": "promotion_check"})
         hf_model_repo = hf_repo_getter()
-        prior_info = get_prior_version_info(
-            local_storage=storage,
-            hf_storage_class=hf_storage_class,
-            hf_model_repo=hf_model_repo,
-        )
-        prior_version = prior_info.version
-        prior_val_loss = prior_info.val_loss
+        try:
+            prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
+        except StoragePolicyError as exc:
+            logger.warning(
+                f"[LSTM] hf_first prior fetch failed for bucket "
+                f"{bucket.bucket_name}: {exc}; treating as inaugural"
+            )
+            prior_metadata = None
+        prior_version: str | None = None
+        prior_val_loss: float | None = None
+        if prior_metadata is not None:
+            prior_version = prior_metadata.get("version")
+            prior_val_loss = prior_metadata.get("metrics", {}).get("val_loss")
+            logger.info(
+                f"[LSTM] Prior version: {prior_version}, val_loss: {prior_val_loss}"
+            )
+        else:
+            logger.info(
+                "[LSTM] No prior version (cold-start); inaugural promote applies"
+            )
 
         promoted = evaluate_for_promotion(
             val_loss=result.val_loss,
@@ -292,9 +315,12 @@ def _run_lstm_training(
 
         hf_repo = None
         hf_url = None
-        storage_backend = get_storage_backend()
 
-        if storage_backend == "hf" and hf_model_repo:
+        # Writes are not policy-gated: whenever the bucket has an HF
+        # repo configured we upload, regardless of read policy. Closes
+        # audit Bug 6 (uploads were skipped under STORAGE_BACKEND=local
+        # even when an HF repo was set).
+        if hf_model_repo:
             try:
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo, local_cache=storage
@@ -319,7 +345,8 @@ def _run_lstm_training(
         if not skip_snapshot:
             update_progress(job_id, {"phase": "snapshots"})
             snapshot_storage = SnapshotLocalStorage(bucket_name)
-            check_hf = storage_backend == "hf"
+            snapshot_hf_repo = snapshot_storage._get_hf_repo()
+            check_hf = snapshot_hf_repo is not None
 
             if not snapshot_storage.snapshot_exists_anywhere(
                 end_date, check_hf=check_hf
@@ -343,7 +370,7 @@ def _run_lstm_training(
                 )
                 logger.info(f"[LSTM] Saved snapshot for cutoff {end_date}")
 
-                if storage_backend == "hf":
+                if snapshot_hf_repo:
                     try:
                         snapshot_storage.upload_snapshot_to_hf(end_date)
                         logger.info(
@@ -354,7 +381,7 @@ def _run_lstm_training(
 
             logger.info("[LSTM] Backfilling historical snapshots...")
             _backfill_lstm_snapshots(
-                symbols, config, start_date, end_date, snapshot_storage, storage_backend
+                symbols, config, start_date, end_date, snapshot_storage
             )
 
         response = LSTMTrainResponse(
@@ -409,7 +436,6 @@ def _backfill_lstm_snapshots(
     start_date: date,
     end_date: date,
     snapshot_storage: SnapshotLocalStorage,
-    storage_backend: str = "local",
 ) -> None:
     """Backfill LSTM snapshots for all years that RL walk-forward training needs.
 
@@ -421,18 +447,24 @@ def _backfill_lstm_snapshots(
     Optimization: Loads prices ONCE for the extended window and filters
     incrementally by cutoff instead of re-downloading for each snapshot.
 
+    Snapshot uploads are now gated solely on whether the bucket has an
+    HF repo configured (``snapshot_storage._get_hf_repo()``) rather
+    than on a process-wide policy. This keeps writes consistent
+    between ``local_first`` and ``hf_first`` callers and closes audit
+    Bug 7.
+
     Args:
         symbols: List of stock symbols
         config: LSTM configuration
         start_date: RL training data start date (from resolve_training_window)
         end_date: Training data end date
         snapshot_storage: Storage instance
-        storage_backend: "local" or "hf" - if "hf", uploads to HuggingFace
     """
     start_year = start_date.year
     end_year = end_date.year
     bootstrap_years = 4
-    check_hf = storage_backend == "hf"
+    snapshot_hf_repo = snapshot_storage._get_hf_repo()
+    check_hf = snapshot_hf_repo is not None
 
     # RL year Y needs snapshot-(Y-1)-12-31.  Create from (start_year-1) onward.
     first_snapshot_year = start_year - 1
@@ -515,8 +547,9 @@ def _backfill_lstm_snapshots(
             f"[LSTM Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
         )
 
-        # Upload to HuggingFace if in HF mode
-        if storage_backend == "hf":
+        # Upload to HuggingFace whenever the bucket's HF repo env is
+        # configured (writes ignore the read policy).
+        if snapshot_hf_repo:
             try:
                 snapshot_storage.upload_snapshot_to_hf(cutoff_date)
                 logger.info(

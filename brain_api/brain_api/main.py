@@ -22,6 +22,17 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from brain_api.storage.policy import get_storage_policy
+
+# Resolve the storage policy at boot. Any invalid `STORAGE_BACKEND`
+# value (including legacy `local`/`hf`) raises here so the API fails
+# to start with a clear migration message instead of 500ing later on
+# the first request that touches storage.
+_resolved_storage_policy = get_storage_policy()
+logger.info(
+    f"[storage-policy] Resolved STORAGE_BACKEND={_resolved_storage_policy.value}"
+)
+
 from brain_api.routes import (
     allocation,
     alpaca,

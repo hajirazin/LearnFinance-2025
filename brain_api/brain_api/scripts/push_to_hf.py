@@ -79,7 +79,7 @@ def push_model(version: str, make_current: bool = False) -> int:
 
     # Initialize HF storage and upload
     try:
-        hf_storage = HuggingFaceModelStorage(repo_id=hf_repo)
+        hf_storage = HuggingFaceModelStorage(repo_id=hf_repo, local_cache=local_storage)
         print(f"Uploading to HuggingFace: {hf_repo}")
 
         hf_info = hf_storage.upload_model(

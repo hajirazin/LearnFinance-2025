@@ -1,6 +1,7 @@
 """API-level tests for PatchTST inference endpoint."""
 
 import tempfile
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -8,13 +9,11 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
+from brain_api.core import model_buckets
+from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DEFAULT_CONFIG, PatchTSTConfig
 from brain_api.core.patchtst.inference import BatchInferenceResult, SymbolPrediction
 from brain_api.main import app
-from brain_api.routes.inference import (
-    get_patchtst_india_storage,
-    get_patchtst_storage,
-)
 from brain_api.storage.local import PatchTSTIndiaModelStorage, PatchTSTModelStorage
 
 # ============================================================================
@@ -93,14 +92,42 @@ def temp_storage():
         yield storage
 
 
+def _override_patchtst_us_bucket(monkeypatch, storage):
+    """Swap the ``(PATCHTST, halal_new)`` registry entry to use the test
+    storage. Inference loads artifacts via the bucket's
+    ``local_storage_class`` factory, so the same factory is reused
+    here. Restored automatically by ``monkeypatch``.
+    """
+    original = get_bucket(ModelType.PATCHTST, "halal_new")
+    patched = replace(original, local_storage_class=lambda: storage)
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.PATCHTST, "halal_new"),
+        patched,
+    )
+
+
+def _override_patchtst_india_bucket(monkeypatch, storage):
+    """Same as :func:`_override_patchtst_us_bucket` but for the
+    ``(PATCHTST, nifty_shariah_500)`` bucket.
+    """
+    original = get_bucket(ModelType.PATCHTST, "nifty_shariah_500")
+    patched = replace(original, local_storage_class=lambda: storage)
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.PATCHTST, "nifty_shariah_500"),
+        patched,
+    )
+
+
 @pytest.fixture
 def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies."""
-    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
+    _override_patchtst_us_bucket(monkeypatch, temp_storage)
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None):
+    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -217,25 +244,24 @@ def test_inference_patchtst_returns_signals_used(client_with_mocks):
 # ============================================================================
 
 
-def test_inference_patchtst_no_model_returns_400():
-    """POST /inference/patchtst returns 400 when no model is trained."""
+def test_inference_patchtst_no_model_returns_400(monkeypatch):
+    """POST /inference/patchtst returns 503 when no model is available
+    locally and no HF repo is configured for the bucket.
+
+    The endpoint's old contract (400 'No current PatchTST model') was
+    replaced by the storage-policy contract (503 with an actionable
+    message) so callers can distinguish 'untrained model' from 'bad
+    request'. Test name kept for git history.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_storage = PatchTSTModelStorage(base_path=tmpdir)
-
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_patchtst_storage] = lambda: empty_storage
+        _override_patchtst_us_bucket(monkeypatch, empty_storage)
 
         client = TestClient(app)
 
-        try:
-            response = client.post(
-                "/inference/patchtst",
-                json={},
-            )
-            assert response.status_code == 400
-            assert "No current PatchTST model" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.clear()
+        response = client.post("/inference/patchtst", json={})
+        assert response.status_code == 503
+        assert "PatchTST" in response.json()["detail"]
 
 
 # ============================================================================
@@ -383,11 +409,11 @@ def temp_india_storage():
 @pytest.fixture
 def india_client_with_mocks(temp_india_storage, monkeypatch):
     """Test client with India PatchTST storage + mocked run_batch_inference."""
-    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+    _override_patchtst_india_bucket(monkeypatch, temp_india_storage)
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None):
+    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -407,20 +433,21 @@ def test_inference_patchtst_india_returns_200(india_client_with_mocks):
     assert data["signals_used"] == ["ohlcv"]
 
 
-def test_inference_patchtst_india_no_model_returns_400():
-    """POST /inference/patchtst/india returns 400 when no India model is current."""
+def test_inference_patchtst_india_no_model_returns_400(monkeypatch):
+    """POST /inference/patchtst/india returns 503 when no India model is
+    available locally and no HF repo is configured for the bucket.
+
+    Storage-policy contract: missing artifacts surface as 503, not 400.
+    Test name kept for git history.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_storage = PatchTSTIndiaModelStorage(base_path=tmpdir)
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_patchtst_india_storage] = lambda: empty_storage
+        _override_patchtst_india_bucket(monkeypatch, empty_storage)
 
         client = TestClient(app)
-        try:
-            response = client.post("/inference/patchtst/india", json={})
-            assert response.status_code == 400
-            assert "No current PatchTST" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.clear()
+        response = client.post("/inference/patchtst/india", json={})
+        assert response.status_code == 503
+        assert "PatchTST" in response.json()["detail"]
 
 
 def test_inference_patchtst_india_empty_symbols_returns_422(india_client_with_mocks):
@@ -441,35 +468,30 @@ def test_inference_patchtst_india_uses_india_storage(
     India version. This guards against accidental wiring back to
     get_patchtst_storage.
     """
-    # Override the US version on temp_storage so the two are visibly distinct.
     us_version = temp_storage.read_current_version()
     india_version = temp_india_storage.read_current_version()
     assert us_version == india_version  # both are MOCK_VERSION; that's fine
 
-    app.dependency_overrides.clear()
-    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+    _override_patchtst_us_bucket(monkeypatch, temp_storage)
+    _override_patchtst_india_bucket(monkeypatch, temp_india_storage)
 
     from brain_api.routes.inference import patchtst as inference_module
 
     seen_storage = []
 
-    def mock_run_batch(symbols, cutoff_date, storage=None):
+    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
         seen_storage.append(storage)
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
 
     client = TestClient(app)
-    try:
-        response = client.post("/inference/patchtst/india", json={})
-        assert response.status_code == 200
-        # The mock captured exactly one call; the storage object must be
-        # the India one we provided -- not the US one.
-        assert len(seen_storage) == 1
-        assert seen_storage[0] is temp_india_storage
-    finally:
-        app.dependency_overrides.clear()
+    response = client.post("/inference/patchtst/india", json={})
+    assert response.status_code == 200
+    # The mock captured exactly one call; the storage object must be
+    # the India one we provided -- not the US one.
+    assert len(seen_storage) == 1
+    assert seen_storage[0] is temp_india_storage
 
 
 # ============================================================================
@@ -484,12 +506,12 @@ def score_batch_client(temp_storage, temp_india_storage, monkeypatch):
     Lets us flip ``market`` between calls without re-initialising the
     test client.
     """
-    app.dependency_overrides[get_patchtst_storage] = lambda: temp_storage
-    app.dependency_overrides[get_patchtst_india_storage] = lambda: temp_india_storage
+    _override_patchtst_us_bucket(monkeypatch, temp_storage)
+    _override_patchtst_india_bucket(monkeypatch, temp_india_storage)
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None):
+    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -562,7 +584,7 @@ def test_score_batch_non_finite_returns_422(score_batch_client, monkeypatch):
     """A NaN prediction must surface as 422 (rank-band invariant violation)."""
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch_with_nan(symbols, cutoff_date, storage=None):
+    def mock_run_batch_with_nan(symbols, cutoff_date, storage=None, artifacts=None):
         result = _make_mock_batch_result(symbols)
         # Replace the first prediction's score with NaN.
         result.predictions[0].predicted_weekly_return_pct = float("nan")
@@ -608,29 +630,29 @@ def test_score_batch_invalid_market_returns_422(score_batch_client):
     assert response.status_code == 422
 
 
-def test_score_batch_no_india_model_returns_400():
-    """market='india' without a current India model returns 400."""
+def test_score_batch_no_india_model_returns_400(monkeypatch):
+    """market='india' without a current India model returns 503.
+
+    Storage-policy contract: missing artifacts surface as 503, not 400.
+    Test name kept for git history.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_india = PatchTSTIndiaModelStorage(base_path=tmpdir)
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_patchtst_india_storage] = lambda: empty_india
-        # US storage is irrelevant for this test, but the dep is required;
-        # an empty US storage is fine because we never read it.
+        _override_patchtst_india_bucket(monkeypatch, empty_india)
+        # US storage is irrelevant for this test (market='india'), but
+        # the bucket must point somewhere safe; use an empty temp dir.
         with tempfile.TemporaryDirectory() as us_tmp:
             empty_us = PatchTSTModelStorage(base_path=us_tmp)
-            app.dependency_overrides[get_patchtst_storage] = lambda: empty_us
+            _override_patchtst_us_bucket(monkeypatch, empty_us)
 
             client = TestClient(app)
-            try:
-                response = client.post(
-                    "/inference/patchtst/score-batch",
-                    json={
-                        "market": "india",
-                        "symbols": ["RELIANCE.NS"],
-                        "min_predictions": 1,
-                    },
-                )
-                assert response.status_code == 400
-                assert "india" in response.json()["detail"]
-            finally:
-                app.dependency_overrides.clear()
+            response = client.post(
+                "/inference/patchtst/score-batch",
+                json={
+                    "market": "india",
+                    "symbols": ["RELIANCE.NS"],
+                    "min_predictions": 1,
+                },
+            )
+            assert response.status_code == 503
+            assert "PatchTST" in response.json()["detail"]

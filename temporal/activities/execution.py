@@ -60,27 +60,6 @@ def generate_orders_sac(
 
 
 @activity.defn
-def generate_orders_hrp(
-    allocation: HRPAllocationResponse | SkippedAllocation,
-    portfolio: AlpacaPortfolioResponse,
-    run_id: str,
-    attempt: int,
-) -> GenerateOrdersResponse | SkippedOrdersResponse:
-    """Generate orders for HRP allocation.
-
-    HRP returns percentage_weights (10.5 = 10.5%), converted to
-    target_weights (0.105) before calling the orders endpoint.
-    """
-    return _generate_orders_from_hrp(
-        allocation=allocation,
-        portfolio=portfolio,
-        run_id=run_id,
-        attempt=attempt,
-        algorithm="hrp",
-    )
-
-
-@activity.defn
 def generate_orders_dhrp(
     allocation: HRPAllocationResponse | SkippedAllocation,
     portfolio: AlpacaPortfolioResponse,
@@ -137,7 +116,7 @@ def _generate_orders_from_hrp(
     attempt: int,
     algorithm: str,
 ) -> GenerateOrdersResponse | SkippedOrdersResponse:
-    """Shared body for HRP-style allocators (HRP, DHRP).
+    """Shared body for HRP-style allocators (DHRP, Alpha-HRP).
 
     Math is identical for both: convert pp weights to fractions and POST
     to /orders/generate with the correct ``algorithm`` tag. Kept as a

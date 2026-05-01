@@ -26,7 +26,9 @@ ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO = "HF_SAC_HALAL_FILTERED_MODEL_REPO"
 ENV_HF_SAC_HALAL_MODEL_REPO = "HF_SAC_HALAL_MODEL_REPO"
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
-ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
+# ``STORAGE_BACKEND`` lives in :mod:`brain_api.storage.policy`; the
+# env name and resolver are owned by that module so this file does
+# not have to know about the read-priority enum.
 
 # Alpaca News API environment variables
 ENV_ALPACA_API_KEY = "ALPACA_API_KEY"
@@ -34,7 +36,6 @@ ENV_ALPACA_API_SECRET = "ALPACA_API_SECRET"
 
 # Defaults
 DEFAULT_LOOKBACK_YEARS = 10
-DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
 
 
 def get_hf_token() -> str | None:
@@ -81,11 +82,6 @@ def get_hf_news_sentiment_repo() -> str | None:
 def get_hf_twitter_sentiment_repo() -> str | None:
     """Get HuggingFace twitter sentiment dataset repository name."""
     return os.environ.get(ENV_HF_TWITTER_SENTIMENT_REPO)
-
-
-def get_storage_backend() -> str:
-    """Get the storage backend to use ('local' or 'hf')."""
-    return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
 
 
 def resolve_cutoff_date(reference_date: date | None = None) -> date:

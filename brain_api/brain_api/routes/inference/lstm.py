@@ -18,15 +18,14 @@ from brain_api.core.model_buckets import (
     get_bucket,
     list_universes_for,
 )
-from brain_api.storage.local import LSTMHalalNewModelStorage
+from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 from .dependencies import (
     PriceLoader,
     get_as_of_date,
     get_price_loader,
-    get_storage,
 )
-from .helpers import _load_model_artifacts, _sort_predictions
+from .helpers import _sort_predictions
 from .models import LSTMInferenceRequest, LSTMInferenceResponse
 
 router = APIRouter()
@@ -44,7 +43,6 @@ def infer_lstm(
             "bucket without breaking existing callers."
         ),
     ),
-    storage: LSTMHalalNewModelStorage = Depends(get_storage),
     price_loader: PriceLoader = Depends(get_price_loader),
 ) -> LSTMInferenceResponse:
     """Predict weekly returns using the current LSTM model.
@@ -56,26 +54,38 @@ def infer_lstm(
         LSTMInferenceResponse with per-symbol predictions and metadata
 
     Raises:
-        HTTPException 400: if no current model version is available
         HTTPException 422: if ``universe`` is not a registered LSTM bucket
-        HTTPException 503: if model artifacts cannot be loaded
+        HTTPException 503: if model artifacts cannot be loaded under the
+            active storage policy (local empty + no HF, HF unreachable, etc.)
     """
     t_start = time.time()
 
-    if universe is not None:
-        try:
-            bucket = get_bucket(ModelType.LSTM, universe)
-        except UnknownBucketError as exc:
-            allowed = sorted(list_universes_for(ModelType.LSTM))
-            raise HTTPException(
-                status_code=422,
-                detail=(f"Unknown universe '{universe}' for LSTM. Allowed: {allowed}"),
-            ) from exc
-        storage = bucket.local_storage_class()
+    resolved_universe = universe if universe is not None else "halal_new"
+    try:
+        bucket = get_bucket(ModelType.LSTM, resolved_universe)
+    except UnknownBucketError as exc:
+        allowed = sorted(list_universes_for(ModelType.LSTM))
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe '{resolved_universe}' for LSTM. Allowed: {allowed}"
+            ),
+        ) from exc
 
-    version = storage.read_current_version()
-    if not version:
-        raise HTTPException(400, "No current LSTM model version available")
+    # Load current model artifacts via the active storage policy
+    # (local_first or hf_first); the helper raises HTTPException 503
+    # with an actionable message on miss / cold-start / HF unreachable.
+    logger.info("[LSTM] Loading model artifacts...")
+    t0 = time.time()
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+    )
+    t_model = time.time() - t0
+    version = artifacts.version
+    logger.info(f"[LSTM] Model loaded in {t_model:.2f}s: version={version}")
+
+    storage = bucket.local_storage_class()
 
     if request.symbols is not None:
         symbols = list(request.symbols)
@@ -101,13 +111,6 @@ def infer_lstm(
     logger.info(
         f"[LSTM] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
-
-    # Load current model artifacts (try local first, then HuggingFace)
-    logger.info("[LSTM] Loading model artifacts...")
-    t0 = time.time()
-    artifacts = _load_model_artifacts(storage)
-    t_model = time.time() - t0
-    logger.info(f"[LSTM] Model loaded in {t_model:.2f}s: version={artifacts.version}")
 
     # Calculate how much history we need to fetch
     # We need sequence_length days of data ending before target_week_start

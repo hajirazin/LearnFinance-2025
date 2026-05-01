@@ -4,7 +4,7 @@ import logging
 import time
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.model_buckets import (
@@ -15,9 +15,9 @@ from brain_api.core.model_buckets import (
 )
 from brain_api.core.sac import run_sac_inference
 from brain_api.core.training_utils import get_device
-from brain_api.storage.sac import SACHalalFilteredModelStorage
+from brain_api.storage.policy import load_current_artifacts_for_bucket
 
-from .dependencies import get_sac_as_of_date, get_sac_storage
+from .dependencies import get_sac_as_of_date
 from .models import SACInferenceRequest, SACInferenceResponse, WeightChange
 
 router = APIRouter()
@@ -35,12 +35,14 @@ def infer_sac(
             "be selected without breaking existing callers."
         ),
     ),
-    storage: SACHalalFilteredModelStorage = Depends(get_sac_storage),
 ) -> SACInferenceResponse:
     """Get target portfolio weights from SAC policy.
 
     This endpoint:
-    1. Loads the current SAC model
+    1. Loads the current SAC model via the active storage policy
+       (``local_first`` / ``hf_first``); HF download under
+       ``universe='halal'`` caches into ``data/models/sac_halal/`` so
+       audit Bug 4 (bucket isolation) cannot regress on the read path.
     2. Normalizes the portfolio snapshot to weights
     3. Builds state vector with current signals + dual forecasts (LSTM + PatchTST)
     4. Runs SAC inference to get target weights
@@ -55,16 +57,17 @@ def infer_sac(
     t_start = time.time()
     logger.info("[SAC] Starting inference")
 
-    if universe is not None:
-        try:
-            bucket = get_bucket(ModelType.SAC, universe)
-        except UnknownBucketError as exc:
-            allowed = sorted(list_universes_for(ModelType.SAC))
-            raise HTTPException(
-                status_code=422,
-                detail=(f"Unknown universe '{universe}' for SAC. Allowed: {allowed}"),
-            ) from exc
-        storage = bucket.local_storage_class()
+    resolved_universe = universe if universe is not None else "halal_filtered"
+    try:
+        bucket = get_bucket(ModelType.SAC, resolved_universe)
+    except UnknownBucketError as exc:
+        allowed = sorted(list_universes_for(ModelType.SAC))
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown universe '{resolved_universe}' for SAC. Allowed: {allowed}"
+            ),
+        ) from exc
 
     # Get cutoff date (always a Friday)
     cutoff_date = get_sac_as_of_date(request)
@@ -76,15 +79,14 @@ def infer_sac(
         f"[SAC] Target week: {week_boundaries.target_week_start} to {week_boundaries.target_week_end}"
     )
 
-    # Load model artifacts
+    # Load model artifacts via the active storage policy. The helper
+    # raises HTTPException 503 with an actionable message on miss /
+    # cold-start / HF unreachable.
     logger.info("[SAC] Loading model artifacts...")
-    try:
-        artifacts = storage.load_current_artifacts()
-    except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail=str(e),
-        ) from e
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+    )
 
     # Storage layer always loads weights on CPU for portability (Mac/Pi/CUDA).
     # Move actor to the best available device for fast inference (MPS on Mac,

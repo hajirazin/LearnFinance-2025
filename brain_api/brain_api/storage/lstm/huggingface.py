@@ -80,9 +80,13 @@ LSTM model for predicting weekly stock returns.
 ## Usage
 
 ```python
-from brain_api.storage.huggingface import HuggingFaceModelStorage
+from brain_api.storage.lstm.huggingface import HuggingFaceModelStorage
+from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
 
-storage = HuggingFaceModelStorage(repo_id="{self.repo_id}")
+storage = HuggingFaceModelStorage(
+    repo_id="{self.repo_id}",
+    local_cache=LSTMHalalNewModelStorage(),
+)
 artifacts = storage.download_model(version="{version}")
 ```
 """

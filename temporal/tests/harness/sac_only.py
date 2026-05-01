@@ -66,11 +66,6 @@ def make_sac_only_activities(
         _forbid("allocate_hrp")
         return None
 
-    @activity.defn(name="generate_orders_hrp")
-    def mock_generate_orders_hrp(*args, **kwargs):
-        _forbid("generate_orders_hrp")
-        return SkippedOrdersResponse(skipped=True, algorithm="hrp")
-
     @activity.defn(name="submit_orders_hrp")
     def mock_submit_orders_hrp(orders):
         _forbid("submit_orders_hrp")
@@ -169,7 +164,6 @@ def make_sac_only_activities(
         mock_get_sac_portfolio,
         mock_get_hrp_portfolio,
         mock_allocate_hrp,
-        mock_generate_orders_hrp,
         mock_submit_orders_hrp,
         mock_get_fundamentals,
         mock_get_news_sentiment,

@@ -7,18 +7,76 @@ import os
 
 import pytest
 
-# HuggingFace-related environment variables that should not affect tests
+# HuggingFace-related environment variables that should not affect tests.
+# Includes both the legacy unbucketed names (kept for backwards compat
+# with tests that still reference them) and the bucket-keyed names that
+# the universe-keyed registry uses today. Without the bucket-keyed
+# names, a developer ``.env`` containing ``HF_LSTM_HALAL_NEW_MODEL_REPO``
+# would leak into tests and trigger real HF uploads now that training
+# routes ungate uploads on policy.
 HF_ENV_VARS = [
+    # Legacy unbucketed (still cleared for safety)
     "HF_LSTM_MODEL_REPO",
     "HF_PATCHTST_MODEL_REPO",
-    "HF_SAC_MODEL_REPO",  # SAC allocator (unified, dual forecasts)
+    "HF_SAC_MODEL_REPO",
+    # Bucket-keyed model repos (one per (model, universe) bucket)
+    "HF_LSTM_HALAL_NEW_MODEL_REPO",
+    "HF_PATCHTST_HALAL_NEW_MODEL_REPO",
+    "HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO",
+    "HF_SAC_HALAL_FILTERED_MODEL_REPO",
+    "HF_SAC_HALAL_MODEL_REPO",
+    # Dataset repos + auth + policy switch
     "HF_NEWS_SENTIMENT_REPO",
     "HF_TWITTER_SENTIMENT_REPO",
     "HF_DATASET_REPO",
+    "HF_MODEL_REPO",
     "HF_TOKEN",
     "HUGGINGFACE_TOKEN",
     "STORAGE_BACKEND",
 ]
+
+
+# `STORAGE_BACKEND` is consulted at *import* time by `brain_api.main`
+# (boot-time policy validation). Many test modules import `app` at the
+# top level, which runs before any pytest fixture; setting an
+# explicit valid value here at conftest module load makes sure those
+# collections run with the safe default regardless of the developer
+# shell env *and* regardless of what their local ``.env`` file says
+# (``brain_api.main`` calls ``dotenv.load_dotenv()`` on import, which
+# is non-overriding -- so as long as we set ``STORAGE_BACKEND`` here
+# first, the ``.env`` value is ignored). Test cases that need a
+# specific value still override via ``monkeypatch.setenv``.
+_HOST_STORAGE_BACKEND = os.environ.pop("STORAGE_BACKEND", None)
+os.environ["STORAGE_BACKEND"] = "local_first"
+
+# Drop bucket-keyed HF model repo envs at conftest module load so a
+# developer ``.env`` (loaded by ``brain_api.main`` via ``load_dotenv``)
+# cannot reintroduce them. The autouse fixture below also clears them
+# per-test, but tests that import ``brain_api.main`` at module top
+# (most of the route tests) are bound by import-time env -- not the
+# fixture lifecycle. Setting an empty string (rather than ``pop``) is
+# what blocks dotenv's non-overriding fallback from re-populating them.
+_HF_BUCKET_REPO_ENVS = (
+    "HF_LSTM_HALAL_NEW_MODEL_REPO",
+    "HF_PATCHTST_HALAL_NEW_MODEL_REPO",
+    "HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO",
+    "HF_SAC_HALAL_FILTERED_MODEL_REPO",
+    "HF_SAC_HALAL_MODEL_REPO",
+    "HF_LSTM_MODEL_REPO",
+    "HF_PATCHTST_MODEL_REPO",
+    "HF_SAC_MODEL_REPO",
+    "HF_NEWS_SENTIMENT_REPO",
+    "HF_TWITTER_SENTIMENT_REPO",
+    "HF_DATASET_REPO",
+    "HF_MODEL_REPO",
+    "HF_TOKEN",
+    "HUGGINGFACE_TOKEN",
+)
+_HOST_HF_REPO_ENVS = {
+    name: os.environ.pop(name) for name in _HF_BUCKET_REPO_ENVS if name in os.environ
+}
+for _name in _HF_BUCKET_REPO_ENVS:
+    os.environ[_name] = ""
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +97,19 @@ def isolate_from_env():
     # Restore original values after test
     for var, value in original_values.items():
         os.environ[var] = value
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Restore host env vars (``STORAGE_BACKEND`` + HF repo envs) after the suite."""
+    if _HOST_STORAGE_BACKEND is None:
+        os.environ.pop("STORAGE_BACKEND", None)
+    else:
+        os.environ["STORAGE_BACKEND"] = _HOST_STORAGE_BACKEND
+    for _name in _HF_BUCKET_REPO_ENVS:
+        if _name in _HOST_HF_REPO_ENVS:
+            os.environ[_name] = _HOST_HF_REPO_ENVS[_name]
+        else:
+            os.environ.pop(_name, None)
 
 
 @pytest.fixture(autouse=True)

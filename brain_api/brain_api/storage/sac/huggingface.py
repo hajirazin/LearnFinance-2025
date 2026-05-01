@@ -58,9 +58,10 @@ class SACHuggingFaceModelStorage:
 
     def __init__(
         self,
+        *,
         repo_id: str | None = None,
         token: str | None = None,
-        local_cache: SACLocalStorage | None = None,
+        local_cache: SACLocalStorage,
     ):
         """Initialize SAC HuggingFace model storage.
 
@@ -78,15 +79,25 @@ class SACHuggingFaceModelStorage:
                 ``HF_SAC_HALAL_FILTERED_MODEL_REPO`` env var for
                 backward compatibility.
             token: HuggingFace API token.
-            local_cache: Optional local storage for caching downloaded
-                models. Pass the bucket's matching local storage
-                (``SACHalalFilteredModelStorage`` or
-                ``SACHalalModelStorage``) so cached versions land on
-                the right on-disk path.
+            local_cache: Required local storage instance for the
+                target bucket (``SACHalalFilteredModelStorage`` or
+                ``SACHalalModelStorage``). Closes audit Bug 4: prior
+                to this change a ``None`` default silently fell back
+                to the parent ``SACLocalStorage`` which writes into
+                ``data/models/sac/`` and would let an A/B run on
+                ``sac_halal`` cache into the ``sac_halal_filtered``
+                directory. Passing the bucket's local class is
+                mandatory.
         """
+        if local_cache is None:
+            raise TypeError(
+                "local_cache is required for SACHuggingFaceModelStorage: "
+                "pass SACHalalFilteredModelStorage() or "
+                "SACHalalModelStorage() to keep bucket isolation."
+            )
         self.repo_id = repo_id or get_hf_sac_halal_filtered_model_repo()
         self.token = token or get_hf_token()
-        self.local_cache = local_cache or SACLocalStorage()
+        self.local_cache = local_cache
         self.api = HfApi(token=self.token)
 
         if not self.repo_id:
@@ -99,9 +110,11 @@ class SACHuggingFaceModelStorage:
 
     @property
     def model_type(self) -> str:
-        # The local_cache subclass identifies the actual bucket; this
-        # property is retained for backward compatibility only.
-        return "sac_halal_filtered"
+        # Defer to the bucket-specific local storage so two parallel
+        # SAC buckets ("sac_halal_filtered" / "sac_halal") log under
+        # their actual on-disk identity instead of always reading as
+        # "sac_halal_filtered" (audit Bug 5).
+        return self.local_cache.model_type
 
     def _ensure_repo_exists(self) -> None:
         """Create the HF repo if it doesn't exist."""
@@ -470,8 +483,12 @@ Soft Actor-Critic (SAC) portfolio allocation agent using dual forecasts (LSTM + 
 
 ```python
 from brain_api.storage.sac import SACHuggingFaceModelStorage
+from brain_api.storage.sac.local import SACHalalFilteredModelStorage
 
-storage = SACHuggingFaceModelStorage(repo_id="{self.repo_id}")
+storage = SACHuggingFaceModelStorage(
+    repo_id="{self.repo_id}",
+    local_cache=SACHalalFilteredModelStorage(),
+)
 artifacts = storage.download_model(version="{version}")
 ```
 """

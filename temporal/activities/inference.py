@@ -113,22 +113,6 @@ def get_patchtst_forecast(
 
 
 @activity.defn
-def get_halal_india_universe() -> dict:
-    """Validate and fetch the halal_india universe from NSE Nifty 500 Shariah."""
-    logger.info("Fetching halal_india universe...")
-    with get_client() as client:
-        response = client.get("/universe/halal_india")
-        response.raise_for_status()
-    data = response.json()
-    stock_count = len(data.get("stocks", []))
-    logger.info(
-        f"Halal India universe: {stock_count} stocks, "
-        f"source={data.get('source', 'unknown')}"
-    )
-    return data
-
-
-@activity.defn
 def select_sticky_top_n(
     stage1: HRPAllocationResponse,
     universe: str,

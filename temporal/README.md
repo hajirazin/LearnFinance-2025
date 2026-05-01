@@ -24,15 +24,23 @@ devbox run temporal:run:us-double-hrp
 
 ## Workflows
 
-| Workflow | Schedule | Description |
-|----------|----------|-------------|
-| USWeeklyAllocation | Monday 11:00 UTC | SAC-only allocation + sell-wait-buy + email (naive HRP retired; `hrp` account now driven by USAlphaHRP) |
-| IndiaWeeklyAllocation | Monday 03:30 UTC | India HRP allocation + email |
-| IndiaDoubleHRP | Monday 04:00 UTC | Two-stage HRP (Nifty Shariah 500 → top 15) + email |
-| USDoubleHRP | Monday 11:30 UTC | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
-| USAlphaHRP | Monday 12:00 UTC | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
-| USWeeklyTraining | Sunday 11:00 UTC | Full US model training (not in `SCHEDULES` by default) |
-| IndiaWeeklyTraining | Sunday 04:30 UTC | India PatchTST training (not in `SCHEDULES` by default) |
+Nine schedules are registered: 5 weekly inference (cron) + 4 monthly first-Sunday
+training (calendar spec). Inference schedules land on the `learnfinance-inference`
+queue (Pi worker, optional Mac inference backup); training schedules land on the
+`learnfinance-training` queue (Mac trainer, `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`
+to serialise heavy GPU activities).
+
+| Workflow | Schedule | Queue | Description |
+|----------|----------|-------|-------------|
+| USWeeklyAllocation | Monday 11:00 UTC | inference | SAC-only allocation + sell-wait-buy + email (naive HRP retired; `hrp` account now driven by USAlphaHRP) |
+| IndiaWeeklyAllocation | Monday 03:30 UTC | inference | India Alpha-HRP (PatchTST screen → rank-band sticky → HRP) + email (paper-only, no broker) |
+| IndiaDoubleHRP | Monday 04:00 UTC | inference | Two-stage HRP (Nifty Shariah 500 → top 15) + email (paper-only, no broker) |
+| USDoubleHRP | Monday 11:30 UTC | inference | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
+| USAlphaHRP | Monday 12:00 UTC | inference | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
+| USForecastersTraining | First Sunday of month, 00:01 UTC | training | LSTM + PatchTST training (strictly serial) + email |
+| USSACTraining | First Sunday of month, 06:01 UTC | training | SAC training on `halal_filtered` bucket + email |
+| USSACHalalTraining | First Sunday of month, 12:01 UTC | training | SAC training on `halal` legacy yfinance bucket (parallel A/B sibling) + email |
+| IndiaMonthlyTraining | First Sunday of month, 18:01 UTC | training | India PatchTST training + email |
 
 ## Schedule registration is idempotent
 
@@ -42,10 +50,12 @@ updating)` and exits 0. This means the docker-compose `temporal-schedules-init`
 one-shot service can safely run on every `docker compose up -d --build` without
 side effects.
 
-Five cron schedules are registered by default: US weekly allocation, India
-weekly allocation, India Double HRP, US Double HRP, and US Alpha-HRP (see
-`SCHEDULES` in `schedules.py`). Training schedules are preserved as a commented `SCHEDULES_MAC`
-block for future use on a beefier host.
+All nine schedules above live in a single `SCHEDULES` list in `schedules.py`.
+Training cadence cannot be expressed as a single cron string ("first Sunday of
+month" requires AND-ing day-of-month and day-of-week, which Vixie cron OR's), so
+training entries use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0],
+hour=H, minute=M)` via the `first_sunday_of_month_at` helper while inference
+entries continue to use plain cron strings.
 
 ## Changing a schedule on the Pi
 

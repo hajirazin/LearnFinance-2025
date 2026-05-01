@@ -107,10 +107,9 @@ class IndiaWeeklyAllocationWorkflow:
             f"week={target_week_start} -> {target_week_end}"
         )
 
-        # Phase 0: Fetch the full Nifty Shariah 500 universe.
-        # Distinct from get_halal_india_universe (which already pre-filters
-        # to top-15 via PatchTST and would discard ranks 16-25 the
-        # rank-band selector and email both want to see).
+        # Phase 0: Fetch the full Nifty Shariah 500 universe -- the
+        # rank-band selector needs ranks 16-25 visible to score, so we
+        # cannot reuse the pre-filtered top-15 halal_india endpoint.
         universe_data = await workflow.execute_activity(
             fetch_nifty_shariah_500_universe,
             start_to_close_timeout=ACTIVITY_TIMEOUT,

@@ -18,10 +18,11 @@ in core.
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.model_buckets import (
+    BucketConfig,
     ModelType,
     UnknownBucketError,
     get_bucket,
@@ -29,15 +30,10 @@ from brain_api.core.model_buckets import (
 )
 from brain_api.core.patchtst import validate_and_collect_finite_scores
 from brain_api.core.patchtst.inference import run_batch_inference
-from brain_api.storage.local import (
-    PatchTSTHalalNewModelStorage,
-    PatchTSTNiftyShariah500ModelStorage,
-)
+from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 from .dependencies import (
     get_patchtst_as_of_date,
-    get_patchtst_india_storage,
-    get_patchtst_storage,
 )
 from .models import (
     PatchTSTInferenceRequest,
@@ -52,20 +48,25 @@ logger = logging.getLogger(__name__)
 
 def _run_patchtst_inference(
     request: PatchTSTInferenceRequest,
-    storage: PatchTSTHalalNewModelStorage,
+    bucket: BucketConfig,
     log_prefix: str,
 ) -> PatchTSTInferenceResponse:
     """Run a single-market PatchTST inference and shape the response.
 
     Shared between ``/patchtst`` (US) and ``/patchtst/india`` so the
     forward-pass + response-assembly math has one implementation -- only
-    the storage backend (trained weights/scalers) differs per market.
+    the bucket (trained weights/scalers) differs per market. Storage is
+    resolved through the active policy (``local_first`` / ``hf_first``)
+    so HF fallback works for both markets, closing audit Bug 1.
     """
     t_start = time.time()
 
-    version = storage.read_current_version()
-    if not version:
-        raise HTTPException(400, "No current PatchTST model version available")
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+    )
+    version = artifacts.version
+    storage = bucket.local_storage_class()
 
     if request.symbols is not None:
         symbols = list(request.symbols)
@@ -90,7 +91,9 @@ def _run_patchtst_inference(
     week_boundaries = compute_week_from_cutoff(cutoff_date)
 
     try:
-        batch_result = run_batch_inference(symbols, cutoff_date, storage)
+        batch_result = run_batch_inference(
+            symbols, cutoff_date, storage=storage, artifacts=artifacts
+        )
     except ValueError as e:
         raise HTTPException(503, str(e)) from e
 
@@ -122,63 +125,69 @@ def _run_patchtst_inference(
     )
 
 
-def _resolve_patchtst_us_storage(
-    universe: str | None,
-    default_storage: PatchTSTHalalNewModelStorage,
-) -> PatchTSTHalalNewModelStorage:
-    """Resolve the US PatchTST storage backend for an optional universe override.
+def _is_india_bucket(bucket: BucketConfig) -> bool:
+    """Identify the India PatchTST bucket via its semantic name.
 
-    When ``universe`` is ``None`` we keep the FastAPI-injected default so
-    that test ``dependency_overrides`` continue to work. Otherwise we
-    look up the bucket via the registry; this lets future US PatchTST
-    buckets (e.g. ``patchtst_halal``) be selected without changing the
-    endpoint signature.
+    We deliberately use ``bucket.bucket_name`` rather than
+    ``isinstance``/identity on ``local_storage_class`` so test fixtures
+    can swap the registry's ``local_storage_class`` (e.g. with a
+    ``lambda`` factory returning a ``tmpdir``-backed storage instance)
+    without breaking US/India routing. The bucket's name is preserved
+    by ``dataclasses.replace`` and is the same identifier baked into
+    the on-disk path and HF repo env var, so it is the right semantic
+    key for "is this the India bucket?".
     """
-    if universe is None:
-        return default_storage
+    return bucket.bucket_name == "patchtst_nifty_shariah_500"
+
+
+def _resolve_patchtst_us_bucket(universe: str | None) -> BucketConfig:
+    """Resolve the bucket for a US PatchTST request.
+
+    When ``universe`` is ``None`` we default to ``halal_new``. Any
+    explicit value is looked up via the registry so future US buckets
+    (e.g. ``patchtst_halal``) can be selected without endpoint
+    signature changes.
+    """
+    resolved = universe if universe is not None else "halal_new"
     try:
-        bucket = get_bucket(ModelType.PATCHTST, universe)
+        bucket = get_bucket(ModelType.PATCHTST, resolved)
     except UnknownBucketError as exc:
         allowed = sorted(list_universes_for(ModelType.PATCHTST))
         raise HTTPException(
             status_code=422,
-            detail=(f"Unknown universe '{universe}' for PatchTST. Allowed: {allowed}"),
+            detail=(f"Unknown universe '{resolved}' for PatchTST. Allowed: {allowed}"),
         ) from exc
-    if bucket.local_storage_class is PatchTSTNiftyShariah500ModelStorage:
+    if _is_india_bucket(bucket):
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Universe '{universe}' is an India bucket; use "
+                f"Universe '{resolved}' is an India bucket; use "
                 "POST /inference/patchtst/india instead."
             ),
         )
-    return bucket.local_storage_class()
+    return bucket
 
 
-def _resolve_patchtst_india_storage(
-    universe: str | None,
-    default_storage: PatchTSTNiftyShariah500ModelStorage,
-) -> PatchTSTNiftyShariah500ModelStorage:
-    """Resolve the India PatchTST storage backend for an optional universe override."""
-    if universe is None:
-        return default_storage
+def _resolve_patchtst_india_bucket(universe: str | None) -> BucketConfig:
+    """Resolve the bucket for an India PatchTST request."""
+    resolved = universe if universe is not None else "nifty_shariah_500"
     try:
-        bucket = get_bucket(ModelType.PATCHTST, universe)
+        bucket = get_bucket(ModelType.PATCHTST, resolved)
     except UnknownBucketError as exc:
         allowed = sorted(list_universes_for(ModelType.PATCHTST))
         raise HTTPException(
             status_code=422,
-            detail=(f"Unknown universe '{universe}' for PatchTST. Allowed: {allowed}"),
+            detail=(f"Unknown universe '{resolved}' for PatchTST. Allowed: {allowed}"),
         ) from exc
-    if bucket.local_storage_class is not PatchTSTNiftyShariah500ModelStorage:
+    if not _is_india_bucket(bucket):
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Universe '{universe}' is not an India bucket; use "
+                f"Universe '{resolved}' is not an India bucket; use "
                 "POST /inference/patchtst instead."
             ),
         )
-    return bucket.local_storage_class()
+    return bucket
 
 
 @router.post("/patchtst", response_model=PatchTSTInferenceResponse)
@@ -193,21 +202,20 @@ def infer_patchtst(
             "callers."
         ),
     ),
-    storage: PatchTSTHalalNewModelStorage = Depends(get_patchtst_storage),
 ) -> PatchTSTInferenceResponse:
     """Predict weekly returns using the current US PatchTST model.
 
     Symbols default to the current model's training metadata. When
     ``symbols`` is provided in the request, inference runs only on that
-    list (same model weights).
+    list (same model weights). Storage is resolved via the active
+    policy (``local_first`` / ``hf_first``).
 
     Raises:
-        HTTPException 400: if no current model version is available
         HTTPException 422: if ``universe`` is unknown or refers to an India bucket
-        HTTPException 503: if model artifacts cannot be loaded
+        HTTPException 503: if model artifacts cannot be loaded under the active policy
     """
-    selected = _resolve_patchtst_us_storage(universe, storage)
-    return _run_patchtst_inference(request, selected, log_prefix="[PatchTST]")
+    bucket = _resolve_patchtst_us_bucket(universe)
+    return _run_patchtst_inference(request, bucket, log_prefix="[PatchTST]")
 
 
 @router.post("/patchtst/india", response_model=PatchTSTInferenceResponse)
@@ -220,39 +228,34 @@ def infer_patchtst_india(
             "India PatchTST universe (`nifty_shariah_500`)."
         ),
     ),
-    storage: PatchTSTNiftyShariah500ModelStorage = Depends(get_patchtst_india_storage),
 ) -> PatchTSTInferenceResponse:
     """Predict weekly returns using the current India PatchTST model.
 
     Same forward-pass math as the US route; the only difference is the
-    storage backend (``data/models/patchtst_nifty_shariah_500/``).
-    Symbols default to the India model's training metadata when not
-    provided.
+    bucket (``patchtst_nifty_shariah_500``). Symbols default to the
+    India model's training metadata when not provided. Storage is
+    resolved via the active policy (``local_first`` / ``hf_first``).
 
     Raises:
-        HTTPException 400: if no current India model version is available
         HTTPException 422: if ``universe`` is unknown or refers to a US bucket
-        HTTPException 503: if model artifacts cannot be loaded
+        HTTPException 503: if model artifacts cannot be loaded under the active policy
     """
-    selected = _resolve_patchtst_india_storage(universe, storage)
-    return _run_patchtst_inference(request, selected, log_prefix="[PatchTST India]")
+    bucket = _resolve_patchtst_india_bucket(universe)
+    return _run_patchtst_inference(request, bucket, log_prefix="[PatchTST India]")
 
 
 @router.post("/patchtst/score-batch", response_model=PatchTSTScoreBatchResponse)
 def patchtst_score_batch(
     request: PatchTSTScoreBatchRequest,
-    us_storage: PatchTSTHalalNewModelStorage = Depends(get_patchtst_storage),
-    india_storage: PatchTSTNiftyShariah500ModelStorage = Depends(
-        get_patchtst_india_storage
-    ),
 ) -> PatchTSTScoreBatchResponse:
     """Run PatchTST batch inference and apply rank-band score validation.
 
     Pipeline:
 
-    1. Pick storage by ``request.market`` (``us`` -> US weights,
-       ``india`` -> India weights). Reuses ``run_batch_inference`` --
-       same forward-pass math for both markets.
+    1. Pick the bucket by ``request.market`` (``us`` ->
+       ``patchtst_halal_new``, ``india`` ->
+       ``patchtst_nifty_shariah_500``). Reuses ``run_batch_inference``
+       -- same forward-pass math for both markets.
     2. Apply ``validate_and_collect_finite_scores`` (math invariant for
        rank-band selection): exclude ``None`` predictions, raise on any
        non-finite value (NaN/+inf/-inf), enforce
@@ -261,26 +264,25 @@ def patchtst_score_batch(
        ``/allocation/rank-band-top-n``.
 
     Raises:
-        HTTPException 400: if no current model version is available for
-            the requested market.
         HTTPException 422: if any prediction is non-finite, or if fewer
             than ``min_predictions`` finite scores are produced. These
             are math-invariant violations of the rank-band selector.
-        HTTPException 503: if model artifacts cannot be loaded.
+        HTTPException 503: if model artifacts cannot be loaded under
+            the active storage policy.
     """
-    storage = india_storage if request.market == "india" else us_storage
-    log_prefix = (
-        "[PatchTST Score-Batch IN]"
-        if request.market == "india"
-        else "[PatchTST Score-Batch US]"
-    )
+    if request.market == "india":
+        bucket = _resolve_patchtst_india_bucket(None)
+        log_prefix = "[PatchTST Score-Batch IN]"
+    else:
+        bucket = _resolve_patchtst_us_bucket(None)
+        log_prefix = "[PatchTST Score-Batch US]"
 
-    version = storage.read_current_version()
-    if not version:
-        raise HTTPException(
-            400,
-            f"No current PatchTST model version available for market={request.market}",
-        )
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+    )
+    version = artifacts.version
+    storage = bucket.local_storage_class()
 
     cutoff_date = get_patchtst_as_of_date(
         PatchTSTInferenceRequest(as_of_date=request.as_of_date)
@@ -294,7 +296,9 @@ def patchtst_score_batch(
     )
 
     try:
-        batch_result = run_batch_inference(symbols, cutoff_date, storage)
+        batch_result = run_batch_inference(
+            symbols, cutoff_date, storage=storage, artifacts=artifacts
+        )
     except ValueError as e:
         raise HTTPException(503, str(e)) from e
 

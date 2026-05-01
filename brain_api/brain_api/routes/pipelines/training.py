@@ -87,14 +87,19 @@ def check_idempotent_version(
     return None
 
 
-def get_prior_version_info(
+def _local_prior_val_loss(
     storage: ModelStorage,
     model_name: str,
 ) -> tuple[str | None, float | None]:
-    """Get prior version and its validation loss.
+    """Read the local prior version + val_loss for the generic
+    ``TrainingPipeline.run`` orchestrator.
 
-    Returns:
-        Tuple of (prior_version, prior_val_loss)
+    Note:
+        This is the legacy local-only helper kept for the unused
+        :class:`TrainingPipeline` class; production training routes
+        consume the policy-aware
+        :func:`brain_api.storage.policy.get_prior_metadata_for_bucket`
+        instead, which honors ``local_first`` / ``hf_first``.
     """
     prior_version = storage.read_current_version()
     prior_val_loss = None
@@ -229,7 +234,7 @@ class TrainingPipeline(Generic[ConfigT, DatasetT, ModelT]):
         )
 
         # Get prior version info
-        prior_version, prior_val_loss = get_prior_version_info(
+        prior_version, prior_val_loss = _local_prior_val_loss(
             self.storage, self.model_name
         )
 

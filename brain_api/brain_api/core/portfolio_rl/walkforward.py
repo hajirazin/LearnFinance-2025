@@ -79,7 +79,22 @@ def generate_walkforward_forecasts(
         if year not in year_groups:
             continue
         cutoff_date = date(year - 1, 12, 31)
-        if not snapshot_storage.ensure_snapshot_available(cutoff_date):
+        from brain_api.storage.policy import (
+            StoragePolicyError,
+            ensure_snapshot_for_bucket,
+        )
+
+        try:
+            available = ensure_snapshot_for_bucket(
+                snapshot_storage=snapshot_storage,
+                cutoff_date=cutoff_date,
+            )
+        except StoragePolicyError as exc:
+            raise SnapshotUnavailableError(
+                f"Snapshot for {cutoff_date} ({forecaster_type}) cannot be "
+                f"resolved under the active storage policy: {exc}"
+            ) from exc
+        if not available:
             raise SnapshotUnavailableError(
                 f"Snapshot for {cutoff_date} ({forecaster_type}) not available "
                 f"locally or on HuggingFace. Run training backfill first."

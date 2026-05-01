@@ -64,7 +64,7 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `HF_PPO_PATCHTST_MODEL_REPO` | HuggingFace PPO+PatchTST allocator model repository | None |
 | `HF_NEWS_SENTIMENT_REPO` | HuggingFace news sentiment dataset repository | None |
 | `HF_TWITTER_SENTIMENT_REPO` | HuggingFace twitter sentiment dataset repository | None |
-| `STORAGE_BACKEND` | Storage backend: `local` or `hf` | `local` |
+| `STORAGE_BACKEND` | Read policy: `local_first` (try local, fall back to HF) or `hf_first` (check HF main, short-circuit to local on version match). Writes always go to local AND HF whenever the bucket has an HF repo configured. | `local_first` |
 | `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
 | `ALPACA_API_SECRET` | Alpaca News API secret | None |
 | `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key (for historical fundamentals) | None |

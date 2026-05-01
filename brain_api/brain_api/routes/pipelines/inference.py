@@ -3,16 +3,18 @@
 This module provides a base inference workflow that can be customized
 for different model types (LSTM, PatchTST, etc.) while keeping the
 common orchestration logic DRY.
+
+Note: model loading is owned by
+``brain_api.storage.policy.load_current_artifacts_for_bucket``; the
+previous ``load_model_with_fallback`` helper hardcoded the LSTM HF
+repo for every model type (audit Bug 2) and was deleted as part of
+the storage-policy redesign.
 """
 
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Generic, Protocol, TypeVar
-
-from fastapi import HTTPException
-
-from brain_api.core.config import get_hf_lstm_halal_new_model_repo, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
@@ -68,69 +70,6 @@ def compute_data_window(
     data_start = target_week_start - timedelta(days=buffer_days)
     data_end = target_week_start - timedelta(days=1)
     return data_start, data_end
-
-
-def load_model_with_fallback(
-    model_name: str,
-    local_storage: LocalModelStorage,
-    hf_storage_class: type,
-) -> Any:
-    """Load model artifacts with HuggingFace fallback.
-
-    Tries local storage first, then falls back to HuggingFace Hub.
-
-    Args:
-        model_name: Model type identifier for logging
-        local_storage: Local storage instance for caching
-        hf_storage_class: HuggingFace storage class for fallback
-
-    Returns:
-        Model artifacts ready for inference
-
-    Raises:
-        HTTPException 503: if no model is available from any source
-    """
-    # Try local storage first
-    try:
-        return local_storage.load_current_artifacts()
-    except (ValueError, FileNotFoundError) as local_error:
-        logger.info(f"[{model_name}] Local model not found: {local_error}")
-
-    # Try HuggingFace if configured
-    storage_backend = get_storage_backend()
-    hf_model_repo = get_hf_lstm_halal_new_model_repo()
-
-    if storage_backend == "hf" or hf_model_repo:
-        if hf_model_repo:
-            try:
-                logger.info(
-                    f"[{model_name}] Attempting to load model from HuggingFace: {hf_model_repo}"
-                )
-                hf_storage = hf_storage_class(
-                    repo_id=hf_model_repo,
-                    local_cache=local_storage,
-                )
-                return hf_storage.download_model(use_cache=True)
-            except Exception as hf_error:
-                logger.error(
-                    f"[{model_name}] Failed to load model from HuggingFace: {hf_error}"
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        f"No {model_name} model available. Local: model not trained. "
-                        f"HuggingFace ({hf_model_repo}): {hf_error}"
-                    ),
-                ) from None
-
-    # No model available from any source
-    raise HTTPException(
-        status_code=503,
-        detail=(
-            f"No trained {model_name} model available. "
-            f"Train a model first with POST /train/{model_name.lower()}"
-        ),
-    ) from None
 
 
 def sort_predictions_by_return(
