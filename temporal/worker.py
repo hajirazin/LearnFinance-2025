@@ -90,8 +90,11 @@ from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 
-TASK_QUEUE = "learnfinance"
+TASK_QUEUE = os.environ.get("TEMPORAL_TASK_QUEUE", "learnfinance")
 TEMPORAL_ADDRESS = os.environ.get("TEMPORAL_ADDRESS", "localhost:7233")
+MAX_CONCURRENT_ACTIVITIES = int(
+    os.environ.get("TEMPORAL_MAX_CONCURRENT_ACTIVITIES", "10")
+)
 
 ALL_WORKFLOWS = [
     IndiaDoubleHRPWorkflow,
@@ -177,9 +180,11 @@ async def main():
         task_queue=TASK_QUEUE,
         workflows=ALL_WORKFLOWS,
         activities=ALL_ACTIVITIES,
-        activity_executor=ThreadPoolExecutor(max_workers=10),
+        activity_executor=ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTIVITIES),
+        max_concurrent_activities=MAX_CONCURRENT_ACTIVITIES,
     )
     print(f"Worker started on task queue '{TASK_QUEUE}' ({TEMPORAL_ADDRESS})")
+    print(f"  Max concurrent activities: {MAX_CONCURRENT_ACTIVITIES}")
     print(f"  Workflows: {len(ALL_WORKFLOWS)}")
     print(f"  Activities: {len(ALL_ACTIVITIES)}")
     await worker.run()

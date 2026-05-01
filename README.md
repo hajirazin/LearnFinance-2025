@@ -172,19 +172,38 @@ devbox run temporal:server
 
 ### 5. Start Temporal worker
 
+Workers are split by role into two task queues: `learnfinance-inference` (weekly allocation / HRP workflows) and `learnfinance-training` (monthly training workflows). On a single-host dev setup you start whichever you need in a separate terminal:
+
 ```bash
-# In another terminal:
-devbox run temporal:worker
+# Allocation / HRP workflows -- default concurrency (10).
+devbox run temporal:worker:inference
+
+# Monthly training workflows -- concurrency capped to 1 so heavy
+# trainings are serialized. Only needed when you want training slots
+# to actually execute.
+devbox run temporal:worker:training
 ```
+
+You can run both at the same time (in two terminals) if you want the same laptop to handle both roles.
+
+On a split Pi + Mac deployment (Pi runs the Temporal server + inference worker via `docker compose`; Mac runs training), set `TEMPORAL_ADDRESS=<pi-host>:7233` on the Mac before starting the training worker so it connects to the Pi's server. LAN or Tailscale is fine; the Temporal dev server has no auth, so do not expose `7233` publicly.
 
 ### 6. Run a workflow manually
 
+Each manual script targets the task queue its workflow is registered on. You need the matching worker running (inference or training) before the workflow will execute.
+
 ```bash
+# Allocation workflows -- require temporal:worker:inference up.
 devbox run temporal:run:us-sac-weekly
 devbox run temporal:run:india-alpha-hrp
 devbox run temporal:run:india-double-hrp
 devbox run temporal:run:us-double-hrp
 devbox run temporal:run:us-alpha-hrp
+
+# Training workflows -- require temporal:worker:training up.
+devbox run temporal:run:us-forecasters-training
+devbox run temporal:run:us-sac-training
+devbox run temporal:run:india-training
 ```
 
 ## Weekly workflow setup

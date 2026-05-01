@@ -52,6 +52,7 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal-server:7233
       - BRAIN_API_URL=http://brain-api:8000
+      - TEMPORAL_TASK_QUEUE=learnfinance-inference
 
   temporal-schedules-init:
     build: ./temporal

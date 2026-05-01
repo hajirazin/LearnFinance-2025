@@ -16,7 +16,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Temporal** is the outer orchestrator (replaced Prefect):
-  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Saturday 11 AM UTC for US forecasters training, Sunday 02:00 UTC for US SAC training on `halal_filtered`, Sunday 13:00 UTC for US SAC training on the legacy `halal` universe (parallel A/B), Sunday 4:30 AM UTC for India training)
+  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, and four monthly training slots on the first Sunday of the month staggered 6h apart starting 00:01 UTC -- see "Training schedule" below)
   - calling brain_api endpoints via HTTP activities
   - handling parallel task execution (asyncio.gather) and skip logic
   - durable sleep/wait for sell-wait-buy pattern (single workflow, no 3-flow hack)
@@ -27,8 +27,8 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india rank-band sticky top 15 (`halal_india_filtered_alpha` partition in `screening_history`, monthly cadence) -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
   - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
-  - US SAC training workflow (`USSACTrainingWorkflow`): runs 12+ hours after the forecasters workflow on a separate cron slot (Sunday 02:00 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email
-  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 11 hours later (Sunday 13:00 UTC, comfortably outside the 10h training timeout) on the legacy yfinance halal universe (variable size, ~12-15 stocks); refresh signals -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`
+  - US SAC training workflow (`USSACTrainingWorkflow`): runs 6 hours after the forecasters workflow on the same first-Sunday-of-month slot (06:01 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email. Serialization guarantee: the Mac training worker runs with `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`, so even if the forecasters run overshoots 6h this activity waits for it to finish rather than starting in parallel.
+  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 6 hours later on the same first-Sunday-of-month slot (12:01 UTC) on the legacy yfinance halal universe (variable size, ~12-15 stocks); refresh signals -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`. Same single-activity serialization applies via the training worker's concurrency cap.
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
@@ -448,11 +448,13 @@ The system must:
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all US models | Manual |
-| Weekly (Saturday 11:00 UTC) | US Forecasters training (LSTM then PatchTST, strictly serial because the host can only fit one trainer at a time) | Cron (Temporal, host-only) |
-| Weekly (Sunday 02:00 UTC) | US SAC training on `halal_filtered` (consumes whatever PatchTST `current` pointer is live at trigger time; comfortably outside Saturday's forecaster slot) | Cron (Temporal, host-only) |
-| Weekly (Sunday 13:00 UTC) | US SAC training on the legacy `halal` universe (parallel A/B sibling of `sac_halal_filtered`; runs 11 h after that slot so the two trainers never overlap on the single-host laptop) | Cron (Temporal, host-only) |
-| Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Temporal) |
-| Monday 6 PM IST | US inference only | Cron (Temporal) |
+| Monthly (first Sunday 00:01 UTC) | US Forecasters training (LSTM then PatchTST, strictly serial because the host can only fit one trainer at a time) | Cron (Temporal, Mac training queue) |
+| Monthly (first Sunday 06:01 UTC) | US SAC training on `halal_filtered` (consumes whatever PatchTST `current` pointer is live at trigger time; 6 h gap from forecasters slot) | Cron (Temporal, Mac training queue) |
+| Monthly (first Sunday 12:01 UTC) | US SAC training on the legacy `halal` universe (parallel A/B sibling of `sac_halal_filtered`; 6 h gap from halal_filtered SAC) | Cron (Temporal, Mac training queue) |
+| Monthly (first Sunday 18:01 UTC) | Full PatchTST retrain (India) | Cron (Temporal, Mac training queue) |
+| Monday 6 PM IST | US inference only | Cron (Temporal, Pi inference queue) |
+
+Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. The four training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker).
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
 - **Promotion requires evaluation**: new model must beat prior + baseline before becoming `current`
@@ -497,13 +499,22 @@ Key configuration:
 - **Parallel execution**: `asyncio.gather()` for concurrent activity execution within workflows
 - **Pydantic data converter**: `pydantic_data_converter` used for correct Pydantic v2 serialization
 - **Sell-wait-buy**: Single workflow with `while True: check -> sleep 15 min` durable polling loop
+- **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL-ish activities inside training workflows (e.g. `refresh_training_data`) automatically land on the training worker.
+- **Activity concurrency cap** (per worker): `TEMPORAL_MAX_CONCURRENT_ACTIVITIES` env (default `10`) drives BOTH `Worker(max_concurrent_activities=N)` and the `ThreadPoolExecutor(max_workers=N)`. The Mac training worker sets this to `1` so heavy training activities are serialized; Pi inference keeps the default `10` so fast allocation activities run in parallel.
 
-**Laptop-only setup** (3 terminal processes):
+**Host topology** (current production deployment):
+- **Pi** (`docker compose up`): runs Temporal server, brain_api, and one worker subscribed to `learnfinance-inference`. `temporal-schedules-init` is the one-shot container that registers all schedules on the server.
+- **Mac** (manual, via `devbox`): user starts brain_api plus one or two workers as needed:
+  - `devbox run temporal:worker:training` -- subscribes to `learnfinance-training`, concurrency cap 1. Required for the monthly training slots to actually execute.
+  - `devbox run temporal:worker:inference` -- subscribes to `learnfinance-inference` as a redundant/faster backup to the Pi worker. Optional.
+- Workers connect outbound to the Pi's Temporal server at `TEMPORAL_ADDRESS=<pi-host>:7233` (LAN or Tailscale). No inbound port needed on the Mac.
+
+**Single-host dev setup** (no Pi, everything on one laptop):
 1. `devbox run temporal:server` -- Temporal dev server with SQLite persistence + UI at port 8233
 2. `devbox run brain:run` -- brain_api FastAPI service
-3. `devbox run temporal:worker` -- Python worker polling the `learnfinance` task queue
+3. `devbox run temporal:worker:inference` and/or `devbox run temporal:worker:training` in separate terminals
 
-**Schedule registration** (run once): `devbox run temporal:schedule`
+**Schedule registration** (run once): `devbox run temporal:schedule` -- registers all 9 schedules on whatever server `TEMPORAL_ADDRESS` points at. Idempotent; never updates existing schedules (delete on the server first, then re-register, if you need to change one).
 
 ## Change safety checklists
 
