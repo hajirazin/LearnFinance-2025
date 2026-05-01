@@ -5,6 +5,7 @@ This module tests:
 - POST /alpaca/submit-orders - submit orders to Alpaca
 - GET /alpaca/order-history - fetch order history
 - Per-account base-URL resolution via ALPACA_{ACCOUNT}_URL env override
+- (model_type, universe) -> AlpacaAccount routing (resolve_alpaca_account)
 """
 
 from unittest.mock import MagicMock, patch
@@ -13,6 +14,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from brain_api.core.alpaca_client import AlpacaAccount, resolve_alpaca_account
 from brain_api.main import app
 
 
@@ -851,3 +853,42 @@ class TestSACHalalAccount:
         assert response_sac.status_code == 200
         assert sac_halal_client_class.call_args.kwargs["base_url"] == LIVE_HOST
         assert sac_client_class.call_args.kwargs["base_url"] == PAPER_HOST
+
+
+# =============================================================================
+# (model_type, universe) -> AlpacaAccount routing
+# =============================================================================
+
+
+class TestResolveAlpacaAccount:
+    """Cover the ``resolve_alpaca_account`` helper used by the labeller.
+
+    Two parallel SAC A/B workflows share ``model_type='sac'`` but trade
+    on disjoint Alpaca accounts. The resolver maps the bucket-registry
+    ``universe`` to the right account so ``/experience/label/sac`` does
+    not silently fetch the legacy ``sac`` account for every record.
+    """
+
+    def test_halal_filtered_returns_sac(self):
+        """halal_filtered -> AlpacaAccount.SAC."""
+        assert resolve_alpaca_account("sac", "halal_filtered") == AlpacaAccount.SAC
+
+    def test_halal_returns_sac_halal(self):
+        """halal -> AlpacaAccount.SAC_HALAL (parallel A/B sibling).
+
+        This is the routing fix that prevents the labeller from
+        silently fetching the legacy ``sac`` account for halal records.
+        """
+        assert resolve_alpaca_account("sac", "halal") == AlpacaAccount.SAC_HALAL
+
+    def test_unknown_universe_raises(self):
+        """An unknown SAC universe raises (no silent fallback)."""
+        with pytest.raises(
+            ValueError, match="No Alpaca account mapped for SAC universe"
+        ):
+            resolve_alpaca_account("sac", "unknown_universe")
+
+    def test_unknown_model_type_raises(self):
+        """A non-SAC model_type raises (only SAC is currently routable)."""
+        with pytest.raises(ValueError, match="No Alpaca account mapped for model_type"):
+            resolve_alpaca_account("hrp", "halal_filtered")

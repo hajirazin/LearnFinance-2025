@@ -163,6 +163,10 @@ def _make_sac_halal_activities(
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
         captured_calls["store_experience_run_id"] = args[0]
+        # ``universe`` is the trailing positional arg (10th); capture it
+        # so we can assert the labeller will route this record to the
+        # ``sac_halal`` Alpaca account (not the legacy ``sac`` account).
+        captured_calls["store_experience_universe"] = args[9] if len(args) > 9 else None
         return None
 
     @activity.defn(name="submit_orders_sac_halal")
@@ -198,7 +202,12 @@ def _make_sac_halal_activities(
         return []
 
     @activity.defn(name="update_execution_sac")
-    def mock_update_execution_sac(run_id, orders_resp, history):
+    def mock_update_execution_sac(
+        run_id, orders_resp, history, post_trade_portfolio=None
+    ):
+        captured_calls["update_execution_post_trade_portfolio"] = (
+            post_trade_portfolio is not None
+        )
         return None
 
     @activity.defn(name="generate_summary")
@@ -324,6 +333,14 @@ class TestUSSACHalalAllocationHappyPath:
         # the run_id prefix on disk -- store activity received the
         # variant run_id.
         assert captured["store_experience_run_id"].startswith("paper:halal:")
+        # universe='halal' MUST be plumbed onto the experience record so
+        # /experience/label/sac routes this record to the sac_halal
+        # Alpaca account (not the legacy sac account) at label time.
+        assert captured["store_experience_universe"] == "halal"
+        # Post-trade portfolio MUST flow into update_execution so the
+        # labeller never falls back to a live Alpaca query for
+        # actual_weights.
+        assert captured["update_execution_post_trade_portfolio"] is True
 
         # Submit went through sac_halal, never the legacy sac account.
         # sell-wait-buy invokes the submitter twice (sells then buys),

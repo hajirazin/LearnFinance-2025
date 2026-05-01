@@ -8,9 +8,42 @@ The experience endpoints manage PPO/SAC experience tuples for reinforcement lear
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/experience/store` | Store an experience record |
-| POST | `/experience/label` | Label records with realized rewards |
+| POST | `/experience/store` | Store an experience record (SAC writes set `universe`) |
+| POST | `/experience/update-execution` | Attach execution report (and optional `actual_weights`) |
+| POST | `/experience/label` | Label records with realized rewards (legacy generic path) |
+| POST | `/experience/label/sac` | Label SAC records using actual weights; routes per-record by `universe` |
 | GET | `/experience/list` | List experience records |
+
+### `/experience/label/sac` per-record account routing
+
+Two parallel SAC A/B Temporal workflows (`USWeeklyAllocationWorkflow`
+on `halal_filtered`, `USSACHalalAllocationWorkflow` on `halal`) share
+`model_type='sac'` but trade on disjoint Alpaca accounts. The labeller
+reads `universe` off each record and routes via
+`brain_api.core.alpaca_client.resolve_alpaca_account` so a mixed batch
+labels each record against the correct Alpaca portfolio:
+
+```mermaid
+flowchart LR
+    StoreEP["POST /experience/store"]
+    Disk[("data/experience/*.json")]
+    LabelEP["POST /experience/label/sac"]
+    AccountMap["resolve_alpaca_account(model_type, universe)"]
+    AlpacaSAC["AlpacaAccount.SAC"]
+    AlpacaSACHalal["AlpacaAccount.SAC_HALAL"]
+
+    StoreEP -->|"writes universe field"| Disk
+    Disk -->|"per-record (model_type, universe)"| LabelEP
+    LabelEP --> AccountMap
+    AccountMap -->|"halal_filtered"| AlpacaSAC
+    AccountMap -->|"halal"| AlpacaSACHalal
+```
+
+Legacy records that pre-date the `universe` field fall back to inferring
+the universe from the run_id prefix (`paper:halal:...` -> `halal`,
+else `halal_filtered`). Per AGENTS.md rule #1 the labeller raises on
+any unknown `(model_type, universe)` pair rather than defaulting to a
+fallback account.
 
 ---
 

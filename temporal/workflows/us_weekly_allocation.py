@@ -168,6 +168,7 @@ class USWeeklyAllocationWorkflow:
                     fundamentals,
                     lstm,
                     patchtst,
+                    "halal_filtered",
                 ],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
@@ -178,16 +179,25 @@ class USWeeklyAllocationWorkflow:
             "sac", sac_sells, sac_buys, sac_orders, submit_orders_sac
         )
 
-        # Phase 5: Get SAC order history + update execution.
+        # Phase 5: Get SAC order history + post-trade portfolio (parallel),
+        # then update execution. The post-trade portfolio snapshot is what
+        # the labeller will read back as actual_weights, so a fresh fetch
+        # AFTER sell-wait-buy is what we want.
         if run_sac:
-            sac_history = await workflow.execute_activity(
-                get_order_history_sac,
-                args=[target_week_start],
-                start_to_close_timeout=SHORT_TIMEOUT,
+            sac_history, sac_post_portfolio = await asyncio.gather(
+                workflow.execute_activity(
+                    get_order_history_sac,
+                    args=[target_week_start],
+                    start_to_close_timeout=SHORT_TIMEOUT,
+                ),
+                workflow.execute_activity(
+                    get_sac_portfolio,
+                    start_to_close_timeout=SHORT_TIMEOUT,
+                ),
             )
             await workflow.execute_activity(
                 update_execution_sac,
-                args=[run_id, sac_orders, sac_history],
+                args=[run_id, sac_orders, sac_history, sac_post_portfolio],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
 

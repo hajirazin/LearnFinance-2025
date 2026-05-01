@@ -34,6 +34,8 @@ def make_sac_only_activities(
     check_order_statuses_fn=None,
     summary_calls: list[dict] | None = None,
     email_calls: list[dict] | None = None,
+    store_experience_calls: list[dict] | None = None,
+    update_execution_calls: list[dict] | None = None,
 ):
     """Build mock activities for the SAC-only ``USWeeklyAllocationWorkflow``."""
 
@@ -101,6 +103,14 @@ def make_sac_only_activities(
 
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
+        if store_experience_calls is not None:
+            # ``universe`` is the trailing positional arg (10th).
+            store_experience_calls.append(
+                {
+                    "run_id": args[0] if args else None,
+                    "universe": args[9] if len(args) > 9 else None,
+                }
+            )
         return None
 
     @activity.defn(name="submit_orders_sac")
@@ -136,7 +146,14 @@ def make_sac_only_activities(
         return []
 
     @activity.defn(name="update_execution_sac")
-    def mock_update_execution_sac(run_id, orders, history):
+    def mock_update_execution_sac(run_id, orders, history, post_trade_portfolio=None):
+        if update_execution_calls is not None:
+            update_execution_calls.append(
+                {
+                    "run_id": run_id,
+                    "has_post_trade_portfolio": post_trade_portfolio is not None,
+                }
+            )
         return None
 
     def _coerce(value, key):

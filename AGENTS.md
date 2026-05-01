@@ -501,6 +501,15 @@ Any implementation must include:
   `get_bucket(ModelType.SAC, universe)`. There is no implicit default
   -- callers must pass `halal_filtered` or `halal` explicitly so the
   two A/B paths cannot accidentally share state.
+- `/experience/label/sac` routes each record to its Alpaca account via
+  `brain_api.core.alpaca_client.resolve_alpaca_account(model_type,
+  universe)` (mapping `halal_filtered` -> `sac`, `halal` -> `sac_halal`).
+  New SAC writes MUST set `universe` on the experience record (the
+  Temporal workflows do this); legacy records that pre-date the field
+  fall back to inferring the universe from the run_id prefix
+  (`paper:halal:...` -> `halal`, else `halal_filtered`). Per AGENTS.md
+  rule #1, the labeller raises (rather than defaulting to a fallback
+  account) for any unknown `(model_type, universe)` pair.
 
 ### Temporal workflow configuration
 

@@ -1,12 +1,27 @@
-"""Alpaca API client with multi-account support.
+"""Alpaca API client + shared account/URL/credential helpers.
 
-This module provides a client for interacting with Alpaca's paper trading API
-with support for multiple accounts (SAC, HRP, DHRP).
+This module is the single source of truth for:
 
-Each account has its own API credentials and is used for separate strategies:
-- SAC: RL allocator (US halal universe)
-- HRP: HRP baseline (US halal universe)
-- DHRP: Double HRP (US halal_new universe with sticky selection)
+* The :class:`AlpacaAccount` enum (``sac``, ``sac_halal``, ``hrp``, ``dhrp``).
+* :func:`get_alpaca_base_url` -- per-account URL resolution that honours
+  the ``ALPACA_{ACCOUNT}_URL`` env override (paper by default, live opt-in
+  per AGENTS.md "Trading mode").
+* :func:`get_alpaca_credentials` -- FastAPI-free credential lookup that
+  raises :class:`ValueError` on missing creds (per AGENTS.md rule #1, no
+  silent ``None`` fallback).
+* :class:`AlpacaClient` -- direct Alpaca HTTP client used by callers that
+  need read-only portfolio data outside a FastAPI request (e.g. the
+  experience labeller). Honours the per-account URL override via
+  :func:`get_alpaca_base_url`, so a live-mode flip works for both the
+  trading routes and the labeller.
+* :func:`resolve_alpaca_account` -- maps ``(model_type, universe)`` to the
+  right Alpaca account so the labeller routes per-record instead of
+  hardcoding the legacy ``sac`` account.
+
+The route module ``brain_api.routes.alpaca`` imports the enum + URL/cred
+helpers from here and wraps :class:`ValueError` in
+:class:`fastapi.HTTPException` at the route boundary -- core stays
+FastAPI-free per AGENTS.md "API design rules" #3.
 """
 
 import logging
@@ -18,16 +33,80 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Alpaca Paper Trading API base URL
-ALPACA_PAPER_API_URL = "https://paper-api.alpaca.markets"
+# Default Alpaca host (used when ALPACA_{ACCOUNT}_URL env var is unset/blank).
+PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 
 
 class AlpacaAccount(str, Enum):
-    """Alpaca account identifiers."""
+    """Supported Alpaca trading accounts (paper by default; live opt-in per-account).
+
+    - ``sac``: SAC RL allocator (US, ``halal_filtered`` universe -- sticky-15
+      from PatchTST).
+    - ``sac_halal``: SAC RL allocator (US, legacy yfinance ``halal``
+      universe; A/B sibling of ``sac``).
+    - ``hrp``: HRP baseline allocator (US, ``halal_new`` universe via the
+      Alpha-HRP workflow).
+    - ``dhrp``: Double HRP allocator (US, ``halal_new`` universe,
+      sticky-selected).
+    """
 
     SAC = "sac"
+    SAC_HALAL = "sac_halal"
     HRP = "hrp"
     DHRP = "dhrp"
+
+
+# ---------------------------------------------------------------------------
+# Per-account URL + credential helpers (FastAPI-free).
+# ---------------------------------------------------------------------------
+
+
+def get_alpaca_base_url(account: AlpacaAccount) -> str:
+    """Resolve Alpaca base URL for ``account``.
+
+    Reads ``ALPACA_{ACCOUNT}_URL``; returns the paper host when unset,
+    empty, or whitespace. Setting it to ``https://api.alpaca.markets``
+    (with matching live API key + secret) flips that single account to
+    live without affecting the others.
+    """
+    raw = os.environ.get(f"ALPACA_{account.value.upper()}_URL", "")
+    return raw.strip() or PAPER_BASE_URL
+
+
+def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
+    """Get ``(api_key, api_secret)`` for ``account`` from env vars.
+
+    Environment variables expected:
+
+    - ``ALPACA_SAC_KEY``,        ``ALPACA_SAC_SECRET``
+    - ``ALPACA_SAC_HALAL_KEY``,  ``ALPACA_SAC_HALAL_SECRET``
+    - ``ALPACA_HRP_KEY``,        ``ALPACA_HRP_SECRET``
+    - ``ALPACA_DHRP_KEY``,       ``ALPACA_DHRP_SECRET``
+
+    Raises:
+        ValueError: if either env var is missing or empty. Per AGENTS.md
+            rule #1, callers must surface this rather than silently
+            falling back to a default account.
+    """
+    account_upper = account.value.upper()
+    key_var = f"ALPACA_{account_upper}_KEY"
+    secret_var = f"ALPACA_{account_upper}_SECRET"
+
+    api_key = os.environ.get(key_var)
+    api_secret = os.environ.get(secret_var)
+
+    if not api_key or not api_secret:
+        raise ValueError(
+            f"Alpaca credentials not configured for account {account.value}. "
+            f"Set {key_var} and {secret_var} environment variables."
+        )
+
+    return api_key, api_secret
+
+
+# ---------------------------------------------------------------------------
+# Direct Alpaca HTTP client (used by the experience labeller).
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -60,35 +139,14 @@ class AlpacaPortfolio:
     buying_power: float
 
 
-def get_account_credentials(account: AlpacaAccount) -> AlpacaCredentials | None:
-    """Get Alpaca API credentials for an account from environment variables.
-
-    Environment variables expected (matching ``routes/alpaca.py`` and
-    ``brain_api/.env.example``):
-
-    - SAC:  ``ALPACA_SAC_KEY``,  ``ALPACA_SAC_SECRET``
-    - HRP:  ``ALPACA_HRP_KEY``,  ``ALPACA_HRP_SECRET``
-    - DHRP: ``ALPACA_DHRP_KEY``, ``ALPACA_DHRP_SECRET``
-
-    Returns:
-        AlpacaCredentials if found, None otherwise.
-    """
-    account_upper = account.value.upper()
-    api_key = os.environ.get(f"ALPACA_{account_upper}_KEY")
-    api_secret = os.environ.get(f"ALPACA_{account_upper}_SECRET")
-
-    if not api_key or not api_secret:
-        logger.warning(
-            f"[Alpaca] Missing credentials for {account_upper} account. "
-            f"Set ALPACA_{account_upper}_KEY and ALPACA_{account_upper}_SECRET."
-        )
-        return None
-
-    return AlpacaCredentials(api_key=api_key, api_secret=api_secret)
-
-
 class AlpacaClient:
-    """Client for Alpaca paper trading API with multi-account support."""
+    """Client for Alpaca trading API with multi-account support.
+
+    Honours :func:`get_alpaca_base_url` so a per-account live override
+    (``ALPACA_{ACCOUNT}_URL``) flips this client too -- not just the
+    FastAPI routes. Currently only used by the experience labeller for
+    read-only portfolio queries.
+    """
 
     def __init__(
         self,
@@ -99,21 +157,22 @@ class AlpacaClient:
         """Initialize Alpaca client for a specific account.
 
         Args:
-            account: Which account to use (SAC, HRP).
-            credentials: API credentials. If None, loaded from env vars.
+            account: Which account to use.
+            credentials: Optional pre-resolved credentials. If ``None``,
+                loaded from env vars via :func:`get_alpaca_credentials`.
             timeout: HTTP request timeout in seconds.
+
+        Raises:
+            ValueError: if ``credentials`` is ``None`` and env-var
+                lookup fails.
         """
         self.account = account
-        self.credentials = credentials or get_account_credentials(account)
+        if credentials is None:
+            api_key, api_secret = get_alpaca_credentials(account)
+            credentials = AlpacaCredentials(api_key=api_key, api_secret=api_secret)
+        self.credentials = credentials
         self.timeout = timeout
-        self.base_url = ALPACA_PAPER_API_URL
-
-        if self.credentials is None:
-            raise ValueError(
-                f"No credentials available for account {account.value}. "
-                f"Set ALPACA_{account.value.upper()}_KEY and "
-                f"ALPACA_{account.value.upper()}_SECRET environment variables."
-            )
+        self.base_url = get_alpaca_base_url(account)
 
     def _headers(self) -> dict[str, str]:
         """Get headers for Alpaca API requests."""
@@ -124,11 +183,7 @@ class AlpacaClient:
         }
 
     def get_account(self) -> dict:
-        """Get account information.
-
-        Returns:
-            Account info dict with cash, equity, buying_power, etc.
-        """
+        """Get account information."""
         url = f"{self.base_url}/v2/account"
         with httpx.Client(timeout=self.timeout) as client:
             response = client.get(url, headers=self._headers())
@@ -136,11 +191,7 @@ class AlpacaClient:
             return response.json()
 
     def get_positions(self) -> list[dict]:
-        """Get all positions in the account.
-
-        Returns:
-            List of position dicts with symbol, qty, market_value, etc.
-        """
+        """Get all positions in the account."""
         url = f"{self.base_url}/v2/positions"
         with httpx.Client(timeout=self.timeout) as client:
             response = client.get(url, headers=self._headers())
@@ -153,18 +204,9 @@ class AlpacaClient:
         after: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Get orders from the account.
-
-        Args:
-            status: Order status filter ("open", "closed", "all").
-            after: Only return orders after this timestamp (ISO format).
-            limit: Maximum number of orders to return.
-
-        Returns:
-            List of order dicts.
-        """
+        """Get orders from the account."""
         url = f"{self.base_url}/v2/orders"
-        params = {"status": status, "limit": limit}
+        params: dict[str, str | int] = {"status": status, "limit": limit}
         if after:
             params["after"] = after
 
@@ -174,11 +216,7 @@ class AlpacaClient:
             return response.json()
 
     def get_portfolio(self) -> AlpacaPortfolio:
-        """Get full portfolio state including cash and positions.
-
-        Returns:
-            AlpacaPortfolio with cash and positions.
-        """
+        """Get full portfolio state including cash and positions."""
         account_info = self.get_account()
         positions_data = self.get_positions()
 
@@ -202,11 +240,7 @@ class AlpacaClient:
         )
 
     def get_portfolio_weights(self) -> dict[str, float]:
-        """Get current portfolio weights.
-
-        Returns:
-            Dict of symbol -> weight, including CASH.
-        """
+        """Get current portfolio weights including ``CASH``."""
         portfolio = self.get_portfolio()
         total_value = portfolio.equity
 
@@ -222,22 +256,20 @@ class AlpacaClient:
 
 
 def get_alpaca_client(account: str | AlpacaAccount) -> AlpacaClient:
-    """Factory function to get an Alpaca client for a specific account.
-
-    Args:
-        account: Account name ("sac", "hrp") or AlpacaAccount enum.
-
-    Returns:
-        AlpacaClient instance.
-    """
+    """Factory function to get an Alpaca client for a specific account."""
     if isinstance(account, str):
         account = AlpacaAccount(account.lower())
     return AlpacaClient(account)
 
 
 def get_sac_client() -> AlpacaClient:
-    """Get Alpaca client for SAC account."""
+    """Get Alpaca client for SAC account (``halal_filtered`` universe)."""
     return get_alpaca_client(AlpacaAccount.SAC)
+
+
+def get_sac_halal_client() -> AlpacaClient:
+    """Get Alpaca client for SAC halal account (legacy ``halal`` universe)."""
+    return get_alpaca_client(AlpacaAccount.SAC_HALAL)
 
 
 def get_hrp_client() -> AlpacaClient:
@@ -248,3 +280,52 @@ def get_hrp_client() -> AlpacaClient:
 def get_dhrp_client() -> AlpacaClient:
     """Get Alpaca client for Double HRP account."""
     return get_alpaca_client(AlpacaAccount.DHRP)
+
+
+# ---------------------------------------------------------------------------
+# (model_type, universe) -> AlpacaAccount routing.
+# ---------------------------------------------------------------------------
+
+
+# Single source of truth for the SAC universe -> Alpaca account mapping.
+# Two parallel SAC A/B workflows share ``model_type='sac'`` for their
+# experience records, so the labeller MUST disambiguate via ``universe``
+# (the bucket-registry key) to pick the right Alpaca account.
+_SAC_UNIVERSE_TO_ACCOUNT: dict[str, AlpacaAccount] = {
+    "halal_filtered": AlpacaAccount.SAC,
+    "halal": AlpacaAccount.SAC_HALAL,
+}
+
+
+def resolve_alpaca_account(model_type: str, universe: str) -> AlpacaAccount:
+    """Resolve the Alpaca account for an ``(model_type, universe)`` pair.
+
+    Currently only ``model_type='sac'`` has a mapping (the two parallel
+    SAC A/B universes ``halal_filtered`` and ``halal``). Per AGENTS.md
+    rule #1 the function raises on any unknown pair instead of falling
+    back to a default account -- a wrong account would silently label
+    an experience record against the wrong portfolio.
+
+    Args:
+        model_type: ``"sac"`` (currently the only routable model type;
+            extend this when other RL allocators get an Alpaca-backed
+            labelling story).
+        universe: SAC bucket universe, e.g. ``"halal_filtered"`` or
+            ``"halal"``.
+
+    Raises:
+        ValueError: if no Alpaca account is mapped for the given pair.
+    """
+    if model_type == "sac":
+        try:
+            return _SAC_UNIVERSE_TO_ACCOUNT[universe]
+        except KeyError as e:
+            valid = sorted(_SAC_UNIVERSE_TO_ACCOUNT)
+            raise ValueError(
+                f"No Alpaca account mapped for SAC universe {universe!r}. "
+                f"Known SAC universes: {valid}."
+            ) from e
+    raise ValueError(
+        f"No Alpaca account mapped for model_type {model_type!r}. "
+        f"Only model_type='sac' is currently routable."
+    )

@@ -22,10 +22,13 @@ also keeps experience-record file paths disjoint -- the new run writes
 run writes ``data/experience/paper_YYYY-MM-DD_sac.json``.
 
 Why ``model_type="sac"`` is reused (and not ``sac_halal``): the
-``/experience/label`` loop hardcodes ``model_type=="sac"`` and
-``AlpacaAccount(model_type)`` -- both invariants stay valid because we
-disambiguate via run_id, not model_type. Future cleanup to plumb a
-distinct model_type through the labeler is out of scope here.
+labeller routes by ``(model_type, universe)`` via
+``brain_api.core.alpaca_client.resolve_alpaca_account``. The two A/B
+SAC workflows share ``model_type='sac'`` and disambiguate via the
+``universe`` field on the experience record (this workflow stores
+``universe='halal'``, the sibling stores ``universe='halal_filtered'``).
+The old run_id-prefix disambiguation still holds as a fallback for
+legacy records that pre-date the ``universe`` field.
 
 Variable n_stocks (10/14/15/future):
 The ``halal`` SAC bucket is sized by yfinance ETF top-holdings at
@@ -192,9 +195,10 @@ class USSACHalalAllocationWorkflow:
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
-        # Store experience. model_type stays "sac" so the labeler keeps
-        # working; disambiguation is via the run_id prefix
-        # (paper:halal:...).
+        # Store experience. model_type stays "sac" but universe='halal'
+        # is now plumbed through so /experience/label/sac routes this
+        # record to the sac_halal Alpaca account (not the legacy sac
+        # account) via resolve_alpaca_account.
         if run_sac:
             await workflow.execute_activity(
                 store_experience_sac,
@@ -208,6 +212,7 @@ class USSACHalalAllocationWorkflow:
                     fundamentals,
                     lstm,
                     patchtst,
+                    UNIVERSE,
                 ],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
@@ -218,16 +223,25 @@ class USSACHalalAllocationWorkflow:
             ACCOUNT, sac_sells, sac_buys, sac_orders, submit_orders_sac_halal
         )
 
-        # Phase 5: Get sac_halal order history + update execution.
+        # Phase 5: Get sac_halal order history + post-trade portfolio
+        # (parallel), then update execution with both. Post-trade
+        # portfolio becomes the labeller's actual_weights, eliminating
+        # the live-Alpaca fallback at label time.
         if run_sac:
-            sac_history = await workflow.execute_activity(
-                get_order_history_sac_halal,
-                args=[target_week_start],
-                start_to_close_timeout=SHORT_TIMEOUT,
+            sac_history, sac_post_portfolio = await asyncio.gather(
+                workflow.execute_activity(
+                    get_order_history_sac_halal,
+                    args=[target_week_start],
+                    start_to_close_timeout=SHORT_TIMEOUT,
+                ),
+                workflow.execute_activity(
+                    get_sac_halal_portfolio,
+                    start_to_close_timeout=SHORT_TIMEOUT,
+                ),
             )
             await workflow.execute_activity(
                 update_execution_sac,
-                args=[run_id, sac_orders, sac_history],
+                args=[run_id, sac_orders, sac_history, sac_post_portfolio],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
 

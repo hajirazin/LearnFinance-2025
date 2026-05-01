@@ -94,6 +94,41 @@ class TestExperienceFullStateSAC:
         assert data["model_type"] == "sac"
         assert "sac" in data["record_id"]
 
+    def test_store_sac_persists_universe_field(
+        self, client, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """POST /experience/store with universe=halal round-trips the field.
+
+        The labeller reads ``universe`` back to route each record to the
+        correct Alpaca account; a missing or stripped field would
+        silently re-introduce the bug this ticket fixed.
+        """
+        from brain_api.routes.experience import get_experience_storage
+
+        app.dependency_overrides[get_experience_storage] = lambda: temp_storage
+        try:
+            response = client.post(
+                "/experience/store",
+                json={
+                    "run_id": "paper:halal:2026-05-04",
+                    "week_start": "2026-05-04",
+                    "week_end": "2026-05-08",
+                    "model_type": "sac",
+                    "model_version": "v1.0.0",
+                    "universe": "halal",
+                    "state": sample_full_state,
+                    "intended_action": sample_intended_action,
+                    "intended_turnover": 0.1,
+                },
+            )
+        finally:
+            app.dependency_overrides.pop(get_experience_storage, None)
+        assert response.status_code == 200
+
+        loaded = temp_storage.load("paper:halal:2026-05-04:sac")
+        assert loaded is not None
+        assert loaded.universe == "halal"
+
     def test_store_sac_validates_required_fields(self, client):
         """Test that required fields are validated for SAC."""
         # Missing model_type
@@ -190,6 +225,7 @@ class TestLabelSACEndpoint:
             patch("brain_api.core.lstm.load_prices_yfinance") as mock_prices,
         ):
             mock_client = MagicMock()
+            mock_client.account = MagicMock(value="sac")
             mock_client.get_portfolio_weights.return_value = {"MSFT": 0.6, "CASH": 0.4}
             mock_get_client.return_value = mock_client
             mock_prices.return_value = {}
@@ -200,16 +236,19 @@ class TestLabelSACEndpoint:
             )
             assert response.status_code == 200
 
-    def test_label_sac_fetches_from_sac_account(
+    def test_label_sac_halal_filtered_routes_to_sac_account(
         self, temp_storage, sample_full_state, sample_intended_action
     ):
-        """Test that label SAC fetches from SAC Alpaca account."""
+        """halal_filtered universe -> AlpacaAccount.SAC."""
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
         record = ExperienceRecord(
-            run_id="paper:2026-01-01:sac",
-            week_start="2026-01-01",
-            week_end="2026-01-05",
+            run_id="paper:2026-04-13:sac",
+            week_start=past_week_start,
+            week_end=past_week_end,
             model_type="sac",
             model_version="v1.0.0",
+            universe="halal_filtered",
             state=sample_full_state,
             intended_action=sample_intended_action,
             intended_turnover=0.1,
@@ -224,6 +263,7 @@ class TestLabelSACEndpoint:
             ),
         ):
             mock_client = MagicMock()
+            mock_client.account = MagicMock(value="sac")
             mock_client.get_portfolio_weights.return_value = {"MSFT": 0.6, "CASH": 0.4}
             mock_get_client.return_value = mock_client
 
@@ -236,6 +276,158 @@ class TestLabelSACEndpoint:
             from brain_api.core.alpaca_client import AlpacaAccount
 
             mock_get_client.assert_called_with(AlpacaAccount.SAC)
+
+    def test_label_sac_halal_routes_to_sac_halal_account(
+        self, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """halal universe -> AlpacaAccount.SAC_HALAL (parallel A/B sibling).
+
+        This is the bug-fix coverage: before per-record routing the
+        labeller would silently fetch the legacy ``sac`` account for
+        every halal record.
+        """
+        # Use past dates so the labeller does not skip the record on
+        # the "week not ended yet" guard.
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
+        record = ExperienceRecord(
+            run_id="paper:halal:2026-04-13:sac",
+            week_start=past_week_start,
+            week_end=past_week_end,
+            model_type="sac",
+            model_version="v1.0.0",
+            universe="halal",
+            state=sample_full_state,
+            intended_action=sample_intended_action,
+            intended_turnover=0.1,
+        )
+        temp_storage.store(record)
+
+        with (
+            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
+            patch(
+                "brain_api.routes.experience.get_experience_storage",
+                return_value=temp_storage,
+            ),
+        ):
+            mock_client = MagicMock()
+            mock_client.account = MagicMock(value="sac_halal")
+            mock_client.get_portfolio_weights.return_value = {"AAPL": 0.5, "CASH": 0.5}
+            mock_get_client.return_value = mock_client
+
+            from brain_api.routes.experience import _label_experience_for_account
+
+            with patch("brain_api.core.lstm.load_prices_yfinance") as mock_prices:
+                mock_prices.return_value = {}
+                _label_experience_for_account("sac", None, temp_storage)
+
+            from brain_api.core.alpaca_client import AlpacaAccount
+
+            mock_get_client.assert_called_with(AlpacaAccount.SAC_HALAL)
+
+    def test_label_sac_routes_per_record_in_mixed_batch(
+        self, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """A mixed batch routes each record to its own account.
+
+        Two unlabeled records (one per universe) MUST construct two
+        distinct Alpaca clients, one for ``sac`` and one for
+        ``sac_halal`` -- no record may leak into the wrong account.
+        """
+        from brain_api.core.alpaca_client import AlpacaAccount
+
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
+
+        temp_storage.store(
+            ExperienceRecord(
+                run_id="paper:2026-01-01:sac",
+                week_start=past_week_start,
+                week_end=past_week_end,
+                model_type="sac",
+                model_version="v1.0.0",
+                universe="halal_filtered",
+                state=sample_full_state,
+                intended_action=sample_intended_action,
+                intended_turnover=0.1,
+            )
+        )
+        temp_storage.store(
+            ExperienceRecord(
+                run_id="paper:halal:2026-01-01:sac",
+                week_start=past_week_start,
+                week_end=past_week_end,
+                model_type="sac",
+                model_version="v1.0.0",
+                universe="halal",
+                state=sample_full_state,
+                intended_action=sample_intended_action,
+                intended_turnover=0.1,
+            )
+        )
+
+        constructed: list[AlpacaAccount] = []
+
+        def fake_get_client(account: AlpacaAccount):
+            constructed.append(account)
+            mc = MagicMock()
+            mc.account = MagicMock(value=account.value)
+            mc.get_portfolio_weights.return_value = {"AAPL": 0.5, "CASH": 0.5}
+            return mc
+
+        with (
+            patch(
+                "brain_api.core.alpaca_client.get_alpaca_client",
+                side_effect=fake_get_client,
+            ),
+            patch("brain_api.core.lstm.load_prices_yfinance", return_value={}),
+        ):
+            from brain_api.routes.experience import _label_experience_for_account
+
+            _label_experience_for_account("sac", None, temp_storage)
+
+        assert AlpacaAccount.SAC in constructed
+        assert AlpacaAccount.SAC_HALAL in constructed
+        # Each account constructed at most once -- the labeller caches
+        # the client per account.
+        assert constructed.count(AlpacaAccount.SAC) == 1
+        assert constructed.count(AlpacaAccount.SAC_HALAL) == 1
+
+    def test_label_sac_infers_universe_from_legacy_run_id(
+        self, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """Legacy records (no universe field) infer it from run_id prefix."""
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
+        record = ExperienceRecord(
+            run_id="paper:halal:2026-04-13:sac",
+            week_start=past_week_start,
+            week_end=past_week_end,
+            model_type="sac",
+            model_version="v1.0.0",
+            universe=None,  # legacy record predating the universe field
+            state=sample_full_state,
+            intended_action=sample_intended_action,
+            intended_turnover=0.1,
+        )
+        temp_storage.store(record)
+
+        with (
+            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
+            patch("brain_api.core.lstm.load_prices_yfinance", return_value={}),
+        ):
+            mock_client = MagicMock()
+            mock_client.account = MagicMock(value="sac_halal")
+            mock_client.get_portfolio_weights.return_value = {"AAPL": 1.0}
+            mock_get_client.return_value = mock_client
+
+            from brain_api.routes.experience import _label_experience_for_account
+
+            _label_experience_for_account("sac", None, temp_storage)
+
+            from brain_api.core.alpaca_client import AlpacaAccount
+
+            mock_get_client.assert_called_with(AlpacaAccount.SAC_HALAL)
 
     def test_label_sac_uses_actual_weights_not_intended(self):
         """Test that SAC labeling uses actual weights."""

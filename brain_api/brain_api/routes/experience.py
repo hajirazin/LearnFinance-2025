@@ -80,6 +80,14 @@ class ExperienceRecord(BaseModel):
     model_type: str  # "sac"
     model_version: str
 
+    # Bucket discriminator. Optional with ``None`` for backward
+    # compatibility with experience JSON files written before this field
+    # existed; the labeller falls back to inferring the universe from
+    # the run_id prefix in that case (logged at WARNING). New writes
+    # MUST set this so the labeller can route to the right Alpaca
+    # account without inference.
+    universe: str | None = None
+
     # Full state at decision time
     state: ExperienceState | dict[str, Any]  # Accept both for backward compatibility
 
@@ -140,6 +148,19 @@ class StoreExperienceRequest(BaseModel):
     week_end: str
     model_type: str  # "sac"
     model_version: str
+
+    # Bucket discriminator. Optional only because legacy callers (and a
+    # handful of test fixtures) predate this field; the SAC Temporal
+    # workflows always pass it now so /experience/label/sac can route
+    # to the right Alpaca account without inferring from run_id.
+    universe: str | None = Field(
+        None,
+        description=(
+            "SAC bucket universe (e.g. 'halal_filtered' or 'halal'). "
+            "Required for new SAC writes so the labeller can route to "
+            "the correct Alpaca account."
+        ),
+    )
 
     # Full state at decision time
     state: ExperienceState | dict[str, Any] = Field(
@@ -447,6 +468,7 @@ def store_experience(
         week_end=request.week_end,
         model_type=request.model_type,
         model_version=request.model_version,
+        universe=request.universe,
         state=request.state,
         intended_action=action,
         intended_turnover=turnover,
@@ -766,16 +788,46 @@ def _compute_reward_from_actual_weights(
     return reward, portfolio_return
 
 
+def _infer_universe_from_run_id(run_id: str) -> str:
+    """Infer the SAC universe from a legacy run_id (no ``universe`` field).
+
+    Used as a one-shot migration aid for experience records written
+    before the ``universe`` field existed. The two parallel SAC A/B
+    workflows have disjoint run_id prefixes by design (per AGENTS.md
+    "Run identity & rerun semantics"):
+
+    - ``paper:halal:YYYY-MM-DD[:sac]`` -> ``halal`` (sac_halal account)
+    - everything else                 -> ``halal_filtered`` (sac account)
+
+    Per AGENTS.md rule #1 the inference is intentionally bounded to the
+    two known SAC universes -- a future third bucket would need to land
+    a ``universe`` field on the record before its experience is
+    written, NOT a silent fallback here.
+    """
+    if run_id.startswith("paper:halal:"):
+        return "halal"
+    return "halal_filtered"
+
+
 def _label_experience_for_account(
     model_type: str,
     run_id: str | None,
     storage: ExperienceStorage,
 ) -> LabelExperienceResponse:
-    """Label experience records for a specific account using actual weights.
+    """Label experience records for a model type using actual weights.
+
+    Routes each record to the correct Alpaca account via
+    :func:`resolve_alpaca_account` driven by ``record.universe``. The
+    two parallel SAC A/B workflows share ``model_type='sac'`` but trade
+    on disjoint Alpaca accounts (``sac`` vs ``sac_halal``), so a single
+    process-wide account would silently mis-label every record from the
+    sibling workflow.
 
     Args:
-        model_type: "sac"
-        run_id: Specific run to label, or None to label all unlabeled.
+        model_type: ``"sac"`` (currently the only labeller-supported
+            model type; see :func:`resolve_alpaca_account`).
+        run_id: Specific run to label, or ``None`` to label every
+            unlabeled record for this ``model_type``.
         storage: Experience storage instance.
 
     Returns:
@@ -783,24 +835,17 @@ def _label_experience_for_account(
     """
     from datetime import timedelta
 
-    from brain_api.core.alpaca_client import AlpacaAccount, get_alpaca_client
+    from brain_api.core.alpaca_client import (
+        AlpacaClient,
+        get_alpaca_client,
+        resolve_alpaca_account,
+    )
     from brain_api.core.lstm import load_prices_yfinance
 
     today = date.today()
     records_labeled = 0
     records_skipped = 0
     errors = []
-
-    # Get Alpaca client for this account
-    try:
-        alpaca_client = get_alpaca_client(AlpacaAccount(model_type))
-    except ValueError as e:
-        logger.error(f"[Experience] Failed to get Alpaca client for {model_type}: {e}")
-        return LabelExperienceResponse(
-            records_labeled=0,
-            records_skipped=0,
-            errors=[str(e)],
-        )
 
     # Get records to label
     if run_id:
@@ -817,6 +862,28 @@ def _label_experience_for_account(
     logger.info(
         f"[Experience] Found {len(records)} {model_type.upper()} records to potentially label"
     )
+
+    # Cache one client per resolved account so a mixed-universe batch
+    # only constructs each Alpaca client once (and so the labeller does
+    # not re-read env vars per record).
+    client_cache: dict[str, AlpacaClient] = {}
+
+    def _get_client_for_record(rec: ExperienceRecord) -> AlpacaClient:
+        universe = rec.universe
+        if universe is None:
+            universe = _infer_universe_from_run_id(rec.run_id)
+            logger.warning(
+                f"[Experience] Record {rec.run_id} has no universe field; "
+                f"inferred universe={universe!r} from run_id prefix. "
+                f"This path is for legacy records only -- new SAC writes "
+                f"set universe explicitly."
+            )
+        account = resolve_alpaca_account(rec.model_type, universe)
+        cached = client_cache.get(account.value)
+        if cached is None:
+            cached = get_alpaca_client(account)
+            client_cache[account.value] = cached
+        return cached
 
     for record in records:
         try:
@@ -839,10 +906,25 @@ def _label_experience_for_account(
                 )
             else:
                 try:
+                    alpaca_client = _get_client_for_record(record)
                     actual_weights = alpaca_client.get_portfolio_weights()
                     logger.info(
-                        f"[Experience] Fetched current weights from Alpaca for {record.run_id}"
+                        f"[Experience] Fetched current weights from Alpaca "
+                        f"({alpaca_client.account.value}) for {record.run_id}"
                     )
+                except ValueError as e:
+                    # Unknown (model_type, universe) -> we cannot pick an
+                    # account. Per AGENTS.md rule #1, surface as an error
+                    # rather than silently labelling against the wrong
+                    # account.
+                    error_msg = (
+                        f"Cannot route {record.run_id} to an Alpaca "
+                        f"account (model_type={record.model_type!r}, "
+                        f"universe={record.universe!r}): {e}"
+                    )
+                    logger.error(f"[Experience] {error_msg}")
+                    errors.append(error_msg)
+                    continue
                 except Exception as e:
                     logger.warning(
                         f"[Experience] Failed to fetch Alpaca weights: {e}. "

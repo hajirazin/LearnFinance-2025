@@ -32,6 +32,8 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         forbidden_calls: list[str] = []
         summary_calls: list[dict] = []
         email_calls: list[dict] = []
+        store_experience_calls: list[dict] = []
+        update_execution_calls: list[dict] = []
 
         activities = make_sac_only_activities(
             active_symbols=active_symbols,
@@ -48,6 +50,8 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
             forbidden_calls=forbidden_calls,
             summary_calls=summary_calls,
             email_calls=email_calls,
+            store_experience_calls=store_experience_calls,
+            update_execution_calls=update_execution_calls,
         )
 
         async with worker_with_activities(
@@ -81,3 +85,17 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         # halal_filtered A/B variant.
         assert summary_calls[0]["universe"] == "halal_filtered"
         assert email_calls[0]["universe"] == "halal_filtered"
+
+        # Universe must also be persisted onto the experience record so
+        # /experience/label/sac routes this record to the sac (not
+        # sac_halal) Alpaca account at label time. Without this the
+        # labeller would default to the legacy sac account by accident
+        # for any halal record sharing model_type='sac'.
+        assert store_experience_calls
+        assert store_experience_calls[0]["universe"] == "halal_filtered"
+
+        # Post-trade portfolio MUST flow into update_execution_sac so
+        # the labeller never falls back to a live Alpaca query for
+        # actual_weights.
+        assert update_execution_calls
+        assert update_execution_calls[0]["has_post_trade_portfolio"] is True

@@ -562,7 +562,7 @@ We store three kinds of data:
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |
 | ~~`POST /experience/label/ppo`~~ | ~~Label PPO experience with rewards~~ |
-| `POST /experience/label/sac` | Label SAC experience with rewards |
+| `POST /experience/label/sac` | Label SAC experience with rewards (routes per-record by `universe`: `halal_filtered` -> `sac` account, `halal` -> `sac_halal` account) |
 | `GET /experience/list` | List stored experiences |
 
 ### Other endpoints

@@ -218,15 +218,25 @@ def store_experience_sac(
     fundamentals: FundamentalsResponse,
     lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
+    universe: str,
 ) -> StoreExperienceResponse | None:
-    """Store SAC experience for future reward labeling."""
+    """Store SAC experience for future reward labeling.
+
+    The ``universe`` arg is mandatory (no default) so the two parallel
+    A/B SAC workflows persist their bucket onto the experience record:
+    ``USWeeklyAllocationWorkflow`` passes ``"halal_filtered"`` and
+    ``USSACHalalAllocationWorkflow`` passes ``"halal"``. The labeller
+    reads it back to route each record to the correct Alpaca account
+    via ``resolve_alpaca_account`` -- without it, every record would
+    silently label against the legacy ``sac`` account.
+    """
     if isinstance(allocation, SkippedAllocation) or getattr(
         allocation, "skipped", False
     ):
         logger.info("SAC skipped - not storing experience")
         return None
 
-    logger.info("Storing SAC experience...")
+    logger.info(f"Storing SAC experience (universe={universe})...")
     state = _build_state_dict(portfolio, news, fundamentals, lstm, patchtst)
     with get_client() as client:
         response = client.post(
@@ -237,6 +247,7 @@ def store_experience_sac(
                 "week_end": week_end,
                 "model_type": "sac",
                 "model_version": allocation.model_version,
+                "universe": universe,
                 "state": state,
                 "intended_action": allocation.target_weights,
                 "intended_turnover": allocation.turnover,
@@ -248,13 +259,40 @@ def store_experience_sac(
     return result
 
 
+def _portfolio_to_weights(portfolio: AlpacaPortfolioResponse) -> dict[str, float]:
+    """Convert an Alpaca portfolio response to weights including ``CASH``.
+
+    Uses the same equity-denominator convention as
+    :meth:`AlpacaClient.get_portfolio_weights` so the two paths stay
+    interchangeable for the labeller. If total equity is non-positive
+    (an empty paper account before first deposit) we surface an
+    all-cash slate rather than divide-by-zero.
+    """
+    total_value = portfolio.cash + sum(p.market_value for p in portfolio.positions)
+    if total_value <= 0:
+        return {"CASH": 1.0}
+    weights = {p.symbol: p.market_value / total_value for p in portfolio.positions}
+    weights["CASH"] = portfolio.cash / total_value
+    return weights
+
+
 @activity.defn
 def update_execution_sac(
     run_id: str,
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
     history: list[OrderHistoryItem],
+    post_trade_portfolio: AlpacaPortfolioResponse | None = None,
 ) -> UpdateExecutionResponse | None:
-    """Update SAC experience with execution report."""
+    """Update SAC experience with execution report and actual weights.
+
+    ``post_trade_portfolio`` is an optional snapshot of the SAC Alpaca
+    account taken AFTER the sell-wait-buy cycle completes. When provided
+    we send ``actual_weights`` to ``/experience/update-execution`` so
+    the labeller never has to fall back to a live Alpaca query. Old
+    callers that don't yet pass it stay backwards-compatible -- the
+    labeller will route the fallback Alpaca call to the correct account
+    via ``resolve_alpaca_account`` in that case.
+    """
     if isinstance(orders, SkippedOrdersResponse) or getattr(orders, "skipped", False):
         logger.info("SAC skipped - not updating execution")
         return None
@@ -273,16 +311,16 @@ def update_execution_sac(
         for o in orders.orders
     ]
     executed_orders = [h.model_dump() for h in history]
+    body: dict = {
+        "run_id": run_id,
+        "model_type": "sac",
+        "intended_orders": intended_orders,
+        "executed_orders": executed_orders,
+    }
+    if post_trade_portfolio is not None:
+        body["actual_weights"] = _portfolio_to_weights(post_trade_portfolio)
     with get_client() as client:
-        response = client.post(
-            "/experience/update-execution",
-            json={
-                "run_id": run_id,
-                "model_type": "sac",
-                "intended_orders": intended_orders,
-                "executed_orders": executed_orders,
-            },
-        )
+        response = client.post("/experience/update-execution", json=body)
         response.raise_for_status()
     result = UpdateExecutionResponse(**response.json())
     logger.info(

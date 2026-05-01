@@ -5,48 +5,50 @@ per account from ``ALPACA_{ACCOUNT}_URL`` env (empty/whitespace falls back to
 the paper host); credentials come from ``ALPACA_{ACCOUNT}_KEY`` /
 ``ALPACA_{ACCOUNT}_SECRET``.
 
+The :class:`AlpacaAccount` enum and :func:`get_alpaca_base_url` /
+:func:`get_alpaca_credentials` helpers live in
+:mod:`brain_api.core.alpaca_client` so the experience labeller can share
+them; this module re-imports them and adds a thin
+``ValueError -> HTTPException(500)`` wrapper for the FastAPI boundary.
+
 - GET /alpaca/portfolio: Fetch account, positions, and open orders count
 - POST /alpaca/submit-orders: Submit an array of orders
 - GET /alpaca/order-history: Fetch order history for a date range
 """
 
 import logging
-import os
-from enum import Enum
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from brain_api.core.alpaca_client import (
+    PAPER_BASE_URL,
+    AlpacaAccount,
+    get_alpaca_base_url,
+)
+from brain_api.core.alpaca_client import (
+    get_alpaca_credentials as _core_get_alpaca_credentials,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Default Alpaca host (used when ALPACA_{ACCOUNT}_URL env var is unset or blank).
-PAPER_BASE_URL = "https://paper-api.alpaca.markets"
+# Re-exported here so existing imports / tests that reach into
+# ``brain_api.routes.alpaca.PAPER_BASE_URL`` keep working.
+__all__ = [
+    "ALPACA_TIMEOUT",
+    "PAPER_BASE_URL",
+    "AlpacaAccount",
+    "get_alpaca_base_url",
+    "get_alpaca_credentials",
+    "get_alpaca_headers",
+    "router",
+]
 
 # Timeout settings for Alpaca API calls
 ALPACA_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
-
-
-# ============================================================================
-# Enums
-# ============================================================================
-
-
-class AlpacaAccount(str, Enum):
-    """Supported Alpaca trading accounts (paper by default; live opt-in per-account).
-
-    - sac: SAC RL allocator (US, halal_filtered universe -- sticky-15 from PatchTST)
-    - sac_halal: SAC RL allocator (US, legacy yfinance halal universe; A/B sibling of `sac`)
-    - hrp: HRP baseline allocator (US, halal universe)
-    - dhrp: Double HRP allocator (US, halal_new universe, sticky-selected)
-    """
-
-    SAC = "sac"
-    SAC_HALAL = "sac_halal"
-    HRP = "hrp"
-    DHRP = "dhrp"
 
 
 # ============================================================================
@@ -136,21 +138,20 @@ class OrderHistoryItem(BaseModel):
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-
-def get_alpaca_base_url(account: AlpacaAccount) -> str:
-    """Resolve Alpaca base URL for an account.
-
-    Reads ``ALPACA_{ACCOUNT}_URL``; returns the paper host when unset, empty,
-    or whitespace. Setting the env var to ``https://api.alpaca.markets`` (with
-    matching live API key + secret) flips that one account to live.
-    """
-    raw = os.environ.get(f"ALPACA_{account.value.upper()}_URL", "")
-    return raw.strip() or PAPER_BASE_URL
+#
+# ``get_alpaca_base_url`` is re-exported from ``brain_api.core.alpaca_client``
+# at module import (see top of file). The credential helper below wraps the
+# core ``ValueError`` in :class:`HTTPException` so route handlers can keep
+# returning a 500 on missing creds without leaking the core exception type.
 
 
 def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
     """Get Alpaca API credentials for a specific account.
+
+    Thin FastAPI-aware wrapper around
+    :func:`brain_api.core.alpaca_client.get_alpaca_credentials` that
+    converts the core ``ValueError`` into an :class:`HTTPException` so
+    route handlers can let the 500 propagate naturally.
 
     Args:
         account: The trading account (sac, sac_halal, hrp, dhrp)
@@ -159,24 +160,13 @@ def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
         Tuple of (api_key, api_secret)
 
     Raises:
-        HTTPException: If credentials are not configured
+        HTTPException: If credentials are not configured.
     """
-    account_upper = account.value.upper()
-    key_var = f"ALPACA_{account_upper}_KEY"
-    secret_var = f"ALPACA_{account_upper}_SECRET"
-
-    api_key = os.environ.get(key_var)
-    api_secret = os.environ.get(secret_var)
-
-    if not api_key or not api_secret:
+    try:
+        return _core_get_alpaca_credentials(account)
+    except ValueError as e:
         logger.error(f"Missing Alpaca credentials for account {account.value}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Alpaca credentials not configured for account {account.value}. "
-            f"Set {key_var} and {secret_var} environment variables.",
-        )
-
-    return api_key, api_secret
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def get_alpaca_headers(account: AlpacaAccount) -> dict[str, str]:
