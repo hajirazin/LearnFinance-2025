@@ -54,6 +54,7 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
 from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
@@ -119,6 +120,22 @@ SCHEDULES = [
         "cron": "0 12 * * 1",  # Monday 12:00 UTC (17:30 IST)
         "task_queue": QUEUE_INFERENCE,
         "description": "US Alpha-HRP (PatchTST -> top 15 -> HRP) Monday 17:30 IST",
+    },
+    {
+        "id": "us-sac-halal-allocate",
+        "workflow": USSACHalalAllocationWorkflow,
+        "workflow_id": "us-sac-halal-allocate",
+        # 30 minutes after us-alpha-hrp keeps the established Monday
+        # cadence on the inference queue. Parallel A/B sibling of
+        # us-weekly-allocate (sac_halal_filtered at 11:00 UTC); trades on
+        # the dedicated `sac_halal` Alpaca account so client_order_id
+        # collisions across the two SAC variants are impossible.
+        "cron": "30 12 * * 1",  # Monday 12:30 UTC (18:00 IST)
+        "task_queue": QUEUE_INFERENCE,
+        "description": (
+            "US SAC (halal) weekly allocation (sac_halal account, "
+            "universe=halal) Monday 18:00 IST"
+        ),
     },
     # Training schedules -- first Sunday of month, staggered 6h apart
     # starting 00:01 UTC. Routed to QUEUE_TRAINING (Mac-only). The Mac

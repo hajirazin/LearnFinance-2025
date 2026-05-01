@@ -24,12 +24,14 @@ def client():
 
 @pytest.fixture
 def mock_alpaca_credentials():
-    """Mock Alpaca credentials for all accounts (sac, hrp, dhrp)."""
+    """Mock Alpaca credentials for all accounts (sac, sac_halal, hrp, dhrp)."""
     with patch.dict(
         "os.environ",
         {
             "ALPACA_SAC_KEY": "test-sac-key",
             "ALPACA_SAC_SECRET": "test-sac-secret",
+            "ALPACA_SAC_HALAL_KEY": "test-sac-halal-key",
+            "ALPACA_SAC_HALAL_SECRET": "test-sac-halal-secret",
             "ALPACA_HRP_KEY": "test-hrp-key",
             "ALPACA_HRP_SECRET": "test-hrp-secret",
             "ALPACA_DHRP_KEY": "test-dhrp-key",
@@ -682,3 +684,170 @@ class TestPerAccountBaseUrl:
         assert hrp_response.status_code == 200
         assert sac_client_class.call_args.kwargs["base_url"] == LIVE_HOST
         assert hrp_client_class.call_args.kwargs["base_url"] == PAPER_HOST
+
+
+# =============================================================================
+# Tests for the new sac_halal account (legacy halal universe A/B sibling of sac)
+# =============================================================================
+
+
+class TestSACHalalAccount:
+    """Cover the sac_halal Alpaca account.
+
+    The sac_halal bucket is the parallel A/B SAC variant on the legacy
+    yfinance halal universe. It MUST use a dedicated Alpaca account so
+    client_order_id collisions with the existing sac (halal_filtered)
+    workflow are impossible (Alpaca dedupes per account; the new
+    workflow's run_id form `paper:halal:YYYY-MM-DD` shares the
+    `:attempt-N:SYMBOL:SIDE` suffix with sac, so cross-account dedup
+    is the only safety guarantee).
+    """
+
+    def test_get_portfolio_sac_halal_uses_sac_halal_credentials(
+        self, client, mock_alpaca_credentials
+    ):
+        """GET /alpaca/portfolio?account=sac_halal sends ALPACA_SAC_HALAL_* headers."""
+        mock_account = {"cash": "9500.00"}
+        mock_positions = [{"symbol": "MSFT", "qty": "1", "market_value": "415.00"}]
+        mock_orders = []
+
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.get.side_effect = [
+                MagicMock(json=lambda: mock_account, raise_for_status=lambda: None),
+                MagicMock(json=lambda: mock_positions, raise_for_status=lambda: None),
+                MagicMock(json=lambda: mock_orders, raise_for_status=lambda: None),
+            ]
+
+            response = client.get("/alpaca/portfolio", params={"account": "sac_halal"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cash"] == 9500.00
+        assert data["open_orders_count"] == 0
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-sac-halal-key"
+        assert kwargs["headers"]["APCA-API-SECRET-KEY"] == "test-sac-halal-secret"
+
+    def test_get_portfolio_sac_halal_missing_credentials_returns_500(self, client):
+        """Without ALPACA_SAC_HALAL_KEY/SECRET, the endpoint must 500 explicitly."""
+        with patch.dict(
+            "os.environ",
+            {"ALPACA_SAC_HALAL_KEY": "", "ALPACA_SAC_HALAL_SECRET": ""},
+        ):
+            response = client.get("/alpaca/portfolio", params={"account": "sac_halal"})
+        assert response.status_code == 500
+        assert "ALPACA_SAC_HALAL_KEY" in response.json()["detail"]
+
+    def test_submit_orders_sac_halal_uses_sac_halal_credentials(
+        self, client, mock_alpaca_credentials
+    ):
+        """POST /alpaca/submit-orders with account=sac_halal uses sac_halal creds."""
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.post.return_value = MagicMock(
+                json=lambda: {"id": "sac-halal-order-1", "status": "accepted"},
+                raise_for_status=lambda: None,
+            )
+
+            response = client.post(
+                "/alpaca/submit-orders",
+                json={
+                    "account": "sac_halal",
+                    "orders": [
+                        {
+                            "symbol": "AAPL",
+                            "qty": 2,
+                            "side": "buy",
+                            "type": "limit",
+                            "time_in_force": "day",
+                            "limit_price": 175.0,
+                            # Variant run_id form per AGENTS.md: paper:halal:...
+                            "client_order_id": "paper:halal:2026-05-04:attempt-1:AAPL:BUY",
+                        }
+                    ],
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["account"] == "sac_halal"
+        assert data["orders_submitted"] == 1
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-sac-halal-key"
+
+    def test_order_history_sac_halal_success(self, client, mock_alpaca_credentials):
+        """GET /alpaca/order-history?account=sac_halal returns sac_halal order list."""
+        mock_orders = [
+            {
+                "id": "ord-sac-halal-1",
+                "client_order_id": "paper:halal:2026-05-04:attempt-1:NVDA:BUY",
+                "symbol": "NVDA",
+                "side": "buy",
+                "status": "filled",
+                "filled_qty": "1",
+                "filled_avg_price": "700.0",
+            }
+        ]
+        with patch("brain_api.routes.alpaca.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_client.get.return_value = MagicMock(
+                json=lambda: mock_orders, raise_for_status=lambda: None
+            )
+
+            response = client.get(
+                "/alpaca/order-history",
+                params={"account": "sac_halal", "after": "2026-05-04"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["client_order_id"].startswith("paper:halal:")
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["headers"]["APCA-API-KEY-ID"] == "test-sac-halal-key"
+
+    def test_sac_halal_url_override_isolated_from_sac(
+        self, client, mock_alpaca_credentials
+    ):
+        """ALPACA_SAC_HALAL_URL=live must not flip the existing sac account."""
+        with patch.dict("os.environ", {"ALPACA_SAC_HALAL_URL": LIVE_HOST}):
+            with patch(
+                "brain_api.routes.alpaca.httpx.Client"
+            ) as sac_halal_client_class:
+                mock_client = MagicMock()
+                sac_halal_client_class.return_value.__enter__.return_value = mock_client
+                mock_client.get.side_effect = [
+                    MagicMock(
+                        json=lambda: {"cash": "1.0"}, raise_for_status=lambda: None
+                    ),
+                    MagicMock(json=list, raise_for_status=lambda: None),
+                    MagicMock(json=list, raise_for_status=lambda: None),
+                ]
+                response_halal = client.get(
+                    "/alpaca/portfolio", params={"account": "sac_halal"}
+                )
+            with patch("brain_api.routes.alpaca.httpx.Client") as sac_client_class:
+                mock_client = MagicMock()
+                sac_client_class.return_value.__enter__.return_value = mock_client
+                mock_client.get.side_effect = [
+                    MagicMock(
+                        json=lambda: {"cash": "1.0"}, raise_for_status=lambda: None
+                    ),
+                    MagicMock(json=list, raise_for_status=lambda: None),
+                    MagicMock(json=list, raise_for_status=lambda: None),
+                ]
+                response_sac = client.get(
+                    "/alpaca/portfolio", params={"account": "sac"}
+                )
+
+        assert response_halal.status_code == 200
+        assert response_sac.status_code == 200
+        assert sac_halal_client_class.call_args.kwargs["base_url"] == LIVE_HOST
+        assert sac_client_class.call_args.kwargs["base_url"] == PAPER_HOST

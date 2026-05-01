@@ -74,6 +74,7 @@ def generate_sac_weekly_summary(
         news=request.news.model_dump(),
         fundamentals=request.fundamentals.model_dump(),
         sac=request.sac.model_dump(),
+        universe=request.universe,
     )
 
     logger.debug(f"Generated prompt length: {len(prompt)} chars")

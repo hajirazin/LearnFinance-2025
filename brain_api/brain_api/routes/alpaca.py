@@ -37,12 +37,14 @@ ALPACA_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 class AlpacaAccount(str, Enum):
     """Supported Alpaca trading accounts (paper by default; live opt-in per-account).
 
-    - sac: SAC RL allocator (US, halal universe)
+    - sac: SAC RL allocator (US, halal_filtered universe -- sticky-15 from PatchTST)
+    - sac_halal: SAC RL allocator (US, legacy yfinance halal universe; A/B sibling of `sac`)
     - hrp: HRP baseline allocator (US, halal universe)
     - dhrp: Double HRP allocator (US, halal_new universe, sticky-selected)
     """
 
     SAC = "sac"
+    SAC_HALAL = "sac_halal"
     HRP = "hrp"
     DHRP = "dhrp"
 
@@ -89,7 +91,9 @@ class OrderToSubmit(BaseModel):
 class SubmitOrdersRequest(BaseModel):
     """Request model for submitting multiple orders."""
 
-    account: AlpacaAccount = Field(..., description="Trading account (sac, hrp, dhrp)")
+    account: AlpacaAccount = Field(
+        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
+    )
     orders: list[OrderToSubmit] = Field(
         default_factory=list, description="Orders to submit"
     )
@@ -149,7 +153,7 @@ def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
     """Get Alpaca API credentials for a specific account.
 
     Args:
-        account: The trading account (sac, hrp, dhrp)
+        account: The trading account (sac, sac_halal, hrp, dhrp)
 
     Returns:
         Tuple of (api_key, api_secret)
@@ -191,7 +195,9 @@ def get_alpaca_headers(account: AlpacaAccount) -> dict[str, str]:
 
 @router.get("/portfolio", response_model=PortfolioResponse)
 def get_portfolio(
-    account: AlpacaAccount = Query(..., description="Trading account (sac, hrp, dhrp)"),
+    account: AlpacaAccount = Query(
+        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
+    ),
 ) -> PortfolioResponse:
     """Get portfolio data for a specific Alpaca account.
 
@@ -200,7 +206,7 @@ def get_portfolio(
     skipped (if > 0, there are pending orders from a previous run).
 
     Args:
-        account: The trading account (sac, hrp, dhrp)
+        account: The trading account (sac, sac_halal, hrp, dhrp)
 
     Returns:
         PortfolioResponse with cash, positions, and open_orders_count
@@ -392,7 +398,9 @@ def submit_orders(request: SubmitOrdersRequest) -> SubmitOrdersResponse:
 
 @router.get("/order-history", response_model=list[OrderHistoryItem])
 def get_order_history(
-    account: AlpacaAccount = Query(..., description="Trading account (sac, hrp, dhrp)"),
+    account: AlpacaAccount = Query(
+        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
+    ),
     after: str = Query(
         ..., description="ISO date to fetch orders after (e.g., 2026-02-03)"
     ),
@@ -403,7 +411,7 @@ def get_order_history(
     orders with actual execution results.
 
     Args:
-        account: The trading account (sac, hrp, dhrp)
+        account: The trading account (sac, sac_halal, hrp, dhrp)
         after: ISO date string to fetch orders after
 
     Returns:

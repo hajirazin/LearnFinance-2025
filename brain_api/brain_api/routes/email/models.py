@@ -116,24 +116,27 @@ class SACWeeklyReportEmailRequest(BaseModel):
     Contains everything needed to render the SAC-only weekly email.
     Uses exact API response types for allocation/forecast data.
     Email recipient configuration comes from environment variables (TRAINING_EMAIL_TO).
+
+    Two parallel A/B SAC weekly workflows share this endpoint:
+    ``USWeeklyAllocationWorkflow`` (universe=``halal_filtered``) and
+    ``USSACHalalAllocationWorkflow`` (universe=``halal``). The
+    ``universe`` field is mandatory (no default; AGENTS.md "no silent
+    fallbacks") and renders into the subject line so both reports are
+    distinguishable in the inbox.
     """
 
-    # AI Summary (from /llm/sac-weekly-summary)
     summary: dict[str, str]
 
-    # Alpaca Results
     order_results: OrderResultsData
     skipped_algorithms: list[str] = []
 
-    # Date Info
     target_week_start: str
     target_week_end: str
     as_of_date: str
+    universe: str  # "halal_filtered" or "halal"; mandatory; renders into subject
 
-    # RL Allocators - reuse exact API response types
     sac: SACInferenceResponse
 
-    # Forecasters - reuse exact API response types
     lstm: LSTMInferenceResponse
     patchtst: PatchTSTInferenceResponse
 

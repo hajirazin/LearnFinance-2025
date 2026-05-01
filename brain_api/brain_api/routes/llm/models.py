@@ -96,6 +96,13 @@ class SACWeeklySummaryRequest(BaseModel):
     SAC Alpaca paper account. HRP weekly reporting lives in the dedicated
     ``/llm/us-alpha-hrp-summary`` endpoint and is not included here.
     Does NOT include Alpaca order results - that's only for the email endpoint.
+
+    Two parallel A/B SAC weekly workflows share this endpoint:
+    ``USWeeklyAllocationWorkflow`` (universe=``halal_filtered``) and
+    ``USSACHalalAllocationWorkflow`` (universe=``halal``). The
+    ``universe`` field is mandatory (no default; AGENTS.md "no silent
+    fallbacks") so the prompt always labels the section with the
+    correct bucket and the LLM cannot conflate the two runs.
     """
 
     lstm: LSTMInferenceResponse  # from POST /inference/lstm
@@ -103,6 +110,7 @@ class SACWeeklySummaryRequest(BaseModel):
     news: NewsSignalResponse  # from POST /signals/news
     fundamentals: FundamentalsResponse  # from POST /signals/fundamentals
     sac: SACInferenceResponse  # from POST /inference/sac
+    universe: str  # "halal_filtered" or "halal"; mandatory
 
 
 class WeeklySummaryResponse(BaseModel):

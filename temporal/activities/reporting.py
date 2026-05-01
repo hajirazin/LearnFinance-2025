@@ -61,9 +61,14 @@ def generate_summary(
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
     sac: SACInferenceResponse | SkippedAllocation,
+    universe: str,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of the SAC-only weekly run."""
-    logger.info("Generating SAC weekly LLM summary...")
+    """Generate LLM summary of the SAC-only weekly run.
+
+    ``universe`` is mandatory (no default) so the two parallel A/B SAC
+    weekly runs label their LLM payloads explicitly.
+    """
+    logger.info(f"Generating SAC weekly LLM summary (universe={universe})...")
     with get_client() as client:
         response = client.post(
             "/llm/sac-weekly-summary",
@@ -73,6 +78,7 @@ def generate_summary(
                 "news": news.model_dump(),
                 "fundamentals": fundamentals.model_dump(),
                 "sac": _alloc_to_dict(sac),
+                "universe": universe,
             },
         )
         response.raise_for_status()
@@ -92,9 +98,15 @@ def send_weekly_email(
     target_week_end: str,
     as_of_date: str,
     skipped_algorithms: list[str],
+    universe: str,
 ) -> WeeklyReportEmailResponse:
-    """Send the SAC-only weekly report email."""
-    logger.info("Sending SAC weekly report email...")
+    """Send the SAC-only weekly report email.
+
+    ``universe`` is mandatory (no default) and renders into the email
+    subject (``US SAC ({universe}) Weekly Portfolio Analysis ...``)
+    so the two A/B reports are distinguishable in the inbox.
+    """
+    logger.info(f"Sending SAC weekly report email (universe={universe})...")
     with get_client() as client:
         response = client.post(
             "/email/sac-weekly-report",
@@ -107,6 +119,7 @@ def send_weekly_email(
                 "target_week_start": target_week_start,
                 "target_week_end": target_week_end,
                 "as_of_date": as_of_date,
+                "universe": universe,
                 "sac": _alloc_to_dict(sac),
                 "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),

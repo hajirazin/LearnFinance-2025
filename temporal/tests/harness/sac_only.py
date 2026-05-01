@@ -44,15 +44,19 @@ def make_sac_only_activities(
         raise AssertionError(f"Workflow must not invoke retired HRP activity '{name}'")
 
     @activity.defn(name="resolve_next_attempt")
-    def mock_resolve_next_attempt(run_id, as_of_date) -> int:
+    def mock_resolve_next_attempt(run_id, as_of_date, accounts=None) -> int:
         return 1
 
     @activity.defn(name="get_active_symbols")
-    def mock_get_active_symbols() -> ActiveSymbolsResponse:
+    def mock_get_active_symbols(universe: str) -> ActiveSymbolsResponse:
         return active_symbols
 
     @activity.defn(name="get_sac_portfolio")
     def mock_get_sac_portfolio() -> AlpacaPortfolioResponse:
+        return sac_portfolio
+
+    @activity.defn(name="get_sac_halal_portfolio")
+    def mock_get_sac_halal_portfolio() -> AlpacaPortfolioResponse:
         return sac_portfolio
 
     @activity.defn(name="get_hrp_portfolio")
@@ -88,11 +92,11 @@ def make_sac_only_activities(
         return patchtst_resp
 
     @activity.defn(name="infer_sac")
-    def mock_infer_sac(portfolio, as_of_date):
+    def mock_infer_sac(portfolio, as_of_date, universe):
         return sac_alloc
 
     @activity.defn(name="generate_orders_sac")
-    def mock_generate_orders_sac(allocation, portfolio, run_id, attempt):
+    def mock_generate_orders_sac(allocation, portfolio, run_id, attempt, algorithm):
         return sac_orders
 
     @activity.defn(name="store_experience_sac")
@@ -107,6 +111,14 @@ def make_sac_only_activities(
             return SkippedSubmitResponse(account="sac")
         return sac_submit_resp
 
+    @activity.defn(name="submit_orders_sac_halal")
+    def mock_submit_orders_sac_halal(orders):
+        if isinstance(orders, SkippedOrdersResponse) or getattr(
+            orders, "skipped", False
+        ):
+            return SkippedSubmitResponse(account="sac_halal")
+        return sac_submit_resp
+
     @activity.defn(name="check_order_statuses")
     def mock_check_order_statuses(account, client_order_ids):
         if check_order_statuses_fn is not None:
@@ -117,6 +129,10 @@ def make_sac_only_activities(
 
     @activity.defn(name="get_order_history_sac")
     def mock_get_order_history_sac(after_date):
+        return []
+
+    @activity.defn(name="get_order_history_sac_halal")
+    def mock_get_order_history_sac_halal(after_date):
         return []
 
     @activity.defn(name="update_execution_sac")
@@ -134,13 +150,14 @@ def make_sac_only_activities(
 
     @activity.defn(name="generate_summary")
     def mock_generate_summary(
-        lstm, patchtst, news, fundamentals, sac
+        lstm, patchtst, news, fundamentals, sac, universe
     ) -> WeeklySummaryResponse:
         if summary_calls is not None:
             summary_calls.append(
                 {
                     "sac_skipped": _coerce(sac, "skipped") or False,
                     "sac_model_version": _coerce(sac, "model_version"),
+                    "universe": universe,
                 }
             )
         return summary_resp
@@ -150,10 +167,13 @@ def make_sac_only_activities(
         if email_calls is not None:
             sac = args[3] if len(args) > 3 else None
             sac_submit = args[4] if len(args) > 4 else None
+            # The trailing positional arg (10th) is `universe`.
+            universe = args[9] if len(args) > 9 else None
             email_calls.append(
                 {
                     "sac_skipped": _coerce(sac, "skipped") or False,
                     "sac_submit_skipped": _coerce(sac_submit, "skipped") or False,
+                    "universe": universe,
                 }
             )
         return email_resp
@@ -162,6 +182,7 @@ def make_sac_only_activities(
         mock_resolve_next_attempt,
         mock_get_active_symbols,
         mock_get_sac_portfolio,
+        mock_get_sac_halal_portfolio,
         mock_get_hrp_portfolio,
         mock_allocate_hrp,
         mock_submit_orders_hrp,
@@ -173,8 +194,10 @@ def make_sac_only_activities(
         mock_generate_orders_sac,
         mock_store_experience_sac,
         mock_submit_orders_sac,
+        mock_submit_orders_sac_halal,
         mock_check_order_statuses,
         mock_get_order_history_sac,
+        mock_get_order_history_sac_halal,
         mock_update_execution_sac,
         mock_generate_summary,
         mock_send_weekly_email,

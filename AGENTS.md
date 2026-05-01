@@ -25,7 +25,8 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - Runs locally via `temporal server start-dev` (SQLite persistence, survives laptop shutdown)
   - India weekly allocation workflow (`IndiaWeeklyAllocationWorkflow`): full Nifty Shariah 500 universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='india'`) -> rank-band sticky selection (`halal_india_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> AI summary -> email (paper-only, no broker)
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india rank-band sticky top 15 (`halal_india_filtered_alpha` partition in `screening_history`, monthly cadence) -> LLM summary -> email
-  - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
+  - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> SAC allocator (universe `halal_filtered`) -> sell-wait-buy with durable polling via the `sac` Alpaca account (orders tagged `algorithm='sac'`) -> AI summary -> email tagged `universe='halal_filtered'`. Run_id stays `paper:YYYY-MM-DD` (default form).
+  - US SAC (halal) weekly allocation workflow (`USSACHalalAllocationWorkflow`): parallel A/B sibling of `USWeeklyAllocationWorkflow` running 30 minutes later on Mondays. Same SAC inference pipeline but with universe `halal` (the legacy yfinance halal universe, variable size 10-15). Trades through the dedicated `sac_halal` Alpaca account (orders tagged `algorithm='sac_halal'`); experience records share `model_type='sac'` but live in their own files because `run_id` is `paper:halal:YYYY-MM-DD`. AI summary + email tagged `universe='halal'`.
   - US Alpha-HRP workflow (`USAlphaHRPWorkflow`): halal_new universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='us'`) -> rank-band sticky selection (`halal_new_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> sell-wait-buy via the `hrp` Alpaca account (orders tagged `algorithm='alpha_hrp'`) -> AI summary -> email. Replaced the retired naive-HRP path that used to run inside `USWeeklyAllocationWorkflow`.
   - US Double HRP workflow (`USDoubleHRPWorkflow`): halal_new universe -> Stage 1 HRP (lookback=756d) -> sticky top 15 (`halal_new` partition in `stage1_weight_history`, K_in=15, stickiness threshold 1.0pp) -> Stage 2 HRP (lookback=252d) on the chosen 15 -> record final weights -> sell-wait-buy via the dedicated `dhrp` Alpaca account (orders tagged `algorithm='dhrp'`) -> AI summary -> email.
   - India Double HRP workflow (`IndiaDoubleHRPWorkflow`): full Nifty Shariah 500 universe -> Stage 1 HRP (lookback=756d) -> top 15 by Stage 1 weight -> Stage 2 HRP (lookback=252d) on the chosen 15 -> AI summary -> email (paper-only, no broker; no sticky persistence -- Stage 1 weights are not retained across weeks).
@@ -116,7 +117,7 @@ temporal/                         # Temporal workflow orchestration
 | `POST /inference/patchtst` | US PatchTST price predictions (symbols from model metadata) |
 | `POST /inference/patchtst/india` | India PatchTST price predictions (loads `patchtst_india` storage) |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST score endpoint (US or India) -- returns `{symbol -> predicted_weekly_return_pct}` and enforces finite-score / `min_predictions` invariants used by Alpha-HRP |
-| `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST) |
+| `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST); `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
 **Orders** (called by Monday run via Temporal after allocations):
@@ -156,13 +157,13 @@ temporal/                         # Temporal workflow orchestration
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /llm/sac-weekly-summary` | Generate AI summary of the SAC-only weekly run (US) |
+| `POST /llm/sac-weekly-summary` | Generate AI summary of the SAC-only weekly run (US); `universe` field is mandatory in the body (`halal_filtered` or `halal`) so the prompt can label the A/B run |
 | `POST /llm/us-alpha-hrp-summary` | Generate AI summary of US Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
 | `POST /llm/forecasters-training-summary` | Generate AI summary of US LSTM + PatchTST training (called by `USForecastersTrainingWorkflow`) |
 | `POST /llm/sac-training-summary` | Generate AI summary of US SAC training (called by `USSACTrainingWorkflow` with `universe="halal_filtered"` (default) and by `USSACHalalTrainingWorkflow` with `universe="halal"`). The `universe` field branches the prompt so the summary identifies which bucket. |
-| `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
+| `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US); `universe` is mandatory and renders into the subject (`US SAC ({universe}) Weekly Portfolio Analysis ...`) so the two A/B runs are distinguishable in the inbox |
 | `POST /email/us-alpha-hrp-report` | Send US Alpha-HRP report email (alpha screen + sticky + HRP + Alpaca order execution) via Gmail SMTP |
 | `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (alpha screen + sticky + HRP, paper-only / no broker) via Gmail SMTP |
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
@@ -176,7 +177,7 @@ temporal/                         # Temporal workflow orchestration
 | `GET /universe/halal` | Halal stock universe |
 | `GET /universe/halal_india` | Top 15 PatchTST-scored from Nifty 500 Shariah (NSE India) |
 | `GET /universe/nifty_shariah_500` | All ~210 Nifty 500 Shariah constituents (NSE India) |
-| `GET /models/active-symbols` | Active symbols from SAC model metadata |
+| `GET /models/active-symbols` | Active symbols from SAC model metadata; `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
 | `POST /etl/refresh-training-data` | Refresh training data; symbols resolved from `universe` field via the ETL universe registry |
@@ -420,7 +421,10 @@ If tests are added later, they should be:
 ### Run identity & rerun semantics
 
 - `run_date` is the **Monday date in IST** (calendar date)
-- `run_id = paper:YYYY-MM-DD`
+- `run_id = paper:YYYY-MM-DD` (default form for the original `sac` / `hrp` / `dhrp` strategies)
+- `run_id = paper:<universe>:YYYY-MM-DD` is an **accepted variant** when a strategy uses a dedicated Alpaca account (currently only `sac_halal` -> `paper:halal:YYYY-MM-DD`). The variant exists so two strategies that share a Monday slot do not collide on `client_order_id` or experience-file paths. Only allowed when:
+  1. The strategy submits orders through a **dedicated Alpaca account** (different `ALPACA_<ACCOUNT>_KEY` / `_SECRET`), so per-account `client_order_id` dedup is automatic, AND
+  2. The variant prefix is exactly the strategy's `universe` string.
 - `attempt` starts at `1`
 - **Rerun is read-only** if the latest attempt has any order not in a terminal canceled/expired/rejected state
 - To allow a new submission: user cancels paper orders manually in Alpaca, then rerun creates `attempt += 1`
@@ -430,7 +434,8 @@ If tests are added later, they should be:
 
 All submitted orders must include deterministic `client_order_id`:
 
-- `paper:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>`
+- `paper:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>` (default)
+- `paper:<universe>:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>` (variant; only when the strategy uses a dedicated Alpaca account, e.g. `paper:halal:...` for `sac_halal`)
 
 The system must:
 
@@ -491,10 +496,11 @@ Any implementation must include:
   `sac_halal` bucket requires plumbing `universe` through the
   finetune request body and bucket lookup -- deliberately deferred
   until the finetune flow is ready for an A/B comparison.
-- `/inference/sac` is also hard-pinned to `sac_halal_filtered` for
-  now. The new `sac_halal` bucket only ships *training* (so we can
-  evaluate it offline against the live bucket); routing inference to
-  the new bucket is a follow-up decision.
+- `/inference/sac` and `/models/active-symbols` accept a **mandatory**
+  `universe` query parameter; both routes resolve the SAC bucket via
+  `get_bucket(ModelType.SAC, universe)`. There is no implicit default
+  -- callers must pass `halal_filtered` or `halal` explicitly so the
+  two A/B paths cannot accidentally share state.
 
 ### Temporal workflow configuration
 
@@ -530,7 +536,8 @@ Key configuration:
 Before merging changes that touch trading logic:
 
 - [ ] Confirm rerun behavior is still read-only after any submission
-- [ ] Confirm `client_order_id` format unchanged (or migration handled)
+- [ ] Confirm `client_order_id` format is the default (`paper:YYYY-MM-DD:...`) or a documented variant (`paper:<universe>:YYYY-MM-DD:...`) tied to a dedicated Alpaca account
+- [ ] If introducing a new strategy that shares a Monday slot with an existing one, the new strategy MUST use a dedicated Alpaca account AND the `paper:<universe>:YYYY-MM-DD` run_id variant so `client_order_id`s and experience-file paths stay disjoint
 - [ ] Confirm safety caps exist and are enforced (max turnover, max orders, cash buffer)
 - [ ] If touching live trading: confirm that paper accounts (any with no `ALPACA_{ACCOUNT}_URL` set) still hit the paper host
 

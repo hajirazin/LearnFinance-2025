@@ -183,6 +183,7 @@ def send_sac_weekly_report_email(
             "target_week_start": request.target_week_start,
             "target_week_end": request.target_week_end,
             "as_of_date": request.as_of_date,
+            "universe": request.universe,
             "sac": request.sac.model_dump(),
             "lstm": request.lstm.model_dump(),
             "patchtst": request.patchtst.model_dump(),
@@ -190,9 +191,9 @@ def send_sac_weekly_report_email(
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,
-            base="SAC Weekly Portfolio Analysis",
+            base=f"US SAC ({request.universe}) Weekly Portfolio Analysis",
         ),
-        log_label="SAC weekly report",
+        log_label=f"SAC weekly report ({request.universe})",
     )
 
 

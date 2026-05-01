@@ -30,15 +30,25 @@ def generate_orders_sac(
     portfolio: AlpacaPortfolioResponse,
     run_id: str,
     attempt: int,
+    algorithm: str,
 ) -> GenerateOrdersResponse | SkippedOrdersResponse:
-    """Generate orders for SAC allocation."""
+    """Generate orders for a SAC allocation, tagged by ``algorithm``.
+
+    The ``algorithm`` arg is mandatory (no default) so the two parallel
+    A/B SAC workflows tag their orders with distinct buckets:
+    ``USWeeklyAllocationWorkflow`` passes ``"sac"`` (halal_filtered
+    universe), ``USSACHalalAllocationWorkflow`` passes ``"sac_halal"``
+    (halal universe). Per AGENTS.md rule #1 (no silent fallbacks); also
+    keeps brain_api's order persistence unambiguous between the two
+    runs even before the per-account Alpaca dedup kicks in.
+    """
     if isinstance(allocation, SkippedAllocation) or getattr(
         allocation, "skipped", False
     ):
-        logger.info("SAC skipped - returning empty orders")
-        return SkippedOrdersResponse(skipped=True, algorithm="sac")
+        logger.info(f"{algorithm.upper()} skipped - returning empty orders")
+        return SkippedOrdersResponse(skipped=True, algorithm=algorithm)
 
-    logger.info("Generating SAC orders...")
+    logger.info(f"Generating {algorithm.upper()} orders...")
     with get_client() as client:
         response = client.post(
             "/orders/generate",
@@ -50,12 +60,15 @@ def generate_orders_sac(
                 },
                 "run_id": run_id,
                 "attempt": attempt,
-                "algorithm": "sac",
+                "algorithm": algorithm,
             },
         )
         response.raise_for_status()
     result = GenerateOrdersResponse(**response.json())
-    logger.info(f"SAC orders: {result.summary.buys} buys, {result.summary.sells} sells")
+    logger.info(
+        f"{algorithm.upper()} orders: "
+        f"{result.summary.buys} buys, {result.summary.sells} sells"
+    )
     return result
 
 

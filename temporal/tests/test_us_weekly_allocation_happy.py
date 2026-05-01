@@ -75,3 +75,9 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         assert summary_calls and summary_calls[0]["sac_skipped"] is False
         assert email_calls and email_calls[0]["sac_skipped"] is False
         assert email_calls[0]["sac_submit_skipped"] is False
+
+        # Universe must be plumbed through explicitly per AGENTS.md
+        # (no silent fallbacks). The legacy weekly workflow is the
+        # halal_filtered A/B variant.
+        assert summary_calls[0]["universe"] == "halal_filtered"
+        assert email_calls[0]["universe"] == "halal_filtered"

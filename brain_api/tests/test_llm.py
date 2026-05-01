@@ -697,6 +697,7 @@ def mock_weekly_summary_request():
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
         },
+        "universe": "halal_filtered",
     }
 
 
@@ -1000,6 +1001,63 @@ class TestSACWeeklySummaryEndpoint:
             )
         finally:
             app.dependency_overrides.clear()
+
+    def test_weekly_summary_missing_universe_returns_422(
+        self,
+        mock_weekly_summary_request,
+    ):
+        """Universe is mandatory: 422 when omitted (AGENTS.md no-default)."""
+        payload = dict(mock_weekly_summary_request)
+        payload.pop("universe")
+
+        response = client.post("/llm/sac-weekly-summary", json=payload)
+
+        assert response.status_code == 422
+        # Pydantic surfaces the missing-field error against the body.
+        body = response.json()
+        assert any("universe" in str(loc) for loc in body.get("detail", []))
+
+    def test_weekly_summary_universe_halal_renders_in_prompt(
+        self,
+        mock_weekly_summary_request,
+        mock_weekly_llm_json_response,
+    ):
+        """universe='halal' must reach the prompt template, not silently default."""
+        import json
+
+        captured_prompts = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_weekly_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=400,
+            ),
+        )
+
+        payload = dict(mock_weekly_summary_request)
+        payload["universe"] = "halal"
+
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post("/llm/sac-weekly-summary", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert len(captured_prompts) == 1
+        # The prompt template renders {{ universe }} as **<universe>**
+        # in the A/B header so the LLM cannot conflate the two parallel
+        # runs. (Both bucket names appear in the documentation list,
+        # so we anchor on the bolded marker.)
+        assert "**halal**" in captured_prompts[0]
+        assert "**halal_filtered**" not in captured_prompts[0]
 
 
 # =============================================================================

@@ -64,11 +64,18 @@ def resolve_next_attempt(
 
 
 @activity.defn
-def get_active_symbols() -> ActiveSymbolsResponse:
-    """Fetch the active symbols from the current SAC model via brain_api."""
-    logger.info("Fetching active symbols from SAC model...")
+def get_active_symbols(universe: str) -> ActiveSymbolsResponse:
+    """Fetch the active symbols from the requested SAC bucket.
+
+    The ``universe`` arg is mandatory (no default) so the two parallel
+    A/B SAC workflows -- ``USWeeklyAllocationWorkflow``
+    (``halal_filtered``) and ``USSACHalalAllocationWorkflow``
+    (``halal``) -- cannot accidentally read from each other's bucket.
+    Per AGENTS.md rule #1 (no silent fallbacks).
+    """
+    logger.info(f"Fetching active symbols from SAC bucket (universe={universe})...")
     with get_client() as client:
-        response = client.get("/models/active-symbols")
+        response = client.get("/models/active-symbols", params={"universe": universe})
         response.raise_for_status()
     result = ActiveSymbolsResponse(**response.json())
     logger.info(
@@ -80,7 +87,7 @@ def get_active_symbols() -> ActiveSymbolsResponse:
 
 @activity.defn
 def get_sac_portfolio() -> AlpacaPortfolioResponse:
-    """Fetch SAC Alpaca account portfolio."""
+    """Fetch SAC Alpaca account portfolio (halal_filtered universe)."""
     logger.info("Fetching SAC portfolio from Alpaca...")
     with get_client() as client:
         response = client.get("/alpaca/portfolio", params={"account": "sac"})
@@ -88,6 +95,29 @@ def get_sac_portfolio() -> AlpacaPortfolioResponse:
     result = AlpacaPortfolioResponse(**response.json())
     logger.info(
         f"SAC portfolio: cash=${result.cash:.2f}, "
+        f"{len(result.positions)} positions, "
+        f"{result.open_orders_count} open orders"
+    )
+    return result
+
+
+@activity.defn
+def get_sac_halal_portfolio() -> AlpacaPortfolioResponse:
+    """Fetch SAC halal Alpaca account portfolio (legacy halal universe).
+
+    Sibling of :func:`get_sac_portfolio`. The ``sac_halal`` Alpaca
+    account is dedicated to the halal A/B SAC variant so positions,
+    cash, and open-order state stay disjoint from the halal_filtered
+    SAC bucket -- a hard requirement for client_order_id and
+    experience-file path isolation (see AGENTS.md run-id variant rule).
+    """
+    logger.info("Fetching SAC halal portfolio from Alpaca...")
+    with get_client() as client:
+        response = client.get("/alpaca/portfolio", params={"account": "sac_halal"})
+        response.raise_for_status()
+    result = AlpacaPortfolioResponse(**response.json())
+    logger.info(
+        f"SAC halal portfolio: cash=${result.cash:.2f}, "
         f"{len(result.positions)} positions, "
         f"{result.open_orders_count} open orders"
     )
@@ -167,8 +197,16 @@ def _submit_orders(
 def submit_orders_sac(
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
-    """Submit SAC orders to Alpaca."""
+    """Submit SAC orders to Alpaca (halal_filtered universe)."""
     return _submit_orders("sac", orders)
+
+
+@activity.defn
+def submit_orders_sac_halal(
+    orders: GenerateOrdersResponse | SkippedOrdersResponse,
+) -> SubmitOrdersResponse | SkippedSubmitResponse:
+    """Submit SAC halal orders to Alpaca (legacy halal universe)."""
+    return _submit_orders("sac_halal", orders)
 
 
 @activity.defn
@@ -189,7 +227,7 @@ def submit_orders_dhrp(
 
 @activity.defn
 def get_order_history_sac(after_date: str) -> list[OrderHistoryItem]:
-    """Fetch SAC order history from Alpaca."""
+    """Fetch SAC order history from Alpaca (halal_filtered universe)."""
     logger.info(f"Fetching SAC order history after {after_date}...")
     with get_client() as client:
         response = client.get(
@@ -198,6 +236,21 @@ def get_order_history_sac(after_date: str) -> list[OrderHistoryItem]:
         response.raise_for_status()
     result = [OrderHistoryItem(**o) for o in response.json()]
     logger.info(f"Got {len(result)} SAC orders from history")
+    return result
+
+
+@activity.defn
+def get_order_history_sac_halal(after_date: str) -> list[OrderHistoryItem]:
+    """Fetch SAC halal order history from Alpaca (legacy halal universe)."""
+    logger.info(f"Fetching SAC halal order history after {after_date}...")
+    with get_client() as client:
+        response = client.get(
+            "/alpaca/order-history",
+            params={"account": "sac_halal", "after": after_date},
+        )
+        response.raise_for_status()
+    result = [OrderHistoryItem(**o) for o in response.json()]
+    logger.info(f"Got {len(result)} SAC halal orders from history")
     return result
 
 

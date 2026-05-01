@@ -35,6 +35,7 @@
       "temporal:lint": ["cd temporal && uv sync --all-extras && uv run ruff check ."],
       "temporal:format": ["cd temporal && uv sync --all-extras && uv run ruff format ."],
       "temporal:run:us-sac-weekly": ["cd temporal && temporal workflow start --type USWeeklyAllocationWorkflow --task-queue learnfinance-inference --workflow-id us-sac-weekly-manual"],
+      "temporal:run:us-sac-halal-allocate": ["cd temporal && temporal workflow start --type USSACHalalAllocationWorkflow --task-queue learnfinance-inference --workflow-id us-sac-halal-allocate-manual"],
       "temporal:run:us-forecasters-training": ["cd temporal && temporal workflow start --type USForecastersTrainingWorkflow --task-queue learnfinance-training --workflow-id us-forecasters-training-manual"],
       "temporal:run:us-sac-training": ["cd temporal && temporal workflow start --type USSACTrainingWorkflow --task-queue learnfinance-training --workflow-id us-sac-training-manual"],
       "temporal:run:us-sac-halal-training": ["cd temporal && temporal workflow start --type USSACHalalTrainingWorkflow --task-queue learnfinance-training --workflow-id us-sac-halal-training-manual"],

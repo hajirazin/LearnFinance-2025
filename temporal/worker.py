@@ -40,11 +40,14 @@ from activities.portfolio import (
     get_dhrp_portfolio,
     get_hrp_portfolio,
     get_order_history_sac,
+    get_order_history_sac_halal,
+    get_sac_halal_portfolio,
     get_sac_portfolio,
     resolve_next_attempt,
     submit_orders_dhrp,
     submit_orders_hrp,
     submit_orders_sac,
+    submit_orders_sac_halal,
 )
 from activities.reporting import (
     generate_double_hrp_summary,
@@ -84,6 +87,7 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
 from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
@@ -101,6 +105,7 @@ ALL_WORKFLOWS = [
     USAlphaHRPWorkflow,
     USDoubleHRPWorkflow,
     USForecastersTrainingWorkflow,
+    USSACHalalAllocationWorkflow,
     USSACHalalTrainingWorkflow,
     USSACTrainingWorkflow,
     USWeeklyAllocationWorkflow,
@@ -122,12 +127,15 @@ ALL_ACTIVITIES = [
     # Portfolio / orders
     get_active_symbols,
     get_sac_portfolio,
+    get_sac_halal_portfolio,
     get_hrp_portfolio,
     get_dhrp_portfolio,
     submit_orders_sac,
+    submit_orders_sac_halal,
     submit_orders_hrp,
     submit_orders_dhrp,
     get_order_history_sac,
+    get_order_history_sac_halal,
     check_order_statuses,
     resolve_next_attempt,
     # Execution / experience

@@ -423,6 +423,7 @@ def mock_weekly_report_email_request():
         "target_week_start": "2026-02-03",
         "target_week_end": "2026-02-07",
         "as_of_date": "2026-02-03",
+        "universe": "halal_filtered",
         "sac": {
             "target_weights": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.05},
             "turnover": 0.15,
@@ -675,7 +676,7 @@ class TestSACWeeklyReportEmailEndpoint:
         mock_send_email,
         mock_weekly_report_email_request,
     ):
-        """Successful SAC weekly report email send."""
+        """Successful SAC weekly report email send for halal_filtered."""
         mock_send_email.return_value = True
 
         response = client.post(
@@ -686,11 +687,47 @@ class TestSACWeeklyReportEmailEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["is_success"] is True
-        assert "SAC Weekly Portfolio Analysis" in data["subject"]
+        # Subject is now universe-tagged (mandatory) so the two A/B
+        # SAC weekly emails self-identify in the inbox.
+        assert "US SAC (halal_filtered) Weekly Portfolio Analysis" in data["subject"]
         assert "2026-02-03" in data["subject"]
         assert "2026-02-07" in data["subject"]
         assert len(data["body"]) > 0
         mock_send_email.assert_called_once()
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_universe_halal_renders_in_subject_and_body(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """universe='halal' must reach both the subject and the email header."""
+        mock_send_email.return_value = True
+        payload = dict(mock_weekly_report_email_request)
+        payload["universe"] = "halal"
+
+        response = client.post("/email/sac-weekly-report", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "US SAC (halal) Weekly Portfolio Analysis" in data["subject"]
+        # The HTML email body header also renders the universe so the
+        # human reader can tell the two A/B reports apart even before
+        # reading the subject.
+        assert "US SAC (halal) Weekly Portfolio Analysis" in data["body"]
+
+    def test_weekly_report_missing_universe_returns_422(
+        self, mock_weekly_report_email_request
+    ):
+        """Universe is mandatory: 422 when omitted (AGENTS.md no-default)."""
+        payload = dict(mock_weekly_report_email_request)
+        payload.pop("universe")
+
+        response = client.post("/email/sac-weekly-report", json=payload)
+
+        assert response.status_code == 422
+        body = response.json()
+        assert any("universe" in str(loc) for loc in body.get("detail", []))
 
     @patch("brain_api.routes.email.weekly_report.send_html_email")
     def test_weekly_report_with_skipped_algorithms(
@@ -764,8 +801,8 @@ class TestSACWeeklyReportEmailEndpoint:
         assert response.status_code == 200
         body = response.json()["body"]
 
-        # Check header
-        assert "SAC Weekly Portfolio Analysis" in body
+        # Check header (universe-tagged form)
+        assert "US SAC (halal_filtered) Weekly Portfolio Analysis" in body
         assert "2026-02-03" in body
 
         # Check Order Execution Summary

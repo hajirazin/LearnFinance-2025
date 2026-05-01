@@ -185,13 +185,22 @@ def record_final_weights(
 
 @activity.defn
 def infer_sac(
-    portfolio: AlpacaPortfolioResponse, as_of_date: str
+    portfolio: AlpacaPortfolioResponse,
+    as_of_date: str,
+    universe: str,
 ) -> SACInferenceResponse:
-    """Get SAC allocation."""
-    logger.info("Getting SAC allocation...")
+    """Get SAC allocation for the requested SAC bucket.
+
+    The ``universe`` arg is mandatory (no default) so each parallel A/B
+    SAC workflow declares its bucket explicitly. brain_api resolves
+    the bucket via ``get_bucket(ModelType.SAC, universe)`` and loads
+    that bucket's frozen ``symbol_order``. Per AGENTS.md rule #1.
+    """
+    logger.info(f"Getting SAC allocation (universe={universe})...")
     with get_client() as client:
         response = client.post(
             "/inference/sac",
+            params={"universe": universe},
             json={
                 "portfolio": {
                     "cash": portfolio.cash,
