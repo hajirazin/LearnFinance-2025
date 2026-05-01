@@ -141,3 +141,102 @@ def isolate_sticky_history_db(tmp_path, monkeypatch):
         "brain_api.storage.screening_history.DEFAULT_DB_PATH",
         tmp_path / "sticky_history.db",
     )
+
+
+@pytest.fixture(autouse=True)
+def isolate_forecaster_snapshots(tmp_path, monkeypatch):
+    """Forbid ``SnapshotLocalStorage`` from writing into the production
+    data dir.
+
+    ``SnapshotLocalStorage`` defaults its ``base_path`` to
+    ``DEFAULT_DATA_PATH = Path("data")`` from
+    :mod:`brain_api.storage.base`. The training routes instantiate it
+    with no explicit path, so without this fail-safe a test-triggered
+    backfill would land snapshots in
+    ``brain_api/data/models/<bucket>/snapshot-*/`` next to real
+    production artifacts. Routing the rebound name on
+    ``brain_api.storage.forecaster_snapshots.local`` (the module that
+    actually instantiates the storage) to a per-test tmp dir guarantees
+    isolation regardless of whether the test author remembered to
+    monkeypatch heavy backfill dependencies.
+    """
+    monkeypatch.setattr(
+        "brain_api.storage.forecaster_snapshots.local.DEFAULT_DATA_PATH",
+        tmp_path / "snapshot_data",
+    )
+
+
+@pytest.fixture(autouse=True)
+def isolate_experience_storage(tmp_path, monkeypatch):
+    """Forbid ``ExperienceStorage`` from writing into the production
+    ``data/experience/`` dir.
+
+    The experience route imports ``DEFAULT_DATA_PATH`` at module top
+    and uses it as the default ``base_path`` whenever the route
+    instantiates ``ExperienceStorage()`` without an explicit path
+    (which happens via the FastAPI ``Depends`` chain on every
+    ``/experience/*`` call). Without this fail-safe, tests posting to
+    those endpoints write ``paper_*_sac.json`` files into
+    ``brain_api/data/experience/`` next to real run artifacts. Mirrors
+    :func:`isolate_forecaster_snapshots` -- routing the rebound name
+    on the route module itself guarantees isolation regardless of
+    whether the test author remembered to monkeypatch the storage.
+    """
+    monkeypatch.setattr(
+        "brain_api.routes.experience.DEFAULT_DATA_PATH",
+        tmp_path / "experience_data",
+    )
+
+
+@pytest.fixture(autouse=True)
+def disable_route_memory_cleanup(monkeypatch):
+    """No-op the LSTM/PatchTST training routes' memory-hygiene calls.
+
+    Production training pipelines train on 10-year price tensors and
+    free hundreds of MB after ``del dataset, prices``; the routes call
+    ``gc.collect()`` (and ``torch.mps.empty_cache`` / ``cuda.empty_cache``
+    in the LSTM backfill loop) to keep RSS bounded across a single
+    monthly retrain. In tests, the mocked dataset is < 1 KB, so those
+    calls free nothing -- yet ``gc.collect()`` still pays a full
+    mark-and-sweep over the pytest-accumulated object graph, which the
+    debug-mode timing breakdown measured at ~83 ms per call.
+
+    Across the LSTM / PatchTST training tests this dominates the wall
+    clock: e.g. ``test_train_lstm_skip_snapshot_false_writes_snapshots``
+    pays 1 main-path ``gc.collect`` + 3 backfill iterations (~83 ms x
+    4 = 332 ms of the 408 ms total). The
+    ``*_not_promoted_when_worse_than_prior`` and
+    ``*_current_unchanged_when_not_promoted`` tests pay 4 background
+    runs x 83 ms = 332 ms in pure ``gc.collect``.
+
+    ``gc.collect`` / ``mps.empty_cache`` are NOT tested side effects --
+    they have no observable behavior contract. Per AGENTS.md "side
+    effects mocked, never skipped", we still let ``storage.write_artifacts``
+    write real torch artifacts on disk and exercise ``snapshot_storage.
+    snapshot_exists_anywhere`` (the actual contracts under test). Only
+    the memory-hygiene helpers are no-oped.
+
+    Patches ``gc.collect`` and the torch cache cleaners on the LSTM /
+    PatchTST route modules' rebound names. SAC route does not call
+    ``gc.collect`` so it is not affected.
+    """
+    import contextlib
+    import importlib
+
+    _no_op = lambda: None  # noqa: E731
+
+    for module_path in (
+        "brain_api.routes.training.lstm",
+        "brain_api.routes.training.patchtst",
+    ):
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError:
+            continue
+        if hasattr(module, "gc"):
+            monkeypatch.setattr(module.gc, "collect", _no_op)
+        if hasattr(module, "torch"):
+            with contextlib.suppress(AttributeError, ImportError):
+                monkeypatch.setattr(module.torch.mps, "empty_cache", _no_op)
+            with contextlib.suppress(AttributeError, ImportError):
+                monkeypatch.setattr(module.torch.cuda, "empty_cache", _no_op)

@@ -67,32 +67,55 @@ class TestGetStoragePolicy:
 class TestStartupValidation:
     """``brain_api.main`` calls ``get_storage_policy()`` at import time;
     importing a fresh module copy under an invalid env var must fail.
+
+    Both tests below MUST restore the original ``brain_api.main`` to
+    ``sys.modules`` after the reimport. Without that restoration the
+    next test that does ``from brain_api.main import shutdown_event``
+    (the LSTM training route does this lazily inside its background
+    task, see ``brain_api/routes/training/lstm.py``) re-executes
+    ``brain_api/main.py`` -- which calls ``load_dotenv()``, which
+    repopulates ``HF_LSTM_HALAL_NEW_MODEL_REPO`` from ``.env`` because
+    the autouse ``isolate_from_env`` fixture has popped it. The result
+    is a real, unmocked HuggingFace upload of model weights inside an
+    unrelated test (~6s of network I/O + side effects on the real HF
+    repo). Restoring the original module keeps it cached in
+    ``sys.modules`` so subsequent imports are no-ops.
     """
 
     def test_invalid_env_fails_app_boot(self, monkeypatch):
         import importlib
         import sys
 
+        original = sys.modules.get("brain_api.main")
         monkeypatch.setenv(ENV_STORAGE_BACKEND, "totally_invalid")
         # Drop any cached module so the import-time validation runs again.
         sys.modules.pop("brain_api.main", None)
-        with pytest.raises(ValueError):
-            importlib.import_module("brain_api.main")
-        sys.modules.pop("brain_api.main", None)
+        try:
+            with pytest.raises(ValueError):
+                importlib.import_module("brain_api.main")
+        finally:
+            sys.modules.pop("brain_api.main", None)
+            if original is not None:
+                sys.modules["brain_api.main"] = original
 
     def test_valid_env_boots(self, monkeypatch):
         import importlib
         import sys
 
+        original = sys.modules.get("brain_api.main")
         monkeypatch.setenv(ENV_STORAGE_BACKEND, "hf_first")
         sys.modules.pop("brain_api.main", None)
-        module = importlib.import_module("brain_api.main")
-        # Smoke-check the FastAPI app responds to a basic request to
-        # confirm boot finished without surfacing the policy error.
-        client = TestClient(module.app)
-        response = client.get("/")
-        assert response.status_code in (200, 404)  # any deterministic status
-        sys.modules.pop("brain_api.main", None)
+        try:
+            module = importlib.import_module("brain_api.main")
+            # Smoke-check the FastAPI app responds to a basic request to
+            # confirm boot finished without surfacing the policy error.
+            client = TestClient(module.app)
+            response = client.get("/")
+            assert response.status_code in (200, 404)  # any deterministic status
+        finally:
+            sys.modules.pop("brain_api.main", None)
+            if original is not None:
+                sys.modules["brain_api.main"] = original
 
 
 class TestEnsureSnapshotForBucketContract:

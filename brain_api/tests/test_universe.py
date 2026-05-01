@@ -1807,8 +1807,16 @@ def test_halal_india_partition_isolated_from_weekly_alpha_hrp():
 # ============================================================================
 
 
-def test_scrape_nifty500_shariah_parses_response():
-    """Test that scrape_nifty500_shariah correctly parses NSE JSON API response."""
+def test_scrape_nifty500_shariah_parses_response(monkeypatch):
+    """Test that scrape_nifty500_shariah correctly parses NSE JSON API response.
+
+    Mocks ``time.sleep`` on the scraper module so the unconditional 1s
+    session-cookie warm-up sleep is a no-op; the retry loop's control
+    flow is preserved end-to-end.
+    """
+    monkeypatch.setattr(
+        "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
+    )
     from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
 
     mock_nse_json = {
@@ -1863,8 +1871,14 @@ def test_scrape_nifty500_shariah_parses_response():
     assert result[1]["symbol"] == "TCS"
 
 
-def test_scrape_nifty500_shariah_filters_index_row():
-    """Test that the index summary row (with spaces in symbol) is filtered out."""
+def test_scrape_nifty500_shariah_filters_index_row(monkeypatch):
+    """Test that the index summary row (with spaces in symbol) is filtered out.
+
+    Mocks ``time.sleep`` so the warm-up cookie sleep is a no-op.
+    """
+    monkeypatch.setattr(
+        "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
+    )
     from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
 
     mock_nse_json = {
@@ -1900,8 +1914,14 @@ def test_scrape_nifty500_shariah_filters_index_row():
     assert result[0]["symbol"] == "RELIANCE"
 
 
-def test_scrape_nifty500_shariah_raises_on_empty_data():
-    """Test that NseFetchError is raised when data array is empty."""
+def test_scrape_nifty500_shariah_raises_on_empty_data(monkeypatch):
+    """Test that NseFetchError is raised when data array is empty.
+
+    Mocks ``time.sleep`` so the warm-up cookie sleep is a no-op.
+    """
+    monkeypatch.setattr(
+        "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
+    )
     from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah
 
     mock_nse_json = {"data": []}
@@ -1927,8 +1947,16 @@ def test_scrape_nifty500_shariah_raises_on_empty_data():
             scrape_nifty500_shariah()
 
 
-def test_scrape_nifty500_shariah_raises_on_http_error():
-    """Test that NseFetchError is raised on HTTP errors."""
+def test_scrape_nifty500_shariah_raises_on_http_error(monkeypatch):
+    """Test that NseFetchError is raised on HTTP errors.
+
+    Mocks ``time.sleep`` so the per-attempt 2s/4s retry backoffs are
+    no-ops; the retry loop still iterates ``MAX_SESSION_RETRIES``
+    times before raising, which is the actual behavior under test.
+    """
+    monkeypatch.setattr(
+        "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
+    )
     import requests as req
 
     from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah

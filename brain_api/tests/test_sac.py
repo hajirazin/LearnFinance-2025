@@ -74,6 +74,72 @@ def mock_symbols() -> list[str]:
     return ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
 
 
+# Signal keys must match `RealTimeSignalBuilder.SIGNAL_KEYS` so the SAC
+# state vector built downstream of `/inference/sac` has the same shape
+# as in production. Values are deterministic stubs; the SAC inference
+# tests assert on actor outputs (weight bounds), not on signal values.
+_MOCK_SIGNAL_KEYS: tuple[str, ...] = (
+    "news_sentiment",
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    "current_ratio",
+    "debt_to_equity",
+    "fundamental_age",
+)
+
+
+def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
+    """Deterministic stand-in for ``build_current_signals``.
+
+    Returns a non-zero per-symbol dict so the SAC actor's input is in
+    the same numerical neighbourhood as production (zeros would still
+    work mathematically but the LSTM/PatchTST training tests use the
+    same convention of plausible-but-fixed values).
+    """
+    return {
+        symbol: {
+            "news_sentiment": 0.1,
+            "gross_margin": 0.4,
+            "operating_margin": 0.2,
+            "net_margin": 0.15,
+            "current_ratio": 1.2,
+            "debt_to_equity": 0.5,
+            "fundamental_age": 7.0,
+        }
+        for symbol in symbols
+    }
+
+
+def _mock_forecasts(symbols, forecaster_type, as_of_date) -> dict[str, float]:
+    """Deterministic stand-in for ``build_current_forecasts``.
+
+    Returns the same constant for both ``lstm`` and ``patchtst`` -- SAC
+    inference tests only validate weight constraints, never the
+    forecast values themselves.
+    """
+    return dict.fromkeys(symbols, 0.01)
+
+
+def _patch_sac_inference_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the side-effecting signal + forecast helpers used by
+    ``/inference/sac``.
+
+    Without this patch the route hits real ``yfinance`` + the
+    production ``data/models/lstm_halal_new`` and ``patchtst_halal_new``
+    paths via the module-level singletons in
+    ``brain_api.routes.inference.helpers`` -- adding ~5s per SAC
+    inference test when the suite runs another file before
+    ``test_sac.py``. Mocks preserve the signal/forecast contract so
+    ``run_sac_inference`` runs end-to-end (per AGENTS.md "side effects
+    must be mocked, not skipped").
+    """
+    from brain_api.routes.inference import helpers as inference_helpers
+
+    monkeypatch.setattr(inference_helpers, "build_current_signals", _mock_signals)
+    monkeypatch.setattr(inference_helpers, "build_current_forecasts", _mock_forecasts)
+
+
 def mock_config() -> SACConfig:
     """Return a minimal config for fast testing."""
     return SACConfig(
@@ -210,6 +276,7 @@ def inference_client(trained_model_storage, monkeypatch):
         )
 
     _override_sac_bucket(monkeypatch, trained_model_storage, _trained_symbols)
+    _patch_sac_inference_helpers(monkeypatch)
 
     client = TestClient(app)
     yield client
@@ -357,6 +424,111 @@ def mock_price_loader(symbols, start_date, end_date):
     return prices
 
 
+# Tiny SAC config used by full-training tests so the route's
+# ``make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, len(symbols))``
+# resolves to a network/loop that fits in a few hundred ms instead of
+# the production ``total_timesteps=10_000`` walk that took ~210s per
+# test before this fixture existed. ``n_stocks`` is overridden inside
+# ``make_sac_config_for_n_stocks``, so the value here is irrelevant
+# beyond satisfying the constructor invariants.
+_TINY_SAC_BASE_CONFIG = SACConfig(
+    n_stocks=5,
+    total_timesteps=100,
+    hidden_sizes=(8, 8),
+    batch_size=8,
+    warmup_steps=10,
+)
+
+
+def _mock_dual_forecasts(weekly_prices, weekly_dates, symbols, shutdown_event=None):
+    """Stand-in for :func:`build_dual_forecast_features` used by the
+    full-training tests so they don't run real walk-forward LSTM +
+    PatchTST fits on top of mock prices.
+
+    Mirrors the pattern already used by
+    :func:`TestSACLSTMFinetune.test_finetune_end_date_is_always_friday`.
+    """
+    n = len(weekly_dates) - 1
+    zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
+    return zeros, zeros
+
+
+_RL_SIGNAL_KEYS: tuple[str, ...] = (
+    "news_sentiment",
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    "current_ratio",
+    "debt_to_equity",
+    "fundamental_age",
+)
+
+
+def _mock_rl_training_signals(
+    prices_dict, symbols, start_date, end_date
+) -> dict[str, dict[str, np.ndarray]]:
+    """Stand-in for :func:`build_rl_training_signals` used by the SAC
+    full-training and finetune tests so the route does not hit real
+    parquet/cache I/O for historical news sentiment + fundamentals.
+
+    Returns one zero array per ``(symbol, signal)`` pair sized off the
+    weekly index of ``prices_dict[symbol]``. Length is intentionally
+    generous (``len(weekly)``) so the route's slice-or-pad branch in
+    :func:`brain_api.routes.training.sac._run_sac_finetune` and the
+    sibling full-training path both take the slice path with a
+    deterministic shape.
+
+    Per AGENTS.md rule: side effects mocked, never skipped. Replaces
+    the unmocked ~520ms parquet read measured in the SAC finetune
+    timing breakdown.
+    """
+    signals: dict[str, dict[str, np.ndarray]] = {}
+    for symbol in symbols:
+        df = prices_dict.get(symbol)
+        if df is None or len(df) == 0:
+            continue
+        weekly_len = len(df["close"].resample("W-FRI").last().dropna())
+        n = max(weekly_len, 1)
+        signals[symbol] = {key: np.zeros(n) for key in _RL_SIGNAL_KEYS}
+    return signals
+
+
+def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock the heavy side effects of ``/train/sac/full``.
+
+    The route's promotion-check, metadata-write, HF-upload-gate, and
+    ``complete_job`` flow all still run end-to-end; we only replace
+    the three real-compute helpers and resize the bound config:
+
+    * ``load_prices_yfinance`` -> :func:`mock_price_loader`
+    * ``DEFAULT_SAC_CONFIG`` -> :data:`_TINY_SAC_BASE_CONFIG`
+      (``make_sac_config_for_n_stocks`` ``replace(...)``\\s from
+      whatever base is bound on the route module, so this is the
+      cheapest seam)
+    * ``build_dual_forecast_features`` -> :func:`_mock_dual_forecasts`
+    * ``train_sac`` -> returns :func:`create_mock_training_result`
+      with the *resolved* (per-bucket) config so the actor/critic
+      shapes match downstream metadata writes.
+
+    Per AGENTS.md rule: side effects mocked, never skipped.
+    """
+    from brain_api.routes.training import sac as sac_route
+
+    monkeypatch.setattr(sac_route, "load_prices_yfinance", mock_price_loader)
+    monkeypatch.setattr(sac_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
+    monkeypatch.setattr(sac_route, "build_dual_forecast_features", _mock_dual_forecasts)
+    monkeypatch.setattr(
+        sac_route, "build_rl_training_signals", _mock_rl_training_signals
+    )
+    monkeypatch.setattr(
+        sac_route,
+        "train_sac",
+        lambda training_data, config, shutdown_event=None: create_mock_training_result(
+            config
+        ),
+    )
+
+
 class TestSACLSTMFinetune:
     """Tests for /train/sac/finetune endpoint."""
 
@@ -392,21 +564,36 @@ class TestSACLSTMFinetune:
     def test_finetune_end_date_is_always_friday(
         self, trained_model_storage, monkeypatch
     ):
-        """Finetune endpoint always uses Friday-anchored end_date."""
+        """Finetune endpoint always uses Friday-anchored end_date.
+
+        Mocks ``load_prices_yfinance``, ``build_dual_forecast_features``,
+        and ``finetune_sac`` on the route module so the real RL loop
+        (``SACFinetuneConfig.total_timesteps=2_000`` plus walk-forward
+        eval) is replaced by deterministic stubs. The route's
+        promotion-check, metadata-write, and ``complete_job`` flow
+        still run end-to-end -- only the heavy compute is mocked
+        (per AGENTS.md rule: side effects mocked, never skipped).
+        """
         from datetime import date as dt_date
 
         from brain_api.routes.training import sac
 
         monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
-
-        def _mock_dual_forecasts(
-            weekly_prices, weekly_dates, symbols, shutdown_event=None
-        ):
-            n = len(weekly_dates) - 1
-            zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
-            return zeros, zeros
-
         monkeypatch.setattr(sac, "build_dual_forecast_features", _mock_dual_forecasts)
+        monkeypatch.setattr(sac, "build_rl_training_signals", _mock_rl_training_signals)
+        monkeypatch.setattr(
+            sac,
+            "finetune_sac",
+            lambda training_data,
+            actor,
+            critic,
+            critic_target,
+            log_alpha,
+            scaler,
+            prior_config,
+            finetune_config,
+            shutdown_event=None: create_mock_training_result(prior_config),
+        )
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
@@ -440,9 +627,7 @@ class TestSACFullTraining:
 
     def test_full_training_returns_202_then_200(self, temp_storage, monkeypatch):
         """Test that full training endpoint returns 202 then 200 on rerun."""
-        from brain_api.routes.training import sac
-
-        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+        _patch_sac_full_training_internals(monkeypatch)
 
         app.dependency_overrides.clear()
         _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
@@ -468,9 +653,7 @@ class TestSACFullTraining:
 
     def test_full_training_is_idempotent(self, temp_storage, monkeypatch):
         """Test that running full training twice with same data produces same version."""
-        from brain_api.routes.training import sac
-
-        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+        _patch_sac_full_training_internals(monkeypatch)
 
         app.dependency_overrides.clear()
         _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
@@ -554,9 +737,7 @@ class TestSACFullTraining:
         ``make_sac_config_for_n_stocks`` so any count >=5 is accepted;
         no equality check rejects the slate.
         """
-        from brain_api.routes.training import sac
-
-        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+        _patch_sac_full_training_internals(monkeypatch)
 
         app.dependency_overrides.clear()
         _override_sac_bucket(

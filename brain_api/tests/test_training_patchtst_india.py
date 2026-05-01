@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
+import brain_api.routes.training.patchtst as patchtst_route
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
@@ -18,6 +19,7 @@ from brain_api.routes.training.dependencies import (
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
+from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 
 
@@ -120,6 +122,35 @@ def _override_india_patchtst_bucket(
     )
 
 
+def _patch_india_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the heavy compute helpers used by ``_backfill_patchtst_snapshots``.
+
+    The India training endpoint delegates to ``_run_patchtst_training``
+    imported from :mod:`brain_api.routes.training.patchtst`, so its
+    backfill loop reads the same module-level names as the US route.
+    Patching them once on ``patchtst_route`` covers both endpoints
+    (per AGENTS.md rule: mock side effects, never skip them).
+    """
+    monkeypatch.setattr(patchtst_route, "patchtst_load_prices", _mock_price_loader)
+    monkeypatch.setattr(
+        patchtst_route, "align_multivariate_data", lambda prices, config: prices
+    )
+    monkeypatch.setattr(
+        patchtst_route,
+        "patchtst_build_dataset",
+        lambda aligned_features, prices, config: _mock_dataset_builder(
+            aligned_features, prices, config
+        ),
+    )
+    monkeypatch.setattr(
+        patchtst_route,
+        "patchtst_train_model",
+        lambda X, y, feature_scaler, config, shutdown_event=None: _mock_trainer(
+            X, y, feature_scaler, config, shutdown_event=shutdown_event
+        ),
+    )
+
+
 @pytest.fixture
 def client_india(temp_india_storage, monkeypatch):
     _override_india_patchtst_bucket(monkeypatch, temp_india_storage)
@@ -128,6 +159,33 @@ def client_india(temp_india_storage, monkeypatch):
         lambda: _mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+@pytest.fixture
+def client_india_with_backfill_mocks(temp_india_storage, monkeypatch):
+    """India test client with backfill internals mocked too.
+
+    Mirrors :func:`client_india` plus the route-module monkeypatches
+    so the ``skip_snapshot=False`` branch runs in milliseconds while
+    still exercising the real on-disk snapshot writes.
+    """
+    _override_india_patchtst_bucket(monkeypatch, temp_india_storage)
+    app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
+    app.dependency_overrides[get_patchtst_dataset_builder] = (
+        lambda: _mock_dataset_builder
+    )
+    app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
+    _patch_india_patchtst_backfill_internals(monkeypatch)
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
@@ -302,3 +360,68 @@ def test_train_patchtst_india_version_differs_from_us():
     )
 
     assert us_version != india_version
+
+
+# ============================================================================
+# skip_snapshot branch coverage
+#
+# The bulk of the file passes ``?skip_snapshot=true`` for speed; these
+# two tests assert both branches against on-disk state under the
+# autouse ``isolate_forecaster_snapshots`` tmp dir.
+# ============================================================================
+
+
+def _wait_for_terminal_response(
+    client: TestClient, url: str, max_attempts: int = 5
+) -> dict:
+    last_response = None
+    for _ in range(max_attempts):
+        last_response = client.post(url)
+        if last_response.status_code == 200:
+            return last_response.json()
+    raise AssertionError(
+        f"Training did not converge to 200 within {max_attempts} POSTs. "
+        f"Last status: {last_response.status_code if last_response else 'n/a'}"
+    )
+
+
+def test_train_patchtst_india_skip_snapshot_true_writes_no_snapshot(client_india):
+    """``?skip_snapshot=true`` must NOT create any India snapshot on disk."""
+    _ = _wait_for_terminal_response(client_india, TRAIN_INDIA_URL)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    assert snapshot_storage.list_snapshots() == [], (
+        "skip_snapshot=true must not write any India snapshots, but found: "
+        f"{snapshot_storage.list_snapshots()}"
+    )
+
+
+def test_train_patchtst_india_skip_snapshot_false_writes_snapshots(
+    client_india_with_backfill_mocks,
+):
+    """Default (``skip_snapshot=false``) writes the end-date snapshot AND backfills history.
+
+    Uses :func:`client_india_with_backfill_mocks` so the heavy compute
+    inside ``_backfill_patchtst_snapshots`` is replaced by deterministic
+    stubs while the real on-disk write logic still runs.
+    """
+    _ = _wait_for_terminal_response(
+        client_india_with_backfill_mocks, "/train/patchtst/india"
+    )
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    snapshots = snapshot_storage.list_snapshots()
+    assert snapshots, (
+        "skip_snapshot=false must write at least one India snapshot, but "
+        "on-disk snapshot list was empty."
+    )
+    end_date_iso = "2024-12-27"
+    end_date_snapshots = [s for s in snapshots if s.isoformat() == end_date_iso]
+    assert end_date_snapshots, (
+        f"Expected end-date snapshot {end_date_iso} on disk, got: "
+        f"{[s.isoformat() for s in snapshots]}"
+    )
+    assert len(snapshots) > 1, (
+        "Backfill must populate historical India snapshots in addition to "
+        f"the end-date one. Got only: {[s.isoformat() for s in snapshots]}"
+    )

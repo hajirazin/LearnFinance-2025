@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
+import brain_api.routes.training.patchtst as patchtst_route
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
@@ -18,6 +19,7 @@ from brain_api.routes.training import (
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
+from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import PatchTSTHalalNewModelStorage
 
 # ============================================================================
@@ -120,15 +122,76 @@ def _override_us_patchtst_bucket(monkeypatch, temp_storage, symbols_fn=mock_symb
     )
 
 
+def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the heavy compute helpers used by ``_backfill_patchtst_snapshots``.
+
+    The route imports ``patchtst_load_prices`` / ``align_multivariate_data``
+    / ``patchtst_build_dataset`` / ``patchtst_train_model`` at module
+    top, so the only safe seam is to monkeypatch the rebound names on
+    :mod:`brain_api.routes.training.patchtst` itself; the existing
+    ``Depends`` overrides only cover the *main* training path. Mocks
+    preserve return shapes so the backfill loop's snapshot-write +
+    HF-upload-gate code still runs end-to-end (per AGENTS.md rule:
+    mock side effects, never skip them).
+    """
+    monkeypatch.setattr(patchtst_route, "patchtst_load_prices", mock_price_loader)
+    monkeypatch.setattr(
+        patchtst_route, "align_multivariate_data", lambda prices, config: prices
+    )
+    monkeypatch.setattr(
+        patchtst_route,
+        "patchtst_build_dataset",
+        lambda aligned_features, prices, config: mock_dataset_builder(
+            aligned_features, prices, config
+        ),
+    )
+    monkeypatch.setattr(
+        patchtst_route,
+        "patchtst_train_model",
+        lambda X, y, feature_scaler, config, shutdown_event=None: mock_trainer(
+            X, y, feature_scaler, config, shutdown_event=shutdown_event
+        ),
+    )
+
+
 @pytest.fixture
 def client_with_mocks(temp_storage, monkeypatch):
-    """Create test client with mocked dependencies."""
+    """Create test client with mocked dependencies for the *main* training path."""
     _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
     app.dependency_overrides[get_patchtst_dataset_builder] = (
         lambda: mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+    yield client
+
+    app.dependency_overrides.clear()
+    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+@pytest.fixture
+def client_with_backfill_mocks(temp_storage, monkeypatch):
+    """Test client with ALL training paths mocked, including snapshot backfill.
+
+    Mirrors :func:`client_with_mocks` but also patches the route's
+    module-level heavy compute helpers so the ``skip_snapshot=False``
+    branch runs in milliseconds while still exercising the real
+    backfill control flow (existence checks, on-disk
+    ``SnapshotLocalStorage`` writes, HF upload gating).
+    """
+    _override_us_patchtst_bucket(monkeypatch, temp_storage)
+    app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
+    app.dependency_overrides[get_patchtst_dataset_builder] = (
+        lambda: mock_dataset_builder
+    )
+    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
+    _patch_us_patchtst_backfill_internals(monkeypatch)
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
@@ -400,3 +463,71 @@ def test_train_patchtst_version_differs_from_lstm():
     )
 
     assert lstm_version != patchtst_version, "PatchTST and LSTM versions should differ"
+
+
+# ============================================================================
+# Scenario 5: skip_snapshot branch coverage
+#
+# All other tests in this file pass ``?skip_snapshot=true`` for speed.
+# These two tests are the only place that exercises
+# ``_backfill_patchtst_snapshots``'s control flow; both branches are
+# asserted against on-disk state under the autouse
+# ``isolate_forecaster_snapshots`` tmp dir.
+# ============================================================================
+
+
+def _wait_for_terminal_response(
+    client: TestClient, url: str, max_attempts: int = 5
+) -> dict:
+    """Drive the route until the BackgroundTask completes (200 not 202)."""
+    last_response = None
+    for _ in range(max_attempts):
+        last_response = client.post(url, json={})
+        if last_response.status_code == 200:
+            return last_response.json()
+    raise AssertionError(
+        f"Training did not converge to 200 within {max_attempts} POSTs. "
+        f"Last status: {last_response.status_code if last_response else 'n/a'}"
+    )
+
+
+def test_train_patchtst_skip_snapshot_true_writes_no_snapshot(client_with_mocks):
+    """``?skip_snapshot=true`` must NOT create any snapshot on disk."""
+    _ = _wait_for_terminal_response(client_with_mocks, TRAIN_URL)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    assert snapshot_storage.list_snapshots() == [], (
+        "skip_snapshot=true must not write any snapshots, but found: "
+        f"{snapshot_storage.list_snapshots()}"
+    )
+
+
+def test_train_patchtst_skip_snapshot_false_writes_snapshots(
+    client_with_backfill_mocks,
+):
+    """Default (``skip_snapshot=false``) writes the end-date snapshot AND backfills history.
+
+    Uses :func:`client_with_backfill_mocks` so the heavy compute inside
+    ``_backfill_patchtst_snapshots`` (yfinance download + per-year
+    PatchTST fit) is replaced by deterministic stubs while the real
+    on-disk write logic still runs. Asserts on the snapshot directory
+    the route created under the autouse tmp path.
+    """
+    _ = _wait_for_terminal_response(client_with_backfill_mocks, "/train/patchtst")
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    snapshots = snapshot_storage.list_snapshots()
+    assert snapshots, (
+        "skip_snapshot=false must write at least one snapshot, but on-disk "
+        "snapshot list was empty."
+    )
+    end_date_iso = "2024-12-27"
+    end_date_snapshots = [s for s in snapshots if s.isoformat() == end_date_iso]
+    assert end_date_snapshots, (
+        f"Expected end-date snapshot {end_date_iso} on disk, got: "
+        f"{[s.isoformat() for s in snapshots]}"
+    )
+    assert len(snapshots) > 1, (
+        "Backfill must populate historical snapshots in addition to the "
+        f"end-date one. Got only: {[s.isoformat() for s in snapshots]}"
+    )
