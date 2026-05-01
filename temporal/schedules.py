@@ -89,13 +89,29 @@ SCHEDULES = [
 # block commented for future use: on a beefier host (Mac/GPU), create a
 # separate schedules_mac.py that imports from here and registers all 4.
 # Do NOT delete.
+#
+# US training is split across two workflows because the host cannot run
+# more than one training job at a time:
+# - USForecastersTrainingWorkflow (Saturday 11 UTC) trains LSTM then
+#   PatchTST serially on halal_new and emails a forecasters-only report.
+# - USSACTrainingWorkflow (Sunday 14 UTC, 12+ hours later to avoid any
+#   overlap) trains SAC on the halal_filtered top-15 (driven by whatever
+#   PatchTST 'current' pointer is live at trigger time) and emails a
+#   SAC-only report.
 # SCHEDULES_MAC = [
 #     {
-#         "id": "us-weekly-training",
-#         "workflow": USWeeklyTrainingWorkflow,
-#         "workflow_id": "us-weekly-training",
-#         "cron": "0 11 * * 0",  # Sunday 11:00 UTC
-#         "description": "US weekly training pipeline (Sunday 11 AM UTC)",
+#         "id": "us-forecasters-training",
+#         "workflow": USForecastersTrainingWorkflow,
+#         "workflow_id": "us-forecasters-training",
+#         "cron": "0 11 * * 6",  # Saturday 11:00 UTC
+#         "description": "US forecasters training (LSTM + PatchTST) Saturday 11 UTC",
+#     },
+#     {
+#         "id": "us-sac-training",
+#         "workflow": USSACTrainingWorkflow,
+#         "workflow_id": "us-sac-training",
+#         "cron": "0 14 * * 0",  # Sunday 14:00 UTC
+#         "description": "US SAC training Sunday 14 UTC (12+ h after forecasters)",
 #     },
 #     {
 #         "id": "india-weekly-training",

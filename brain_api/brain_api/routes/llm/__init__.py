@@ -4,8 +4,9 @@ from fastapi import APIRouter
 
 from .models import (
     AlphaHRPSummaryRequest,
+    ForecastersTrainingSummaryRequest,
+    SACTrainingSummaryRequest,
     SACWeeklySummaryRequest,
-    TrainingSummaryRequest,
     TrainingSummaryResponse,
     WeeklySummaryResponse,
 )
@@ -29,12 +30,13 @@ router.include_router(weekly_summary_router)
 
 __all__ = [
     "AlphaHRPSummaryRequest",
+    "ForecastersTrainingSummaryRequest",
     "LLMProvider",
     "LLMResponse",
     "OllamaProvider",
     "OpenAIProvider",
+    "SACTrainingSummaryRequest",
     "SACWeeklySummaryRequest",
-    "TrainingSummaryRequest",
     "TrainingSummaryResponse",
     "WeeklySummaryResponse",
     "get_llm_provider",

@@ -24,8 +24,8 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def mock_training_summary_request():
-    """Valid request payload for training summary endpoint."""
+def mock_forecasters_summary_request():
+    """Valid request payload for /llm/forecasters-training-summary."""
     return {
         "lstm": {
             "version": "v2026-01-15-abc123",
@@ -43,6 +43,13 @@ def mock_training_summary_request():
             "num_input_channels": 5,
             "signals_used": ["ohlcv"],
         },
+    }
+
+
+@pytest.fixture
+def mock_sac_summary_request():
+    """Valid request payload for /llm/sac-training-summary."""
+    return {
         "sac": {
             "version": "v2026-01-15-jkl012",
             "data_window_start": "2020-01-01",
@@ -55,14 +62,23 @@ def mock_training_summary_request():
 
 
 @pytest.fixture
-def mock_llm_json_response():
-    """Mock JSON response from LLM."""
+def mock_forecasters_llm_json_response():
+    """Mock JSON response from LLM for the forecasters summary endpoint."""
     return {
-        "para_1_overall": "All models trained successfully with good metrics.",
+        "para_1_overall": "Both forecasters trained successfully with good metrics.",
         "para_2_lstm": "LSTM model shows strong price prediction capability.",
         "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
-        "para_4_sac": "SAC shows promising results but was not promoted.",
-        "para_5_recommendations": "Consider investigating SAC promotion criteria.",
+        "para_4_recommendations": "Slate looks stable for the SAC retrain tomorrow.",
+    }
+
+
+@pytest.fixture
+def mock_sac_llm_json_response():
+    """Mock JSON response from LLM for the SAC summary endpoint."""
+    return {
+        "para_1_overall": "SAC training completed but did not clear the promotion gate.",
+        "para_2_metrics": "Sharpe 1.8 and 12% max drawdown are mediocre this week.",
+        "para_3_recommendations": "Investigate SAC promotion criteria before next retrain.",
     }
 
 
@@ -227,69 +243,65 @@ class MockLLMProvider(LLMProvider):
         return self._response
 
 
-class TestTrainingSummaryEndpoint:
-    """Tests for POST /llm/training-summary endpoint."""
+class TestForecastersTrainingSummaryEndpoint:
+    """Tests for POST /llm/forecasters-training-summary endpoint."""
 
     def test_successful_summary_generation(
         self,
-        mock_training_summary_request,
-        mock_llm_json_response,
+        mock_forecasters_summary_request,
+        mock_forecasters_llm_json_response,
     ):
-        """Successful training summary generation."""
+        """Successful forecasters summary generation."""
         import json
 
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
-                content=json.dumps(mock_llm_json_response),
+                content=json.dumps(mock_forecasters_llm_json_response),
                 model="gpt-4o-mini",
                 tokens_used=500,
             ),
         )
-
-        # Override dependency
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
-                json=mock_training_summary_request,
+                "/llm/forecasters-training-summary",
+                json=mock_forecasters_summary_request,
             )
-
-            assert response.status_code == 200
+            assert response.status_code == 200, response.text
             data = response.json()
             assert "summary" in data
             assert data["provider"] == "openai"
             assert data["model_used"] == "gpt-4o-mini"
             assert data["tokens_used"] == 500
+            assert "para_1_overall" in data["summary"]
+            assert "para_2_lstm" in data["summary"]
+            assert "para_3_patchtst" in data["summary"]
         finally:
             app.dependency_overrides.clear()
 
     def test_ollama_provider_response(
         self,
-        mock_training_summary_request,
-        mock_llm_json_response,
+        mock_forecasters_summary_request,
+        mock_forecasters_llm_json_response,
     ):
-        """Training summary with OLLAMA provider."""
+        """Forecasters summary with OLLAMA provider."""
         import json
 
         mock_provider = MockLLMProvider(
             name="ollama",
             response=LLMResponse(
-                content=json.dumps(mock_llm_json_response),
+                content=json.dumps(mock_forecasters_llm_json_response),
                 model="llama3.2",
                 tokens_used=None,
             ),
         )
-
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
-                json=mock_training_summary_request,
+                "/llm/forecasters-training-summary",
+                json=mock_forecasters_summary_request,
             )
-
             assert response.status_code == 200
             data = response.json()
             assert data["provider"] == "ollama"
@@ -298,35 +310,26 @@ class TestTrainingSummaryEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    def test_llm_service_unavailable(
-        self,
-        mock_training_summary_request,
-    ):
+    def test_llm_service_unavailable(self, mock_forecasters_summary_request):
         """LLM service failure returns 503."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(content="", model="", tokens_used=None),
             error=Exception("API connection failed"),
         )
-
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
-                json=mock_training_summary_request,
+                "/llm/forecasters-training-summary",
+                json=mock_forecasters_summary_request,
             )
-
             assert response.status_code == 503
             assert "LLM service unavailable" in response.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 
-    def test_invalid_json_response_fallback(
-        self,
-        mock_training_summary_request,
-    ):
-        """Invalid JSON from LLM returns fallback summary."""
+    def test_invalid_json_response_fallback(self, mock_forecasters_summary_request):
+        """Invalid JSON from LLM returns the para_1_overall fallback stub."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
@@ -335,15 +338,12 @@ class TestTrainingSummaryEndpoint:
                 tokens_used=100,
             ),
         )
-
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
-                json=mock_training_summary_request,
+                "/llm/forecasters-training-summary",
+                json=mock_forecasters_summary_request,
             )
-
             assert response.status_code == 200
             data = response.json()
             assert "para_1_overall" in data["summary"]
@@ -353,34 +353,30 @@ class TestTrainingSummaryEndpoint:
 
     def test_invalid_request_returns_422(self):
         """Invalid request body returns 422."""
-        # Override dependency to avoid API key check (validation happens before dependency)
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(content="{}", model="test", tokens_used=0),
         )
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
-                json={"lstm": "invalid"},  # Should be an object
+                "/llm/forecasters-training-summary",
+                json={"lstm": "invalid"},
             )
             assert response.status_code == 422
         finally:
             app.dependency_overrides.clear()
 
-    def test_missing_required_field_returns_422(self):
-        """Missing required field returns 422."""
-        # Override dependency to avoid API key check (validation happens before dependency)
+    def test_missing_patchtst_returns_422(self):
+        """Missing patchtst field returns 422 (lstm + patchtst both required)."""
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(content="{}", model="test", tokens_used=0),
         )
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
-
         try:
             response = client.post(
-                "/llm/training-summary",
+                "/llm/forecasters-training-summary",
                 json={
                     "lstm": {
                         "version": "v1",
@@ -389,9 +385,135 @@ class TestTrainingSummaryEndpoint:
                         "metrics": {},
                         "promoted": True,
                     },
-                    # Missing patchtst, sac
                 },
             )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_sac_field_is_rejected(self, mock_forecasters_summary_request):
+        """SAC training data must NOT be sent to the forecasters endpoint.
+
+        We don't enforce extra=forbid at the model layer, so sending an
+        extra ``sac`` field still returns 200 (it's silently dropped),
+        but a sloppy caller that omits the required ``patchtst`` while
+        sending ``sac`` instead must still get 422. This guards against
+        accidentally wiring the SAC payload through the wrong activity.
+        """
+        import json
+
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps({"para_1_overall": "ok"}),
+                model="gpt-4o-mini",
+                tokens_used=10,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            payload = {
+                "lstm": mock_forecasters_summary_request["lstm"],
+                "sac": {
+                    "version": "v",
+                    "data_window_start": "2020-01-01",
+                    "data_window_end": "2025-01-01",
+                    "metrics": {},
+                    "promoted": True,
+                },
+            }
+            response = client.post(
+                "/llm/forecasters-training-summary",
+                json=payload,
+            )
+            assert response.status_code == 422
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestSACTrainingSummaryEndpoint:
+    """Tests for POST /llm/sac-training-summary endpoint."""
+
+    def test_successful_summary_generation(
+        self,
+        mock_sac_summary_request,
+        mock_sac_llm_json_response,
+    ):
+        """Successful SAC summary generation."""
+        import json
+
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_sac_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/sac-training-summary",
+                json=mock_sac_summary_request,
+            )
+            assert response.status_code == 200, response.text
+            data = response.json()
+            assert "summary" in data
+            assert data["provider"] == "openai"
+            assert data["tokens_used"] == 300
+            assert "para_1_overall" in data["summary"]
+            assert "para_2_metrics" in data["summary"]
+            assert "para_3_recommendations" in data["summary"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_llm_service_unavailable(self, mock_sac_summary_request):
+        """LLM service failure returns 503."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="", model="", tokens_used=None),
+            error=Exception("LLM down"),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/sac-training-summary",
+                json=mock_sac_summary_request,
+            )
+            assert response.status_code == 503
+            assert "LLM service unavailable" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_invalid_json_response_fallback(self, mock_sac_summary_request):
+        """Invalid JSON from LLM returns fallback under para_1_overall."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content="not json", model="gpt-4o-mini", tokens_used=42
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/sac-training-summary",
+                json=mock_sac_summary_request,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert "Unable to generate AI summary" in data["summary"]["para_1_overall"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_missing_sac_returns_422(self):
+        """Empty body fails validation (sac is required)."""
+        mock_provider = MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="{}", model="test", tokens_used=0),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post("/llm/sac-training-summary", json={})
             assert response.status_code == 422
         finally:
             app.dependency_overrides.clear()

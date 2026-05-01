@@ -64,11 +64,13 @@ from activities.training import (
     fetch_halal_filtered_universe,
     fetch_halal_new_universe,
     fetch_nifty_shariah_500_universe,
+    generate_forecasters_training_summary,
     generate_india_training_summary,
-    generate_training_summary,
+    generate_sac_training_summary,
     refresh_training_data,
+    send_forecasters_training_email,
     send_india_training_email,
-    send_training_summary_email,
+    send_sac_training_email,
     train_india_patchtst,
     train_lstm,
     train_patchtst,
@@ -82,8 +84,9 @@ from workflows.india_weekly_allocation import IndiaWeeklyAllocationWorkflow
 from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
+from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_sac_training import USSACTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
-from workflows.us_weekly_training import USWeeklyTrainingWorkflow
 
 TASK_QUEUE = "learnfinance"
 TEMPORAL_ADDRESS = os.environ.get("TEMPORAL_ADDRESS", "localhost:7233")
@@ -94,8 +97,9 @@ ALL_WORKFLOWS = [
     IndiaWeeklyTrainingWorkflow,
     USAlphaHRPWorkflow,
     USDoubleHRPWorkflow,
+    USForecastersTrainingWorkflow,
+    USSACTrainingWorkflow,
     USWeeklyAllocationWorkflow,
-    USWeeklyTrainingWorkflow,
 ]
 
 ALL_ACTIVITIES = [
@@ -151,8 +155,10 @@ ALL_ACTIVITIES = [
     train_patchtst,
     train_sac,
     train_india_patchtst,
-    generate_training_summary,
-    send_training_summary_email,
+    generate_forecasters_training_summary,
+    send_forecasters_training_email,
+    generate_sac_training_summary,
+    send_sac_training_email,
     generate_india_training_summary,
     send_india_training_email,
 ]

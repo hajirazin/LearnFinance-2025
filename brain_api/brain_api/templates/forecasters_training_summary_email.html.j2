@@ -3,115 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Training Summary</title>
+  <title>US Forecasters Training Summary</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
 
   <!-- Header -->
   <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
-    <h1 style="margin: 0 0 8px 0; font-size: 24px;">Weekly Training Summary</h1>
-    <p style="margin: 0; opacity: 0.9;">Data Window: {{ lstm.data_window_start }} to {{ lstm.data_window_end }}</p>
+    <h1 style="margin: 0 0 8px 0; font-size: 24px;">US Forecasters Training Summary</h1>
+    <p style="margin: 0; opacity: 0.9;">LSTM + PatchTST &middot; Data Window: {{ lstm.data_window_start }} to {{ lstm.data_window_end }}</p>
   </div>
 
   <!-- AI Analysis Section -->
   <div style="background: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
     <h2 style="margin: 0 0 16px 0; color: #667eea; font-size: 20px;">AI Analysis</h2>
-    
+
     {% if summary.para_1_overall %}
     <div style="margin-bottom: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
       <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">Overall Summary</h3>
       <p style="margin: 0;">{{ summary.para_1_overall }}</p>
     </div>
     {% endif %}
-    
+
     {% if summary.para_2_lstm %}
     <div style="margin-bottom: 16px; padding: 16px; background: #e3f2fd; border-radius: 8px;">
       <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #1565c0; text-transform: uppercase; letter-spacing: 0.5px;">LSTM Forecast</h3>
       <p style="margin: 0;">{{ summary.para_2_lstm }}</p>
     </div>
     {% endif %}
-    
+
     {% if summary.para_3_patchtst %}
     <div style="margin-bottom: 16px; padding: 16px; background: #e8f5e9; border-radius: 8px;">
       <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #2e7d32; text-transform: uppercase; letter-spacing: 0.5px;">PatchTST Forecast</h3>
       <p style="margin: 0;">{{ summary.para_3_patchtst }}</p>
     </div>
     {% endif %}
-    
-    {% if summary.para_4_sac %}
-    <div style="margin-bottom: 16px; padding: 16px; background: #fce4ec; border-radius: 8px;">
-      <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #c2185b; text-transform: uppercase; letter-spacing: 0.5px;">SAC Allocator</h3>
-      <p style="margin: 0;">{{ summary.para_4_sac }}</p>
-    </div>
-    {% endif %}
-    
-    {% if summary.para_5_recommendations %}
+
+    {% if summary.para_4_recommendations %}
     <div style="padding: 16px; background: #fffde7; border-radius: 8px; border-left: 4px solid #fbc02d;">
       <h3 style="margin: 0 0 8px 0; font-size: 14px; color: #f57f17; text-transform: uppercase; letter-spacing: 0.5px;">Recommendations</h3>
-      <p style="margin: 0;">{{ summary.para_5_recommendations }}</p>
+      <p style="margin: 0;">{{ summary.para_4_recommendations }}</p>
     </div>
     {% endif %}
-  </div>
-
-  <!-- SAC Allocator -->
-  <div style="background: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-    <h2 style="margin: 0 0 16px 0; color: #667eea; font-size: 20px;">SAC Allocator</h2>
-    
-    <div style="max-width: 400px;">
-      <div style="background: #fce4ec; padding: 16px; border-radius: 8px; border-top: 4px solid #c2185b;">
-        <h3 style="margin: 0 0 12px 0; color: #c2185b; font-size: 16px;">SAC</h3>
-        
-        <table style="width: 100%; font-size: 14px;">
-          <tr>
-            <td style="padding: 4px 0; color: #666;">Version</td>
-            <td style="padding: 4px 0; text-align: right; font-family: monospace;">{{ sac.version }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; color: #666;">Data Window</td>
-            <td style="padding: 4px 0; text-align: right;">{{ sac.data_window_start }} to {{ sac.data_window_end }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; color: #666;">Promoted</td>
-            <td style="padding: 4px 0; text-align: right;">
-              {% if sac.promoted %}
-              <span style="color: #2e7d32; font-weight: bold;">Yes</span>
-              {% else %}
-              <span style="color: #c62828;">No</span>
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; color: #666;">Symbols</td>
-            <td style="padding: 4px 0; text-align: right;">{{ sac.symbols_used | length }}</td>
-          </tr>
-        </table>
-        
-        {% if sac.metrics %}
-        <h4 style="margin: 12px 0 8px 0; font-size: 13px; color: #666;">Metrics</h4>
-        <table style="width: 100%; font-size: 13px;">
-          {% for key, value in sac.metrics.items() %}
-          <tr>
-            <td style="padding: 2px 0; color: #888;">{{ key }}</td>
-            <td style="padding: 2px 0; text-align: right; font-family: monospace;">{{ "%.4f" | format(value) if value is number else value }}</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% endif %}
-      </div>
-    </div>
   </div>
 
   <!-- Forecasters Comparison (Side-by-Side) -->
   <div style="background: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
     <h2 style="margin: 0 0 16px 0; color: #667eea; font-size: 20px;">Forecasters Comparison</h2>
-    
+
     <table style="width: 100%; border-collapse: collapse;">
       <tr>
         <!-- LSTM Column -->
         <td style="width: 50%; vertical-align: top; padding-right: 12px;">
           <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; border-top: 4px solid #1565c0;">
             <h3 style="margin: 0 0 12px 0; color: #1565c0; font-size: 16px;">LSTM <span style="font-weight: normal; font-size: 12px; color: #666;">(Pure Price)</span></h3>
-            
+
             <table style="width: 100%; font-size: 14px;">
               <tr>
                 <td style="padding: 4px 0; color: #666;">Version</td>
@@ -132,7 +77,7 @@
                 </td>
               </tr>
             </table>
-            
+
             {% if lstm.metrics %}
             <h4 style="margin: 12px 0 8px 0; font-size: 13px; color: #666;">Metrics</h4>
             <table style="width: 100%; font-size: 13px;">
@@ -146,12 +91,12 @@
             {% endif %}
           </div>
         </td>
-        
+
         <!-- PatchTST Column -->
         <td style="width: 50%; vertical-align: top; padding-left: 12px;">
           <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; border-top: 4px solid #2e7d32;">
             <h3 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 16px;">PatchTST <span style="font-weight: normal; font-size: 12px; color: #666;">(OHLCV)</span></h3>
-            
+
             <table style="width: 100%; font-size: 14px;">
               <tr>
                 <td style="padding: 4px 0; color: #666;">Version</td>
@@ -176,12 +121,12 @@
                 <td style="padding: 4px 0; text-align: right;">{{ patchtst.num_input_channels }}</td>
               </tr>
             </table>
-            
+
             {% if patchtst.signals_used %}
             <h4 style="margin: 12px 0 8px 0; font-size: 13px; color: #666;">Signals Used</h4>
             <p style="margin: 0; font-size: 12px; color: #666;">{{ patchtst.signals_used | join(", ") }}</p>
             {% endif %}
-            
+
             {% if patchtst.metrics %}
             <h4 style="margin: 12px 0 8px 0; font-size: 13px; color: #666;">Metrics</h4>
             <table style="width: 100%; font-size: 13px;">
@@ -202,6 +147,7 @@
   <!-- Footer -->
   <div style="text-align: center; padding: 16px; color: #999; font-size: 12px;">
     <p style="margin: 0;">Generated by LearnFinance-2025</p>
+    <p style="margin: 4px 0 0 0;">SAC training runs on a separate schedule and is reported in its own email.</p>
     <p style="margin: 4px 0 0 0;">This is an automated training summary. Not financial advice.</p>
   </div>
 

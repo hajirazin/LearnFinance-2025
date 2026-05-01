@@ -1,0 +1,32 @@
+You are a financial ML training analyst. Analyze and summarize the following US SAC (Soft Actor-Critic) training result for a weekly portfolio management system. The LSTM and PatchTST forecasters are trained on a separate schedule (the day before) and are summarised in their own report; SAC consumes whatever forecaster ``current`` pointers are live at trigger time.
+
+## Training Results
+
+### SAC (Reinforcement Learning Allocator)
+This model learns portfolio allocation strategies using Soft Actor-Critic with dual forecasts (LSTM + PatchTST) plus per-stock signals (news sentiment, fundamentals).
+
+- **Version**: {{ sac.version }}
+- **Data Window**: {{ sac.data_window_start }} to {{ sac.data_window_end }}
+- **Promoted to Production**: {{ "Yes" if sac.promoted else "No" }}
+- **Symbols Used**: {{ sac.symbols_used | length }} stocks
+- **Metrics**: {{ sac.metrics | tojson }}
+
+## Context
+
+- Universe: ``halal_filtered`` -- top 15 by PatchTST predicted weekly return + rank-band sticky selection on top of ``halal_new``.
+- Promotion gate: SAC must beat the configured minimum CAGR threshold (and any prior promoted version) before it becomes ``current``.
+- The 15-symbol slate matches the SAC action space, so any change in symbols comes from upstream forecaster movement -- worth flagging if the slate looks unstable.
+
+## Instructions
+
+Provide a concise analysis of this SAC training result. Focus on:
+1. Overall SAC training health and promotion outcome
+2. Allocator performance metrics (Sharpe, CAGR, drawdown, episode returns) and what they suggest
+3. Any concerns or recommendations for next week's SAC retrain or for the inference pipeline
+
+Respond with JSON only, using this exact structure:
+{
+    "para_1_overall": "2-3 sentence summary of overall SAC training health and promotion outcome",
+    "para_2_metrics": "2-3 sentences about SAC performance metrics (Sharpe, CAGR, drawdown, returns)",
+    "para_3_recommendations": "2-3 sentences with recommendations or concerns for next week's SAC retrain or the inference pipeline"
+}

@@ -16,7 +16,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Temporal** is the outer orchestrator (replaced Prefect):
-  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Sunday 11 AM UTC for US training, Sunday 4:30 AM UTC for India training)
+  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Saturday 11 AM UTC for US forecasters training, Sunday 14:00 UTC for US SAC training, Sunday 4:30 AM UTC for India training)
   - calling brain_api endpoints via HTTP activities
   - handling parallel task execution (asyncio.gather) and skip logic
   - durable sleep/wait for sell-wait-buy pattern (single workflow, no 3-flow hack)
@@ -26,7 +26,8 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India weekly allocation workflow (`IndiaWeeklyAllocationWorkflow`): full Nifty Shariah 500 universe -> PatchTST alpha screen (`/inference/patchtst/score-batch` with `market='india'`) -> rank-band sticky selection (`halal_india_alpha` partition, K_in=15 / K_hold=30) -> HRP allocation (lookback=252d) on the 15 chosen names -> record final weights -> AI summary -> email (paper-only, no broker)
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india rank-band sticky top 15 (`halal_india_filtered_alpha` partition in `screening_history`, monthly cadence) -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
-  - US weekly training workflow (`USWeeklyTrainingWorkflow`): full retrain pipeline
+  - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
+  - US SAC training workflow (`USSACTrainingWorkflow`): runs 12+ hours after the forecasters workflow on a separate cron slot; halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
@@ -82,7 +83,8 @@ temporal/                         # Temporal workflow orchestration
 ├── schedules.py                  # One-time script to register cron schedules
 ├── workflows/
 │   ├── us_weekly_allocation.py   # Sell-wait-buy with durable polling
-│   ├── us_weekly_training.py     # Full US model training pipeline
+│   ├── us_forecasters_training.py # US LSTM + PatchTST training (Saturday)
+│   ├── us_sac_training.py        # US SAC training (Sunday, 12+ h after forecasters)
 │   ├── india_weekly_allocation.py # India Alpha-HRP (PatchTST screen + sticky + HRP + email)
 │   └── india_weekly_training.py  # India PatchTST training pipeline
 ├── activities/
@@ -154,10 +156,14 @@ temporal/                         # Temporal workflow orchestration
 | `POST /llm/us-alpha-hrp-summary` | Generate AI summary of US Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
+| `POST /llm/forecasters-training-summary` | Generate AI summary of US LSTM + PatchTST training (called by `USForecastersTrainingWorkflow`) |
+| `POST /llm/sac-training-summary` | Generate AI summary of US SAC training (called by `USSACTrainingWorkflow`) |
 | `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
 | `POST /email/us-alpha-hrp-report` | Send US Alpha-HRP report email (alpha screen + sticky + HRP + Alpaca order execution) via Gmail SMTP |
 | `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (alpha screen + sticky + HRP, paper-only / no broker) via Gmail SMTP |
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
+| `POST /email/forecasters-training-summary` | Send US Forecasters (LSTM + PatchTST) training summary email via Gmail SMTP |
+| `POST /email/sac-training-summary` | Send US SAC training summary email via Gmail SMTP |
 
 **Other**:
 
@@ -429,7 +435,8 @@ The system must:
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all US models | Manual |
-| Weekly (Sunday 11 AM UTC) | Fine-tune SAC variants (US) | Cron (Temporal) |
+| Weekly (Saturday 11:00 UTC) | US Forecasters training (LSTM then PatchTST, strictly serial because the host can only fit one trainer at a time) | Cron (Temporal, host-only) |
+| Weekly (Sunday 14:00 UTC) | US SAC training (12+ h after the forecasters slot to guarantee no overlap; consumes whatever PatchTST `current` pointer is live at trigger time) | Cron (Temporal, host-only) |
 | Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Temporal) |
 | Monday 6 PM IST | US inference only | Cron (Temporal) |
 

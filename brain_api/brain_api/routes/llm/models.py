@@ -23,9 +23,10 @@ __all__ = [
     "AlphaHRPSummaryRequest",
     "AlphaScoreItem",
     "DoubleHRPSummaryRequest",
+    "ForecastersTrainingSummaryRequest",
     "IndiaTrainingSummaryRequest",
+    "SACTrainingSummaryRequest",
     "SACWeeklySummaryRequest",
-    "TrainingSummaryRequest",
     "TrainingSummaryResponse",
     "USDoubleHRPSummaryRequest",
     "WeeklySummaryResponse",
@@ -36,16 +37,37 @@ __all__ = [
 # =============================================================================
 
 
-class TrainingSummaryRequest(BaseModel):
-    """Request model for POST /llm/training-summary."""
+class ForecastersTrainingSummaryRequest(BaseModel):
+    """Request model for POST /llm/forecasters-training-summary.
+
+    Carries the LSTM + PatchTST training results from the US forecasters
+    workflow. SAC is summarised separately by the SAC training workflow
+    via :class:`SACTrainingSummaryRequest` so each workflow can email
+    its own report independently.
+    """
 
     lstm: LSTMTrainResponse
     patchtst: PatchTSTTrainResponse
+
+
+class SACTrainingSummaryRequest(BaseModel):
+    """Request model for POST /llm/sac-training-summary.
+
+    Carries the SAC training result from the US SAC workflow. The SAC
+    workflow consumes whatever PatchTST ``current`` pointer is live at
+    trigger time, so forecaster metrics are not part of this payload --
+    they live in :class:`ForecastersTrainingSummaryRequest`.
+    """
+
     sac: SACTrainResponse
 
 
 class TrainingSummaryResponse(BaseModel):
-    """Response model for POST /llm/training-summary."""
+    """Response model for the split training-summary endpoints.
+
+    Used by both ``/llm/forecasters-training-summary`` and
+    ``/llm/sac-training-summary`` (and also the India training summary).
+    """
 
     summary: dict[str, str]  # Paragraph fields from LLM
     provider: str  # "openai" or "ollama"

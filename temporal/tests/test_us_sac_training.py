@@ -1,4 +1,10 @@
-"""Tests for US weekly training Temporal workflow."""
+"""Tests for the US SAC training Temporal workflow.
+
+The SAC workflow is the second half of the (deleted)
+``USWeeklyTrainingWorkflow`` split. It runs a day after the forecasters
+workflow and consumes whatever PatchTST ``current`` pointer is live at
+trigger time, so it does NOT trigger forecaster training itself.
+"""
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -14,12 +20,7 @@ from models import (
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
 )
-from workflows.us_weekly_training import USWeeklyTrainingWorkflow
-
-
-@pytest.fixture
-def mock_halal_new():
-    return {"stocks": [{"symbol": f"SYM{i}"} for i in range(410)], "total_stocks": 410}
+from workflows.us_sac_training import USSACTrainingWorkflow
 
 
 @pytest.fixture
@@ -31,17 +32,6 @@ def mock_filtered():
         "selection_method": "patchtst_forecast_rank_band",
         "model_version": "v2026-03-01-abc123",
     }
-
-
-@pytest.fixture
-def mock_training():
-    return TrainingResponse(
-        version="v1.0.0",
-        data_window_start="2020-01-01",
-        data_window_end="2024-01-01",
-        metrics={"loss": 0.01},
-        promoted=True,
-    )
 
 
 @pytest.fixture
@@ -57,12 +47,24 @@ def mock_refresh():
 
 
 @pytest.fixture
+def mock_sac_training():
+    return TrainingResponse(
+        version="v2026-03-01-sac001",
+        data_window_start="2020-01-01",
+        data_window_end="2024-01-01",
+        metrics={"sharpe": 1.5, "cagr": 0.18},
+        promoted=True,
+        symbols_used=["AAPL", "MSFT", "GOOGL"],
+    )
+
+
+@pytest.fixture
 def mock_summary():
     return TrainingSummaryResponse(
-        summary={"para_1_overall": "All models trained successfully."},
+        summary={"para_1_overall": "SAC trained successfully."},
         provider="openai",
         model_used="gpt-4o-mini",
-        tokens_used=500,
+        tokens_used=200,
     )
 
 
@@ -70,77 +72,58 @@ def mock_summary():
 def mock_email():
     return TrainingSummaryEmailResponse(
         is_success=True,
-        subject="Training Summary: 2020-01-01 to 2024-01-01",
-        body="<html><body>Training summary</body></html>",
+        subject="US SAC Training: 2020-01-01 to 2024-01-01",
+        body="<html><body>SAC summary</body></html>",
     )
 
 
-def _make_us_training_activities(
-    halal_new, filtered, training, refresh, summary, email
-):
-    @activity.defn(name="fetch_halal_new_universe")
-    def mock_new():
-        return halal_new
-
-    @activity.defn(name="train_lstm")
-    def mock_lstm(universe: str):
-        assert universe == "halal_new"
-        return training
-
-    @activity.defn(name="train_patchtst")
-    def mock_ptst(universe: str):
-        assert universe == "halal_new"
-        return training
+def _make_sac_activities(filtered, refresh, training, summary, email):
+    """Build mocked activities matching the registered names exactly."""
+    call_log: list[str] = []
 
     @activity.defn(name="fetch_halal_filtered_universe")
     def mock_filt():
+        call_log.append("fetch_halal_filtered_universe")
         return filtered
 
     @activity.defn(name="refresh_training_data")
     def mock_ref():
+        call_log.append("refresh_training_data")
         return refresh
 
     @activity.defn(name="train_sac")
     def mock_sac(universe: str):
+        call_log.append("train_sac")
         assert universe == "halal_filtered"
         return training
 
-    @activity.defn(name="generate_training_summary")
-    def mock_summ(lstm, patchtst, sac):
+    @activity.defn(name="generate_sac_training_summary")
+    def mock_summ(sac):
+        call_log.append("generate_sac_training_summary")
         return summary
 
-    @activity.defn(name="send_training_summary_email")
-    def mock_em(lstm, patchtst, sac, summary_arg):
+    @activity.defn(name="send_sac_training_email")
+    def mock_em(sac, summary_arg):
+        call_log.append("send_sac_training_email")
         return email
 
-    return [
-        mock_new,
-        mock_lstm,
-        mock_ptst,
-        mock_filt,
-        mock_ref,
-        mock_sac,
-        mock_summ,
-        mock_em,
-    ]
+    return [mock_filt, mock_ref, mock_sac, mock_summ, mock_em], call_log
 
 
-class TestUSWeeklyTrainingWorkflow:
+class TestUSSACTrainingWorkflow:
     @pytest.mark.asyncio
     async def test_full_workflow_success(
         self,
-        mock_halal_new,
         mock_filtered,
-        mock_training,
         mock_refresh,
+        mock_sac_training,
         mock_summary,
         mock_email,
     ):
-        activities = _make_us_training_activities(
-            mock_halal_new,
+        activities, call_log = _make_sac_activities(
             mock_filtered,
-            mock_training,
             mock_refresh,
+            mock_sac_training,
             mock_summary,
             mock_email,
         )
@@ -151,27 +134,35 @@ class TestUSWeeklyTrainingWorkflow:
             async with Worker(
                 env.client,
                 task_queue="test-queue",
-                workflows=[USWeeklyTrainingWorkflow],
+                workflows=[USSACTrainingWorkflow],
                 activities=activities,
                 activity_executor=ThreadPoolExecutor(),
             ):
                 result = await env.client.execute_workflow(
-                    USWeeklyTrainingWorkflow.run,
-                    id="test-us-training",
+                    USSACTrainingWorkflow.run,
+                    id="test-us-sac-training",
                     task_queue="test-queue",
                 )
 
-            assert result["halal_new"]["total_stocks"] == 410
-            assert result["lstm"]["version"] == "v1.0.0"
-            assert result["lstm"]["promoted"] is True
-            assert result["patchtst"]["version"] == "v1.0.0"
             assert result["filtered"]["stocks"] == 15
-            assert (
-                result["filtered"]["selection_method"] == "patchtst_forecast_rank_band"
+            assert result["filtered"]["selection_method"] == (
+                "patchtst_forecast_rank_band"
             )
             assert result["refresh"]["sentiment_gaps_filled"] == 10
             assert result["refresh"]["fundamentals_refreshed"] == 2
-            assert result["sac"]["version"] == "v1.0.0"
+            assert result["sac"]["version"] == "v2026-03-01-sac001"
+            assert result["sac"]["promoted"] is True
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
-            assert "Training Summary" in result["email"]["subject"]
+            assert "US SAC Training" in result["email"]["subject"]
+
+            # SAC must not retrain forecasters or rebuild halal_new.
+            assert "train_lstm" not in call_log
+            assert "train_patchtst" not in call_log
+            assert "fetch_halal_new_universe" not in call_log
+
+            # filtered-fetch must precede refresh + SAC train.
+            filt_idx = call_log.index("fetch_halal_filtered_universe")
+            ref_idx = call_log.index("refresh_training_data")
+            sac_idx = call_log.index("train_sac")
+            assert filt_idx < ref_idx < sac_idx

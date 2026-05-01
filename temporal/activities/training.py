@@ -183,93 +183,149 @@ def train_india_patchtst(universe: str) -> TrainingResponse:
     return _poll_training_job("/train/patchtst/india", json_body={"universe": universe})
 
 
+def _lstm_payload(lstm: TrainingResponse) -> dict:
+    """Serialise an LSTM ``TrainingResponse`` for brain_api JSON bodies.
+
+    Mirrors the ``LSTMTrainResponse`` Pydantic schema so the same dict
+    is reusable across the ``/llm/forecasters-training-summary`` and
+    ``/email/forecasters-training-summary`` payloads.
+    """
+    return {
+        "version": lstm.version,
+        "data_window_start": lstm.data_window_start,
+        "data_window_end": lstm.data_window_end,
+        "metrics": lstm.metrics,
+        "promoted": lstm.promoted,
+    }
+
+
+def _patchtst_payload(patchtst: TrainingResponse) -> dict:
+    """Serialise a PatchTST ``TrainingResponse`` for brain_api JSON bodies.
+
+    Mirrors the ``PatchTSTTrainResponse`` Pydantic schema so the same
+    dict is reusable across forecaster summary + email payloads (US and
+    India).
+    """
+    return {
+        "version": patchtst.version,
+        "data_window_start": patchtst.data_window_start,
+        "data_window_end": patchtst.data_window_end,
+        "metrics": patchtst.metrics,
+        "promoted": patchtst.promoted,
+        "num_input_channels": patchtst.num_input_channels or 0,
+        "signals_used": patchtst.signals_used or [],
+    }
+
+
+def _sac_payload(sac: TrainingResponse) -> dict:
+    """Serialise a SAC ``TrainingResponse`` for brain_api JSON bodies.
+
+    Mirrors the ``SACTrainResponse`` Pydantic schema for the
+    ``/llm/sac-training-summary`` and ``/email/sac-training-summary``
+    payloads.
+    """
+    return {
+        "version": sac.version,
+        "data_window_start": sac.data_window_start,
+        "data_window_end": sac.data_window_end,
+        "metrics": sac.metrics,
+        "promoted": sac.promoted,
+        "symbols_used": sac.symbols_used or [],
+    }
+
+
 @activity.defn
-def generate_training_summary(
+def generate_forecasters_training_summary(
     lstm: TrainingResponse,
     patchtst: TrainingResponse,
-    sac: TrainingResponse,
 ) -> TrainingSummaryResponse:
-    """Generate LLM summary of all training results."""
-    logger.info("Generating training summary via LLM...")
+    """Generate LLM summary for the US LSTM + PatchTST training run.
+
+    Called by ``USForecastersTrainingWorkflow`` after both forecasters
+    finish training serially. SAC has its own summary endpoint and runs
+    on a separate workflow, so it is intentionally not included here.
+    """
+    logger.info("Generating forecasters (LSTM + PatchTST) training summary via LLM...")
     payload = {
-        "lstm": {
-            "version": lstm.version,
-            "data_window_start": lstm.data_window_start,
-            "data_window_end": lstm.data_window_end,
-            "metrics": lstm.metrics,
-            "promoted": lstm.promoted,
-        },
-        "patchtst": {
-            "version": patchtst.version,
-            "data_window_start": patchtst.data_window_start,
-            "data_window_end": patchtst.data_window_end,
-            "metrics": patchtst.metrics,
-            "promoted": patchtst.promoted,
-            "num_input_channels": patchtst.num_input_channels or 0,
-            "signals_used": patchtst.signals_used or [],
-        },
-        "sac": {
-            "version": sac.version,
-            "data_window_start": sac.data_window_start,
-            "data_window_end": sac.data_window_end,
-            "metrics": sac.metrics,
-            "promoted": sac.promoted,
-            "symbols_used": sac.symbols_used or [],
-        },
+        "lstm": _lstm_payload(lstm),
+        "patchtst": _patchtst_payload(patchtst),
     }
     with get_training_client() as client:
-        response = client.post("/llm/training-summary", json=payload)
+        response = client.post("/llm/forecasters-training-summary", json=payload)
         response.raise_for_status()
     result = TrainingSummaryResponse(**response.json())
     logger.info(
-        f"Training summary generated via {result.provider} ({result.model_used}), "
-        f"tokens_used={result.tokens_used}"
+        f"Forecasters training summary generated via {result.provider} "
+        f"({result.model_used}), tokens_used={result.tokens_used}"
     )
     return result
 
 
 @activity.defn
-def send_training_summary_email(
+def send_forecasters_training_email(
     lstm: TrainingResponse,
     patchtst: TrainingResponse,
-    sac: TrainingResponse,
     summary: TrainingSummaryResponse,
 ) -> TrainingSummaryEmailResponse:
-    """Send training summary via email."""
-    logger.info("Sending training summary email...")
+    """Send the US Forecasters (LSTM + PatchTST) training summary email."""
+    logger.info("Sending forecasters training summary email...")
     payload = {
-        "lstm": {
-            "version": lstm.version,
-            "data_window_start": lstm.data_window_start,
-            "data_window_end": lstm.data_window_end,
-            "metrics": lstm.metrics,
-            "promoted": lstm.promoted,
-        },
-        "patchtst": {
-            "version": patchtst.version,
-            "data_window_start": patchtst.data_window_start,
-            "data_window_end": patchtst.data_window_end,
-            "metrics": patchtst.metrics,
-            "promoted": patchtst.promoted,
-            "num_input_channels": patchtst.num_input_channels or 0,
-            "signals_used": patchtst.signals_used or [],
-        },
-        "sac": {
-            "version": sac.version,
-            "data_window_start": sac.data_window_start,
-            "data_window_end": sac.data_window_end,
-            "metrics": sac.metrics,
-            "promoted": sac.promoted,
-            "symbols_used": sac.symbols_used or [],
-        },
+        "lstm": _lstm_payload(lstm),
+        "patchtst": _patchtst_payload(patchtst),
         "summary": summary.summary,
     }
     with get_training_client() as client:
-        response = client.post("/email/training-summary", json=payload)
+        response = client.post("/email/forecasters-training-summary", json=payload)
         response.raise_for_status()
     result = TrainingSummaryEmailResponse(**response.json())
     logger.info(
-        f"Training summary email sent: is_success={result.is_success}, "
+        f"Forecasters training summary email sent: is_success={result.is_success}, "
+        f"subject={result.subject}"
+    )
+    return result
+
+
+@activity.defn
+def generate_sac_training_summary(
+    sac: TrainingResponse,
+) -> TrainingSummaryResponse:
+    """Generate LLM summary for the US SAC training run.
+
+    Called by ``USSACTrainingWorkflow`` after SAC finishes training.
+    SAC consumes whatever PatchTST ``current`` pointer is live at
+    trigger time, so forecaster metrics are summarised separately by
+    ``USForecastersTrainingWorkflow``.
+    """
+    logger.info("Generating SAC training summary via LLM...")
+    payload = {"sac": _sac_payload(sac)}
+    with get_training_client() as client:
+        response = client.post("/llm/sac-training-summary", json=payload)
+        response.raise_for_status()
+    result = TrainingSummaryResponse(**response.json())
+    logger.info(
+        f"SAC training summary generated via {result.provider} "
+        f"({result.model_used}), tokens_used={result.tokens_used}"
+    )
+    return result
+
+
+@activity.defn
+def send_sac_training_email(
+    sac: TrainingResponse,
+    summary: TrainingSummaryResponse,
+) -> TrainingSummaryEmailResponse:
+    """Send the US SAC training summary email."""
+    logger.info("Sending SAC training summary email...")
+    payload = {
+        "sac": _sac_payload(sac),
+        "summary": summary.summary,
+    }
+    with get_training_client() as client:
+        response = client.post("/email/sac-training-summary", json=payload)
+        response.raise_for_status()
+    result = TrainingSummaryEmailResponse(**response.json())
+    logger.info(
+        f"SAC training summary email sent: is_success={result.is_success}, "
         f"subject={result.subject}"
     )
     return result
@@ -281,17 +337,7 @@ def generate_india_training_summary(
 ) -> TrainingSummaryResponse:
     """Generate LLM summary of India PatchTST training results."""
     logger.info("Generating India training summary via LLM...")
-    payload = {
-        "patchtst": {
-            "version": patchtst.version,
-            "data_window_start": patchtst.data_window_start,
-            "data_window_end": patchtst.data_window_end,
-            "metrics": patchtst.metrics,
-            "promoted": patchtst.promoted,
-            "num_input_channels": patchtst.num_input_channels or 0,
-            "signals_used": patchtst.signals_used or [],
-        },
-    }
+    payload = {"patchtst": _patchtst_payload(patchtst)}
     with get_training_client() as client:
         response = client.post("/llm/india-training-summary", json=payload)
         response.raise_for_status()
@@ -310,15 +356,7 @@ def send_india_training_email(
     """Send India training summary via email."""
     logger.info("Sending India training summary email...")
     payload = {
-        "patchtst": {
-            "version": patchtst.version,
-            "data_window_start": patchtst.data_window_start,
-            "data_window_end": patchtst.data_window_end,
-            "metrics": patchtst.metrics,
-            "promoted": patchtst.promoted,
-            "num_input_channels": patchtst.num_input_channels or 0,
-            "signals_used": patchtst.signals_used or [],
-        },
+        "patchtst": _patchtst_payload(patchtst),
         "summary": summary.summary,
     }
     with get_training_client() as client:

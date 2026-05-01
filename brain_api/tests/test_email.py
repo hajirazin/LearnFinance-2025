@@ -17,8 +17,8 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def mock_training_summary_email_request():
-    """Valid request payload for training summary email endpoint."""
+def mock_forecasters_email_request():
+    """Valid request payload for /email/forecasters-training-summary."""
     return {
         "lstm": {
             "version": "v2026-01-15-abc123",
@@ -36,6 +36,19 @@ def mock_training_summary_email_request():
             "num_input_channels": 5,
             "signals_used": ["ohlcv"],
         },
+        "summary": {
+            "para_1_overall": "Forecasters trained successfully with good metrics.",
+            "para_2_lstm": "LSTM model shows strong price prediction capability.",
+            "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
+            "para_4_recommendations": "Slate looks stable for the SAC retrain tomorrow.",
+        },
+    }
+
+
+@pytest.fixture
+def mock_sac_email_request():
+    """Valid request payload for /email/sac-training-summary."""
+    return {
         "sac": {
             "version": "v2026-01-15-jkl012",
             "data_window_start": "2020-01-01",
@@ -45,11 +58,9 @@ def mock_training_summary_email_request():
             "symbols_used": ["AAPL", "MSFT", "GOOGL"],
         },
         "summary": {
-            "para_1_overall": "All models trained successfully with good metrics.",
-            "para_2_lstm": "LSTM model shows strong price prediction capability.",
-            "para_3_patchtst": "PatchTST leverages OHLCV approach effectively.",
-            "para_4_sac": "SAC shows promising results but was not promoted.",
-            "para_5_recommendations": "Consider investigating SAC promotion criteria.",
+            "para_1_overall": "SAC training completed but did not clear the gate.",
+            "para_2_metrics": "Sharpe 1.8 and 12% max drawdown are mediocre.",
+            "para_3_recommendations": "Investigate SAC promotion criteria.",
         },
     }
 
@@ -120,84 +131,75 @@ class TestGmailConfig:
 # =============================================================================
 
 
-class TestTrainingSummaryEmailEndpoint:
-    """Tests for POST /email/training-summary endpoint."""
+class TestForecastersTrainingSummaryEmailEndpoint:
+    """Tests for POST /email/forecasters-training-summary endpoint."""
 
     @patch("brain_api.routes.email.training_summary.send_html_email")
     def test_successful_email_send(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_forecasters_email_request,
     ):
-        """Successful training summary email send."""
+        """Successful forecasters training summary email send."""
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["is_success"] is True
-        assert "Training Summary:" in data["subject"]
+        assert "US Forecasters Training:" in data["subject"]
         assert "2020-01-01" in data["subject"]
         assert "2025-12-31" in data["subject"]
-        assert len(data["body"]) > 0  # HTML body is returned
+        assert len(data["body"]) > 0
         mock_send_email.assert_called_once()
 
     @patch("brain_api.routes.email.training_summary.send_html_email")
     def test_email_body_contains_expected_sections(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_forecasters_email_request,
     ):
-        """Email body contains all expected sections."""
+        """Email body contains forecasters-only sections (no SAC)."""
         mock_send_email.return_value = True
 
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
         )
 
         assert response.status_code == 200
         body = response.json()["body"]
 
-        # Check header
-        assert "Weekly Training Summary" in body
+        assert "US Forecasters Training Summary" in body
         assert "2020-01-01" in body
-
-        # Check AI Analysis section
         assert "AI Analysis" in body
-        assert "All models trained successfully" in body
-
-        # Check SAC Allocator section
-        assert "SAC Allocator" in body
-        assert "SAC" in body
-        assert "v2026-01-15-jkl012" in body  # SAC version
-
-        # Check Forecasters section
+        assert "Forecasters trained successfully" in body
         assert "Forecasters Comparison" in body
         assert "LSTM" in body
         assert "PatchTST" in body
-
-        # Check footer
+        assert "v2026-01-15-abc123" in body  # LSTM version
+        assert "v2026-01-15-def456" in body  # PatchTST version
+        # SAC must not appear in the forecasters email.
+        assert "SAC Allocator" not in body
+        assert "v2026-01-15-jkl012" not in body
         assert "LearnFinance-2025" in body
 
     @patch("brain_api.routes.email.training_summary.send_html_email")
     def test_gmail_config_error_returns_500(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_forecasters_email_request,
     ):
         """Gmail configuration error returns 500."""
         mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
-
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
         )
-
         assert response.status_code == 500
         assert "Gmail configuration error" in response.json()["detail"]
 
@@ -205,31 +207,29 @@ class TestTrainingSummaryEmailEndpoint:
     def test_smtp_error_returns_503(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_forecasters_email_request,
     ):
         """SMTP send error returns 503."""
         mock_send_email.side_effect = Exception("SMTP connection failed")
-
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
         )
-
         assert response.status_code == 503
         assert "Failed to send email" in response.json()["detail"]
 
     def test_invalid_request_returns_422(self):
         """Invalid request body returns 422."""
         response = client.post(
-            "/email/training-summary",
-            json={"lstm": "invalid"},  # Should be an object
+            "/email/forecasters-training-summary",
+            json={"lstm": "invalid"},
         )
         assert response.status_code == 422
 
-    def test_missing_required_field_returns_422(self):
-        """Missing required field returns 422."""
+    def test_missing_patchtst_returns_422(self):
+        """Missing patchtst field returns 422."""
         response = client.post(
-            "/email/training-summary",
+            "/email/forecasters-training-summary",
             json={
                 "lstm": {
                     "version": "v1",
@@ -238,7 +238,7 @@ class TestTrainingSummaryEmailEndpoint:
                     "metrics": {},
                     "promoted": True,
                 },
-                # Missing patchtst, sac, summary
+                "summary": {},
             },
         )
         assert response.status_code == 422
@@ -247,40 +247,124 @@ class TestTrainingSummaryEmailEndpoint:
     def test_empty_summary_still_works(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_forecasters_email_request,
     ):
         """Email with empty summary paragraphs still sends."""
         mock_send_email.return_value = True
-        mock_training_summary_email_request["summary"] = {}
-
+        mock_forecasters_email_request["summary"] = {}
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
         )
-
         assert response.status_code == 200
         assert response.json()["is_success"] is True
 
+
+class TestSACTrainingSummaryEmailEndpoint:
+    """Tests for POST /email/sac-training-summary endpoint."""
+
     @patch("brain_api.routes.email.training_summary.send_html_email")
-    def test_model_not_promoted_shown_correctly(
+    def test_successful_email_send(
         self,
         mock_send_email,
-        mock_training_summary_email_request,
+        mock_sac_email_request,
     ):
-        """Models not promoted are shown correctly in email."""
+        """Successful SAC training summary email send."""
         mock_send_email.return_value = True
-        # SAC is already not promoted in fixture
 
         response = client.post(
-            "/email/training-summary",
-            json=mock_training_summary_email_request,
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["is_success"] is True
+        assert "US SAC Training:" in data["subject"]
+        assert "2020-01-01" in data["subject"]
+        assert "2025-12-31" in data["subject"]
+        assert len(data["body"]) > 0
+        mock_send_email.assert_called_once()
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_email_body_contains_expected_sections(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """Email body contains SAC-only sections (no LSTM/PatchTST)."""
+        mock_send_email.return_value = True
+
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
         )
 
         assert response.status_code == 200
         body = response.json()["body"]
-        # The body should contain "No" for SAC promoted status
-        # This is rendered as <span style="color: #c62828;">No</span>
+
+        assert "US SAC Training Summary" in body
+        assert "AI Analysis" in body
+        assert "SAC Allocator" in body
+        assert "v2026-01-15-jkl012" in body  # SAC version
+        # SAC was not promoted -- "No" should appear.
         assert "No" in body
+        # Forecasters should not show up in the SAC email.
+        assert "Forecasters Comparison" not in body
+        assert "v2026-01-15-abc123" not in body  # LSTM version
+        assert "v2026-01-15-def456" not in body  # PatchTST version
+        assert "LearnFinance-2025" in body
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_gmail_config_error_returns_500(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """Gmail configuration error returns 500."""
+        mock_send_email.side_effect = GmailConfigError("GMAIL_USER is required")
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+        assert response.status_code == 500
+        assert "Gmail configuration error" in response.json()["detail"]
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_smtp_error_returns_503(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """SMTP send error returns 503."""
+        mock_send_email.side_effect = Exception("SMTP connection failed")
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+        assert response.status_code == 503
+        assert "Failed to send email" in response.json()["detail"]
+
+    def test_missing_sac_returns_422(self):
+        """Empty body fails validation (sac is required)."""
+        response = client.post("/email/sac-training-summary", json={})
+        assert response.status_code == 422
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_empty_summary_still_works(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """Email with empty summary paragraphs still sends."""
+        mock_send_email.return_value = True
+        mock_sac_email_request["summary"] = {}
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+        assert response.status_code == 200
+        assert response.json()["is_success"] is True
 
 
 # =============================================================================

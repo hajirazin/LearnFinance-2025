@@ -4,9 +4,12 @@ from pydantic import BaseModel
 
 
 class TrainingSummaryResponse(BaseModel):
-    """Response model for POST /llm/training-summary.
+    """Response model for the split training-summary LLM endpoints.
 
-    Works with the brain_api /llm/training-summary endpoint.
+    Works with both ``/llm/forecasters-training-summary`` and
+    ``/llm/sac-training-summary`` (and is shape-compatible with
+    ``/llm/india-training-summary``). Returned by the matching
+    activities in ``temporal/activities/training.py``.
     """
 
     summary: dict[str, str]  # Paragraph fields from LLM

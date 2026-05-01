@@ -1,14 +1,30 @@
-"""Training summary endpoint using LLM."""
+"""Training summary endpoints using LLM.
+
+Three endpoints share the same prompt-render -> LLM-call -> JSON-parse
+pipeline (see :func:`_run_training_summary`). Each endpoint differs only
+in the Jinja template it loads, the request DTO it accepts, and the
+fallback paragraph key used when the LLM returns un-parseable text:
+
+* ``/llm/forecasters-training-summary`` -- US LSTM + PatchTST (called by
+  the US Forecasters Temporal workflow).
+* ``/llm/sac-training-summary`` -- US SAC (called by the US SAC Temporal
+  workflow, which runs 12+ hours after forecasters and consumes whatever
+  PatchTST ``current`` pointer is live at trigger time).
+* ``/llm/india-training-summary`` -- India PatchTST (single India
+  forecaster).
+"""
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from .models import (
+    ForecastersTrainingSummaryRequest,
     IndiaTrainingSummaryRequest,
-    TrainingSummaryRequest,
+    SACTrainingSummaryRequest,
     TrainingSummaryResponse,
 )
 from .providers import LLMProvider, get_llm_provider, parse_json_response
@@ -29,49 +45,56 @@ def get_jinja_env() -> Environment:
     )
 
 
-@router.post("/training-summary", response_model=TrainingSummaryResponse)
-def generate_training_summary(
-    request: TrainingSummaryRequest,
-    provider: LLMProvider = Depends(get_llm_provider),
+def _run_training_summary(
+    *,
+    template_name: str,
+    template_context: dict[str, Any],
+    fallback_key: str,
+    provider: LLMProvider,
+    log_label: str,
 ) -> TrainingSummaryResponse:
-    """Generate an LLM summary of training results.
+    """Render a Jinja prompt, call the LLM, and parse the JSON response.
 
-    Takes all 3 training results (LSTM, PatchTST, SAC) and generates
-    a summary using the configured LLM provider (OpenAI or OLLAMA).
+    Shared by every training-summary endpoint in this module so that
+    template/LLM/JSON-parse error handling stays identical across
+    forecasters, SAC, and India variants. Each caller only owns the
+    template name, request payload, and fallback paragraph key.
 
     Args:
-        request: Training results from all 3 models.
+        template_name: Jinja template filename in ``brain_api/templates``.
+        template_context: Variables to render into the prompt.
+        fallback_key: Paragraph key to populate when the LLM returns
+            text the JSON parser cannot consume (keeps the response
+            schema stable for downstream email rendering).
         provider: LLM provider (injected via dependency).
+        log_label: Short tag used in log lines (``forecasters``, ``sac``,
+            ``india``).
 
     Returns:
-        Summary with paragraph fields and metadata.
+        ``TrainingSummaryResponse`` with the parsed (or fallback)
+        summary plus provider metadata.
 
     Raises:
-        HTTPException: If template loading or LLM call fails.
+        HTTPException: 500 if the template is missing, 503 if the LLM
+            call fails.
     """
-    logger.info(f"Generating training summary using provider={provider.name}")
+    logger.info(
+        f"Generating {log_label} training summary using provider={provider.name}"
+    )
 
-    # Load and render the Jinja2 template
     try:
         env = get_jinja_env()
-        template = env.get_template("training_summary_prompt.j2")
+        template = env.get_template(template_name)
     except TemplateNotFound as e:
         logger.error(f"Template not found: {e}")
         raise HTTPException(
             status_code=500,
-            detail="Template not found: training_summary_prompt.j2",
+            detail=f"Template not found: {template_name}",
         ) from e
 
-    # Render prompt with training data
-    prompt = template.render(
-        lstm=request.lstm.model_dump(),
-        patchtst=request.patchtst.model_dump(),
-        sac=request.sac.model_dump(),
-    )
-
+    prompt = template.render(**template_context)
     logger.debug(f"Generated prompt length: {len(prompt)} chars")
 
-    # Call LLM provider
     try:
         llm_response = provider.generate(prompt)
     except Exception as e:
@@ -81,14 +104,12 @@ def generate_training_summary(
             detail=f"LLM service unavailable: {e}",
         ) from e
 
-    # Parse JSON response
     try:
         summary = parse_json_response(llm_response.content)
     except ValueError as e:
         logger.warning(f"Failed to parse LLM response as JSON: {e}")
-        # Return a fallback summary
         summary = {
-            "para_1_overall": "Unable to generate AI summary. Please check the logs for details.",
+            fallback_key: "Unable to generate AI summary. Please check the logs for details.",
             "raw_response": llm_response.content[:500],
         }
 
@@ -97,6 +118,52 @@ def generate_training_summary(
         provider=provider.name,
         model_used=llm_response.model,
         tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/forecasters-training-summary", response_model=TrainingSummaryResponse)
+def generate_forecasters_training_summary(
+    request: ForecastersTrainingSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> TrainingSummaryResponse:
+    """Generate an LLM summary of US forecaster (LSTM + PatchTST) training.
+
+    Called by the US Forecasters Temporal workflow after both forecasters
+    have finished training serially. SAC is summarised independently by
+    :func:`generate_sac_training_summary` so the two workflows email
+    independent reports on different days.
+    """
+    return _run_training_summary(
+        template_name="forecasters_training_summary_prompt.j2",
+        template_context={
+            "lstm": request.lstm.model_dump(),
+            "patchtst": request.patchtst.model_dump(),
+        },
+        fallback_key="para_1_overall",
+        provider=provider,
+        log_label="forecasters",
+    )
+
+
+@router.post("/sac-training-summary", response_model=TrainingSummaryResponse)
+def generate_sac_training_summary(
+    request: SACTrainingSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> TrainingSummaryResponse:
+    """Generate an LLM summary of US SAC allocator training.
+
+    Called by the US SAC Temporal workflow after SAC has finished
+    training. The SAC workflow runs 12+ hours after the forecasters
+    workflow (Sat -> Sun) and reads whatever PatchTST ``current``
+    pointer is live at trigger time, so forecaster metrics are not part
+    of this payload.
+    """
+    return _run_training_summary(
+        template_name="sac_training_summary_prompt.j2",
+        template_context={"sac": request.sac.model_dump()},
+        fallback_key="para_1_overall",
+        provider=provider,
+        log_label="sac",
     )
 
 
@@ -108,49 +175,11 @@ def generate_india_training_summary(
     """Generate an LLM summary of India PatchTST training results.
 
     India trains PatchTST only (no LSTM, SAC).
-
-    Args:
-        request: India PatchTST training result.
-        provider: LLM provider (injected via dependency).
-
-    Returns:
-        Summary with paragraph fields and metadata.
     """
-    logger.info(f"Generating India training summary using provider={provider.name}")
-
-    try:
-        env = get_jinja_env()
-        template = env.get_template("india_training_summary_prompt.j2")
-    except TemplateNotFound as e:
-        logger.error(f"Template not found: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Template not found: india_training_summary_prompt.j2",
-        ) from e
-
-    prompt = template.render(patchtst=request.patchtst.model_dump())
-
-    try:
-        llm_response = provider.generate(prompt)
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"LLM service unavailable: {e}",
-        ) from e
-
-    try:
-        summary = parse_json_response(llm_response.content)
-    except ValueError as e:
-        logger.warning(f"Failed to parse LLM response as JSON: {e}")
-        summary = {
-            "para_1_overall": "Unable to generate AI summary. Please check the logs for details.",
-            "raw_response": llm_response.content[:500],
-        }
-
-    return TrainingSummaryResponse(
-        summary=summary,
-        provider=provider.name,
-        model_used=llm_response.model,
-        tokens_used=llm_response.tokens_used,
+    return _run_training_summary(
+        template_name="india_training_summary_prompt.j2",
+        template_context={"patchtst": request.patchtst.model_dump()},
+        fallback_key="para_1_overall",
+        provider=provider,
+        log_label="india",
     )

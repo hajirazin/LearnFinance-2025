@@ -29,7 +29,7 @@ Each Monday the system runs five independent Temporal workflows that each pick 1
 | `india-weekly-allocate` (`IndiaWeeklyAllocationWorkflow`) | Mon 03:30 UTC / 09:00 IST | India | PatchTST alpha screen -> rank-band sticky top-15 -> HRP (paper-only, no broker) | `/universe/nifty_shariah_500`, `/inference/patchtst/score-batch?market=india`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/india-alpha-hrp-summary`, `/email/india-alpha-hrp-report` |
 | `india-double-hrp` (`IndiaDoubleHRPWorkflow`) | Mon 04:00 UTC / 09:30 IST | India | Stage-1 HRP on `nifty_shariah_500` -> sticky top-15 -> Stage-2 HRP | `/universe/nifty_shariah_500`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/india-double-hrp-summary`, `/email/india-double-hrp-report` |
 
-Training schedules (US weekly training, India PatchTST weekly training) are defined in `schedules.py` but are intentionally not registered on the default (Raspberry Pi) host — they require a beefier machine.
+Training schedules (US Forecasters training Saturday 11:00 UTC, US SAC training Sunday 14:00 UTC — kept 12+ hours apart so the host never has to run two trainers concurrently — and India PatchTST weekly training Sunday 04:30 UTC) are defined in `schedules.py` but are intentionally not registered on the default (Raspberry Pi) host — they require a beefier machine.
 
 ## Model hierarchy
 
@@ -466,7 +466,8 @@ We store three kinds of data:
 | `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP (PatchTST top-15 alpha screen + HRP) |
 | `POST /llm/india-double-hrp-summary` | Generate AI summary of India two-stage HRP allocation |
 | `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
-| `POST /llm/training-summary` | Generate AI summary of training results (OpenAI/OLLAMA) |
+| `POST /llm/forecasters-training-summary` | Generate AI summary of US LSTM + PatchTST training (called by `USForecastersTrainingWorkflow`) |
+| `POST /llm/sac-training-summary` | Generate AI summary of US SAC training (called by `USSACTrainingWorkflow`) |
 
 ### Email endpoints
 
@@ -478,7 +479,8 @@ We store three kinds of data:
 | `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (paper-only, no broker) via Gmail SMTP |
 | `POST /email/india-double-hrp-report` | Send India Double HRP report (Stage 1 + Stage 2 + AI summary) |
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
-| `POST /email/training-summary` | Send US training summary email |
+| `POST /email/forecasters-training-summary` | Send US Forecasters (LSTM + PatchTST) training summary email via Gmail SMTP |
+| `POST /email/sac-training-summary` | Send US SAC training summary email via Gmail SMTP |
 
 ### Alpaca endpoints
 

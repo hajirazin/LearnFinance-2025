@@ -20,12 +20,13 @@ __all__ = [
     "AlphaHRPEmailRequest",
     "AlphaScoreItem",
     "DoubleHRPEmailRequest",
+    "ForecastersTrainingSummaryEmailRequest",
     "IndiaAlphaHRPEmailRequest",
     "IndiaTrainingSummaryEmailRequest",
     "IndiaTrainingSummaryEmailResponse",
     "OrderResultsData",
+    "SACTrainingSummaryEmailRequest",
     "SACWeeklyReportEmailRequest",
-    "TrainingSummaryEmailRequest",
     "TrainingSummaryEmailResponse",
     "USAlphaHRPEmailRequest",
     "USDoubleHRPEmailRequest",
@@ -37,21 +38,43 @@ __all__ = [
 # =============================================================================
 
 
-class TrainingSummaryEmailRequest(BaseModel):
-    """Request model for POST /email/training-summary.
+class ForecastersTrainingSummaryEmailRequest(BaseModel):
+    """Request model for POST /email/forecasters-training-summary.
 
-    Contains all training results and the LLM-generated summary.
-    Email recipient configuration comes from environment variables.
+    Carries the US LSTM + PatchTST training results plus the
+    forecasters-only LLM summary. Sent at the end of the US Forecasters
+    Temporal workflow (Saturday). Email recipient configuration comes
+    from environment variables (``GMAIL_USER``, ``GMAIL_APP_PASSWORD``,
+    ``TRAINING_EMAIL_TO``, ``TRAINING_EMAIL_CC``).
     """
 
     lstm: LSTMTrainResponse
     patchtst: PatchTSTTrainResponse
+    summary: dict[str, str]  # LLM-generated paragraphs
+
+
+class SACTrainingSummaryEmailRequest(BaseModel):
+    """Request model for POST /email/sac-training-summary.
+
+    Carries the US SAC training result plus the SAC-only LLM summary.
+    Sent at the end of the US SAC Temporal workflow (Sunday, 12+ hours
+    after forecasters). Email recipient configuration comes from the
+    same environment variables as the forecasters report.
+    """
+
     sac: SACTrainResponse
     summary: dict[str, str]  # LLM-generated paragraphs
 
 
 class TrainingSummaryEmailResponse(BaseModel):
-    """Response model for POST /email/training-summary."""
+    """Response model for the split training-summary email endpoints.
+
+    Used by both ``/email/forecasters-training-summary`` and
+    ``/email/sac-training-summary``. Same shape as
+    :class:`IndiaTrainingSummaryEmailResponse`, kept separate only for
+    OpenAPI documentation clarity (each endpoint advertises its own
+    response model in the schema).
+    """
 
     is_success: bool
     subject: str
