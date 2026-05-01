@@ -9,8 +9,8 @@
 
   <!-- Header -->
   <div style="background: linear-gradient(135deg, #c2185b 0%, #7b1fa2 100%); color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
-    <h1 style="margin: 0 0 8px 0; font-size: 24px;">US SAC Training Summary</h1>
-    <p style="margin: 0; opacity: 0.9;">Soft Actor-Critic Allocator &middot; Data Window: {{ sac.data_window_start }} to {{ sac.data_window_end }}</p>
+    <h1 style="margin: 0 0 8px 0; font-size: 24px;">US SAC Training Summary &middot; <span style="font-family: monospace;">{{ universe }}</span></h1>
+    <p style="margin: 0; opacity: 0.9;">Soft Actor-Critic Allocator &middot; Bucket: <span style="font-family: monospace;">sac_{{ universe }}</span> &middot; Data Window: {{ sac.data_window_start }} to {{ sac.data_window_end }}</p>
   </div>
 
   <!-- AI Analysis Section -->

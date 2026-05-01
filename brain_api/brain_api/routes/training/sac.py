@@ -27,8 +27,10 @@ from brain_api.core.portfolio_rl.walkforward import (
     build_dual_forecast_features,
 )
 from brain_api.core.sac import (
+    DEFAULT_SAC_CONFIG,
     SACConfig,
     finetune_sac,
+    make_sac_config_for_n_stocks,
     train_sac,
 )
 from brain_api.core.sac import (
@@ -38,10 +40,13 @@ from brain_api.core.sac import (
     compute_version as sac_compute_version,
 )
 from brain_api.core.training_utils import TrainingCancelledError
-from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
+from brain_api.storage.sac import (
+    SACHalalFilteredModelStorage,
+    SACHalalModelStorage,
+    create_sac_metadata,
+)
 
 from .dependencies import (
-    get_sac_config,
     get_sac_storage,
 )
 from .helpers import get_prior_version_info
@@ -89,9 +94,14 @@ class SACTrainRequest(BaseModel):
 def train_sac_endpoint(
     background_tasks: BackgroundTasks,
     request: SACTrainRequest = SACTrainRequest(),
-    config: SACConfig = Depends(get_sac_config),
 ) -> SACTrainResponse | JSONResponse:
     """Train SAC portfolio allocator using dual forecasts.
+
+    Resolves the universe-specific config + storage via the bucket
+    registry, so two parallel A/B workflows
+    (``halal_filtered`` and ``halal``) can hit this endpoint with
+    different ``universe`` values and write to independent
+    ``current`` pointers without sharing process-wide state.
 
     Returns 200 with cached result if version already exists (idempotent).
     Returns 202 with job_id if training is started in the background.
@@ -118,27 +128,21 @@ def train_sac_endpoint(
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
-    # SAC actor/critic dimensions are baked at training time from
-    # ``config.n_stocks``; mismatched symbol counts would build the
-    # wrong-sized network and silently produce garbage allocations.
-    # Per AGENTS.md rule #1, raise instead of trimming/padding.
-    if len(symbols) != config.n_stocks:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"SAC bucket {bucket.bucket_name!r} requires "
-                f"len(symbols) == n_stocks={config.n_stocks}, but "
-                f"resolver for universe {request.universe!r} returned "
-                f"{len(symbols)} symbols."
-            ),
-        )
+    # Build a per-bucket SAC config: ``n_stocks`` and
+    # ``target_entropy`` are rewritten to match the resolved slate.
+    # For halal_filtered (validator pins to 15) this returns a config
+    # byte-equivalent to ``DEFAULT_SAC_CONFIG`` so existing version
+    # hashes / current artifacts are unaffected. For halal (variable
+    # size) this resizes the SAC actor/critic dim before training.
+    config = make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, len(symbols))
 
-    storage: SACHalalFilteredModelStorage = bucket.local_storage_class()
+    storage = bucket.local_storage_class()
 
     start_date, end_date = resolve_training_window()
     logger.info(
         f"[SAC] Starting training for {len(symbols)} symbols "
-        f"(bucket={bucket.bucket_name})"
+        f"(bucket={bucket.bucket_name}, n_stocks={config.n_stocks}, "
+        f"target_entropy={config.target_entropy})"
     )
     version = sac_compute_version(start_date, end_date, symbols, config)
 
@@ -155,7 +159,7 @@ def train_sac_endpoint(
                 symbols_used=existing_metadata["symbols"],
             )
 
-    job, is_new = get_or_create_job("sac", version)
+    job, is_new = get_or_create_job(f"sac_{request.universe}", version)
     if not is_new:
         logger.info(f"[SAC] Job {job.job_id} already running, returning 202")
         return JSONResponse(
@@ -173,6 +177,7 @@ def train_sac_endpoint(
         symbols=symbols,
         config=config,
         storage=storage,
+        bucket_name=bucket.bucket_name,
         hf_repo_getter=bucket.hf_repo_getter,
         hf_storage_class=bucket.hf_storage_class,
     )
@@ -193,11 +198,18 @@ def _run_sac_full_training(
     job_id: str,
     symbols: list[str],
     config: SACConfig,
-    storage: SACHalalFilteredModelStorage,
+    storage: SACHalalFilteredModelStorage | SACHalalModelStorage,
+    bucket_name: str,
     hf_repo_getter: Callable[[], str | None],
     hf_storage_class: type,
 ) -> None:
-    """Background task that runs the full SAC training pipeline."""
+    """Background task that runs the full SAC training pipeline.
+
+    ``bucket_name`` is threaded through to ``create_sac_metadata`` so
+    each parallel A/B bucket's metadata identifies its own bucket on
+    disk and on HF (vital for telling the two ``current`` artifacts
+    apart when they share the SAC HuggingFace storage class).
+    """
     from brain_api.main import shutdown_event
 
     try:
@@ -339,6 +351,7 @@ def _run_sac_full_training(
             eval_sharpe=result.eval_sharpe,
             eval_cagr=result.eval_cagr,
             eval_max_drawdown=result.eval_max_drawdown,
+            bucket_name=bucket_name,
         )
 
         update_progress(job_id, {"phase": "writing_artifacts"})
@@ -644,6 +657,9 @@ def _run_sac_finetune(
             eval_sharpe=result.eval_sharpe,
             eval_cagr=result.eval_cagr,
             eval_max_drawdown=result.eval_max_drawdown,
+            # Finetune is halal_filtered-only by design (see AGENTS.md
+            # known limitation). The default bucket_name covers it.
+            bucket_name="sac_halal_filtered",
         )
 
         update_progress(job_id, {"phase": "writing_artifacts"})

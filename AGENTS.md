@@ -16,7 +16,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Temporal** is the outer orchestrator (replaced Prefect):
-  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Saturday 11 AM UTC for US forecasters training, Sunday 14:00 UTC for US SAC training, Sunday 4:30 AM UTC for India training)
+  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, Saturday 11 AM UTC for US forecasters training, Sunday 02:00 UTC for US SAC training on `halal_filtered`, Sunday 13:00 UTC for US SAC training on the legacy `halal` universe (parallel A/B), Sunday 4:30 AM UTC for India training)
   - calling brain_api endpoints via HTTP activities
   - handling parallel task execution (asyncio.gather) and skip logic
   - durable sleep/wait for sell-wait-buy pattern (single workflow, no 3-flow hack)
@@ -27,7 +27,8 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India training workflow (`IndiaWeeklyTrainingWorkflow`): NiftyShariah500 universe -> PatchTST India train -> halal_india rank-band sticky top 15 (`halal_india_filtered_alpha` partition in `screening_history`, monthly cadence) -> LLM summary -> email
   - US weekly allocation workflow (`USWeeklyAllocationWorkflow`): signals + forecasts -> allocators -> sell-wait-buy with durable polling -> email
   - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
-  - US SAC training workflow (`USSACTrainingWorkflow`): runs 12+ hours after the forecasters workflow on a separate cron slot; halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email
+  - US SAC training workflow (`USSACTrainingWorkflow`): runs 12+ hours after the forecasters workflow on a separate cron slot (Sunday 02:00 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email
+  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 11 hours later (Sunday 13:00 UTC, comfortably outside the 10h training timeout) on the legacy yfinance halal universe (variable size, ~12-15 stocks); refresh signals -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news, fundamentals)
@@ -137,8 +138,8 @@ temporal/                         # Temporal workflow orchestration
 | `POST /train/lstm` | Full LSTM retrain |
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
-| `POST /train/sac/full` | Full SAC retrain (dual forecasts) |
-| `POST /train/sac/finetune` | SAC fine-tune on experience buffer |
+| `POST /train/sac/full` | Full SAC retrain (dual forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
+| `POST /train/sac/finetune` | SAC fine-tune on experience buffer (halal_filtered-only -- see "Operational requirements") |
 
 **Alpaca** (called by Monday run via Temporal for order execution):
 
@@ -157,13 +158,13 @@ temporal/                         # Temporal workflow orchestration
 | `POST /llm/india-alpha-hrp-summary` | Generate AI summary of India Alpha-HRP allocation (PatchTST alpha screen + rank-band sticky + HRP) |
 | `POST /llm/india-training-summary` | Generate AI summary of India PatchTST training results |
 | `POST /llm/forecasters-training-summary` | Generate AI summary of US LSTM + PatchTST training (called by `USForecastersTrainingWorkflow`) |
-| `POST /llm/sac-training-summary` | Generate AI summary of US SAC training (called by `USSACTrainingWorkflow`) |
+| `POST /llm/sac-training-summary` | Generate AI summary of US SAC training (called by `USSACTrainingWorkflow` with `universe="halal_filtered"` (default) and by `USSACHalalTrainingWorkflow` with `universe="halal"`). The `universe` field branches the prompt so the summary identifies which bucket. |
 | `POST /email/sac-weekly-report` | Send the SAC-only weekly portfolio analysis email via Gmail SMTP (US) |
 | `POST /email/us-alpha-hrp-report` | Send US Alpha-HRP report email (alpha screen + sticky + HRP + Alpaca order execution) via Gmail SMTP |
 | `POST /email/india-alpha-hrp-report` | Send India Alpha-HRP report email (alpha screen + sticky + HRP, paper-only / no broker) via Gmail SMTP |
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
 | `POST /email/forecasters-training-summary` | Send US Forecasters (LSTM + PatchTST) training summary email via Gmail SMTP |
-| `POST /email/sac-training-summary` | Send US SAC training summary email via Gmail SMTP |
+| `POST /email/sac-training-summary` | Send US SAC training summary email via Gmail SMTP. Subject is `f"US SAC ({universe}) Training: ..."` so the two parallel A/B reports (`halal_filtered`, `halal`) are distinguishable in the inbox. |
 
 **Other**:
 
@@ -309,8 +310,13 @@ data/models/
 │   └── (same structure, US PatchTST trained on halal_new)
 ├── patchtst_nifty_shariah_500/
 │   └── (same structure, India PatchTST; independent current pointer)
-└── sac_halal_filtered/
-    └── (same structure, SAC trained on top-15 halal_filtered)
+├── sac_halal_filtered/
+│   └── (same structure, SAC trained on top-15 halal_filtered; n_stocks=15 fixed)
+└── sac_halal/
+    └── (same structure, SAC trained on the legacy yfinance halal universe;
+         variable n_stocks bound to the bucket's symbol count at training
+         time -- independent current pointer, parallel A/B sibling of
+         sac_halal_filtered)
 ```
 
 - Active version per bucket: `data/models/{bucket_name}/current`.
@@ -443,7 +449,8 @@ The system must:
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all US models | Manual |
 | Weekly (Saturday 11:00 UTC) | US Forecasters training (LSTM then PatchTST, strictly serial because the host can only fit one trainer at a time) | Cron (Temporal, host-only) |
-| Weekly (Sunday 14:00 UTC) | US SAC training (12+ h after the forecasters slot to guarantee no overlap; consumes whatever PatchTST `current` pointer is live at trigger time) | Cron (Temporal, host-only) |
+| Weekly (Sunday 02:00 UTC) | US SAC training on `halal_filtered` (consumes whatever PatchTST `current` pointer is live at trigger time; comfortably outside Saturday's forecaster slot) | Cron (Temporal, host-only) |
+| Weekly (Sunday 13:00 UTC) | US SAC training on the legacy `halal` universe (parallel A/B sibling of `sac_halal_filtered`; runs 11 h after that slot so the two trainers never overlap on the single-host laptop) | Cron (Temporal, host-only) |
 | Weekly (Sunday 4:30 AM UTC) | Full PatchTST retrain (India) | Cron (Temporal) |
 | Monday 6 PM IST | US inference only | Cron (Temporal) |
 
@@ -462,6 +469,21 @@ Any implementation must include:
   - run-level logs with `run_id` + `attempt`
   - stage duration metrics (even if just logged)
   - clear error propagation back to Temporal
+
+### Known limitations
+
+- `POST /train/sac/finetune` is intentionally `halal_filtered`-only at
+  the moment. The endpoint loads the prior model via the legacy
+  `get_sac_storage` dependency (which is hard-pinned to the
+  `sac_halal_filtered` bucket) and reuses the prior model's
+  `n_stocks` for fine-tune. Extending finetune to the parallel
+  `sac_halal` bucket requires plumbing `universe` through the
+  finetune request body and bucket lookup -- deliberately deferred
+  until the finetune flow is ready for an A/B comparison.
+- `/inference/sac` is also hard-pinned to `sac_halal_filtered` for
+  now. The new `sac_halal` bucket only ships *training* (so we can
+  evaluate it offline against the live bucket); routing inference to
+  the new bucket is a follow-up decision.
 
 ### Temporal workflow configuration
 
@@ -505,6 +527,8 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm India symbols retain `.NS` suffix throughout the pipeline (including `screening_history.stock` rows and `evicted_from_previous` keys for the `halal_india_filtered_alpha` partition)
 - [ ] Confirm sticky carry-set isolation: no two strategies share a `partition` string in `brain_api/core/strategy_partitions.py` (uniqueness across `stage1_weight_history` AND `screening_history`)
 - [ ] Confirm India universe builders (monthly `halal_india`) write to `screening_history` via `ScreeningHistoryRepository`, NOT `stage1_weight_history` -- the weekly India Alpha-HRP partition (`halal_india_alpha`) is the only India strategy that uses the two-stage table
+- [ ] Confirm SAC `n_stocks` is resolved from the bucket symbol count via `make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, len(symbols))` and NOT from a process-wide config (the parallel `sac_halal_filtered` / `sac_halal` workflows share a process and must each pick their own action dim)
+- [ ] Confirm `sac_halal_filtered` and `sac_halal` never share a `current` pointer, on-disk path, or HF repo (`HF_SAC_HALAL_FILTERED_MODEL_REPO` vs `HF_SAC_HALAL_MODEL_REPO`)
 
 ## AI assistant behavioral rules
 

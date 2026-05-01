@@ -35,6 +35,7 @@ from brain_api.core.config import (
     get_hf_patchtst_halal_new_model_repo,
     get_hf_patchtst_nifty_shariah_500_model_repo,
     get_hf_sac_halal_filtered_model_repo,
+    get_hf_sac_halal_model_repo,
 )
 from brain_api.storage.lstm.huggingface import HuggingFaceModelStorage
 from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
@@ -47,7 +48,11 @@ from brain_api.storage.patchtst.local import (
     PatchTSTNiftyShariah500ModelStorage,
 )
 from brain_api.storage.sac.huggingface import SACHuggingFaceModelStorage
-from brain_api.storage.sac.local import SACHalalFilteredModelStorage
+from brain_api.storage.sac.local import (
+    SACHalalFilteredModelStorage,
+    SACHalalModelStorage,
+)
+from brain_api.universe.halal import get_halal_symbols
 from brain_api.universe.halal_filtered import get_halal_filtered_symbols
 from brain_api.universe.halal_new import get_halal_new_symbols
 from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
@@ -86,6 +91,48 @@ def _validate_ns_suffix(symbols: list[str]) -> None:
         raise ValueError(
             f"India universe symbols must end with .NS suffix. "
             f"Got {len(bad)} without suffix (sample: {sample})."
+        )
+
+
+def _validate_halal_filtered_count(symbols: list[str]) -> None:
+    """Enforce the halal_filtered sticky-15 invariant.
+
+    The ``halal_filtered`` bucket is contractually fixed at 15 names
+    (rank-band sticky ``K_in=15`` on top of PatchTST scores). SAC's
+    actor/critic dim and ``compute_version`` hash are baked at training
+    time, so a slate of any other size would silently train a
+    different-shaped network and break the bucket's ``current``
+    artifact lineage. Per AGENTS.md rule #1 we raise rather than
+    truncate or pad.
+
+    The sibling ``halal`` bucket intentionally has NO count validator
+    -- its size is whatever yfinance's ETF top-holdings produced this
+    month (typical range 12-15) and the SAC config factory resizes the
+    network to fit.
+    """
+    expected = 15
+    if len(symbols) != expected:
+        raise ValueError(
+            f"halal_filtered bucket requires exactly {expected} symbols "
+            f"(rank-band sticky K_in=15 invariant), got {len(symbols)}."
+        )
+
+
+def _validate_halal_min_count(symbols: list[str]) -> None:
+    """Lower-bound check for the variable-size ``halal`` SAC bucket.
+
+    ``halal`` is sourced from yfinance ETF top-holdings (SPUS, HLAL,
+    SPTE) which can fluctuate month-to-month. A single-digit slate
+    cannot meaningfully diversify a portfolio agent (and the existing
+    ``_run_sac_full_training`` pipeline drops further if any symbol
+    lacks price data, see ``routes/training/sac.py:215``), so we fail
+    fast at the bucket layer instead of letting training crash later.
+    """
+    minimum = 5
+    if len(symbols) < minimum:
+        raise ValueError(
+            f"halal bucket requires at least {minimum} symbols for SAC "
+            f"training, got {len(symbols)}."
         )
 
 
@@ -209,9 +256,30 @@ _register(
         hf_storage_class=SACHuggingFaceModelStorage,
         hf_repo_getter=get_hf_sac_halal_filtered_model_repo,
         symbols_resolver=get_halal_filtered_symbols,
-        # SAC also enforces ``len(symbols) == config.n_stocks`` at the
-        # endpoint layer because that check needs the SAC config object,
-        # which lives outside the registry.
+        # The halal_filtered SAC slate is contractually fixed at 15
+        # (rank-band sticky K_in=15). The validator pins this at the
+        # bucket layer so the SAC training endpoint no longer needs a
+        # process-wide ``config.n_stocks`` equality check (which would
+        # otherwise prevent the parallel halal bucket from running).
+        symbol_validator=_validate_halal_filtered_count,
+    )
+)
+
+_register(
+    BucketConfig(
+        model_type=ModelType.SAC,
+        universe="halal",
+        bucket_name="sac_halal",
+        local_storage_class=SACHalalModelStorage,
+        hf_storage_class=SACHuggingFaceModelStorage,
+        hf_repo_getter=get_hf_sac_halal_model_repo,
+        symbols_resolver=get_halal_symbols,
+        # The legacy halal universe is variable-size (yfinance ETF top
+        # holdings; typical range 12-15 after dedup + US filter), so
+        # we only enforce a lower bound here. The endpoint resizes
+        # SAC's ``n_stocks`` and ``target_entropy`` via
+        # ``make_sac_config_for_n_stocks`` to match the resolved slate.
+        symbol_validator=_validate_halal_min_count,
     )
 )
 

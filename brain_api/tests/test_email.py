@@ -269,7 +269,12 @@ class TestSACTrainingSummaryEmailEndpoint:
         mock_send_email,
         mock_sac_email_request,
     ):
-        """Successful SAC training summary email send."""
+        """Successful SAC training summary email send.
+
+        Default ``universe`` is ``halal_filtered`` (backward-compat for
+        the legacy single-bucket workflow), which is rendered into the
+        subject as ``US SAC (halal_filtered) Training: ...``.
+        """
         mock_send_email.return_value = True
 
         response = client.post(
@@ -280,11 +285,38 @@ class TestSACTrainingSummaryEmailEndpoint:
         assert response.status_code == 200, response.text
         data = response.json()
         assert data["is_success"] is True
-        assert "US SAC Training:" in data["subject"]
+        assert "US SAC (halal_filtered) Training:" in data["subject"]
         assert "2020-01-01" in data["subject"]
         assert "2025-12-31" in data["subject"]
         assert len(data["body"]) > 0
         mock_send_email.assert_called_once()
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_universe_halal_in_subject_and_body(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """Posting ``universe="halal"`` produces a halal-tagged email.
+
+        Two parallel A/B SAC workflows share this endpoint; the
+        ``universe`` field is rendered into both the subject and the
+        body header so a human inbox reader can immediately tell the
+        two reports apart without opening them.
+        """
+        mock_send_email.return_value = True
+        mock_sac_email_request["universe"] = "halal"
+
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "US SAC (halal) Training:" in data["subject"]
+        assert "halal_filtered" not in data["subject"]
+        assert "sac_halal" in data["body"]
 
     @patch("brain_api.routes.email.training_summary.send_html_email")
     def test_email_body_contains_expected_sections(

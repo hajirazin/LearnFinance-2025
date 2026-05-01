@@ -298,7 +298,8 @@ BRAIN_API_URL=http://localhost:8000
 HF_LSTM_HALAL_NEW_MODEL_REPO=hajirazin/learnfinance-models-lstm
 HF_PATCHTST_HALAL_NEW_MODEL_REPO=hajirazin/learnfinance-models-patchtst
 HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO=hajirazin/learnfinance-models-patchtst-india
-HF_SAC_HALAL_FILTERED_MODEL_REPO=hajirazin/learnfinance-models-sac
+HF_SAC_HALAL_FILTERED_MODEL_REPO=hajirazin/learnfinance-models-sac-halal-filtered
+HF_SAC_HALAL_MODEL_REPO=hajirazin/learnfinance-models-sac-halal
 ```
 
 Forecaster / SAC universe selection is no longer env-driven. Training
@@ -307,6 +308,28 @@ symbols + storage via the per-bucket registry in
 [brain_api/brain_api/core/model_buckets.py](brain_api/brain_api/core/model_buckets.py).
 This is what lets two Temporal workflows hit `/train/sac/full` with
 different universes in parallel without colliding.
+
+### Parallel SAC A/B (sac_halal_filtered vs sac_halal)
+
+Two SAC training workflows run on a Sunday cron, on different universes,
+to compare which slate produces a better allocator:
+
+- `USSACTrainingWorkflow` (Sunday 02:00 UTC) trains SAC on
+  `halal_filtered` (sticky top-15 from PatchTST scores; `n_stocks=15`
+  fixed by the bucket validator). Bucket: `sac_halal_filtered`, HF repo
+  `HF_SAC_HALAL_FILTERED_MODEL_REPO`.
+- `USSACHalalTrainingWorkflow` (Sunday 13:00 UTC, 11 hours later so the
+  two trainers never overlap on the single-host laptop) trains SAC on
+  the legacy yfinance `halal` universe (ETF top-holdings of SPUS / HLAL
+  / SPTE; variable size, typical 12-15 names). Bucket: `sac_halal`, HF
+  repo `HF_SAC_HALAL_MODEL_REPO`. SAC's `n_stocks` and `target_entropy`
+  are resized at training time from the resolved slate via
+  `make_sac_config_for_n_stocks`.
+
+Each bucket has an independent `current` pointer; promoting one MUST
+NOT touch the other. `/inference/sac` and `/train/sac/finetune` are
+still hard-pinned to `sac_halal_filtered` (see AGENTS.md "Known
+limitations").
 
 ## Key design decisions
 

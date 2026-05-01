@@ -152,18 +152,23 @@ def generate_sac_training_summary(
 ) -> TrainingSummaryResponse:
     """Generate an LLM summary of US SAC allocator training.
 
-    Called by the US SAC Temporal workflow after SAC has finished
-    training. The SAC workflow runs 12+ hours after the forecasters
-    workflow (Sat -> Sun) and reads whatever PatchTST ``current``
-    pointer is live at trigger time, so forecaster metrics are not part
-    of this payload.
+    Called by either US SAC Temporal workflow (``halal_filtered`` at
+    Sunday 02:00 UTC, ``halal`` at Sunday 13:00 UTC) after SAC has
+    finished training. The SAC workflows read whatever PatchTST
+    ``current`` pointer is live at trigger time, so forecaster
+    metrics are not part of this payload. The ``request.universe``
+    field is rendered into the prompt so the resulting summary is
+    explicit about which bucket it describes.
     """
     return _run_training_summary(
         template_name="sac_training_summary_prompt.j2",
-        template_context={"sac": request.sac.model_dump()},
+        template_context={
+            "sac": request.sac.model_dump(),
+            "universe": request.universe,
+        },
         fallback_key="para_1_overall",
         provider=provider,
-        log_label="sac",
+        log_label=f"sac-{request.universe}",
     )
 
 

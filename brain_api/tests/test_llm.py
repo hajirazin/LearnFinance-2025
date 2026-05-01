@@ -518,6 +518,86 @@ class TestSACTrainingSummaryEndpoint:
         finally:
             app.dependency_overrides.clear()
 
+    def test_default_universe_is_halal_filtered(
+        self,
+        mock_sac_summary_request,
+        mock_sac_llm_json_response,
+    ):
+        """Backward compatibility: omitting ``universe`` defaults to halal_filtered.
+
+        The legacy SAC workflow predates the parallel A/B halal bucket
+        and posts payloads without the ``universe`` field. The endpoint
+        must accept those payloads and render the existing
+        halal_filtered prompt branch.
+        """
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_sac_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/sac-training-summary",
+                json=mock_sac_summary_request,
+            )
+            assert response.status_code == 200, response.text
+            assert len(captured_prompts) == 1
+            assert "halal_filtered" in captured_prompts[0]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_universe_halal_renders_in_prompt(
+        self,
+        mock_sac_summary_request,
+        mock_sac_llm_json_response,
+    ):
+        """``universe="halal"`` must reach the prompt template.
+
+        Two parallel A/B SAC workflows hit this endpoint with different
+        ``universe`` values; the rendered prompt must identify the
+        bucket so the LLM-generated summary is unambiguous.
+        """
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_sac_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            payload = {**mock_sac_summary_request, "universe": "halal"}
+            response = client.post("/llm/sac-training-summary", json=payload)
+            assert response.status_code == 200, response.text
+            assert len(captured_prompts) == 1
+            assert "Universe: ``halal``" in captured_prompts[0]
+            assert "yfinance ETF top-holdings" in captured_prompts[0]
+        finally:
+            app.dependency_overrides.clear()
+
 
 # =============================================================================
 # Weekly Summary Endpoint Tests

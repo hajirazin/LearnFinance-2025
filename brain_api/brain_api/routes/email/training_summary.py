@@ -137,19 +137,26 @@ def send_forecasters_training_summary_email(
 def send_sac_training_summary_email(
     request: SACTrainingSummaryEmailRequest,
 ) -> TrainingSummaryEmailResponse:
-    """Send the US SAC training summary email."""
+    """Send the US SAC training summary email.
+
+    Two parallel A/B SAC workflows share this endpoint
+    (``halal_filtered`` and ``halal``). The ``universe`` field is
+    rendered into the subject line so a human reading the inbox can
+    immediately distinguish the two reports without opening them.
+    """
     subject = (
-        f"US SAC Training: {request.sac.data_window_start} "
-        f"to {request.sac.data_window_end}"
+        f"US SAC ({request.universe}) Training: "
+        f"{request.sac.data_window_start} to {request.sac.data_window_end}"
     )
     is_success, html_body = _send_training_email(
         template_name="sac_training_summary_email.html.j2",
         template_context={
             "sac": request.sac.model_dump(),
             "summary": request.summary,
+            "universe": request.universe,
         },
         subject=subject,
-        log_label="sac",
+        log_label=f"sac-{request.universe}",
     )
     return TrainingSummaryEmailResponse(
         is_success=is_success,

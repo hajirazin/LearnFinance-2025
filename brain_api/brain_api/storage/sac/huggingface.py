@@ -64,11 +64,25 @@ class SACHuggingFaceModelStorage:
     ):
         """Initialize SAC HuggingFace model storage.
 
+        This class is shared by every SAC bucket (``halal_filtered``,
+        ``halal``, ...). The bucket-specific HF repo is selected by the
+        caller via ``repo_id``; the bucket registry passes
+        ``hf_repo_getter()`` (one of
+        ``HF_SAC_HALAL_FILTERED_MODEL_REPO`` /
+        ``HF_SAC_HALAL_MODEL_REPO``). When ``repo_id`` is omitted we
+        fall back to the legacy ``HF_SAC_HALAL_FILTERED_MODEL_REPO``
+        env so older callers (pre-bucket-registry) keep working.
+
         Args:
             repo_id: HuggingFace repo ID. Defaults to
-                ``HF_SAC_HALAL_FILTERED_MODEL_REPO`` env var.
+                ``HF_SAC_HALAL_FILTERED_MODEL_REPO`` env var for
+                backward compatibility.
             token: HuggingFace API token.
-            local_cache: Optional local storage for caching downloaded models.
+            local_cache: Optional local storage for caching downloaded
+                models. Pass the bucket's matching local storage
+                (``SACHalalFilteredModelStorage`` or
+                ``SACHalalModelStorage``) so cached versions land on
+                the right on-disk path.
         """
         self.repo_id = repo_id or get_hf_sac_halal_filtered_model_repo()
         self.token = token or get_hf_token()
@@ -78,12 +92,15 @@ class SACHuggingFaceModelStorage:
         if not self.repo_id:
             raise ValueError(
                 "HuggingFace SAC model repo not configured. "
-                "Set HF_SAC_HALAL_FILTERED_MODEL_REPO environment variable "
-                "or pass repo_id."
+                "Set the bucket-specific env var "
+                "(HF_SAC_HALAL_FILTERED_MODEL_REPO or "
+                "HF_SAC_HALAL_MODEL_REPO) or pass repo_id."
             )
 
     @property
     def model_type(self) -> str:
+        # The local_cache subclass identifies the actual bucket; this
+        # property is retained for backward compatibility only.
         return "sac_halal_filtered"
 
     def _ensure_repo_exists(self) -> None:

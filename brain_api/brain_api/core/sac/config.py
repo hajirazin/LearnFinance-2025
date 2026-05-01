@@ -3,7 +3,7 @@
 Extends the shared SACBaseConfig with training-specific settings.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from brain_api.core.portfolio_rl.sac_config import SACBaseConfig
@@ -41,6 +41,33 @@ class SACConfig(SACBaseConfig):
             data = data.copy()
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
         return cls(**data)
+
+
+def make_sac_config_for_n_stocks(base: SACConfig, n_stocks: int) -> SACConfig:
+    """Return a copy of ``base`` resized for ``n_stocks`` risky assets.
+
+    Thin SACConfig-layer wrapper around
+    :func:`brain_api.core.portfolio_rl.sac_config.make_sac_base_config_for_n_stocks`
+    that preserves the SACConfig-only fields (``training_years``,
+    ``n_eval_folds``). The endpoint calls this factory after resolving
+    the bucket symbol list so each parallel A/B bucket trains its SAC
+    actor/critic at the right action dimension without mutating any
+    shared global config.
+
+    See the base helper for the math contract (``target_entropy =
+    -(n_stocks + 1)``) and the byte-equivalence guarantee at
+    ``n_stocks == base.n_stocks``.
+    """
+    if n_stocks < 1:
+        raise ValueError(
+            f"n_stocks must be >= 1 to build a meaningful SAC action space, "
+            f"got {n_stocks}."
+        )
+    return replace(
+        base,
+        n_stocks=n_stocks,
+        target_entropy=-float(n_stocks + 1),
+    )
 
 
 # Default configuration

@@ -53,13 +53,21 @@ class ForecastersTrainingSummaryRequest(BaseModel):
 class SACTrainingSummaryRequest(BaseModel):
     """Request model for POST /llm/sac-training-summary.
 
-    Carries the SAC training result from the US SAC workflow. The SAC
+    Carries the SAC training result from a US SAC workflow. The SAC
     workflow consumes whatever PatchTST ``current`` pointer is live at
     trigger time, so forecaster metrics are not part of this payload --
     they live in :class:`ForecastersTrainingSummaryRequest`.
+
+    Two parallel A/B SAC workflows share this endpoint:
+    ``USSACTrainingWorkflow`` (universe=``halal_filtered``) and
+    ``USSACHalalTrainingWorkflow`` (universe=``halal``). The
+    ``universe`` field discriminates so the LLM prompt and resulting
+    summary identify which bucket the metrics describe; default
+    preserves the legacy single-bucket payload shape.
     """
 
     sac: SACTrainResponse
+    universe: str = "halal_filtered"
 
 
 class TrainingSummaryResponse(BaseModel):

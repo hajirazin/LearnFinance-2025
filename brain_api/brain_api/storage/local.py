@@ -28,6 +28,7 @@ from brain_api.storage.patchtst.local import (
 from brain_api.storage.sac.local import (
     SACArtifacts,
     SACHalalFilteredModelStorage,
+    SACHalalModelStorage,
     SACLocalStorage,  # Backward compatibility alias
     create_sac_metadata,
 )
@@ -106,6 +107,7 @@ __all__ = [
     # SAC (unified with dual forecasts)
     "SACArtifacts",
     "SACHalalFilteredModelStorage",
+    "SACHalalModelStorage",
     "SACLocalStorage",  # Backward compatibility alias
     "create_metadata",
     "create_patchtst_metadata",

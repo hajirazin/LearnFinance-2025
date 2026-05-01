@@ -87,17 +87,24 @@ SCHEDULES = [
 # Training schedules are intentionally excluded. The Raspberry Pi (the host
 # that runs schedules.py today) cannot afford training workloads. Keep this
 # block commented for future use: on a beefier host (Mac/GPU), create a
-# separate schedules_mac.py that imports from here and registers all 4.
+# separate schedules_mac.py that imports from here and registers all of them.
 # Do NOT delete.
 #
-# US training is split across two workflows because the host cannot run
+# US training is split across three workflows because the host cannot run
 # more than one training job at a time:
 # - USForecastersTrainingWorkflow (Saturday 11 UTC) trains LSTM then
 #   PatchTST serially on halal_new and emails a forecasters-only report.
-# - USSACTrainingWorkflow (Sunday 14 UTC, 12+ hours later to avoid any
-#   overlap) trains SAC on the halal_filtered top-15 (driven by whatever
-#   PatchTST 'current' pointer is live at trigger time) and emails a
-#   SAC-only report.
+# - USSACTrainingWorkflow (Sunday 02 UTC) trains SAC on the
+#   halal_filtered top-15 (driven by whatever PatchTST 'current'
+#   pointer is live at trigger time) and emails a SAC-only report. The
+#   gap from Saturday's forecasters slot is comfortably wider than the
+#   10h SAC training timeout.
+# - USSACHalalTrainingWorkflow (Sunday 13 UTC, 11 h after the
+#   halal_filtered slot to fit inside the 10h training timeout with
+#   buffer) trains a parallel SAC on the legacy yfinance halal universe
+#   (variable size, ~12-15 stocks) for an A/B comparison and emails its
+#   own SAC-only report. Each SAC bucket has an independent 'current'
+#   pointer; promoting one MUST NOT touch the other.
 # SCHEDULES_MAC = [
 #     {
 #         "id": "us-forecasters-training",
@@ -110,8 +117,18 @@ SCHEDULES = [
 #         "id": "us-sac-training",
 #         "workflow": USSACTrainingWorkflow,
 #         "workflow_id": "us-sac-training",
-#         "cron": "0 14 * * 0",  # Sunday 14:00 UTC
-#         "description": "US SAC training Sunday 14 UTC (12+ h after forecasters)",
+#         "cron": "0 2 * * 0",  # Sunday 02:00 UTC
+#         "description": "US SAC training (halal_filtered) Sunday 02 UTC",
+#     },
+#     {
+#         "id": "us-sac-halal-training",
+#         "workflow": USSACHalalTrainingWorkflow,
+#         "workflow_id": "us-sac-halal-training",
+#         "cron": "0 13 * * 0",  # Sunday 13:00 UTC
+#         "description": (
+#             "US SAC training (halal) Sunday 13 UTC -- parallel A/B "
+#             "vs sac_halal_filtered, runs 11 h after that slot"
+#         ),
 #     },
 #     {
 #         "id": "india-weekly-training",

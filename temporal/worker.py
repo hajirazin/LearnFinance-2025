@@ -63,6 +63,7 @@ from activities.reporting import (
 from activities.training import (
     fetch_halal_filtered_universe,
     fetch_halal_new_universe,
+    fetch_halal_universe,
     fetch_nifty_shariah_500_universe,
     generate_forecasters_training_summary,
     generate_india_training_summary,
@@ -85,6 +86,7 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
 from workflows.us_weekly_allocation import USWeeklyAllocationWorkflow
 
@@ -98,6 +100,7 @@ ALL_WORKFLOWS = [
     USAlphaHRPWorkflow,
     USDoubleHRPWorkflow,
     USForecastersTrainingWorkflow,
+    USSACHalalTrainingWorkflow,
     USSACTrainingWorkflow,
     USWeeklyAllocationWorkflow,
 ]
@@ -148,6 +151,7 @@ ALL_ACTIVITIES = [
     # Training
     fetch_halal_new_universe,
     fetch_halal_filtered_universe,
+    fetch_halal_universe,
     fetch_nifty_shariah_500_universe,
     fetch_halal_india_universe_training,
     refresh_training_data,

@@ -25,31 +25,42 @@ from brain_api.core.sac import (
 from brain_api.main import app
 from brain_api.routes.inference import get_sac_storage as get_inference_storage
 from brain_api.routes.training import (
-    get_sac_config,
     get_sac_storage,
 )
 from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
 
 
-def _override_sac_bucket(monkeypatch, temp_storage, symbols_fn):
-    """Swap the ``(SAC, halal_filtered)`` registry entry for tests.
+def _override_sac_bucket(
+    monkeypatch,
+    temp_storage,
+    symbols_fn,
+    universe: str = "halal_filtered",
+    drop_validator: bool = True,
+):
+    """Swap a ``(SAC, universe)`` registry entry for tests.
 
     SAC training resolves storage and symbols inside the endpoint via
     the bucket registry, so tests mutate the registry rather than using
     ``Depends`` overrides. ``monkeypatch.setitem`` restores the original
     bucket at teardown.
+
+    The production halal_filtered bucket pins the slate to exactly 15
+    symbols via :func:`_validate_halal_filtered_count`, which would
+    reject the small mock slates used here for speed. Tests that want
+    to exercise the validator pass ``drop_validator=False``.
     """
     from brain_api.core import model_buckets
 
-    original = get_bucket(ModelType.SAC, "halal_filtered")
+    original = get_bucket(ModelType.SAC, universe)
     patched = replace(
         original,
         local_storage_class=lambda: temp_storage,
         symbols_resolver=symbols_fn,
+        symbol_validator=None if drop_validator else original.symbol_validator,
     )
     monkeypatch.setitem(
         model_buckets._BUCKETS,
-        (ModelType.SAC, "halal_filtered"),
+        (ModelType.SAC, universe),
         patched,
     )
 
@@ -334,7 +345,6 @@ class TestSACLSTMFinetune:
         """Test that finetune without prior model returns 400."""
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-        app.dependency_overrides[get_sac_config] = mock_config
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
@@ -370,7 +380,6 @@ class TestSACLSTMFinetune:
 
         app.dependency_overrides.clear()
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-        app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
 
@@ -407,7 +416,6 @@ class TestSACFullTraining:
 
         app.dependency_overrides.clear()
         _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
-        app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
 
@@ -436,7 +444,6 @@ class TestSACFullTraining:
 
         app.dependency_overrides.clear()
         _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
-        app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
 
@@ -462,7 +469,6 @@ class TestSACFullTraining:
         """Unknown universe in body must be rejected with 422."""
         app.dependency_overrides.clear()
         _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
-        app.dependency_overrides[get_sac_config] = mock_config
 
         client = TestClient(app)
         try:
@@ -474,29 +480,89 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
-    def test_full_training_n_stocks_mismatch_returns_422(
+    def test_full_training_halal_filtered_wrong_count_returns_422(
         self, temp_storage, monkeypatch
     ):
-        """SAC requires len(symbols) == config.n_stocks; mismatch -> 422.
+        """The halal_filtered bucket pins the slate to exactly 15 symbols.
 
-        SAC's network architecture and state vector are wired to a fixed
-        ``n_stocks``. Resolving a universe with a different size silently
-        would corrupt the action space, so the endpoint surfaces this as
-        422 (per AGENTS.md rule #1: no silent fallbacks).
+        Producing a different count silently would build a different-
+        shaped SAC actor/critic and break the bucket's compute_version
+        hash + ``current`` artifact lineage. Per AGENTS.md rule #1 we
+        raise 422 from the bucket symbol_validator; this test exercises
+        that path explicitly with the validator left in place.
         """
         app.dependency_overrides.clear()
 
-        def _too_few_symbols() -> list[str]:
-            return ["AAPL", "MSFT"]  # 2 != 5
+        def _fourteen_symbols() -> list[str]:
+            return [f"SYM{i}" for i in range(14)]
 
-        _override_sac_bucket(monkeypatch, temp_storage, _too_few_symbols)
-        app.dependency_overrides[get_sac_config] = mock_config
+        _override_sac_bucket(
+            monkeypatch,
+            temp_storage,
+            _fourteen_symbols,
+            universe="halal_filtered",
+            drop_validator=False,
+        )
 
         client = TestClient(app)
         try:
-            response = client.post("/train/sac/full")
+            response = client.post(
+                "/train/sac/full", json={"universe": "halal_filtered"}
+            )
             assert response.status_code == 422
-            assert "n_stocks" in response.text or "5" in response.text
+            assert "exactly 15" in response.text
+            assert "got 14" in response.text
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_halal_universe_returns_202(self, temp_storage, monkeypatch):
+        """Variable-size halal universe (yfinance ETF top-holdings) trains.
+
+        The legacy halal universe has variable size month-to-month
+        (typical 12-15 names). The endpoint resolves SAC's ``n_stocks``
+        and ``target_entropy`` per-bucket via
+        ``make_sac_config_for_n_stocks`` so any count >=5 is accepted;
+        no equality check rejects the slate.
+        """
+        from brain_api.routes.training import sac
+
+        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
+
+        app.dependency_overrides.clear()
+        _override_sac_bucket(
+            monkeypatch,
+            temp_storage,
+            mock_symbols,
+            universe="halal",
+        )
+
+        client = TestClient(app)
+        try:
+            response = client.post("/train/sac/full", json={"universe": "halal"})
+            assert response.status_code == 202
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_halal_too_few_returns_422(self, temp_storage, monkeypatch):
+        """halal bucket lower-bound: <5 symbols must 422 at the validator."""
+        app.dependency_overrides.clear()
+
+        def _too_few_symbols() -> list[str]:
+            return ["AAPL", "MSFT"]  # 2 < 5
+
+        _override_sac_bucket(
+            monkeypatch,
+            temp_storage,
+            _too_few_symbols,
+            universe="halal",
+            drop_validator=False,
+        )
+
+        client = TestClient(app)
+        try:
+            response = client.post("/train/sac/full", json={"universe": "halal"})
+            assert response.status_code == 422
+            assert "at least 5" in response.text
         finally:
             app.dependency_overrides.clear()
 

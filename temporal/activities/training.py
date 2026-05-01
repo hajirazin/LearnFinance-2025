@@ -77,6 +77,28 @@ def fetch_halal_filtered_universe() -> dict:
 
 
 @activity.defn
+def fetch_halal_universe() -> dict:
+    """GET /universe/halal -- legacy yfinance ETF top-holdings.
+
+    The ``halal`` universe is the parallel A/B sibling of
+    ``halal_filtered`` for the SAC bucket comparison. yfinance's
+    ETF top-holdings can fluctuate month-to-month, so the slate size
+    is variable (typical range 12-15 after dedup + US filter); SAC's
+    actor/critic dim is resized at training time via the bucket-level
+    config factory in brain_api.
+    """
+    logger.info("Fetching halal universe (yfinance ETF top-holdings)...")
+    with get_training_client() as client:
+        response = client.get("/universe/halal")
+        response.raise_for_status()
+    data = response.json()
+    stocks = data.get("stocks", [])
+    total = data.get("total_stocks", len(stocks))
+    logger.info(f"Halal universe fetched: {total} stocks")
+    return data
+
+
+@activity.defn
 def fetch_nifty_shariah_500_universe() -> dict:
     """GET /universe/nifty_shariah_500 -- fail fast if NSE broken."""
     logger.info("Fetching NiftyShariah500 universe (all ~210 symbols)...")
@@ -174,8 +196,12 @@ def train_patchtst(universe: str) -> TrainingResponse:
 def train_sac(universe: str) -> TrainingResponse:
     """Train the SAC reinforcement-learning allocator on the given universe.
 
-    ``universe`` MUST resolve to exactly ``n_stocks`` symbols
-    (currently 15) -- the API enforces this invariant.
+    Two registered SAC buckets accept this call:
+    ``halal_filtered`` (slate fixed at 15 by the bucket validator) and
+    ``halal`` (variable-size yfinance ETF top-holdings; SAC's actor /
+    critic dim is resized at training time by the bucket-level config
+    factory in brain_api). The API enforces per-bucket symbol-count
+    invariants and returns 422 if violated.
     """
     logger.info(f"Starting SAC training on universe={universe}...")
     return _poll_training_job("/train/sac/full", json_body={"universe": universe})
@@ -293,16 +319,22 @@ def send_forecasters_training_email(
 @activity.defn
 def generate_sac_training_summary(
     sac: TrainingResponse,
+    universe: str = "halal_filtered",
 ) -> TrainingSummaryResponse:
-    """Generate LLM summary for the US SAC training run.
+    """Generate LLM summary for a US SAC training run.
 
-    Called by ``USSACTrainingWorkflow`` after SAC finishes training.
-    SAC consumes whatever PatchTST ``current`` pointer is live at
-    trigger time, so forecaster metrics are summarised separately by
-    ``USForecastersTrainingWorkflow``.
+    Called by either US SAC workflow:
+    ``USSACTrainingWorkflow`` (universe=``halal_filtered``) and the
+    parallel A/B sibling ``USSACHalalTrainingWorkflow``
+    (universe=``halal``). SAC consumes whatever PatchTST ``current``
+    pointer is live at trigger time, so forecaster metrics are
+    summarised separately by ``USForecastersTrainingWorkflow``.
+
+    The ``universe`` argument is forwarded to brain_api so the
+    resulting summary identifies which bucket the metrics describe.
     """
-    logger.info("Generating SAC training summary via LLM...")
-    payload = {"sac": _sac_payload(sac)}
+    logger.info(f"Generating SAC training summary via LLM (universe={universe})...")
+    payload = {"sac": _sac_payload(sac), "universe": universe}
     with get_training_client() as client:
         response = client.post("/llm/sac-training-summary", json=payload)
         response.raise_for_status()
@@ -318,12 +350,20 @@ def generate_sac_training_summary(
 def send_sac_training_email(
     sac: TrainingResponse,
     summary: TrainingSummaryResponse,
+    universe: str = "halal_filtered",
 ) -> TrainingSummaryEmailResponse:
-    """Send the US SAC training summary email."""
-    logger.info("Sending SAC training summary email...")
+    """Send the US SAC training summary email.
+
+    Shared by both SAC workflows. ``universe`` is forwarded to
+    brain_api so the email subject is bucket-specific (e.g.
+    "US SAC (halal) Training: ..."), letting a human inbox reader
+    distinguish the two parallel reports without opening them.
+    """
+    logger.info(f"Sending SAC training summary email (universe={universe})...")
     payload = {
         "sac": _sac_payload(sac),
         "summary": summary.summary,
+        "universe": universe,
     }
     with get_training_client() as client:
         response = client.post("/email/sac-training-summary", json=payload)

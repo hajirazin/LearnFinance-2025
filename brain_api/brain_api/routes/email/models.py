@@ -56,14 +56,19 @@ class ForecastersTrainingSummaryEmailRequest(BaseModel):
 class SACTrainingSummaryEmailRequest(BaseModel):
     """Request model for POST /email/sac-training-summary.
 
-    Carries the US SAC training result plus the SAC-only LLM summary.
-    Sent at the end of the US SAC Temporal workflow (Sunday, 12+ hours
-    after forecasters). Email recipient configuration comes from the
-    same environment variables as the forecasters report.
+    Carries a US SAC training result plus the SAC-only LLM summary.
+    Sent at the end of either US SAC Temporal workflow (Sunday):
+    ``USSACTrainingWorkflow`` for ``halal_filtered`` and the parallel
+    A/B sibling ``USSACHalalTrainingWorkflow`` for ``halal``. The
+    ``universe`` field is rendered into the subject line so a human
+    reading inbox can immediately distinguish the two reports without
+    opening them. Email recipient configuration comes from the same
+    environment variables as the forecasters report.
     """
 
     sac: SACTrainResponse
     summary: dict[str, str]  # LLM-generated paragraphs
+    universe: str = "halal_filtered"
 
 
 class TrainingSummaryEmailResponse(BaseModel):

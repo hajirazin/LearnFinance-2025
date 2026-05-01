@@ -1,6 +1,6 @@
 """SAC base configuration for portfolio RL."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 
@@ -119,6 +119,53 @@ class SACBaseConfig:
             data = data.copy()
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
         return cls(**data)
+
+
+def make_sac_base_config_for_n_stocks(
+    base: SACBaseConfig, n_stocks: int
+) -> SACBaseConfig:
+    """Return a copy of ``base`` with action-dim-sensitive fields rewritten.
+
+    The SAC paper sets ``target_entropy = -dim(action)`` as the textbook
+    default for continuous control with squashed Gaussian actions; the
+    ``-(n_stocks + 1)`` accounts for the CASH slot (`SACBaseConfig.action_dim`
+    is ``n_stocks + 1``). Two parallel A/B buckets (``halal_filtered``
+    fixed at 15, ``halal`` variable size from yfinance ETF top-holdings)
+    therefore need different ``target_entropy`` values, and we cannot
+    mutate the global ``DEFAULT_SAC_BASE_CONFIG`` in place because both
+    Sunday training jobs share the same FastAPI process.
+
+    Returns a fresh dataclass instance so the global default stays
+    immutable. Every other hyperparameter (``hidden_sizes``, ``gamma``,
+    ``tau``, ``actor_lr``, ...) is inherited verbatim from ``base`` so
+    research-driven SAC settings are not silently re-tuned per bucket.
+
+    Math invariant: when ``n_stocks == base.n_stocks`` (currently 15 ==
+    15 for the halal_filtered bucket), the returned config is byte-
+    equivalent to ``base`` (``target_entropy`` ends up at the same
+    -16.0). This preserves halal_filtered's existing ``compute_version``
+    hash and ``current`` artifact lineage.
+
+    Args:
+        base: Source config to copy from (typically
+            ``DEFAULT_SAC_BASE_CONFIG``).
+        n_stocks: Bucket-determined number of risky assets in the
+            action vector (cash is added on top).
+
+    Returns:
+        A new ``SACBaseConfig`` instance with ``n_stocks`` and
+        ``target_entropy`` rewritten.
+    """
+    if n_stocks < 1:
+        raise ValueError(
+            f"n_stocks must be >= 1 to build a meaningful SAC action space, "
+            f"got {n_stocks}."
+        )
+    return replace(
+        base,
+        n_stocks=n_stocks,
+        target_entropy=-float(n_stocks + 1),
+    )
 
 
 @dataclass

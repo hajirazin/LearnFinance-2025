@@ -7,6 +7,7 @@ and PatchTST predicted weekly returns as forecast features.
 from brain_api.core.sac.config import (
     DEFAULT_SAC_CONFIG,
     SACConfig,
+    make_sac_config_for_n_stocks,
 )
 from brain_api.core.sac.inference import run_sac_inference
 from brain_api.core.sac.training import (
@@ -28,6 +29,7 @@ __all__ = [
     # Version
     "compute_version",
     "finetune_sac",
+    "make_sac_config_for_n_stocks",
     # Inference
     "run_sac_inference",
     # Training

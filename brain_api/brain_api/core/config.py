@@ -23,6 +23,7 @@ ENV_HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO = (
     "HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO"
 )
 ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO = "HF_SAC_HALAL_FILTERED_MODEL_REPO"
+ENV_HF_SAC_HALAL_MODEL_REPO = "HF_SAC_HALAL_MODEL_REPO"
 ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
@@ -59,6 +60,17 @@ def get_hf_patchtst_nifty_shariah_500_model_repo() -> str | None:
 def get_hf_sac_halal_filtered_model_repo() -> str | None:
     """Get HF repo for SAC trained on the ``halal_filtered`` universe."""
     return os.environ.get(ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO)
+
+
+def get_hf_sac_halal_model_repo() -> str | None:
+    """Get HF repo for SAC trained on the legacy ``halal`` universe.
+
+    The ``halal`` bucket is the parallel A/B comparison sibling of
+    ``halal_filtered``: same SAC algorithm, different universe (yfinance
+    top-holdings of SPUS/HLAL/SPTE, monthly variable size). Promoting
+    one bucket MUST NOT touch the other's ``current`` pointer.
+    """
+    return os.environ.get(ENV_HF_SAC_HALAL_MODEL_REPO)
 
 
 def get_hf_news_sentiment_repo() -> str | None:
