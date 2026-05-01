@@ -46,6 +46,7 @@ class USSACTrainingWorkflow:
 
         refresh_result = await workflow.execute_activity(
             refresh_training_data,
+            args=["halal_filtered"],
             start_to_close_timeout=timedelta(hours=1),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )

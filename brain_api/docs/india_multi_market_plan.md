@@ -71,7 +71,7 @@ data/models/
 Pros:
 - **Fixes a latent bug** -- today, retraining on `halal` vs `halal_filtered` clobbers the same `current` pointer. Universe partitioning eliminates this
 - Flatter hierarchy (2 levels: universe/model_type vs 3 levels: market/universe/model_type)
-- Natural extension of existing `UniverseType` enum
+- Natural extension of the per-universe registry (formerly the `UniverseType` enum, now superseded by `brain_api/core/model_buckets.py` and `brain_api/etl/universe_registry.py`)
 - Self-contained: promoting `halal_filtered` LSTM cannot touch `nifty_shariah` LSTM or a future `sp500` LSTM
 - More descriptive identifiers: `run_id = paper:nifty_shariah:2026-02-28`
 - Adding US SP500 with its own separate models just works
@@ -112,7 +112,7 @@ No duplication, 2-level storage, full isolation for free.
 | HF repos | Per market | Per universe |
 | run_id | `paper:us:2026-02-28` | `paper:halal_filtered:2026-02-28` |
 | Hierarchy depth | 3 levels (market/universe/model) | 2 levels (universe/model) |
-| Existing `UniverseType` enum | Mostly unchanged, add `MarketRegion` | Extend naturally |
+| Existing universe registries (`model_buckets`, `etl/universe_registry`) | Mostly unchanged, add `MarketRegion` | Extend naturally |
 
 ---
 
@@ -385,7 +385,7 @@ flowchart TD
 1. **Add `MARKET_DEFAULTS`, `UNIVERSE_CONFIG` to config** -- file: `core/config.py`
    - New: `MARKET_DEFAULTS` dict (broker, calendar, currency, fractional per market)
    - New: `UNIVERSE_CONFIG` dict (market, stock_count, models per universe)
-   - New: India universe type `NIFTY_SHARIAH` in `UniverseType` enum
+   - New: India universe `nifty_shariah` registered in the universe registries (`brain_api/core/model_buckets.py` for training, `brain_api/etl/universe_registry.py` for ETL)
    - New: universe-aware HF repo getters
    - New: helper `get_exchange_calendar(universe)` that resolves universe -> market -> calendar
 

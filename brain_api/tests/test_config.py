@@ -4,11 +4,7 @@ import os
 from datetime import date
 from unittest.mock import patch
 
-import pytest
-
 from brain_api.core.config import (
-    UniverseType,
-    get_etl_universe,
     resolve_cutoff_date,
     resolve_training_window,
 )
@@ -145,121 +141,13 @@ class TestResolveTrainingWindow:
         assert start_date == date(2019, 1, 1)
 
 
-class TestUniverseType:
-    """Tests for UniverseType enum."""
-
-    def test_universe_type_values(self) -> None:
-        """UniverseType enum has expected values."""
-        assert UniverseType.HALAL.value == "halal"
-        assert UniverseType.SP500.value == "sp500"
-        assert UniverseType.HALAL_NEW.value == "halal_new"
-        assert UniverseType.HALAL_FILTERED.value == "halal_filtered"
-        assert UniverseType.HALAL_INDIA.value == "halal_india"
-        assert UniverseType.NIFTY_SHARIAH_500.value == "nifty_shariah_500"
-
-    def test_universe_type_is_string_compatible(self) -> None:
-        """UniverseType can be compared with strings."""
-        assert UniverseType.HALAL == "halal"
-        assert UniverseType.SP500 == "sp500"
-        assert UniverseType.HALAL_NEW == "halal_new"
-        assert UniverseType.HALAL_FILTERED == "halal_filtered"
-        assert UniverseType.HALAL_INDIA == "halal_india"
-        assert UniverseType.NIFTY_SHARIAH_500 == "nifty_shariah_500"
-
-    def test_universe_type_from_string(self) -> None:
-        """UniverseType can be created from string."""
-        assert UniverseType("halal") == UniverseType.HALAL
-        assert UniverseType("sp500") == UniverseType.SP500
-        assert UniverseType("halal_new") == UniverseType.HALAL_NEW
-        assert UniverseType("halal_filtered") == UniverseType.HALAL_FILTERED
-        assert UniverseType("halal_india") == UniverseType.HALAL_INDIA
-        assert UniverseType("nifty_shariah_500") == UniverseType.NIFTY_SHARIAH_500
-
-    def test_universe_type_invalid_raises(self) -> None:
-        """Invalid UniverseType value raises ValueError."""
-        with pytest.raises(ValueError):
-            UniverseType("invalid")
-
-
-# NOTE: ``get_forecaster_train_universe`` and ``get_rl_train_universe``
-# were removed when forecaster/SAC training switched to the per-bucket
-# registry (``brain_api.core.model_buckets``). Universe selection now
-# comes from the request body ``{universe: ...}`` so two parallel
-# Temporal workflows can hit the same training endpoint with different
-# universes -- env vars cannot support that. Endpoint-level allowlist /
-# unknown-universe behaviour is now exercised in
-# ``tests/test_training_*.py`` (rejection -> 422).
-
-
-class TestGetEtlUniverse:
-    """Tests for get_etl_universe function."""
-
-    def test_halal_from_env(self) -> None:
-        """ETL_UNIVERSE=halal returns HALAL."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL
-
-    def test_sp500_from_env(self) -> None:
-        """ETL_UNIVERSE=sp500 returns SP500."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "sp500"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.SP500
-
-    def test_halal_new_from_env(self) -> None:
-        """ETL_UNIVERSE=halal_new returns HALAL_NEW."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal_new"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL_NEW
-
-    def test_halal_filtered_from_env(self) -> None:
-        """ETL_UNIVERSE=halal_filtered returns HALAL_FILTERED."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "halal_filtered"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-    def test_nifty_shariah_500_from_env(self) -> None:
-        """ETL_UNIVERSE=nifty_shariah_500 returns NIFTY_SHARIAH_500."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "nifty_shariah_500"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.NIFTY_SHARIAH_500
-
-    def test_case_insensitive(self) -> None:
-        """Environment variable is case-insensitive."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL
-
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "SP500"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.SP500
-
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL_NEW"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL_NEW
-
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "HALAL_FILTERED"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.HALAL_FILTERED
-
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "NIFTY_SHARIAH_500"}, clear=True):
-            result = get_etl_universe()
-        assert result == UniverseType.NIFTY_SHARIAH_500
-
-    def test_invalid_value_raises_error(self) -> None:
-        """Invalid ETL_UNIVERSE value raises ValueError."""
-        with patch.dict(os.environ, {"ETL_UNIVERSE": "invalid"}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                get_etl_universe()
-            assert "invalid" in str(exc_info.value).lower()
-            assert "halal" in str(exc_info.value).lower()
-            assert "sp500" in str(exc_info.value).lower()
-
-
-# NOTE: ``get_rl_train_universe`` and ``RL_ALLOWED_UNIVERSES`` were
-# removed for the same reason as ``get_forecaster_train_universe``: SAC
-# now resolves its universe from the request body via the bucket
-# registry. The ``len(symbols) == config.n_stocks`` invariant that
-# ``RL_ALLOWED_UNIVERSES`` indirectly protected is now enforced by the
-# ``/train/sac/full`` endpoint and exercised in tests/test_sac.py
-# (``test_full_training_n_stocks_mismatch_returns_422``).
+# NOTE: ``UniverseType``, ``get_etl_universe``,
+# ``get_forecaster_train_universe``, and ``get_rl_train_universe`` were
+# all removed when forecaster/SAC training and ETL switched to the
+# request-body ``universe`` field validated against in-process
+# registries (``brain_api.core.model_buckets`` for training,
+# ``brain_api.etl.universe_registry`` for ETL). Endpoint-level
+# allowlist / unknown-universe behaviour is exercised in
+# ``tests/test_training_*.py`` and ``tests/test_etl_news_sentiment.py``
+# (rejection -> 422). Pure-function registry behaviour is exercised in
+# ``tests/test_etl_universe_registry.py``.

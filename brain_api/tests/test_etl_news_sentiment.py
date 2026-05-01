@@ -22,6 +22,7 @@ class TestETLNewsEndpoints:
             response = client.post(
                 "/etl/news-sentiment",
                 json={
+                    "universe": "halal_filtered",
                     "batch_size": 64,
                     "max_articles": 10,
                     "local_only": True,
@@ -34,14 +35,31 @@ class TestETLNewsEndpoints:
         assert data["status"] == "pending"
         assert "message" in data
 
-    def test_start_job_with_defaults(self):
-        """POST /etl/news-sentiment with empty body uses defaults."""
+    def test_start_job_with_only_universe(self):
+        """POST /etl/news-sentiment with only universe field uses defaults for the rest."""
         with patch("brain_api.routes.etl._run_etl_job"):
-            response = client.post("/etl/news-sentiment", json={})
+            response = client.post(
+                "/etl/news-sentiment", json={"universe": "halal_filtered"}
+            )
 
         assert response.status_code == 202
         data = response.json()
         assert "job_id" in data
+
+    def test_missing_universe_returns_422(self):
+        """POST /etl/news-sentiment without universe returns 422 (required field)."""
+        with patch("brain_api.routes.etl._run_etl_job"):
+            response = client.post("/etl/news-sentiment", json={})
+        assert response.status_code == 422
+
+    def test_unknown_universe_returns_422(self):
+        """POST /etl/news-sentiment with an unregistered universe returns 422."""
+        with patch("brain_api.routes.etl._run_etl_job"):
+            response = client.post(
+                "/etl/news-sentiment", json={"universe": "totally_made_up"}
+            )
+        assert response.status_code == 422
+        assert "totally_made_up" in response.json()["detail"]
 
     def test_get_job_status_not_found(self):
         """GET /etl/news-sentiment/{job_id} returns 404 for unknown job."""
@@ -56,7 +74,11 @@ class TestETLNewsEndpoints:
         with patch("brain_api.routes.etl._run_etl_job"):
             create_response = client.post(
                 "/etl/news-sentiment",
-                json={"max_articles": 10, "local_only": True},
+                json={
+                    "universe": "halal_filtered",
+                    "max_articles": 10,
+                    "local_only": True,
+                },
             )
 
         job_id = create_response.json()["job_id"]
@@ -78,7 +100,11 @@ class TestETLNewsEndpoints:
             for _ in range(3):
                 client.post(
                     "/etl/news-sentiment",
-                    json={"max_articles": 10, "local_only": True},
+                    json={
+                        "universe": "halal_filtered",
+                        "max_articles": 10,
+                        "local_only": True,
+                    },
                 )
 
         response = client.get("/etl/news-sentiment/jobs")
@@ -96,6 +122,7 @@ class TestETLNewsEndpoints:
             create_response = client.post(
                 "/etl/news-sentiment",
                 json={
+                    "universe": "halal_new",
                     "batch_size": 128,
                     "max_articles": 50,
                     "sentiment_threshold": 0.2,
@@ -110,14 +137,17 @@ class TestETLNewsEndpoints:
         assert data["config"]["batch_size"] == 128
         assert data["config"]["max_articles"] == 50
         assert data["config"]["sentiment_threshold"] == 0.2
-        assert "universe" in data["config"]
+        assert data["config"]["universe"] == "halal_new"
         assert data["config"]["local_only"] is True
 
     def test_invalid_batch_size(self):
         """POST with invalid batch_size should return 422."""
         response = client.post(
             "/etl/news-sentiment",
-            json={"batch_size": 0},  # Invalid: must be >= 1
+            json={
+                "universe": "halal_filtered",
+                "batch_size": 0,  # Invalid: must be >= 1
+            },
         )
 
         assert response.status_code == 422
@@ -126,7 +156,10 @@ class TestETLNewsEndpoints:
         """POST with invalid sentiment_threshold should return 422."""
         response = client.post(
             "/etl/news-sentiment",
-            json={"sentiment_threshold": 1.5},  # Invalid: must be <= 1.0
+            json={
+                "universe": "halal_filtered",
+                "sentiment_threshold": 1.5,  # Invalid: must be <= 1.0
+            },
         )
 
         assert response.status_code == 422
@@ -146,7 +179,11 @@ class TestETLJobLifecycle:
         ):
             response = client.post(
                 "/etl/news-sentiment",
-                json={"max_articles": 10, "local_only": True},
+                json={
+                    "universe": "halal_filtered",
+                    "max_articles": 10,
+                    "local_only": True,
+                },
             )
 
         job_id = response.json()["job_id"]
@@ -336,15 +373,8 @@ class TestGapFillUnmatchedSymbols:
         # Create path for parquet (file doesn't need to exist - _append_to_parquet handles it)
         parquet_path = tmp_path / "test_sentiment.parquet"
 
-        # Mock dependencies
-        from brain_api.core.config import UniverseType
-
         with (
-            patch(
-                "brain_api.etl.gap_fill.get_etl_universe",
-                return_value=UniverseType.HALAL,
-            ),
-            patch("brain_api.etl.gap_fill.get_halal_symbols") as mock_symbols,
+            patch("brain_api.etl.gap_fill.get_etl_symbols") as mock_symbols,
             patch("brain_api.etl.gap_fill.find_gaps") as mock_find_gaps,
             patch("brain_api.etl.gap_fill.categorize_gaps") as mock_categorize,
             patch("brain_api.etl.gap_fill.AlpacaNewsClient") as mock_client_cls,
@@ -397,6 +427,7 @@ class TestGapFillUnmatchedSymbols:
 
             # Run gap fill
             result = fill_sentiment_gaps(
+                universe="halal",
                 start_date=date(2024, 1, 1),
                 end_date=date(2024, 12, 31),
                 parquet_path=parquet_path,
@@ -419,15 +450,15 @@ class TestGapFillUnmatchedSymbols:
 class TestRefreshTrainingDataEndpoint:
     """Tests for /etl/refresh-training-data endpoint.
 
-    Symbols are resolved internally from ETL_UNIVERSE config,
-    so we mock get_etl_symbols to avoid real API calls.
+    Symbols are resolved via the ETL universe registry, so we mock
+    ``brain_api.routes.etl.get_etl_symbols`` to avoid real API calls.
     """
 
     def test_refresh_training_data_returns_200(self):
         """POST /etl/refresh-training-data should return 200."""
         with (
             patch(
-                "brain_api.routes.training.dependencies.get_etl_symbols",
+                "brain_api.routes.etl.get_etl_symbols",
                 return_value=["AAPL", "MSFT"],
             ),
             patch(
@@ -448,6 +479,7 @@ class TestRefreshTrainingDataEndpoint:
             response = client.post(
                 "/etl/refresh-training-data",
                 json={
+                    "universe": "halal_filtered",
                     "start_date": "2020-01-01",
                     "end_date": "2025-01-01",
                 },
@@ -461,14 +493,16 @@ class TestRefreshTrainingDataEndpoint:
         assert "fundamentals_skipped" in data
         assert "fundamentals_failed" in data
         assert "duration_seconds" in data
+        # Universe must be forwarded into ensure_fresh_training_data
+        assert mock_refresh.call_args.kwargs["universe"] == "halal_filtered"
 
     def test_refresh_training_data_with_defaults(self):
-        """POST /etl/refresh-training-data with no dates uses defaults."""
+        """POST /etl/refresh-training-data with only universe uses default dates."""
         from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
 
         with (
             patch(
-                "brain_api.routes.training.dependencies.get_etl_symbols",
+                "brain_api.routes.etl.get_etl_symbols",
                 return_value=["AAPL"],
             ),
             patch(
@@ -488,7 +522,7 @@ class TestRefreshTrainingDataEndpoint:
 
             response = client.post(
                 "/etl/refresh-training-data",
-                json={},
+                json={"universe": "halal_filtered"},
             )
 
         assert response.status_code == 200
@@ -499,67 +533,60 @@ class TestRefreshTrainingDataEndpoint:
             date.today().year - DEFAULT_LOOKBACK_YEARS, 1, 1
         )
 
-    def test_refresh_training_data_empty_body_accepted(self):
-        """POST with empty body should be accepted (symbols resolved internally)."""
-        with (
-            patch(
-                "brain_api.routes.training.dependencies.get_etl_symbols",
-                return_value=["AAPL"],
-            ),
-            patch(
-                "brain_api.core.data_freshness.ensure_fresh_training_data"
-            ) as mock_refresh,
-        ):
-            from brain_api.core.data_freshness import DataFreshnessResult
+    def test_refresh_training_data_missing_universe_returns_422(self):
+        """POST without universe should return 422 (required field)."""
+        response = client.post("/etl/refresh-training-data", json={})
+        assert response.status_code == 422
 
-            mock_refresh.return_value = DataFreshnessResult(
-                sentiment_gaps_filled=0,
-                sentiment_gaps_remaining=0,
-                fundamentals_refreshed=[],
-                fundamentals_skipped_today=[],
-                fundamentals_failed=[],
-                duration_seconds=0.1,
-            )
-
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={},
-            )
-        assert response.status_code == 200
+    def test_refresh_training_data_unknown_universe_returns_422(self):
+        """POST with an unregistered universe should return 422."""
+        response = client.post(
+            "/etl/refresh-training-data",
+            json={"universe": "totally_made_up"},
+        )
+        assert response.status_code == 422
+        assert "totally_made_up" in response.json()["detail"]
 
     def test_refresh_training_data_invalid_start_date(self):
         """POST with invalid start_date should return 400."""
         with patch(
-            "brain_api.routes.training.dependencies.get_etl_symbols",
+            "brain_api.routes.etl.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(
                 "/etl/refresh-training-data",
-                json={"start_date": "not-a-date"},
+                json={
+                    "universe": "halal_filtered",
+                    "start_date": "not-a-date",
+                },
             )
         assert response.status_code == 400
 
     def test_refresh_training_data_invalid_end_date(self):
         """POST with invalid end_date should return 400."""
         with patch(
-            "brain_api.routes.training.dependencies.get_etl_symbols",
+            "brain_api.routes.etl.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(
                 "/etl/refresh-training-data",
-                json={"end_date": "not-a-date"},
+                json={
+                    "universe": "halal_filtered",
+                    "end_date": "not-a-date",
+                },
             )
         assert response.status_code == 400
 
     def test_refresh_training_data_start_after_end(self):
         """POST with start_date after end_date should return 400."""
         with patch(
-            "brain_api.routes.training.dependencies.get_etl_symbols",
+            "brain_api.routes.etl.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(
                 "/etl/refresh-training-data",
                 json={
+                    "universe": "halal_filtered",
                     "start_date": "2025-01-01",
                     "end_date": "2020-01-01",
                 },
@@ -575,7 +602,10 @@ class TestSentimentGapsEndpoint:
         with patch("brain_api.routes.etl._run_gap_fill_job"):
             response = client.post(
                 "/etl/sentiment-gaps",
-                json={"start_date": "2025-01-01"},
+                json={
+                    "universe": "halal_filtered",
+                    "start_date": "2025-01-01",
+                },
             )
 
         assert response.status_code == 202
@@ -590,6 +620,7 @@ class TestSentimentGapsEndpoint:
             response = client.post(
                 "/etl/sentiment-gaps",
                 json={
+                    "universe": "halal_filtered",
                     "start_date": "2024-01-01",
                     "end_date": "2024-12-31",
                 },
@@ -609,7 +640,10 @@ class TestSentimentGapsEndpoint:
         with patch("brain_api.routes.etl._run_gap_fill_job"):
             create_response = client.post(
                 "/etl/sentiment-gaps",
-                json={"start_date": "2025-01-01"},
+                json={
+                    "universe": "halal_filtered",
+                    "start_date": "2025-01-01",
+                },
             )
 
         job_id = create_response.json()["job_id"]
@@ -621,12 +655,16 @@ class TestSentimentGapsEndpoint:
         assert data["status"] in ["pending", "running", "completed", "failed"]
         assert "started_at" in data
         assert "config" in data
+        assert data["config"]["universe"] == "halal_filtered"
 
     def test_sentiment_gaps_invalid_date_format(self):
         """POST with invalid date format should return 400."""
         response = client.post(
             "/etl/sentiment-gaps",
-            json={"start_date": "not-a-date"},
+            json={
+                "universe": "halal_filtered",
+                "start_date": "not-a-date",
+            },
         )
 
         # FastAPI returns 400 for date parsing errors
@@ -636,7 +674,24 @@ class TestSentimentGapsEndpoint:
         """POST without start_date should return 422."""
         response = client.post(
             "/etl/sentiment-gaps",
-            json={},
+            json={"universe": "halal_filtered"},
         )
 
         assert response.status_code == 422
+
+    def test_sentiment_gaps_missing_universe_returns_422(self):
+        """POST without universe should return 422 (required field)."""
+        response = client.post("/etl/sentiment-gaps", json={"start_date": "2025-01-01"})
+        assert response.status_code == 422
+
+    def test_sentiment_gaps_unknown_universe_returns_422(self):
+        """POST with an unregistered universe should return 422."""
+        response = client.post(
+            "/etl/sentiment-gaps",
+            json={
+                "universe": "totally_made_up",
+                "start_date": "2025-01-01",
+            },
+        )
+        assert response.status_code == 422
+        assert "totally_made_up" in response.json()["detail"]

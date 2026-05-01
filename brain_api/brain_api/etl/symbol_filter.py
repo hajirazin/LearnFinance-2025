@@ -1,19 +1,21 @@
 """Universe filtering for stock symbols.
 
-Simplified version that uses brain_api.universe directly.
+Resolves universe slates via the ETL universe registry; per-universe
+ETF metadata (used by ``etfs_used``) is kept inline because it is only
+consumed by the news-sentiment ETL output stats.
 """
 
 from datetime import UTC, datetime
 
-from brain_api.core.config import UniverseType
-from brain_api.universe import (
-    HALAL_ETFS,
-    get_halal_filtered_symbols,
-    get_halal_new_symbols,
-    get_halal_symbols,
-    get_sp500_symbols,
-)
+from brain_api.etl.universe_registry import get_etl_symbols
+from brain_api.universe import HALAL_ETFS
 from brain_api.universe.halal_new import ALL_ETFS
+
+# Universes whose ETF source list is the ``halal_new`` 5-ETF set
+# (``halal_new`` itself plus any sticky-derived US slate built on top
+# of it). All other registered universes fall back to the legacy
+# 3-ETF ``HALAL_ETFS`` for stats purposes.
+_HALAL_NEW_DERIVED_UNIVERSES = frozenset({"halal_new", "halal_filtered"})
 
 
 class UniverseFilter:
@@ -28,59 +30,35 @@ class UniverseFilter:
     def __init__(
         self,
         symbols: set[str] | None = None,
-        universe_type: UniverseType | None = None,
+        universe: str | None = None,
     ):
         """Initialize with a set of allowed symbols.
 
         Args:
             symbols: Set of uppercase symbols to allow. None = allow all.
-            universe_type: Which universe this filter was built from.
+            universe: Registered universe name this filter was built
+                from (used by ``etfs_used``).
         """
         self._symbols = symbols
-        self._universe_type = universe_type
+        self._universe = universe
         self._fetched_at: str | None = None
 
     @classmethod
-    def from_universe_type(cls, universe_type: UniverseType) -> "UniverseFilter":
-        """Create filter from a UniverseType enum value.
-
-        Dispatches to the appropriate symbol source:
-        - HALAL -> ~14 stocks from SPUS/HLAL/SPTE ETFs
-        - HALAL_NEW -> ~410 stocks from 5 ETFs + Alpaca filter
-        - SP500 -> ~500 stocks from datahub.io
+    def from_universe(cls, universe: str) -> "UniverseFilter":
+        """Create filter from a registered universe string.
 
         Args:
-            universe_type: Which universe to filter to
+            universe: One of the registered universe strings (see
+                :mod:`brain_api.etl.universe_registry`).
 
         Returns:
-            UniverseFilter with the universe's symbols
+            UniverseFilter populated with the universe's symbols.
         """
-        if universe_type == UniverseType.HALAL:
-            symbols = get_halal_symbols()
-        elif universe_type == UniverseType.HALAL_NEW:
-            symbols = get_halal_new_symbols()
-        elif universe_type == UniverseType.HALAL_FILTERED:
-            symbols = get_halal_filtered_symbols()
-        elif universe_type == UniverseType.SP500:
-            symbols = get_sp500_symbols()
-        else:
-            raise ValueError(f"Unknown universe type: {universe_type}")
-
+        symbols = get_etl_symbols(universe)
         all_symbols = {s.upper() for s in symbols}
-        instance = cls(all_symbols, universe_type=universe_type)
+        instance = cls(all_symbols, universe=universe)
         instance._fetched_at = datetime.now(UTC).isoformat()
         return instance
-
-    @classmethod
-    def from_halal_universe(cls) -> "UniverseFilter":
-        """Create filter from halal ETF holdings.
-
-        Convenience method; delegates to from_universe_type(HALAL).
-
-        Returns:
-            UniverseFilter with halal symbols
-        """
-        return cls.from_universe_type(UniverseType.HALAL)
 
     @classmethod
     def from_symbol_list(cls, symbols: list[str]) -> "UniverseFilter":
@@ -146,14 +124,12 @@ class UniverseFilter:
 
     @property
     def etfs_used(self) -> list[str]:
-        """List of ETF tickers used for the halal universe.
+        """List of ETF tickers backing this universe.
 
-        Returns the correct ETF list based on which universe this filter
-        was built from:
-        - HALAL: 3 ETFs (SPUS, HLAL, SPTE)
-        - HALAL_NEW: 5 ETFs (SPUS, SPTE, SPWO, HLAL, UMMA)
-        - Others / unknown: falls back to HALAL ETFs
+        - ``halal_new`` / ``halal_filtered`` -> 5-ETF halal_new source.
+        - everything else (including unrecognised universes) -> the
+          legacy 3-ETF ``HALAL_ETFS`` list, preserving prior behaviour.
         """
-        if self._universe_type in (UniverseType.HALAL_NEW, UniverseType.HALAL_FILTERED):
+        if self._universe in _HALAL_NEW_DERIVED_UNIVERSES:
             return [s.upper() for s in ALL_ETFS]
         return list(HALAL_ETFS)

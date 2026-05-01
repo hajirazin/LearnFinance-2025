@@ -2,12 +2,10 @@
 
 import os
 from datetime import date, timedelta
-from enum import Enum
 
 # Environment variable names
 ENV_LSTM_LOOKBACK_YEARS = "LSTM_TRAIN_LOOKBACK_YEARS"
 ENV_LSTM_WINDOW_END_DATE = "LSTM_TRAIN_WINDOW_END_DATE"
-ENV_ETL_UNIVERSE = "ETL_UNIVERSE"
 ENV_CUTOFF_DATE = "CUTOFF_DATE"
 
 # HuggingFace Hub environment variables
@@ -36,31 +34,6 @@ ENV_ALPACA_API_SECRET = "ALPACA_API_SECRET"
 # Defaults
 DEFAULT_LOOKBACK_YEARS = 10
 DEFAULT_STORAGE_BACKEND = "local"  # Options: "local", "hf"
-
-
-class UniverseType(str, Enum):
-    """Stock universe types for training models and ETL.
-
-    Each universe represents a different set of stocks to train on.
-    Using str as base class allows direct string comparison and serialization.
-
-    Universe selection for *training* now flows through the per-bucket
-    registry (see ``brain_api.core.model_buckets``) instead of an env
-    var, so a workflow can A/B-test two universes against the same
-    endpoint concurrently. ``UniverseType`` is retained for ETL
-    selection only; the training endpoints accept the universe as a
-    request body field instead.
-    """
-
-    HALAL = "halal"  # Halal ETF universe (~14 stocks from SPUS/HLAL/SPTE)
-    SP500 = "sp500"  # S&P 500 (~500 stocks from datahub.io)
-    HALAL_NEW = "halal_new"  # Expanded halal (~410 stocks from 5 ETFs + Alpaca filter)
-    HALAL_FILTERED = "halal_filtered"  # Top 15 factor-scored from halal_new
-    HALAL_INDIA = "halal_india"  # Top 15 PatchTST-scored from Nifty 500 Shariah (NSE)
-    NIFTY_SHARIAH_500 = "nifty_shariah_500"  # All ~210 Nifty 500 Shariah constituents
-
-
-DEFAULT_ETL_UNIVERSE = UniverseType.HALAL_FILTERED
 
 
 def get_hf_token() -> str | None:
@@ -101,31 +74,6 @@ def get_hf_twitter_sentiment_repo() -> str | None:
 def get_storage_backend() -> str:
     """Get the storage backend to use ('local' or 'hf')."""
     return os.environ.get(ENV_STORAGE_BACKEND, DEFAULT_STORAGE_BACKEND)
-
-
-def get_etl_universe() -> UniverseType:
-    """Get ETL pipeline universe from environment.
-
-    Controls which stock universe the news-sentiment ETL and
-    sentiment-gaps pipelines filter to.
-
-    Returns:
-        UniverseType enum value.
-
-    Raises:
-        ValueError: If ETL_UNIVERSE env var has an invalid value.
-    """
-    env_value = os.environ.get(ENV_ETL_UNIVERSE, "")
-    if not env_value:
-        return DEFAULT_ETL_UNIVERSE
-
-    try:
-        return UniverseType(env_value.lower())
-    except ValueError as err:
-        valid_options = [e.value for e in UniverseType]
-        raise ValueError(
-            f"Invalid ETL_UNIVERSE='{env_value}'. Valid options: {valid_options}"
-        ) from err
 
 
 def resolve_cutoff_date(reference_date: date | None = None) -> date:

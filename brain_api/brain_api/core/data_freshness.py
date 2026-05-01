@@ -181,6 +181,7 @@ def refresh_stale_fundamentals(
 
 
 def ensure_fresh_training_data(
+    universe: str,
     symbols: list[str],
     start_date: date,
     end_date: date,
@@ -195,6 +196,9 @@ def ensure_fresh_training_data(
     Called automatically by training endpoints.
 
     Args:
+        universe: Registered ETL universe string -- forwarded to
+            ``fill_sentiment_gaps`` so the gap fill scopes its symbol
+            slate to the same universe the caller is training on.
         symbols: List of symbols to ensure data for
         start_date: Training window start date
         end_date: Training window end date
@@ -226,6 +230,7 @@ def ensure_fresh_training_data(
     try:
         if parquet_path.exists():
             gap_result: GapFillResult = fill_sentiment_gaps(
+                universe=universe,
                 start_date=start_date,
                 end_date=end_date,
                 parquet_path=parquet_path,

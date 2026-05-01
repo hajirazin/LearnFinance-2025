@@ -18,16 +18,13 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from brain_api.core.config import UniverseType, get_etl_universe
 from brain_api.core.finbert import FinBERTScorer, SentimentScore
 from brain_api.core.news_api.alpaca import ALPACA_EARLIEST_DATE, AlpacaNewsClient
 from brain_api.etl.gap_detection import categorize_gaps, find_gaps, get_gap_statistics
 from brain_api.etl.parquet_writer import OUTPUT_SCHEMA
-from brain_api.universe import (
-    get_halal_filtered_symbols,
-    get_halal_new_symbols,
-    get_halal_symbols,
-    get_sp500_symbols,
+from brain_api.etl.universe_registry import (
+    UnknownETLUniverseError,
+    get_etl_symbols,
 )
 
 logger = logging.getLogger(__name__)
@@ -220,6 +217,7 @@ def append_to_parquet(
 
 
 def fill_sentiment_gaps(
+    universe: str,
     start_date: date,
     end_date: date,
     parquet_path: Path,
@@ -230,6 +228,8 @@ def fill_sentiment_gaps(
     """Fill missing sentiment data in the parquet file.
 
     Args:
+        universe: Registered ETL universe string (see
+            :mod:`brain_api.etl.universe_registry`).
         start_date: Earliest date to check for gaps
         end_date: Latest date to check for gaps
         parquet_path: Path to daily_sentiment.parquet
@@ -248,32 +248,28 @@ def fill_sentiment_gaps(
 
     try:
         # Phase 1: Get universe symbols
-        universe_type = get_etl_universe()
-        logger.info("Phase 1: Getting %s symbols", universe_type.value)
+        logger.info("Phase 1: Getting %s symbols", universe)
         progress.current_phase = "getting_symbols"
         update_progress()
 
-        if universe_type == UniverseType.HALAL:
-            symbols = get_halal_symbols()
-        elif universe_type == UniverseType.HALAL_NEW:
-            symbols = get_halal_new_symbols()
-        elif universe_type == UniverseType.HALAL_FILTERED:
-            symbols = get_halal_filtered_symbols(shutdown_event=shutdown_event)
-        elif universe_type == UniverseType.SP500:
-            symbols = get_sp500_symbols()
-        else:
-            raise ValueError(f"Unknown universe type: {universe_type}")
+        try:
+            symbols = get_etl_symbols(universe, shutdown_event=shutdown_event)
+        except UnknownETLUniverseError:
+            # Surfaced to the API layer as 422; re-raise here so the
+            # caller (route handler) can map it. Keeps the no-silent-
+            # fallback rule from AGENTS.md.
+            raise
 
         if not symbols:
-            logger.error("No %s symbols found", universe_type.value)
-            progress.error = f"No {universe_type.value} symbols found"
+            logger.error("No %s symbols found", universe)
+            progress.error = f"No {universe} symbols found"
             progress.status = "failed"
             return GapFillResult(success=False, progress=progress)
 
         logger.info(
             "Found %d %s symbols: %s...",
             len(symbols),
-            universe_type.value,
+            universe,
             symbols[:5],
         )
 

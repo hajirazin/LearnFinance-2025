@@ -19,6 +19,11 @@ from pydantic import BaseModel, Field
 from brain_api.etl.config import ETLConfig
 from brain_api.etl.gap_fill import GapFillProgress, fill_sentiment_gaps
 from brain_api.etl.pipeline import run_pipeline
+from brain_api.etl.universe_registry import (
+    UnknownETLUniverseError,
+    get_etl_symbols,
+    list_universes,
+)
 
 
 def _get_shutdown_event() -> threading.Event:
@@ -110,9 +115,36 @@ def _run_etl_job(job_id: str, config: ETLConfig) -> None:
 # ============================================================================
 
 
+def _validate_universe_or_422(universe: str) -> None:
+    """Reject unknown ``universe`` values with HTTP 422.
+
+    Raising ``HTTPException(422)`` here keeps the route handler's happy
+    path small and matches the training endpoints' contract for
+    unknown-universe inputs.
+    """
+    try:
+        # Cheap registry lookup; we only care about validity here, not
+        # the symbol list (resolvers may be expensive).
+        if universe not in list_universes():
+            raise UnknownETLUniverseError(
+                f"No ETL universe registered for {universe!r}. "
+                f"Valid universes: {sorted(list_universes())}"
+            )
+    except UnknownETLUniverseError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
 class ETLJobRequest(BaseModel):
     """Request model for starting an ETL job."""
 
+    universe: str = Field(
+        ...,
+        description=(
+            "Registered ETL universe string (see ETL universe registry). "
+            "Validated against the registry; unknown values return 422."
+        ),
+        examples=["halal_filtered"],
+    )
     batch_size: int = Field(
         256,
         ge=1,
@@ -186,7 +218,7 @@ def start_news_sentiment_etl(
 
     This endpoint starts a long-running ETL pipeline that:
     1. Downloads the HuggingFace financial news dataset (if not cached)
-    2. Filters to the configured universe (ETL_UNIVERSE env var)
+    2. Filters to the universe specified in the request body
     3. Scores articles with FinBERT (with caching)
     4. Aggregates daily sentiment per symbol
     5. Outputs to parquet file
@@ -197,14 +229,15 @@ def start_news_sentiment_etl(
     Returns:
         ETLJobResponse with job_id for polling
     """
+    _validate_universe_or_422(request.universe)
     # Clean up old jobs
     _cleanup_old_jobs()
 
     # Generate job ID
     job_id = str(uuid.uuid4())[:8]
 
-    # Create config from request (universe comes from ETL_UNIVERSE env var)
     config = ETLConfig(
+        universe=request.universe,
         batch_size=request.batch_size,
         max_articles=request.max_articles,
         sentiment_threshold=request.sentiment_threshold,
@@ -219,10 +252,10 @@ def start_news_sentiment_etl(
         status="pending",
         started_at=datetime.now(UTC),
         config={
+            "universe": config.universe,
             "batch_size": config.batch_size,
             "max_articles": config.max_articles,
             "sentiment_threshold": config.sentiment_threshold,
-            "universe": config.universe.value,
             "local_only": config.local_only,
             "output_dir": str(config.output_dir),
             "cache_dir": str(config.cache_dir),
@@ -310,6 +343,14 @@ def get_etl_job_status(job_id: str) -> ETLJobStatusResponse:
 class SentimentGapsRequest(BaseModel):
     """Request model for sentiment gap fill."""
 
+    universe: str = Field(
+        ...,
+        description=(
+            "Registered ETL universe string (see ETL universe registry). "
+            "Validated against the registry; unknown values return 422."
+        ),
+        examples=["halal_filtered"],
+    )
     start_date: str = Field(
         ...,
         description="Earliest date to check for gaps (YYYY-MM-DD)",
@@ -360,6 +401,7 @@ def _update_gap_fill_progress(job_id: str, progress: GapFillProgress) -> None:
 
 def _run_gap_fill_job(
     job_id: str,
+    universe: str,
     start_date: date,
     end_date: date,
     parquet_path: Path,
@@ -374,6 +416,7 @@ def _run_gap_fill_job(
 
     try:
         result = fill_sentiment_gaps(
+            universe=universe,
             start_date=start_date,
             end_date=end_date,
             parquet_path=parquet_path,
@@ -422,7 +465,7 @@ def start_sentiment_gaps_fill(
 
     The job:
     1. Reads data/output/daily_sentiment.parquet
-    2. Identifies missing (date, symbol) pairs for the configured universe (ETL_UNIVERSE env var)
+    2. Identifies missing (date, symbol) pairs for the universe in the request body
     3. Fetches news from Alpaca API (2015+ only, rate-limited to 200/min)
     4. Scores articles with FinBERT
     5. Appends new sentiment data to parquet
@@ -432,6 +475,7 @@ def start_sentiment_gaps_fill(
     Returns:
         ETLJobResponse with job_id for polling
     """
+    _validate_universe_or_422(request.universe)
     # Clean up old jobs
     _cleanup_old_jobs()
 
@@ -473,6 +517,7 @@ def start_sentiment_gaps_fill(
         status="pending",
         started_at=datetime.now(UTC),
         config={
+            "universe": request.universe,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "parquet_path": str(parquet_path),
@@ -485,6 +530,7 @@ def start_sentiment_gaps_fill(
     background_tasks.add_task(
         _run_gap_fill_job,
         job_id,
+        request.universe,
         start_date,
         end_date,
         parquet_path,
@@ -535,6 +581,16 @@ def get_sentiment_gaps_job_status(job_id: str) -> ETLJobStatusResponse:
 class RefreshTrainingDataRequest(BaseModel):
     """Request model for refreshing training data."""
 
+    universe: str = Field(
+        ...,
+        description=(
+            "Registered ETL universe string (see ETL universe registry). "
+            "Determines the symbol slate for both sentiment gap fill and "
+            "fundamentals refresh. Validated against the registry; "
+            "unknown values return 422."
+        ),
+        examples=["halal_filtered"],
+    )
     start_date: str | None = Field(
         None,
         description="Training window start date (YYYY-MM-DD). Defaults to Jan 1st, 10 years ago.",
@@ -574,8 +630,10 @@ def refresh_training_data(
 ) -> RefreshTrainingDataResponse:
     """Refresh training data (sentiment gaps + fundamentals).
 
-    Symbols are resolved from the ETL_UNIVERSE config, ensuring this endpoint
-    is self-sufficient and does not require the caller to specify symbols.
+    Symbols are resolved from the ``universe`` field via the ETL
+    universe registry, so two parallel workflows can refresh different
+    slates against the same brain_api deployment without env-var
+    contention.
 
     This endpoint ensures training data is fresh before training by:
     1. Filling news sentiment gaps (2015+ via Alpaca API)
@@ -585,11 +643,15 @@ def refresh_training_data(
         RefreshTrainingDataResponse with statistics on what was refreshed
     """
     from brain_api.core.data_freshness import ensure_fresh_training_data
-    from brain_api.routes.training.dependencies import get_etl_symbols
 
-    symbols = get_etl_symbols()
+    _validate_universe_or_422(request.universe)
+    try:
+        symbols = get_etl_symbols(request.universe)
+    except UnknownETLUniverseError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     logger.info(
-        f"[ETL Refresh] Resolved {len(symbols)} symbols from ETL_UNIVERSE config"
+        f"[ETL Refresh] Resolved {len(symbols)} symbols "
+        f"from universe={request.universe!r}"
     )
 
     # Parse end_date (default: today)
@@ -626,6 +688,7 @@ def refresh_training_data(
 
     # Call the shared data freshness function
     result = ensure_fresh_training_data(
+        universe=request.universe,
         symbols=symbols,
         start_date=start_date,
         end_date=end_date,

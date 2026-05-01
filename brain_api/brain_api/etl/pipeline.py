@@ -76,7 +76,7 @@ def run_pipeline(
             "dataset": config.dataset_name,
             "batch_size": config.batch_size,
             "sentiment_threshold": config.sentiment_threshold,
-            "universe": config.universe.value,
+            "universe": config.universe,
             "max_articles": config.max_articles,
         },
     }
@@ -99,9 +99,9 @@ def run_pipeline(
     console.print()
 
     # Universe filter
-    universe_name = config.universe.value
+    universe_name = config.universe
     console.print(f"  Fetching [cyan]{universe_name}[/] universe...")
-    universe = UniverseFilter.from_universe_type(config.universe)
+    universe = UniverseFilter.from_universe(config.universe)
     console.print(f"  Found [green]{universe.symbol_count}[/] {universe_name} symbols")
     stats["universe"] = {
         "type": universe_name,

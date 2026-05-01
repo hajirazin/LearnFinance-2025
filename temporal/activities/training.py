@@ -23,10 +23,15 @@ logger = logging.getLogger(__name__)
 
 
 @activity.defn
-def refresh_training_data() -> RefreshTrainingDataResponse:
-    """Refresh sentiment gaps and stale fundamentals."""
-    logger.info("Refreshing training data (symbols resolved by brain_api)...")
-    request = RefreshTrainingDataRequest()
+def refresh_training_data(universe: str) -> RefreshTrainingDataResponse:
+    """Refresh sentiment gaps and stale fundamentals for ``universe``.
+
+    ``universe`` selects the registered ETL universe at the brain_api
+    side so two parallel SAC workflows (e.g. ``halal_filtered`` and a
+    future ``halal``) can each refresh their own slate.
+    """
+    logger.info("Refreshing training data for universe=%s ...", universe)
+    request = RefreshTrainingDataRequest(universe=universe)
     with get_training_client() as client:
         response = client.post(
             "/etl/refresh-training-data",

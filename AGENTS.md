@@ -173,9 +173,9 @@ temporal/                         # Temporal workflow orchestration
 | `GET /universe/halal_india` | Top 15 PatchTST-scored from Nifty 500 Shariah (NSE India) |
 | `GET /universe/nifty_shariah_500` | All ~210 Nifty 500 Shariah constituents (NSE India) |
 | `GET /models/active-symbols` | Active symbols from SAC model metadata |
-| `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
-| `POST /etl/sentiment-gaps` | Gap detection and backfill |
-| `POST /etl/refresh-training-data` | Refresh training data (symbols from ETL_UNIVERSE config) |
+| `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
+| `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
+| `POST /etl/refresh-training-data` | Refresh training data; symbols resolved from `universe` field via the ETL universe registry |
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |
@@ -325,11 +325,18 @@ validator (e.g. `.NS` suffix enforcement for India). Training endpoints
 take `{"universe": "<name>"}` in the request body, look up the bucket
 via `get_bucket(model_type, universe)`, and dispatch to the existing
 core training functions -- there is **no env-var-driven universe
-selection** for forecasters or SAC. ETL still uses `ETL_UNIVERSE`
-because there is no concurrent A/B requirement for the ETL job.
+selection** for forecasters, SAC, or ETL. ETL has its own sibling
+registry at
+[brain_api/brain_api/etl/universe_registry.py](brain_api/brain_api/etl/universe_registry.py)
+keyed only on the universe string (no model dimension); the three
+`/etl/*` endpoints take `{"universe": "<name>"}` in the request body
+and 422 on unknown values. This keeps two parallel SAC workflows
+(e.g. `halal_filtered` and a future `halal`) from racing on a single
+process-wide env var when each refreshes its own slate.
 
 Adding a new bucket is one `_register(BucketConfig(...))` call plus a
-sibling local-storage subclass and a new HF repo env var. No other
+sibling local-storage subclass and a new HF repo env var. Adding a new
+ETL universe is one `_register(ETLUniverseConfig(...))` call. No other
 endpoint, workflow, or test edits should be required.
 
 ## Agent workflow rules

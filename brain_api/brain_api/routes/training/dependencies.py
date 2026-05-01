@@ -48,11 +48,6 @@ from brain_api.storage.local import (
     PatchTSTNiftyShariah500ModelStorage,
 )
 from brain_api.storage.sac import SACHalalFilteredModelStorage
-from brain_api.universe import get_halal_universe
-
-# ``get_halal_universe`` is still used by the ETL symbol resolver below;
-# imports kept for backward compatibility.
-_ = get_halal_universe
 
 # ============================================================================
 # Type aliases for dependency injection
@@ -67,45 +62,6 @@ Trainer = Callable[[Any, Any, Any, LSTMConfig], TrainingResult]
 PatchTSTPriceLoader = Callable[[list[str], Any, Any], dict]
 PatchTSTDatasetBuilder = Callable[[dict, dict, PatchTSTConfig], PatchTSTDatasetResult]
 PatchTSTTrainer = Callable[[Any, Any, Any, PatchTSTConfig], PatchTSTTrainingResult]
-
-
-# ============================================================================
-# ETL symbol resolver (separate from training; ETL_UNIVERSE env still in use)
-# ============================================================================
-
-
-def get_etl_symbols() -> list[str]:
-    """Get symbols for ETL pipelines based on config.
-
-    Reads ``ETL_UNIVERSE`` env var to determine which universe to use.
-    Default is ``UniverseType.HALAL_FILTERED``. Unlike the training
-    pipelines, ETL is not part of the universe-keyed bucket registry
-    -- it remains env-var driven because there is no concurrent A/B
-    requirement for the ETL refresh job.
-    """
-    from brain_api.core.config import UniverseType, get_etl_universe
-
-    universe_type = get_etl_universe()
-
-    if universe_type == UniverseType.SP500:
-        from brain_api.universe.sp500 import get_sp500_symbols
-
-        return get_sp500_symbols()
-    elif universe_type == UniverseType.HALAL_NEW:
-        from brain_api.universe.halal_new import get_halal_new_symbols
-
-        return get_halal_new_symbols()
-    elif universe_type == UniverseType.HALAL_FILTERED:
-        from brain_api.universe.halal_filtered import get_halal_filtered_symbols
-
-        return get_halal_filtered_symbols()
-    elif universe_type == UniverseType.NIFTY_SHARIAH_500:
-        from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_symbols
-
-        return get_nifty_shariah_500_symbols()
-    else:  # Default: HALAL
-        universe = get_halal_universe()
-        return [stock["symbol"] for stock in universe["stocks"]]
 
 
 def snapshots_available(forecaster_type: str) -> bool:

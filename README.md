@@ -289,8 +289,9 @@ flowchart TD
 # Brain API URL (for Temporal to call)
 BRAIN_API_URL=http://localhost:8000
 
-# ETL universe (still env-driven; ETL is single-tenant)
-ETL_UNIVERSE=halal_filtered
+# Universe selection for ETL is now per-request (no env var). Each
+# call to /etl/* takes a {"universe": "..."} body validated against the
+# in-process registry in brain_api/etl/universe_registry.py.
 
 # Per-bucket HuggingFace repos. Each (model, universe) bucket has its
 # own repo so two parallel A/B workflows can promote independently.

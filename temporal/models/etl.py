@@ -6,6 +6,13 @@ from pydantic import BaseModel, Field
 class RefreshTrainingDataRequest(BaseModel):
     """Request for POST /etl/refresh-training-data endpoint."""
 
+    universe: str = Field(
+        ...,
+        description=(
+            "Registered ETL universe string (e.g. 'halal_filtered'); "
+            "scopes both sentiment gap fill and fundamentals refresh."
+        ),
+    )
     start_date: str | None = Field(
         None, description="Training window start (YYYY-MM-DD), defaults to 10 years ago"
     )

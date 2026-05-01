@@ -87,8 +87,10 @@ def _make_sac_activities(filtered, refresh, training, summary, email):
         return filtered
 
     @activity.defn(name="refresh_training_data")
-    def mock_ref():
+    def mock_ref(universe: str):
         call_log.append("refresh_training_data")
+        # SAC workflow refreshes the same slate it trains on.
+        assert universe == "halal_filtered"
         return refresh
 
     @activity.defn(name="train_sac")

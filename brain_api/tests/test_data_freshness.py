@@ -147,10 +147,15 @@ class TestEnsureFreshTrainingData:
             patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}),
         ):
             result = ensure_fresh_training_data(
-                symbols, start_date, end_date, parquet_path=parquet_path
+                "halal_filtered",
+                symbols,
+                start_date,
+                end_date,
+                parquet_path=parquet_path,
             )
 
             mock_fill.assert_called_once_with(
+                universe="halal_filtered",
                 start_date=start_date,
                 end_date=end_date,
                 parquet_path=parquet_path,
@@ -186,6 +191,7 @@ class TestEnsureFreshTrainingData:
 
             # Parquet doesn't exist, so gap fill will be skipped
             result = ensure_fresh_training_data(
+                "halal_filtered",
                 symbols,
                 start_date,
                 end_date,
@@ -229,6 +235,7 @@ class TestEnsureFreshTrainingData:
             mock_fetcher_class.return_value = mock_fetcher
 
             result = ensure_fresh_training_data(
+                "halal_filtered",
                 symbols,
                 start_date,
                 end_date,
@@ -266,6 +273,7 @@ class TestEnsureFreshTrainingData:
             mock_fetcher_class.return_value = mock_fetcher
 
             result = ensure_fresh_training_data(
+                "halal_filtered",
                 symbols,
                 start_date,
                 end_date,
@@ -302,6 +310,7 @@ class TestEnsureFreshTrainingData:
             mock_fetcher_class.return_value = mock_fetcher
 
             result = ensure_fresh_training_data(
+                "halal_filtered",
                 symbols,
                 start_date,
                 end_date,
@@ -331,6 +340,7 @@ class TestEnsureFreshTrainingData:
             patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}),
         ):
             result = ensure_fresh_training_data(
+                "halal_filtered",
                 symbols,
                 start_date,
                 end_date,
