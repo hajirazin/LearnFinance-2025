@@ -102,22 +102,28 @@ def get_sac_portfolio() -> AlpacaPortfolioResponse:
 
 
 @activity.defn
-def get_sac_halal_portfolio() -> AlpacaPortfolioResponse:
-    """Fetch SAC halal Alpaca account portfolio (legacy halal universe).
+def get_ibkr_sac_halal_portfolio() -> AlpacaPortfolioResponse:
+    """Fetch SAC halal IBKR account portfolio (legacy halal universe).
 
-    Sibling of :func:`get_sac_portfolio`. The ``sac_halal`` Alpaca
-    account is dedicated to the halal A/B SAC variant so positions,
-    cash, and open-order state stay disjoint from the halal_filtered
-    SAC bucket -- a hard requirement for client_order_id and
-    experience-file path isolation (see AGENTS.md run-id variant rule).
+    Sibling of :func:`get_sac_portfolio` but routes through the IBKR
+    ``/ibkr/*`` surface instead of ``/alpaca/*``. The ``sac_halal``
+    workflow trades on a dedicated IBKR paper account (env
+    ``IBKR_SAC_HALAL_*``) so positions, cash, and open-order state
+    stay disjoint from every Alpaca-backed strategy.
+
+    Reuses the broker-agnostic ``AlpacaPortfolioResponse`` Pydantic
+    model because brain_api's ``/ibkr/portfolio`` route returns the
+    same shape on purpose (cash, positions, open_orders_count). The
+    name ``AlpacaPortfolioResponse`` is a historical artifact -- treat
+    it as ``PortfolioResponse``.
     """
-    logger.info("Fetching SAC halal portfolio from Alpaca...")
+    logger.info("Fetching SAC halal portfolio from IBKR...")
     with get_client() as client:
-        response = client.get("/alpaca/portfolio", params={"account": "sac_halal"})
+        response = client.get("/ibkr/portfolio", params={"account": "sac_halal"})
         response.raise_for_status()
     result = AlpacaPortfolioResponse(**response.json())
     logger.info(
-        f"SAC halal portfolio: cash=${result.cash:.2f}, "
+        f"SAC halal IBKR portfolio: cash=${result.cash:.2f}, "
         f"{len(result.positions)} positions, "
         f"{result.open_orders_count} open orders"
     )
@@ -201,12 +207,61 @@ def submit_orders_sac(
     return _submit_orders("sac", orders)
 
 
-@activity.defn
-def submit_orders_sac_halal(
+def _submit_orders_ibkr(
+    account: str,
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
 ) -> SubmitOrdersResponse | SkippedSubmitResponse:
-    """Submit SAC halal orders to Alpaca (legacy halal universe)."""
-    return _submit_orders("sac_halal", orders)
+    """Submit orders to brain_api's ``/ibkr/submit-orders`` route.
+
+    Sibling of :func:`_submit_orders` for IBKR-routed accounts. Same
+    skip / empty-orders short-circuits, same response shape -- the
+    only difference is the URL prefix and the broker that ultimately
+    executes the order.
+    """
+    if isinstance(orders, SkippedOrdersResponse) or getattr(orders, "skipped", False):
+        logger.info(f"{account.upper()} (IBKR) orders skipped")
+        return SkippedSubmitResponse(account=account, skipped=True)
+
+    if not orders.orders:
+        logger.info(f"No {account.upper()} (IBKR) orders to submit")
+        return SubmitOrdersResponse(
+            account=account,
+            orders_submitted=0,
+            orders_failed=0,
+            skipped=False,
+            results=[],
+        )
+
+    logger.info(f"Submitting {len(orders.orders)} {account.upper()} (IBKR) orders...")
+    with get_client() as client:
+        response = client.post(
+            "/ibkr/submit-orders",
+            json={
+                "account": account,
+                "orders": [o.model_dump() for o in orders.orders],
+            },
+        )
+        response.raise_for_status()
+    result = SubmitOrdersResponse(**response.json())
+    logger.info(
+        f"{account.upper()} (IBKR) orders: {result.orders_submitted} submitted, "
+        f"{result.orders_failed} failed"
+    )
+    return result
+
+
+@activity.defn
+def submit_orders_ibkr_sac_halal(
+    orders: GenerateOrdersResponse | SkippedOrdersResponse,
+) -> SubmitOrdersResponse | SkippedSubmitResponse:
+    """Submit SAC halal orders to IBKR (legacy halal universe).
+
+    The ``USSACHalalAllocationWorkflow`` passes this activity into
+    :func:`workflows._order_execution.sell_wait_buy` as the submitter,
+    so sells fire first then buys -- same durable polling cycle as the
+    Alpaca-backed workflows.
+    """
+    return _submit_orders_ibkr("sac_halal", orders)
 
 
 @activity.defn
@@ -240,17 +295,24 @@ def get_order_history_sac(after_date: str) -> list[OrderHistoryItem]:
 
 
 @activity.defn
-def get_order_history_sac_halal(after_date: str) -> list[OrderHistoryItem]:
-    """Fetch SAC halal order history from Alpaca (legacy halal universe)."""
-    logger.info(f"Fetching SAC halal order history after {after_date}...")
+def get_order_history_ibkr_sac_halal(after_date: str) -> list[OrderHistoryItem]:
+    """Fetch SAC halal order history from IBKR (legacy halal universe).
+
+    Reads brain_api's local IBKR order ledger (the IB Gateway's own
+    completed-orders feed only covers the current daily session).
+    Same response shape as the Alpaca order-history activities so
+    downstream consumers (``check_order_statuses_ibkr``,
+    ``update_execution_sac``) treat the two interchangeably.
+    """
+    logger.info(f"Fetching SAC halal IBKR order history after {after_date}...")
     with get_client() as client:
         response = client.get(
-            "/alpaca/order-history",
+            "/ibkr/order-history",
             params={"account": "sac_halal", "after": after_date},
         )
         response.raise_for_status()
     result = [OrderHistoryItem(**o) for o in response.json()]
-    logger.info(f"Got {len(result)} SAC halal orders from history")
+    logger.info(f"Got {len(result)} SAC halal IBKR orders from history")
     return result
 
 
@@ -260,9 +322,15 @@ def check_order_statuses(account: str, client_order_ids: list[str]) -> list[dict
 
     Fetches recent order history and filters to the given client_order_ids.
     Returns list of {client_order_id, status, filled_qty, filled_avg_price}.
+
+    Used by Alpaca-backed sell-wait-buy loops. The IBKR equivalent is
+    :func:`check_order_statuses_ibkr`; ``sell_wait_buy`` takes the
+    status-checker as a parameter so the helper stays broker-agnostic
+    rather than branching on ``account``.
     """
     logger.info(
-        f"Checking {len(client_order_ids)} order statuses for {account.upper()}..."
+        f"Checking {len(client_order_ids)} Alpaca order statuses "
+        f"for {account.upper()}..."
     )
     today = activity.info().current_attempt_scheduled_time.strftime("%Y-%m-%d")
     with get_client() as client:
@@ -275,7 +343,37 @@ def check_order_statuses(account: str, client_order_ids: list[str]) -> list[dict
     id_set = set(client_order_ids)
     matched = [o for o in all_orders if o.get("client_order_id") in id_set]
     logger.info(
-        f"Got {len(matched)}/{len(client_order_ids)} order statuses "
+        f"Got {len(matched)}/{len(client_order_ids)} Alpaca order statuses "
+        f"for {account.upper()}"
+    )
+    return matched
+
+
+@activity.defn
+def check_order_statuses_ibkr(account: str, client_order_ids: list[str]) -> list[dict]:
+    """IBKR sibling of :func:`check_order_statuses`.
+
+    Hits brain_api's ``/ibkr/order-history`` (backed by the local
+    ledger; see ``brain_api/storage/ibkr_orders.py``) instead of the
+    Alpaca route. The shape returned matches Alpaca's so
+    ``sell_wait_buy`` can stay broker-agnostic -- it just calls
+    whichever status-check activity the workflow handed it.
+    """
+    logger.info(
+        f"Checking {len(client_order_ids)} IBKR order statuses for {account.upper()}..."
+    )
+    today = activity.info().current_attempt_scheduled_time.strftime("%Y-%m-%d")
+    with get_client() as client:
+        response = client.get(
+            "/ibkr/order-history",
+            params={"account": account, "after": today},
+        )
+        response.raise_for_status()
+    all_orders = response.json()
+    id_set = set(client_order_ids)
+    matched = [o for o in all_orders if o.get("client_order_id") in id_set]
+    logger.info(
+        f"Got {len(matched)}/{len(client_order_ids)} IBKR order statuses "
         f"for {account.upper()}"
     )
     return matched

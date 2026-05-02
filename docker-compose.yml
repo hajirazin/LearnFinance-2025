@@ -40,6 +40,49 @@ services:
       retries: 10
       start_period: 30s
 
+  # Interactive Brokers Gateway (paper) for the sac_halal SAC workflow.
+  # gnzsnz/ib-gateway is multi-arch (amd64 + arm64 since 10.37.1l); IBC is
+  # bundled so headless auto-login works once 2FA has been confirmed once
+  # via VNC. Memory-leak protection uses the JVM's built-in soft restart
+  # (preserves the security token, no nightly 2FA push).
+  #
+  # Weekly reauth: IBKR invalidates the session during the Saturday
+  # maintenance window (~13:00 SGT). Exactly one IBKR Mobile push fires
+  # per week; tap to confirm. If missed, the gateway auto-restarts and
+  # retries every TWOFA_EXIT_INTERVAL seconds until accepted.
+  #
+  # network_mode: host so brain-api on the same Pi can reach localhost:4002
+  # without docker-network NAT issues. ports: kept for visibility; on
+  # host networking they are informational only.
+  ibkr-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:stable
+    container_name: learnfinance-ibkr-gateway
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TRADING_MODE: paper
+      # Soft restart cycles the JVM in-place; keeps the 2FA-blessed
+      # session token alive so no daily push fires.
+      AUTO_RESTART_TIME: "11:59 PM"
+      # On weekend reauth: don't exit, just restart and re-prompt 2FA.
+      TWOFA_TIMEOUT_ACTION: restart
+      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+      # 1 hour between reauth retries -- avoids spamming the phone with a
+      # fresh push every minute. Headroom: weekend reauth Sat ~13:00 SGT
+      # vs Monday 20:30 SGT trade slot = ~31 hours = ~30 retry attempts.
+      TWOFA_EXIT_INTERVAL: "3600"
+      TIME_ZONE: Asia/Singapore
+      # Credentials must be provided via .env (see brain_api/.env.example).
+      # IB_USERNAME / IB_PASSWORD are the gnzsnz image's documented vars.
+    env_file:
+      - ./brain_api/.env
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -an | grep -q ':4002 .*LISTEN' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   temporal-worker:
     build: ./temporal
     container_name: learnfinance-temporal-worker

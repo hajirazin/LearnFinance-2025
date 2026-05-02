@@ -20,11 +20,26 @@ class PositionModel(BaseModel):
 
 
 class AlpacaPortfolioResponse(BaseModel):
-    """Response from GET /alpaca/portfolio."""
+    """Response from GET /alpaca/portfolio (and /ibkr/portfolio).
+
+    The class name is a historical artifact -- both routes return the
+    exact same broker-agnostic shape (cash, positions[], open orders
+    count) by design, so a single Pydantic class deserializes both.
+    Code that wants to express "this is broker-agnostic" can import
+    the :data:`PortfolioResponse` alias instead of the Alpaca name.
+    """
 
     cash: float
     positions: list[PositionModel]
     open_orders_count: int
+
+
+# Broker-agnostic alias. Use this in new code that consumes a portfolio
+# snapshot from either Alpaca or IBKR (e.g. ``_portfolio_to_weights``)
+# so the type signature does not pretend to be Alpaca-specific. The
+# legacy ``AlpacaPortfolioResponse`` name is preserved as the canonical
+# class for backwards compatibility with existing imports / tests.
+PortfolioResponse = AlpacaPortfolioResponse
 
 
 class OrderSubmitResult(BaseModel):

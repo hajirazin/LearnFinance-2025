@@ -127,13 +127,16 @@ SCHEDULES = [
         "workflow_id": "us-sac-halal-allocate",
         # 30 minutes after us-alpha-hrp keeps the established Monday
         # cadence on the inference queue. Parallel A/B sibling of
-        # us-weekly-allocate (sac_halal_filtered at 11:00 UTC); trades on
-        # the dedicated `sac_halal` Alpaca account so client_order_id
-        # collisions across the two SAC variants are impossible.
+        # us-weekly-allocate (sac_halal_filtered at 11:00 UTC); trades
+        # on the dedicated `sac_halal` IBKR account (env
+        # IBKR_SAC_HALAL_*, IB Gateway on TCP 4002 paper / 4001 live)
+        # via brain_api's /ibkr/* routes -- different broker entirely
+        # so client_order_id collisions across the two SAC variants are
+        # impossible.
         "cron": "30 12 * * 1",  # Monday 12:30 UTC (18:00 IST)
         "task_queue": QUEUE_INFERENCE,
         "description": (
-            "US SAC (halal) weekly allocation (sac_halal account, "
+            "US SAC (halal) weekly allocation (IBKR sac_halal account, "
             "universe=halal) Monday 18:00 IST"
         ),
     },

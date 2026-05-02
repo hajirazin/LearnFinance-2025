@@ -30,20 +30,29 @@ flowchart LR
     LabelEP["POST /experience/label/sac"]
     AccountMap["resolve_alpaca_account(model_type, universe)"]
     AlpacaSAC["AlpacaAccount.SAC"]
-    AlpacaSACHalal["AlpacaAccount.SAC_HALAL"]
+    IBKRSnapshot["actual_weights from IBKR post-trade snapshot"]
+    Raise["ValueError (no Alpaca account; AGENTS.md #1)"]
 
-    StoreEP -->|"writes universe field"| Disk
+    StoreEP -->|"writes universe + actual_weights"| Disk
     Disk -->|"per-record (model_type, universe)"| LabelEP
-    LabelEP --> AccountMap
+    LabelEP -->|"actual_weights present"| IBKRSnapshot
+    LabelEP -->|"no actual_weights"| AccountMap
     AccountMap -->|"halal_filtered"| AlpacaSAC
-    AccountMap -->|"halal"| AlpacaSACHalal
+    AccountMap -->|"halal (IBKR-routed)"| Raise
 ```
 
-Legacy records that pre-date the `universe` field fall back to inferring
-the universe from the run_id prefix (`paper:halal:...` -> `halal`,
-else `halal_filtered`). Per AGENTS.md rule #1 the labeller raises on
-any unknown `(model_type, universe)` pair rather than defaulting to a
-fallback account.
+The `halal` SAC variant trades through IBKR rather than Alpaca, so
+`resolve_alpaca_account('sac', 'halal')` is intentionally undefined --
+the IBKR-routed workflow plumbs `actual_weights` onto every halal
+record from the post-trade IBKR snapshot, so the labeller never falls
+through to the Alpaca lookup. A halal record reaching the labeller
+without `actual_weights` surfaces as a routing error (AGENTS.md
+rule #1) rather than silently labelling against the wrong portfolio.
+
+Legacy records that pre-date the `universe` field fall back to
+inferring the universe from the run_id prefix (`paper:halal:...` ->
+`halal`, else `halal_filtered`). Halal legacy records will fail-loud
+the same way -- there are none in production at the IBKR cutover.
 
 ---
 

@@ -36,18 +36,19 @@ from activities.inference import (
 )
 from activities.portfolio import (
     check_order_statuses,
+    check_order_statuses_ibkr,
     get_active_symbols,
     get_dhrp_portfolio,
     get_hrp_portfolio,
+    get_ibkr_sac_halal_portfolio,
+    get_order_history_ibkr_sac_halal,
     get_order_history_sac,
-    get_order_history_sac_halal,
-    get_sac_halal_portfolio,
     get_sac_portfolio,
     resolve_next_attempt,
     submit_orders_dhrp,
     submit_orders_hrp,
+    submit_orders_ibkr_sac_halal,
     submit_orders_sac,
-    submit_orders_sac_halal,
 )
 from activities.reporting import (
     generate_double_hrp_summary,
@@ -127,16 +128,17 @@ ALL_ACTIVITIES = [
     # Portfolio / orders
     get_active_symbols,
     get_sac_portfolio,
-    get_sac_halal_portfolio,
+    get_ibkr_sac_halal_portfolio,
     get_hrp_portfolio,
     get_dhrp_portfolio,
     submit_orders_sac,
-    submit_orders_sac_halal,
+    submit_orders_ibkr_sac_halal,
     submit_orders_hrp,
     submit_orders_dhrp,
     get_order_history_sac,
-    get_order_history_sac_halal,
+    get_order_history_ibkr_sac_halal,
     check_order_statuses,
+    check_order_statuses_ibkr,
     resolve_next_attempt,
     # Execution / experience
     generate_orders_sac,

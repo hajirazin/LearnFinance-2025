@@ -57,10 +57,6 @@ def make_sac_only_activities(
     def mock_get_sac_portfolio() -> AlpacaPortfolioResponse:
         return sac_portfolio
 
-    @activity.defn(name="get_sac_halal_portfolio")
-    def mock_get_sac_halal_portfolio() -> AlpacaPortfolioResponse:
-        return sac_portfolio
-
     @activity.defn(name="get_hrp_portfolio")
     def mock_get_hrp_portfolio() -> AlpacaPortfolioResponse:
         return _forbid("get_hrp_portfolio") or AlpacaPortfolioResponse(
@@ -121,14 +117,6 @@ def make_sac_only_activities(
             return SkippedSubmitResponse(account="sac")
         return sac_submit_resp
 
-    @activity.defn(name="submit_orders_sac_halal")
-    def mock_submit_orders_sac_halal(orders):
-        if isinstance(orders, SkippedOrdersResponse) or getattr(
-            orders, "skipped", False
-        ):
-            return SkippedSubmitResponse(account="sac_halal")
-        return sac_submit_resp
-
     @activity.defn(name="check_order_statuses")
     def mock_check_order_statuses(account, client_order_ids):
         if check_order_statuses_fn is not None:
@@ -139,10 +127,6 @@ def make_sac_only_activities(
 
     @activity.defn(name="get_order_history_sac")
     def mock_get_order_history_sac(after_date):
-        return []
-
-    @activity.defn(name="get_order_history_sac_halal")
-    def mock_get_order_history_sac_halal(after_date):
         return []
 
     @activity.defn(name="update_execution_sac")
@@ -199,7 +183,6 @@ def make_sac_only_activities(
         mock_resolve_next_attempt,
         mock_get_active_symbols,
         mock_get_sac_portfolio,
-        mock_get_sac_halal_portfolio,
         mock_get_hrp_portfolio,
         mock_allocate_hrp,
         mock_submit_orders_hrp,
@@ -211,10 +194,8 @@ def make_sac_only_activities(
         mock_generate_orders_sac,
         mock_store_experience_sac,
         mock_submit_orders_sac,
-        mock_submit_orders_sac_halal,
         mock_check_order_statuses,
         mock_get_order_history_sac,
-        mock_get_order_history_sac_halal,
         mock_update_execution_sac,
         mock_generate_summary,
         mock_send_weekly_email,

@@ -5,14 +5,21 @@ it must:
 
 1. Use the variant ``run_id`` form ``paper:halal:YYYY-MM-DD`` per
    AGENTS.md "Run identity & rerun semantics" (because it trades on
-   the dedicated ``sac_halal`` Alpaca paper account).
+   the dedicated ``sac_halal`` IBKR paper account, isolated from
+   every Alpaca-routed strategy by virtue of being on a different
+   broker entirely).
 2. Resolve next attempt against the ``sac_halal`` account only.
 3. Read symbols from the ``halal`` SAC bucket (mandatory ``universe``
    arg on ``get_active_symbols``).
 4. Send ``universe='halal'`` to ``infer_sac``, ``generate_summary``
    and ``send_weekly_email``.
 5. Tag SAC orders with ``algorithm='sac_halal'``.
-6. Submit through the ``sac_halal`` Alpaca submitter (not ``sac``).
+6. Submit through the IBKR ``sac_halal`` submitter
+   (``submit_orders_ibkr_sac_halal``), NEVER through the legacy
+   Alpaca ``submit_orders_sac`` activity, AND poll status through
+   ``check_order_statuses_ibkr`` -- the IBKR sibling of
+   ``check_order_statuses`` -- so the broker-agnostic
+   ``sell_wait_buy`` helper never branches on ``account``.
 
 The size of the active-symbols list is parametrized over [10, 14, 15]
 to enforce the n-agnostic claim from the plan -- the legacy halal
@@ -122,9 +129,18 @@ def _make_sac_halal_activities(
         captured_calls["get_active_symbols_universe"] = universe
         return active_symbols
 
+    @activity.defn(name="get_ibkr_sac_halal_portfolio")
+    def mock_get_ibkr_sac_halal_portfolio() -> AlpacaPortfolioResponse:
+        return sac_portfolio
+
     @activity.defn(name="get_sac_halal_portfolio")
     def mock_get_sac_halal_portfolio() -> AlpacaPortfolioResponse:
-        return sac_portfolio
+        # Post-IBKR-migration, the halal workflow MUST NOT call the
+        # legacy Alpaca sac_halal portfolio activity (it doesn't exist
+        # in production any more). Registered here purely to detect
+        # accidental re-introduction.
+        captured_calls["forbidden_get_sac_halal_portfolio"] = True
+        return AlpacaPortfolioResponse(cash=0.0, positions=[], open_orders_count=0)
 
     @activity.defn(name="get_sac_portfolio")
     def mock_get_sac_portfolio() -> AlpacaPortfolioResponse:
@@ -169,9 +185,9 @@ def _make_sac_halal_activities(
         captured_calls["store_experience_universe"] = args[9] if len(args) > 9 else None
         return None
 
-    @activity.defn(name="submit_orders_sac_halal")
-    def mock_submit_orders_sac_halal(orders_resp):
-        captured_calls.setdefault("submit_calls", []).append("sac_halal")
+    @activity.defn(name="submit_orders_ibkr_sac_halal")
+    def mock_submit_orders_ibkr_sac_halal(orders_resp):
+        captured_calls.setdefault("submit_calls", []).append("ibkr_sac_halal")
         if isinstance(orders_resp, SkippedOrdersResponse) or getattr(
             orders_resp, "skipped", False
         ):
@@ -184,21 +200,43 @@ def _make_sac_halal_activities(
             results=[],
         )
 
+    @activity.defn(name="submit_orders_sac_halal")
+    def mock_submit_orders_sac_halal(orders_resp):
+        # Post-IBKR-migration, the halal workflow MUST NOT submit
+        # through the legacy Alpaca sac_halal submitter (it doesn't
+        # exist in production any more).
+        captured_calls["forbidden_submit_orders_sac_halal"] = True
+        return SkippedSubmitResponse(account="sac_halal")
+
     @activity.defn(name="submit_orders_sac")
     def mock_submit_orders_sac(orders_resp):
         # The halal workflow MUST NOT submit to the sac (halal_filtered) account.
         captured_calls["forbidden_submit_orders_sac"] = True
         return SkippedSubmitResponse(account="sac")
 
-    @activity.defn(name="check_order_statuses")
-    def mock_check_order_statuses(account, client_order_ids):
-        captured_calls.setdefault("check_status_accounts", []).append(account)
+    @activity.defn(name="check_order_statuses_ibkr")
+    def mock_check_order_statuses_ibkr(account, client_order_ids):
+        captured_calls.setdefault("check_status_ibkr_accounts", []).append(account)
         return [
             {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
         ]
 
+    @activity.defn(name="check_order_statuses")
+    def mock_check_order_statuses(account, client_order_ids):
+        # The halal workflow MUST poll IBKR statuses, not Alpaca ones.
+        captured_calls["forbidden_check_order_statuses_alpaca"] = True
+        return [
+            {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
+        ]
+
+    @activity.defn(name="get_order_history_ibkr_sac_halal")
+    def mock_get_order_history_ibkr_sac_halal(after_date):
+        captured_calls.setdefault("history_calls", []).append("ibkr_sac_halal")
+        return []
+
     @activity.defn(name="get_order_history_sac_halal")
     def mock_get_order_history_sac_halal(after_date):
+        captured_calls["forbidden_get_order_history_sac_halal"] = True
         return []
 
     @activity.defn(name="update_execution_sac")
@@ -236,6 +274,7 @@ def _make_sac_halal_activities(
     return [
         mock_resolve_next_attempt,
         mock_get_active_symbols,
+        mock_get_ibkr_sac_halal_portfolio,
         mock_get_sac_halal_portfolio,
         mock_get_sac_portfolio,
         mock_get_fundamentals,
@@ -245,9 +284,12 @@ def _make_sac_halal_activities(
         mock_infer_sac,
         mock_generate_orders_sac,
         mock_store_experience_sac,
+        mock_submit_orders_ibkr_sac_halal,
         mock_submit_orders_sac_halal,
         mock_submit_orders_sac,
+        mock_check_order_statuses_ibkr,
         mock_check_order_statuses,
+        mock_get_order_history_ibkr_sac_halal,
         mock_get_order_history_sac_halal,
         mock_update_execution_sac,
         mock_generate_summary,
@@ -275,7 +317,8 @@ class TestUSSACHalalAllocationHappyPath:
           * resolve_next_attempt scopes to the ``sac_halal`` account
           * universe='halal' threads through to infer_sac / summary / email
           * algorithm='sac_halal' tags generate_orders_sac
-          * submit goes through ``submit_orders_sac_halal`` (not ``submit_orders_sac``)
+          * submit goes through ``submit_orders_ibkr_sac_halal``
+            (never the legacy Alpaca submitters)
           * the returned ``symbols_count`` matches the parametrized n
             (n-agnostic claim)
         """
@@ -342,17 +385,26 @@ class TestUSSACHalalAllocationHappyPath:
         # actual_weights.
         assert captured["update_execution_post_trade_portfolio"] is True
 
-        # Submit went through sac_halal, never the legacy sac account.
-        # sell-wait-buy invokes the submitter twice (sells then buys),
-        # so we assert all entries are the halal account.
+        # Submit went through the IBKR sac_halal submitter, never the
+        # legacy Alpaca submitter (sac or sac_halal). sell-wait-buy
+        # invokes the submitter twice (sells then buys).
         submit_calls = captured.get("submit_calls", [])
-        assert submit_calls and all(c == "sac_halal" for c in submit_calls)
+        assert submit_calls and all(c == "ibkr_sac_halal" for c in submit_calls)
         assert "forbidden_submit_orders_sac" not in captured
+        assert "forbidden_submit_orders_sac_halal" not in captured
         assert "forbidden_get_sac_portfolio" not in captured
+        assert "forbidden_get_sac_halal_portfolio" not in captured
 
-        # Sell-wait-buy polling (if any) must scope to sac_halal too.
-        for acct in captured.get("check_status_accounts", []):
+        # Sell-wait-buy polling (if any) must scope to the IBKR
+        # status-check activity AND the sac_halal account.
+        for acct in captured.get("check_status_ibkr_accounts", []):
             assert acct == "sac_halal"
+        assert "forbidden_check_order_statuses_alpaca" not in captured
+
+        # Order history must come from the IBKR ledger, not the legacy
+        # Alpaca route.
+        assert captured.get("history_calls") == ["ibkr_sac_halal"]
+        assert "forbidden_get_order_history_sac_halal" not in captured
 
         # Email subject reflects the new universe-tagged form.
         assert "halal" in result["email"]["subject"]

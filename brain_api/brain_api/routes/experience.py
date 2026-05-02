@@ -796,7 +796,10 @@ def _infer_universe_from_run_id(run_id: str) -> str:
     workflows have disjoint run_id prefixes by design (per AGENTS.md
     "Run identity & rerun semantics"):
 
-    - ``paper:halal:YYYY-MM-DD[:sac]`` -> ``halal`` (sac_halal account)
+    - ``paper:halal:YYYY-MM-DD[:sac]`` -> ``halal`` (IBKR-routed; the
+      Alpaca labeller has no account for this universe and will
+      surface an error on resolve_alpaca_account -- see AGENTS.md
+      rule #1)
     - everything else                 -> ``halal_filtered`` (sac account)
 
     Per AGENTS.md rule #1 the inference is intentionally bounded to the
@@ -817,11 +820,11 @@ def _label_experience_for_account(
     """Label experience records for a model type using actual weights.
 
     Routes each record to the correct Alpaca account via
-    :func:`resolve_alpaca_account` driven by ``record.universe``. The
-    two parallel SAC A/B workflows share ``model_type='sac'`` but trade
-    on disjoint Alpaca accounts (``sac`` vs ``sac_halal``), so a single
-    process-wide account would silently mis-label every record from the
-    sibling workflow.
+    :func:`resolve_alpaca_account` driven by ``record.universe``. Only
+    ``halal_filtered`` is currently Alpaca-routable; ``halal`` records
+    are IBKR-routed and MUST carry ``actual_weights`` plumbed in from
+    the post-trade IBKR snapshot at write time -- the Alpaca fallback
+    cannot serve them and will fail-loud per AGENTS.md rule #1.
 
     Args:
         model_type: ``"sac"`` (currently the only labeller-supported

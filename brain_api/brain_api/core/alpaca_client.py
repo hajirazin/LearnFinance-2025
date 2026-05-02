@@ -2,7 +2,7 @@
 
 This module is the single source of truth for:
 
-* The :class:`AlpacaAccount` enum (``sac``, ``sac_halal``, ``hrp``, ``dhrp``).
+* The :class:`AlpacaAccount` enum (``sac``, ``hrp``, ``dhrp``).
 * :func:`get_alpaca_base_url` -- per-account URL resolution that honours
   the ``ALPACA_{ACCOUNT}_URL`` env override (paper by default, live opt-in
   per AGENTS.md "Trading mode").
@@ -22,6 +22,15 @@ The route module ``brain_api.routes.alpaca`` imports the enum + URL/cred
 helpers from here and wraps :class:`ValueError` in
 :class:`fastapi.HTTPException` at the route boundary -- core stays
 FastAPI-free per AGENTS.md "API design rules" #3.
+
+Note on the dropped ``SAC_HALAL`` entry: the ``sac_halal`` SAC variant
+(legacy ``halal`` universe) used to live here as
+``AlpacaAccount.SAC_HALAL`` but was migrated wholesale to IBKR; see
+``brain_api.routes.ibkr`` and ``brain_api.core.ibkr_client``. The
+``halal`` universe therefore has no Alpaca routing target -- a record
+reaching the labeller without ``actual_weights`` will raise from
+:func:`resolve_alpaca_account` rather than silently labelling against
+the wrong account (AGENTS.md rule #1).
 """
 
 import logging
@@ -42,16 +51,16 @@ class AlpacaAccount(str, Enum):
 
     - ``sac``: SAC RL allocator (US, ``halal_filtered`` universe -- sticky-15
       from PatchTST).
-    - ``sac_halal``: SAC RL allocator (US, legacy yfinance ``halal``
-      universe; A/B sibling of ``sac``).
     - ``hrp``: HRP baseline allocator (US, ``halal_new`` universe via the
       Alpha-HRP workflow).
     - ``dhrp``: Double HRP allocator (US, ``halal_new`` universe,
       sticky-selected).
+
+    The ``halal`` SAC variant (formerly ``sac_halal``) trades through
+    IBKR rather than Alpaca; see :mod:`brain_api.routes.ibkr`.
     """
 
     SAC = "sac"
-    SAC_HALAL = "sac_halal"
     HRP = "hrp"
     DHRP = "dhrp"
 
@@ -78,10 +87,9 @@ def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
 
     Environment variables expected:
 
-    - ``ALPACA_SAC_KEY``,        ``ALPACA_SAC_SECRET``
-    - ``ALPACA_SAC_HALAL_KEY``,  ``ALPACA_SAC_HALAL_SECRET``
-    - ``ALPACA_HRP_KEY``,        ``ALPACA_HRP_SECRET``
-    - ``ALPACA_DHRP_KEY``,       ``ALPACA_DHRP_SECRET``
+    - ``ALPACA_SAC_KEY``,   ``ALPACA_SAC_SECRET``
+    - ``ALPACA_HRP_KEY``,   ``ALPACA_HRP_SECRET``
+    - ``ALPACA_DHRP_KEY``,  ``ALPACA_DHRP_SECRET``
 
     Raises:
         ValueError: if either env var is missing or empty. Per AGENTS.md
@@ -267,11 +275,6 @@ def get_sac_client() -> AlpacaClient:
     return get_alpaca_client(AlpacaAccount.SAC)
 
 
-def get_sac_halal_client() -> AlpacaClient:
-    """Get Alpaca client for SAC halal account (legacy ``halal`` universe)."""
-    return get_alpaca_client(AlpacaAccount.SAC_HALAL)
-
-
 def get_hrp_client() -> AlpacaClient:
     """Get Alpaca client for HRP account."""
     return get_alpaca_client(AlpacaAccount.HRP)
@@ -288,30 +291,32 @@ def get_dhrp_client() -> AlpacaClient:
 
 
 # Single source of truth for the SAC universe -> Alpaca account mapping.
-# Two parallel SAC A/B workflows share ``model_type='sac'`` for their
-# experience records, so the labeller MUST disambiguate via ``universe``
-# (the bucket-registry key) to pick the right Alpaca account.
+# Currently only ``halal_filtered`` is Alpaca-routed; ``halal`` was
+# migrated to IBKR (see ``brain_api.routes.ibkr``) and intentionally
+# has NO entry here so a misrouted record fails loud.
 _SAC_UNIVERSE_TO_ACCOUNT: dict[str, AlpacaAccount] = {
     "halal_filtered": AlpacaAccount.SAC,
-    "halal": AlpacaAccount.SAC_HALAL,
 }
 
 
 def resolve_alpaca_account(model_type: str, universe: str) -> AlpacaAccount:
     """Resolve the Alpaca account for an ``(model_type, universe)`` pair.
 
-    Currently only ``model_type='sac'`` has a mapping (the two parallel
-    SAC A/B universes ``halal_filtered`` and ``halal``). Per AGENTS.md
-    rule #1 the function raises on any unknown pair instead of falling
-    back to a default account -- a wrong account would silently label
-    an experience record against the wrong portfolio.
+    Currently only ``('sac', 'halal_filtered')`` has a mapping. The
+    ``('sac', 'halal')`` pair has NO Alpaca account by design: that
+    bucket trades through IBKR (see :mod:`brain_api.routes.ibkr`) so
+    any halal experience record that reaches the labeller without
+    ``actual_weights`` already plumbed in MUST surface as an error
+    rather than silently labelling against an Alpaca account that
+    never held the IBKR positions. Per AGENTS.md rule #1 the function
+    raises on any unknown pair instead of falling back.
 
     Args:
         model_type: ``"sac"`` (currently the only routable model type;
             extend this when other RL allocators get an Alpaca-backed
             labelling story).
-        universe: SAC bucket universe, e.g. ``"halal_filtered"`` or
-            ``"halal"``.
+        universe: SAC bucket universe -- only ``"halal_filtered"`` is
+            currently routable (``"halal"`` lives on IBKR).
 
     Raises:
         ValueError: if no Alpaca account is mapped for the given pair.

@@ -107,11 +107,21 @@ async def sell_wait_buy(
     buy_orders: list[OrderModel],
     original_orders: GenerateOrdersResponse | SkippedOrdersResponse,
     submit_activity,
+    check_status_activity=check_order_statuses,
 ):
-    """Run the full sell -> poll -> buy cycle for a single Alpaca account.
+    """Run the full sell -> poll -> buy cycle for a single broker account.
 
-    Each algorithm has its own Alpaca account, so multiple sell-wait-buy
-    pipelines can run in parallel via ``asyncio.gather``.
+    Each algorithm has its own broker account, so multiple
+    sell-wait-buy pipelines can run in parallel via ``asyncio.gather``.
+
+    ``submit_activity`` is the broker-specific submit activity (e.g.
+    ``submit_orders_sac`` for Alpaca, ``submit_orders_ibkr_sac_halal``
+    for IBKR). ``check_status_activity`` is its sibling for status
+    polling -- defaults to the Alpaca-backed
+    :func:`activities.portfolio.check_order_statuses` to keep existing
+    callers working unchanged; the IBKR-routed
+    ``USSACHalalAllocationWorkflow`` passes ``check_order_statuses_ibkr``
+    explicitly so the helper never branches on ``account``.
     """
     sell_submit = await workflow.execute_activity(
         submit_activity,
@@ -129,7 +139,7 @@ async def sell_wait_buy(
 
         while workflow.now() < deadline:
             statuses = await workflow.execute_activity(
-                check_order_statuses,
+                check_status_activity,
                 args=[account, sell_order_ids],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )

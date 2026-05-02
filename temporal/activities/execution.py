@@ -14,6 +14,7 @@ from models import (
     NewsSignalResponse,
     OrderHistoryItem,
     PatchTSTInferenceResponse,
+    PortfolioResponse,
     SACInferenceResponse,
     SkippedAllocation,
     SkippedOrdersResponse,
@@ -259,8 +260,16 @@ def store_experience_sac(
     return result
 
 
-def _portfolio_to_weights(portfolio: AlpacaPortfolioResponse) -> dict[str, float]:
-    """Convert an Alpaca portfolio response to weights including ``CASH``.
+def _portfolio_to_weights(portfolio: PortfolioResponse) -> dict[str, float]:
+    """Convert a portfolio response to weights including ``CASH``.
+
+    Broker-agnostic: ``PortfolioResponse`` aliases the same Pydantic
+    shape returned by both ``GET /alpaca/portfolio`` and
+    ``GET /ibkr/portfolio`` (cash, positions[], open_orders_count),
+    so the same aggregation math feeds Alpaca-routed and IBKR-routed
+    workflows with no per-broker code path. No math difference between
+    brokers, so AGENTS.md rule #2 (math correctness vs DRY) doesn't
+    require duplication here.
 
     Uses the same equity-denominator convention as
     :meth:`AlpacaClient.get_portfolio_weights` so the two paths stay
@@ -281,17 +290,18 @@ def update_execution_sac(
     run_id: str,
     orders: GenerateOrdersResponse | SkippedOrdersResponse,
     history: list[OrderHistoryItem],
-    post_trade_portfolio: AlpacaPortfolioResponse | None = None,
+    post_trade_portfolio: PortfolioResponse | None = None,
 ) -> UpdateExecutionResponse | None:
     """Update SAC experience with execution report and actual weights.
 
-    ``post_trade_portfolio`` is an optional snapshot of the SAC Alpaca
-    account taken AFTER the sell-wait-buy cycle completes. When provided
-    we send ``actual_weights`` to ``/experience/update-execution`` so
-    the labeller never has to fall back to a live Alpaca query. Old
-    callers that don't yet pass it stay backwards-compatible -- the
-    labeller will route the fallback Alpaca call to the correct account
-    via ``resolve_alpaca_account`` in that case.
+    ``post_trade_portfolio`` is an optional snapshot of the SAC broker
+    account taken AFTER the sell-wait-buy cycle completes. Broker-
+    agnostic: the snapshot may come from Alpaca (halal_filtered SAC)
+    or IBKR (halal SAC) -- the response shapes match by design, so
+    ``actual_weights`` is computed the same way for both. When
+    provided we send ``actual_weights`` to
+    ``/experience/update-execution`` so the labeller never has to fall
+    back to a live broker query.
     """
     if isinstance(orders, SkippedOrdersResponse) or getattr(orders, "skipped", False):
         logger.info("SAC skipped - not updating execution")

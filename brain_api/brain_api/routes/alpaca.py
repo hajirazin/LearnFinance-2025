@@ -93,9 +93,7 @@ class OrderToSubmit(BaseModel):
 class SubmitOrdersRequest(BaseModel):
     """Request model for submitting multiple orders."""
 
-    account: AlpacaAccount = Field(
-        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
-    )
+    account: AlpacaAccount = Field(..., description="Trading account (sac, hrp, dhrp)")
     orders: list[OrderToSubmit] = Field(
         default_factory=list, description="Orders to submit"
     )
@@ -154,7 +152,7 @@ def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
     route handlers can let the 500 propagate naturally.
 
     Args:
-        account: The trading account (sac, sac_halal, hrp, dhrp)
+        account: The trading account (sac, hrp, dhrp)
 
     Returns:
         Tuple of (api_key, api_secret)
@@ -185,9 +183,7 @@ def get_alpaca_headers(account: AlpacaAccount) -> dict[str, str]:
 
 @router.get("/portfolio", response_model=PortfolioResponse)
 def get_portfolio(
-    account: AlpacaAccount = Query(
-        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
-    ),
+    account: AlpacaAccount = Query(..., description="Trading account (sac, hrp, dhrp)"),
 ) -> PortfolioResponse:
     """Get portfolio data for a specific Alpaca account.
 
@@ -196,7 +192,7 @@ def get_portfolio(
     skipped (if > 0, there are pending orders from a previous run).
 
     Args:
-        account: The trading account (sac, sac_halal, hrp, dhrp)
+        account: The trading account (sac, hrp, dhrp)
 
     Returns:
         PortfolioResponse with cash, positions, and open_orders_count
@@ -388,9 +384,7 @@ def submit_orders(request: SubmitOrdersRequest) -> SubmitOrdersResponse:
 
 @router.get("/order-history", response_model=list[OrderHistoryItem])
 def get_order_history(
-    account: AlpacaAccount = Query(
-        ..., description="Trading account (sac, sac_halal, hrp, dhrp)"
-    ),
+    account: AlpacaAccount = Query(..., description="Trading account (sac, hrp, dhrp)"),
     after: str = Query(
         ..., description="ISO date to fetch orders after (e.g., 2026-02-03)"
     ),
@@ -401,7 +395,7 @@ def get_order_history(
     orders with actual execution results.
 
     Args:
-        account: The trading account (sac, sac_halal, hrp, dhrp)
+        account: The trading account (sac, hrp, dhrp)
         after: ISO date string to fetch orders after
 
     Returns:

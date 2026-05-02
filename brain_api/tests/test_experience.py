@@ -277,17 +277,18 @@ class TestLabelSACEndpoint:
 
             mock_get_client.assert_called_with(AlpacaAccount.SAC)
 
-    def test_label_sac_halal_routes_to_sac_halal_account(
+    def test_label_sac_halal_skips_when_no_actual_weights(
         self, temp_storage, sample_full_state, sample_intended_action
     ):
-        """halal universe -> AlpacaAccount.SAC_HALAL (parallel A/B sibling).
+        """halal records have NO Alpaca account post IBKR migration.
 
-        This is the bug-fix coverage: before per-record routing the
-        labeller would silently fetch the legacy ``sac`` account for
-        every halal record.
+        The halal SAC variant trades through IBKR (see
+        ``brain_api.routes.ibkr``), so ``resolve_alpaca_account('sac',
+        'halal')`` raises by design (AGENTS.md rule #1). A halal
+        record reaching the labeller without ``actual_weights`` plumbed
+        in MUST be skipped with an error rather than silently labelled
+        against an Alpaca account that never held the IBKR positions.
         """
-        # Use past dates so the labeller does not skip the record on
-        # the "week not ended yet" guard.
         past_week_start = (date.today() - timedelta(days=14)).isoformat()
         past_week_end = (date.today() - timedelta(days=10)).isoformat()
         record = ExperienceRecord(
@@ -309,30 +310,70 @@ class TestLabelSACEndpoint:
                 "brain_api.routes.experience.get_experience_storage",
                 return_value=temp_storage,
             ),
+            patch("brain_api.core.lstm.load_prices_yfinance", return_value={}),
         ):
-            mock_client = MagicMock()
-            mock_client.account = MagicMock(value="sac_halal")
-            mock_client.get_portfolio_weights.return_value = {"AAPL": 0.5, "CASH": 0.5}
-            mock_get_client.return_value = mock_client
-
             from brain_api.routes.experience import _label_experience_for_account
 
-            with patch("brain_api.core.lstm.load_prices_yfinance") as mock_prices:
-                mock_prices.return_value = {}
-                _label_experience_for_account("sac", None, temp_storage)
+            response = _label_experience_for_account("sac", None, temp_storage)
 
-            from brain_api.core.alpaca_client import AlpacaAccount
+        # No Alpaca client should ever be constructed for a halal record.
+        mock_get_client.assert_not_called()
+        # The labeller must surface the routing failure rather than
+        # silently labelling -- AGENTS.md rule #1.
+        assert response.records_labeled == 0
+        assert response.records_skipped >= 1 or response.errors
 
-            mock_get_client.assert_called_with(AlpacaAccount.SAC_HALAL)
-
-    def test_label_sac_routes_per_record_in_mixed_batch(
+    def test_label_sac_halal_with_actual_weights_skips_alpaca_lookup(
         self, temp_storage, sample_full_state, sample_intended_action
     ):
-        """A mixed batch routes each record to its own account.
+        """halal records with actual_weights labelled without touching Alpaca.
 
-        Two unlabeled records (one per universe) MUST construct two
-        distinct Alpaca clients, one for ``sac`` and one for
-        ``sac_halal`` -- no record may leak into the wrong account.
+        The IBKR-routed workflow plumbs the post-trade IBKR portfolio
+        snapshot onto the experience record at write time; the labeller
+        consumes that and never falls through to the Alpaca-account
+        lookup that no longer has a halal entry.
+        """
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
+        record = ExperienceRecord(
+            run_id="paper:halal:2026-04-13:sac",
+            week_start=past_week_start,
+            week_end=past_week_end,
+            model_type="sac",
+            model_version="v1.0.0",
+            universe="halal",
+            state=sample_full_state,
+            intended_action=sample_intended_action,
+            intended_turnover=0.1,
+            actual_weights={"AAPL": 0.5, "CASH": 0.5},
+        )
+        temp_storage.store(record)
+
+        with (
+            patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
+            patch(
+                "brain_api.routes.experience.get_experience_storage",
+                return_value=temp_storage,
+            ),
+            patch("brain_api.core.lstm.load_prices_yfinance", return_value={}),
+        ):
+            from brain_api.routes.experience import _label_experience_for_account
+
+            _label_experience_for_account("sac", None, temp_storage)
+
+        # The post-trade snapshot already provides actual_weights, so
+        # the labeller never even attempts to construct an Alpaca client.
+        mock_get_client.assert_not_called()
+
+    def test_label_sac_routes_halal_filtered_unaffected_by_halal_drop(
+        self, temp_storage, sample_full_state, sample_intended_action
+    ):
+        """halal_filtered records still route to AlpacaAccount.SAC.
+
+        Surgical edit guarantee: dropping the halal entry from
+        ``_SAC_UNIVERSE_TO_ACCOUNT`` MUST NOT affect halal_filtered
+        labelling. This test pins that guarantee so a future cleanup
+        can't accidentally take SAC down with sac_halal.
         """
         from brain_api.core.alpaca_client import AlpacaAccount
 
@@ -347,19 +388,6 @@ class TestLabelSACEndpoint:
                 model_type="sac",
                 model_version="v1.0.0",
                 universe="halal_filtered",
-                state=sample_full_state,
-                intended_action=sample_intended_action,
-                intended_turnover=0.1,
-            )
-        )
-        temp_storage.store(
-            ExperienceRecord(
-                run_id="paper:halal:2026-01-01:sac",
-                week_start=past_week_start,
-                week_end=past_week_end,
-                model_type="sac",
-                model_version="v1.0.0",
-                universe="halal",
                 state=sample_full_state,
                 intended_action=sample_intended_action,
                 intended_turnover=0.1,
@@ -386,17 +414,19 @@ class TestLabelSACEndpoint:
 
             _label_experience_for_account("sac", None, temp_storage)
 
-        assert AlpacaAccount.SAC in constructed
-        assert AlpacaAccount.SAC_HALAL in constructed
-        # Each account constructed at most once -- the labeller caches
-        # the client per account.
-        assert constructed.count(AlpacaAccount.SAC) == 1
-        assert constructed.count(AlpacaAccount.SAC_HALAL) == 1
+        assert constructed == [AlpacaAccount.SAC]
 
-    def test_label_sac_infers_universe_from_legacy_run_id(
+    def test_label_sac_legacy_halal_run_id_skips_safely(
         self, temp_storage, sample_full_state, sample_intended_action
     ):
-        """Legacy records (no universe field) infer it from run_id prefix."""
+        """Legacy halal records (no universe field) skip safely.
+
+        A pre-IBKR-migration record with run_id ``paper:halal:...`` and
+        no ``universe`` field would have its universe inferred as
+        ``halal`` from the run_id prefix. Post-migration that no
+        longer maps to an Alpaca account, so the labeller surfaces the
+        routing failure and skips rather than silently labelling.
+        """
         past_week_start = (date.today() - timedelta(days=14)).isoformat()
         past_week_end = (date.today() - timedelta(days=10)).isoformat()
         record = ExperienceRecord(
@@ -416,18 +446,12 @@ class TestLabelSACEndpoint:
             patch("brain_api.core.alpaca_client.get_alpaca_client") as mock_get_client,
             patch("brain_api.core.lstm.load_prices_yfinance", return_value={}),
         ):
-            mock_client = MagicMock()
-            mock_client.account = MagicMock(value="sac_halal")
-            mock_client.get_portfolio_weights.return_value = {"AAPL": 1.0}
-            mock_get_client.return_value = mock_client
-
             from brain_api.routes.experience import _label_experience_for_account
 
-            _label_experience_for_account("sac", None, temp_storage)
+            response = _label_experience_for_account("sac", None, temp_storage)
 
-            from brain_api.core.alpaca_client import AlpacaAccount
-
-            mock_get_client.assert_called_with(AlpacaAccount.SAC_HALAL)
+        mock_get_client.assert_not_called()
+        assert response.records_labeled == 0
 
     def test_label_sac_uses_actual_weights_not_intended(self):
         """Test that SAC labeling uses actual weights."""

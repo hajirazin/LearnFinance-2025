@@ -40,6 +40,7 @@ from brain_api.routes import (
     etl,
     experience,
     health,
+    ibkr,
     inference,
     llm,
     models_meta,
@@ -89,6 +90,7 @@ async def validation_exception_handler(
 app.include_router(root.router)
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(alpaca.router, prefix="/alpaca", tags=["alpaca"])
+app.include_router(ibkr.router, prefix="/ibkr", tags=["ibkr"])
 app.include_router(universe.router, prefix="/universe", tags=["universe"])
 app.include_router(training.router, prefix="/train", tags=["training"])
 app.include_router(inference.router, prefix="/inference", tags=["inference"])
