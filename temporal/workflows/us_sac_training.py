@@ -38,16 +38,16 @@ class USSACTrainingWorkflow:
     async def run(self) -> dict:
         workflow.logger.info("Starting US SAC training pipeline...")
 
-        filtered_result = await workflow.execute_activity(
-            fetch_halal_filtered_universe,
-            start_to_close_timeout=SHORT_TIMEOUT,
+        refresh_result = await workflow.execute_activity(
+            refresh_training_data,
+            args=["halal_new"],
+            start_to_close_timeout=TRAINING_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
-        refresh_result = await workflow.execute_activity(
-            refresh_training_data,
-            args=["halal_filtered"],
-            start_to_close_timeout=timedelta(hours=1),
+        filtered_result = await workflow.execute_activity(
+            fetch_halal_filtered_universe,
+            start_to_close_timeout=SHORT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
