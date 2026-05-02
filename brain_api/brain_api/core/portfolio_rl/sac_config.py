@@ -1,7 +1,9 @@
 """SAC base configuration for portfolio RL."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
+
+from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
 
 
 @dataclass
@@ -45,7 +47,10 @@ class SACBaseConfig:
     normalize_rewards: bool = True  # Use running reward normalization
 
     # === Environment (shared RL environment defaults) ===
-    cost_bps: int = 10  # Transaction cost in basis points
+    # ``cost_bps`` is **deprecated** -- the live cost source is the
+    # IBKR Singapore Tiered model on ``cost_config``. Retained for
+    # round-trip compatibility with previously serialised configs.
+    cost_bps: int = 10  # DEPRECATED; see cost_config
     cash_buffer: float = 0.02  # Minimum cash weight (2%)
     max_position_weight: float = 0.20  # Max weight per stock (20%)
     reward_scale: float = 1.0  # Let normalize_rewards handle magnitude.
@@ -54,6 +59,11 @@ class SACBaseConfig:
     # magnitude controls. With reward_scale=1.0, Welford normalization
     # produces mean~0 std~1 rewards, giving alpha a stable target.
     n_stocks: int = 15  # Top-15 stocks by liquidity
+    # IBKR Singapore Tiered transaction-cost schedule. See
+    # brain_api/core/portfolio_rl/broker_costs.py for the per-leg math.
+    cost_config: IBKRSingaporeCostConfig = field(
+        default_factory=IBKRSingaporeCostConfig.default
+    )
 
     # === Reward shaping ===
     sharpe_weight: float = (
@@ -110,14 +120,19 @@ class SACBaseConfig:
             "min_cagr_improvement": self.min_cagr_improvement,
             "sharpe_weight": self.sharpe_weight,
             "sharpe_eta": self.sharpe_eta,
+            "cost_config": self.cost_config.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SACBaseConfig":
         """Create config from dictionary."""
+        data = data.copy()
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
-            data = data.copy()
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
+        # Round-trip the IBKR cost sub-config; legacy serialised configs
+        # without the field fall through to the dataclass default factory.
+        if "cost_config" in data and isinstance(data["cost_config"], dict):
+            data["cost_config"] = IBKRSingaporeCostConfig.from_dict(data["cost_config"])
         return cls(**data)
 
 

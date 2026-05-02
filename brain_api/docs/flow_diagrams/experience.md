@@ -144,9 +144,9 @@ flowchart TD
     D -->|Yes| F[Get Symbols from Action]
     
     F --> G[Fetch Price Data<br/>from yfinance]
-    G --> H[Compute Weekly Returns<br/>per Symbol]
+    G --> H[Compute Weekly Returns<br/>+ End-of-Week Prices]
     H --> I[Calculate Portfolio Return]
-    I --> J[Subtract Transaction Cost]
+    I --> J["Subtract IBKR-SG<br/>Transaction Cost (log space)"]
     J --> K[Scale to Reward]
     K --> L[Update Record]
     
@@ -168,14 +168,20 @@ flowchart LR
         C --> D[Portfolio Return]
     end
     
-    subgraph "Transaction Cost"
-        E[Turnover] --> F["Cost = turnover × 10bps"]
+    subgraph "Transaction Cost (IBKR Singapore Tiered)"
+        E1[Per-Symbol Δw] --> E2["Convert to Shares<br/>(Δw × NAV / price)"]
+        E2 --> E3["Per-Leg Commission<br/>$0.0035/share<br/>min $0.35, max 1%"]
+        E2 --> E4["Sell-side Regulatory<br/>(SEC + FINRA TAF cap)"]
+        E2 --> E5["Both-sides Clearing<br/>+ FINRA CAT"]
+        E3 --> F["tc = Σ legs / NAV"]
+        E4 --> F
+        E5 --> F
     end
     
-    subgraph "Final Reward"
-        D --> G[Net Return]
+    subgraph "Final Reward (log space)"
+        D --> G["log(1 + r) - log(1 + tc)"]
         F --> G
-        G --> H["Reward = net_return × 100"]
+        G --> H["Reward = net_return × scale"]
     end
 ```
 

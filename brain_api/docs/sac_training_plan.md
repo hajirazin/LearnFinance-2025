@@ -62,7 +62,7 @@ state = [
 |------------|-------|-------------|
 | Cash buffer | 2% | Post-softmax clipping |
 | Max position | 20% | Post-softmax capping |
-| Transaction cost | 10 bps | Subtracted from return in reward |
+| Transaction cost | IBKR Singapore Tiered (per-symbol per-leg) | Subtracted from return in reward; canonical formula in [`brain_api/brain_api/core/portfolio_rl/broker_costs.py`](../brain_api/core/portfolio_rl/broker_costs.py). Components: commission with $0.35 min / 1% max, sell-side regulatory (SEC + FINRA TAF capped), both-sides clearing + FINRA CAT, NYSE/FINRA pass-through. NAV anchor = USD 10k. |
 
 ## Training Data
 

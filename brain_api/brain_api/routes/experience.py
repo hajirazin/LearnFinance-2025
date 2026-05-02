@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -115,6 +116,22 @@ class ExperienceRecord(BaseModel):
         description="Per-order execution status",
     )
     execution_updated_at: str | None = None
+    # Total portfolio equity (cash + positions market value) at the time of
+    # the post-trade snapshot, in USD. Required by the IBKR-SG cost model
+    # in the labeller to convert weight deltas into share counts. Optional
+    # only for backward compatibility with experience records written
+    # before this field existed; the labeller falls back to the IBKR cost
+    # config's default NAV anchor (USD 10k) and logs a WARNING in that
+    # case.
+    nav_usd: float | None = Field(
+        None,
+        description=(
+            "Post-trade total portfolio equity in USD; used by the IBKR "
+            "cost model in the labeller. Should be set by "
+            "/experience/update-execution from the broker portfolio "
+            "snapshot."
+        ),
+    )
 
     # Reward (filled by labeling job)
     reward: float | None = None
@@ -239,6 +256,15 @@ class UpdateExecutionRequest(BaseModel):
     actual_weights: dict[str, float] | None = Field(
         None,
         description="Actual portfolio weights after orders settled",
+    )
+
+    nav_usd: float | None = Field(
+        None,
+        description=(
+            "Post-trade total portfolio equity in USD (cash + positions "
+            "market_value). Plumbed in from the broker snapshot so the "
+            "labeller's IBKR cost model can size shares correctly."
+        ),
     )
 
 
@@ -383,39 +409,147 @@ def match_orders(
 # ============================================================================
 
 
+def _extract_prior_weights(record: ExperienceRecord) -> dict[str, float]:
+    """Pull pre-rebalance weights off the experience record's state.
+
+    ``state`` may be either an :class:`ExperienceState` or a raw dict
+    (legacy serialised records). When ``current_weights`` is missing
+    or empty we default to all-cash, which is the right zero-cost
+    starting condition for the simulator and matches the env reset
+    convention.
+    """
+    state = record.state
+    if isinstance(state, ExperienceState):
+        cw = state.current_weights or {}
+    elif isinstance(state, dict):
+        cw = state.get("current_weights") or {}
+    else:
+        cw = {}
+    if not cw:
+        return {"CASH": 1.0}
+    return {k: float(v) for k, v in cw.items()}
+
+
+def _build_weight_arrays(
+    prior_weights: dict[str, float],
+    target_weights: dict[str, float],
+    symbol_prices: dict[str, float],
+) -> tuple[list[str], np.ndarray, np.ndarray, np.ndarray]:
+    """Build (symbol_order, prior_w, target_w, prices) arrays for the cost model.
+
+    Aligns ``prior_weights`` and ``target_weights`` on the union of
+    their stock symbols (CASH is appended as the last slot). Missing
+    weights are treated as 0.0 -- a symbol the policy fully sold (or
+    fully bought into from cash) is the canonical use-case for that.
+
+    Per AGENTS.md rule #1, raises if a non-zero-delta symbol is
+    missing a price -- silently zero-costing a real trade is the
+    failure mode this guard exists to prevent.
+    """
+    stock_symbols = sorted(
+        {s for s in prior_weights if s != "CASH"}
+        | {s for s in target_weights if s != "CASH"}
+    )
+    n_stocks = len(stock_symbols)
+
+    prior_w = np.zeros(n_stocks + 1)
+    target_w = np.zeros(n_stocks + 1)
+    prices = np.zeros(n_stocks)
+
+    for stock_idx, symbol in enumerate(stock_symbols):
+        prior_w[stock_idx] = float(prior_weights.get(symbol, 0.0))
+        target_w[stock_idx] = float(target_weights.get(symbol, 0.0))
+        delta = abs(target_w[stock_idx] - prior_w[stock_idx])
+        if delta > 1e-9:
+            price = symbol_prices.get(symbol)
+            if price is None or not np.isfinite(price) or price <= 0:
+                raise ValueError(
+                    f"price for {symbol!r} required to size the rebalance "
+                    f"leg (delta_w={delta}); per AGENTS.md rule #1 we "
+                    f"refuse to silently zero-cost a real trade. "
+                    f"Got price={price!r}."
+                )
+            prices[stock_idx] = float(price)
+
+    prior_w[-1] = float(prior_weights.get("CASH", 0.0))
+    target_w[-1] = float(target_weights.get("CASH", 0.0))
+
+    return stock_symbols, prior_w, target_w, prices
+
+
 def compute_realized_reward(
     action: dict[str, float],
-    turnover: float,
     symbol_returns: dict[str, float],
-    cost_bps: int = 10,
+    *,
+    prior_weights: dict[str, float] | None = None,
+    symbol_prices: dict[str, float] | None = None,
+    nav_usd: float | None = None,
     reward_scale: float = 100.0,
 ) -> tuple[float, float]:
-    """Compute realized reward from actual returns.
+    """Compute realized reward from actual returns under the IBKR-SG cost model.
+
+    The transaction cost is the sum of per-symbol per-leg IBKR
+    Singapore Tiered fees (commission with $0.35 min / 1% max,
+    sell-side regulatory, clearing, pass-through). See
+    :mod:`brain_api.core.portfolio_rl.broker_costs` for the math.
 
     Args:
-        action: Target weights at decision time.
-        turnover: Portfolio turnover.
+        action: Target weights at decision time (post-rebalance).
         symbol_returns: Realized weekly returns for each symbol.
-        cost_bps: Transaction cost in basis points.
+        prior_weights: Pre-rebalance weights, used to compute the
+            per-symbol delta the cost model charges for. Defaults to
+            an all-cash slate (full opening of every position).
+        symbol_prices: Per-symbol close prices used to convert
+            dollar deltas into share counts. Required for any
+            symbol with a non-zero weight delta; per AGENTS.md
+            rule #1 a missing price raises rather than silently
+            zero-costing the leg.
+        nav_usd: Total portfolio equity in USD (used for the $0.35
+            per-order minimum and 1% per-order ceiling). Falls back
+            to the IBKR cost config's default anchor (USD 10k) when
+            None -- WARNING-logged by callers.
         reward_scale: Reward scaling factor.
 
     Returns:
         Tuple of (reward, realized_return).
     """
-    # Compute portfolio return
+    from brain_api.core.portfolio_rl.broker_costs import (
+        IBKRSingaporeCostConfig,
+        compute_ibkr_rebalance_cost,
+    )
+
     portfolio_return = 0.0
     for symbol, weight in action.items():
         if symbol == "CASH":
             continue  # Cash return is 0
-        symbol_return = symbol_returns.get(symbol, 0.0)
-        portfolio_return += weight * symbol_return
+        portfolio_return += weight * symbol_returns.get(symbol, 0.0)
 
-    # Compute transaction cost
-    cost_rate = cost_bps / 10_000
-    transaction_cost = turnover * cost_rate
+    if prior_weights is None:
+        prior_weights = {"CASH": 1.0}
+    if symbol_prices is None:
+        symbol_prices = {}
 
-    # Compute reward
-    net_return = portfolio_return - transaction_cost
+    cfg = IBKRSingaporeCostConfig.default()
+    if nav_usd is not None:
+        cfg = cfg.with_nav(nav_usd)
+
+    symbol_order, prior_w, target_w, prices = _build_weight_arrays(
+        prior_weights=prior_weights,
+        target_weights=action,
+        symbol_prices=symbol_prices,
+    )
+    rebalance_cost = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=prior_w,
+        target_weights=target_w,
+        prices=prices,
+        cfg=cfg,
+    )
+    tc_fraction = rebalance_cost.total_fraction
+
+    # Log-space reward for mathematical consistency (matches env.step).
+    portfolio_log_return = float(np.log(max(1 + portfolio_return, 1e-10)))
+    net_return = portfolio_log_return - np.log(1 + tc_fraction)
     reward = net_return * reward_scale
 
     return reward, portfolio_return
@@ -578,6 +712,8 @@ def update_execution(
     # Update record
     record.execution_report = execution_report
     record.actual_weights = request.actual_weights
+    if request.nav_usd is not None:
+        record.nav_usd = request.nav_usd
     record.execution_updated_at = datetime.now(UTC).isoformat()
 
     storage.update(record)
@@ -664,29 +800,41 @@ def label_experience(
 
             prices = load_prices_yfinance(symbols, data_start, data_end)
 
-            # Compute weekly returns for each symbol
+            # Compute weekly returns AND end-of-week prices for each
+            # symbol. The end_price is what the IBKR-SG cost model uses
+            # to convert weight deltas into share counts.
             symbol_returns = {}
+            symbol_prices: dict[str, float] = {}
             for symbol in symbols:
                 df = prices.get(symbol)
                 if df is None or df.empty:
                     symbol_returns[symbol] = 0.0
                     continue
 
-                # Get close prices for the week
                 try:
                     # Find closest prices to week start and end
                     start_price = df.loc[df.index >= str(week_start), "close"].iloc[0]
                     end_price = df.loc[df.index <= str(week_end), "close"].iloc[-1]
                     weekly_return = (end_price - start_price) / start_price
                     symbol_returns[symbol] = float(weekly_return)
+                    symbol_prices[symbol] = float(end_price)
                 except (IndexError, KeyError):
                     symbol_returns[symbol] = 0.0
+
+            prior_weights = _extract_prior_weights(record)
+            if record.nav_usd is None:
+                logger.warning(
+                    f"[Experience] Record {record.run_id} has no nav_usd; "
+                    f"falling back to IBKRSingaporeCostConfig default NAV anchor"
+                )
 
             # Compute reward
             reward, realized_return = compute_realized_reward(
                 action=record.action,
-                turnover=record.turnover,
                 symbol_returns=symbol_returns,
+                prior_weights=prior_weights,
+                symbol_prices=symbol_prices,
+                nav_usd=record.nav_usd,
             )
 
             # Update record
@@ -743,46 +891,75 @@ def list_experience(
 def _compute_reward_from_actual_weights(
     actual_weights: dict[str, float],
     symbol_returns: dict[str, float],
-    cost_bps: int = 10,
+    *,
+    prior_weights: dict[str, float] | None = None,
+    symbol_prices: dict[str, float] | None = None,
+    nav_usd: float | None = None,
     reward_scale: float = 100.0,
 ) -> tuple[float, float]:
-    """Compute reward based on ACTUAL portfolio weights (not intended).
+    """Compute reward based on ACTUAL portfolio weights using IBKR-SG costs.
 
-    This is the key difference from the legacy labeling - we use what
-    actually executed, not what the policy intended.
+    Differs from the simulator (env.step) in that the rebalance is
+    measured against what actually executed (``actual_weights``) vs
+    what the policy intended; the cost formula itself is identical
+    -- per-symbol per-leg IBKR Singapore Tiered fees in
+    :mod:`brain_api.core.portfolio_rl.broker_costs`.
+
+    The legacy "estimated_turnover = 0.1" hack is gone -- the cost is
+    now derived from the **actual** per-symbol weight deltas
+    (``actual_weights`` - ``prior_weights``) and the **actual**
+    per-symbol prices we have on record. If either side is missing
+    for a symbol that traded, we raise per AGENTS.md rule #1.
 
     Args:
         actual_weights: Actual portfolio weights after orders settled.
         symbol_returns: Realized weekly returns for each symbol.
-        cost_bps: Transaction cost in basis points.
+        prior_weights: Pre-rebalance weights (defaults to all-cash).
+        symbol_prices: Per-symbol close prices for the rebalance week.
+        nav_usd: Total portfolio equity in USD; defaults to the IBKR
+            cost config's USD 10k anchor when None.
         reward_scale: Reward scaling factor.
 
     Returns:
         Tuple of (reward, portfolio_return).
     """
-    import numpy as np
+    from brain_api.core.portfolio_rl.broker_costs import (
+        IBKRSingaporeCostConfig,
+        compute_ibkr_rebalance_cost,
+    )
 
-    # Compute portfolio return using ACTUAL weights
     portfolio_return = 0.0
     for symbol, weight in actual_weights.items():
         if symbol == "CASH":
             continue  # Cash return is 0
-        symbol_return = symbol_returns.get(symbol, 0.0)
-        portfolio_return += weight * symbol_return
+        portfolio_return += weight * symbol_returns.get(symbol, 0.0)
 
-    # Use log return for RL (additive across time)
     portfolio_log_return = float(np.log(max(1 + portfolio_return, 1e-10)))
 
-    # Transaction cost is computed from turnover (we use a simpler estimate here)
-    # In a more sophisticated version, we could compute actual turnover from
-    # execution_report
-    cost_rate = cost_bps / 10_000
-    estimated_turnover = 0.1  # Estimate 10% turnover per week
+    if prior_weights is None:
+        prior_weights = {"CASH": 1.0}
+    if symbol_prices is None:
+        symbol_prices = {}
 
-    transaction_cost = estimated_turnover * cost_rate
-    # Both terms in log space for mathematical consistency:
-    # net_return = log(1 + r) - log(1 + tc) = log((1 + r) / (1 + tc))
-    net_return = portfolio_log_return - np.log(1 + transaction_cost)
+    cfg = IBKRSingaporeCostConfig.default()
+    if nav_usd is not None:
+        cfg = cfg.with_nav(nav_usd)
+
+    symbol_order, prior_w, target_w, prices = _build_weight_arrays(
+        prior_weights=prior_weights,
+        target_weights=actual_weights,
+        symbol_prices=symbol_prices,
+    )
+    rebalance_cost = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=prior_w,
+        target_weights=target_w,
+        prices=prices,
+        cfg=cfg,
+    )
+    tc_fraction = rebalance_cost.total_fraction
+
+    net_return = portfolio_log_return - np.log(1 + tc_fraction)
     reward = net_return * reward_scale
 
     return reward, portfolio_return
@@ -953,8 +1130,11 @@ def _label_experience_for_account(
 
             prices = load_prices_yfinance(symbols, data_start, data_end)
 
-            # Compute weekly returns for each symbol
+            # Compute weekly returns AND end-of-week prices for each
+            # symbol. The end_price feeds the IBKR-SG cost model in
+            # _compute_reward_from_actual_weights.
             symbol_returns = {}
+            symbol_prices: dict[str, float] = {}
             for symbol in symbols:
                 df = prices.get(symbol)
                 if df is None or df.empty:
@@ -966,13 +1146,24 @@ def _label_experience_for_account(
                     end_price = df.loc[df.index <= str(week_end), "close"].iloc[-1]
                     weekly_return = (end_price - start_price) / start_price
                     symbol_returns[symbol] = float(weekly_return)
+                    symbol_prices[symbol] = float(end_price)
                 except (IndexError, KeyError):
                     symbol_returns[symbol] = 0.0
+
+            prior_weights = _extract_prior_weights(record)
+            if record.nav_usd is None:
+                logger.warning(
+                    f"[Experience] Record {record.run_id} has no nav_usd; "
+                    f"falling back to IBKRSingaporeCostConfig default NAV anchor"
+                )
 
             # Compute reward using ACTUAL weights
             reward, realized_return = _compute_reward_from_actual_weights(
                 actual_weights=actual_weights,
                 symbol_returns=symbol_returns,
+                prior_weights=prior_weights,
+                symbol_prices=symbol_prices,
+                nav_usd=record.nav_usd,
             )
 
             # Update record

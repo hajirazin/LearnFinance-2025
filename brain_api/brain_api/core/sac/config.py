@@ -37,9 +37,15 @@ class SACConfig(SACBaseConfig):
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SACConfig":
         """Create config from dictionary."""
+        from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
+
+        data = data.copy()
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
-            data = data.copy()
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
+        # Round-trip IBKR cost sub-config (legacy serialised configs without
+        # the field fall through to the dataclass default factory).
+        if "cost_config" in data and isinstance(data["cost_config"], dict):
+            data["cost_config"] = IBKRSingaporeCostConfig.from_dict(data["cost_config"])
         return cls(**data)
 
 

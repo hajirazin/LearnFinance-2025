@@ -12,6 +12,13 @@ This module provides the shared components for RL-based portfolio allocation:
 Used by `sac` unified agent.
 """
 
+from brain_api.core.portfolio_rl.broker_costs import (
+    IBKRSingaporeCostConfig,
+    LegCost,
+    RebalanceCost,
+    compute_ibkr_leg_cost,
+    compute_ibkr_rebalance_cost,
+)
 from brain_api.core.portfolio_rl.config import DEFAULT_RL_BASE_CONFIG, RLBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
@@ -57,10 +64,13 @@ from brain_api.core.portfolio_rl.walkforward import (
 __all__ = [
     "DEFAULT_RL_BASE_CONFIG",
     "EvaluationMetrics",
+    "IBKRSingaporeCostConfig",
+    "LegCost",
     "PortfolioEnv",
     "PortfolioScaler",
     "PortfolioState",
     "RLBaseConfig",
+    "RebalanceCost",
     "SnapshotInferenceError",
     "SnapshotUnavailableError",
     "StateSchema",
@@ -74,6 +84,8 @@ __all__ = [
     "compute_cagr",
     "compute_hit_rate",
     "compute_hrp_baseline_metrics",
+    "compute_ibkr_leg_cost",
+    "compute_ibkr_rebalance_cost",
     "compute_max_drawdown",
     "compute_portfolio_return",
     "compute_reward",

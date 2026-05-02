@@ -13,6 +13,10 @@ from typing import Any
 
 import numpy as np
 
+from brain_api.core.portfolio_rl.broker_costs import (
+    IBKRSingaporeCostConfig,
+    compute_ibkr_rebalance_cost,
+)
 from brain_api.core.portfolio_rl.config import DEFAULT_RL_BASE_CONFIG, RLBaseConfig
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
@@ -61,8 +65,10 @@ class PortfolioEnv:
         signals: np.ndarray,
         lstm_forecasts: np.ndarray,
         patchtst_forecasts: np.ndarray,
+        prices: np.ndarray,
         symbol_order: list[str],
         config: RLBaseConfig | None = None,
+        cost_config: IBKRSingaporeCostConfig | None = None,
     ):
         """Initialize environment.
 
@@ -75,18 +81,34 @@ class PortfolioEnv:
                            Shape: (n_weeks, n_stocks).
             patchtst_forecasts: PatchTST forecast feature for each stock each week.
                                Shape: (n_weeks, n_stocks).
+            prices: Per-symbol close levels (NOT returns), shape
+                ``(n_weeks, n_stocks)``. Required by the IBKR-SG cost
+                model to convert weight deltas into share counts; per
+                AGENTS.md rule #1 we will not silently default to a
+                synthetic price grid.
             symbol_order: Ordered list of stock symbols.
             config: RL configuration.
+            cost_config: IBKR Singapore Tiered cost schedule. Defaults
+                to :meth:`IBKRSingaporeCostConfig.default` (calibrated
+                to USD 10k NAV).
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
         self.lstm_forecasts = lstm_forecasts
         self.patchtst_forecasts = patchtst_forecasts
+        self.prices = prices
         self.symbol_order = symbol_order
         self.config = config or DEFAULT_RL_BASE_CONFIG
+        self.cost_config = cost_config or IBKRSingaporeCostConfig.default()
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
+
+        if prices.shape != (self.n_weeks, self.n_stocks):
+            raise ValueError(
+                f"prices shape {prices.shape} does not match "
+                f"(n_weeks, n_stocks) = ({self.n_weeks}, {self.n_stocks})"
+            )
 
         # State schema
         self.schema = StateSchema(n_stocks=self.n_stocks)
@@ -215,7 +237,8 @@ class PortfolioEnv:
             max_position_weight=self.config.max_position_weight,
         )
 
-        # Compute turnover
+        # Compute turnover (kept for episode statistics + info dict; no
+        # longer drives the cost calculation -- IBKR-SG cost is per-leg).
         turnover = compute_turnover(self.current_weights, target_weights)
 
         # Get weekly returns for stocks (CASH return = 0)
@@ -233,11 +256,24 @@ class PortfolioEnv:
         # For tracking, also compute simple return
         portfolio_return = float(np.dot(target_weights, asset_returns))
 
+        # IBKR Singapore Tiered transaction cost (per-symbol, per-leg).
+        # The cost model needs today's prices to convert weight deltas
+        # into shares + per-order minimum charges. See
+        # brain_api/core/portfolio_rl/broker_costs.py.
+        rebalance_cost = compute_ibkr_rebalance_cost(
+            symbol_order=self.symbol_order,
+            current_weights=self.current_weights,
+            target_weights=target_weights,
+            prices=self.prices[self.current_week_idx],
+            cfg=self.cost_config,
+        )
+        tc_fraction = rebalance_cost.total_fraction
+
         # Compute blended reward (return + differential Sharpe)
         reward = compute_blended_reward(
             portfolio_log_return=portfolio_log_return,
             portfolio_simple_return=portfolio_return,
-            turnover=turnover,
+            transaction_cost_fraction=tc_fraction,
             differential_sharpe=self.differential_sharpe,
             config=self.config,
         )
@@ -269,6 +305,9 @@ class PortfolioEnv:
             "turnover": turnover,
             "target_weights": target_weights.tolist(),
             "week_idx": self.current_week_idx - 1,
+            "transaction_cost_usd": rebalance_cost.total_usd,
+            "transaction_cost_fraction": tc_fraction,
+            "cost_breakdown": rebalance_cost.breakdown(),
         }
 
         return EnvStep(
@@ -336,18 +375,22 @@ def create_env_from_data(
     patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
     config: RLBaseConfig | None = None,
+    cost_config: IBKRSingaporeCostConfig | None = None,
 ) -> PortfolioEnv:
     """Create environment from raw data dictionaries.
 
     Helper function to convert from dict format to array format.
 
     Args:
-        prices: Dict of symbol -> array of prices (for computing returns).
+        prices: Dict of symbol -> array of prices (for computing returns
+            and for sizing trades against the IBKR-SG cost model).
         signals: Dict of symbol -> dict of signal_name -> array of values.
         lstm_forecasts: Dict of symbol -> array of LSTM forecast values.
         patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
         config: RL configuration.
+        cost_config: IBKR Singapore Tiered cost schedule (defaults applied
+            inside :class:`PortfolioEnv` if omitted).
 
     Returns:
         PortfolioEnv instance.
@@ -358,13 +401,19 @@ def create_env_from_data(
     n_stocks = len(symbol_order)
     n_signals = 7  # news + 5 fundamentals + fundamental_age
 
-    # Build returns array
+    # Build returns array + parallel prices array (close at the end of each
+    # week, used by the IBKR-SG cost model to size shares per leg).
     symbol_returns = np.zeros((n_weeks, n_stocks))
+    weekly_prices = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         price_series = prices[symbol]
         # Weekly returns
         returns = (price_series[1:] - price_series[:-1]) / price_series[:-1]
         symbol_returns[:, stock_idx] = returns[:n_weeks]
+        # Use the end-of-week close (price at index t+1) so the price
+        # available at the rebalance lines up with the return realised
+        # over week t.
+        weekly_prices[:, stock_idx] = price_series[1 : n_weeks + 1]
 
     # Build signals array
     signal_names = [
@@ -400,6 +449,8 @@ def create_env_from_data(
         signals=signals_array,
         lstm_forecasts=lstm_array,
         patchtst_forecasts=patchtst_array,
+        prices=weekly_prices,
         symbol_order=symbol_order,
         config=config,
+        cost_config=cost_config,
     )

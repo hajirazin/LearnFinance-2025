@@ -423,7 +423,16 @@ SAC uses a **blended reward** combining portfolio return with a DifferentialShar
 
 `reward = sharpe_weight * DSR + (1 - sharpe_weight) * return_reward`
 
-Transaction costs are computed in log space. This encourages risk-adjusted returns over raw performance.
+The return component is `log(1 + r) - log(1 + tc)` (log-space, so subtracting cost is unit-consistent with log return).
+
+Transaction cost `tc` is the per-symbol per-leg **IBKR Singapore Tiered** schedule (see [brain_api/brain_api/core/portfolio_rl/broker_costs.py](brain_api/brain_api/core/portfolio_rl/broker_costs.py)):
+
+- **Commission**: USD 0.0035 / share, min USD 0.35 / order, max 1% of trade value
+- **Sell-side regulatory**: SEC 0.0000206 × sale notional + FINRA TAF 0.000195 × shares (capped at USD 9.27)
+- **Both sides**: NSCC/DTC clearing 0.00020 × shares + FINRA CAT 0.000033 × shares
+- **Pass-through**: NYSE + FINRA fees on commission
+
+Calibration anchor: USD 10,000 NAV (the cost is sized against this assumed portfolio value to make the per-order minimum bite realistically). At that scale a 30%-turnover rebalance comes out around **1.5-3 bps round-trip** -- the per-order minimum binds because typical legs are only a few shares of a $200 stock. Deliberately out of scope: FX (SGD↔USD), US dividend WHT, IBKR account fees.
 
 ### Limit orders + fractional sizing
 

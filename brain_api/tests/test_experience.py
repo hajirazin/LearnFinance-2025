@@ -454,40 +454,58 @@ class TestLabelSACEndpoint:
         assert response.records_labeled == 0
 
     def test_label_sac_uses_actual_weights_not_intended(self):
-        """Test that SAC labeling uses actual weights."""
+        """Test that SAC labeling uses actual weights for the return.
+
+        Pass a no-trade rebalance (prior == actual) so the IBKR cost
+        leg is zero and we can isolate the portfolio-return part.
+        """
         actual_weights = {"GOOGL": 0.4, "AMZN": 0.4, "CASH": 0.2}
         symbol_returns = {"GOOGL": 0.03, "AMZN": 0.02}
 
         _reward, portfolio_return = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
+            prior_weights=actual_weights,  # no rebalance -> zero cost
+            symbol_prices={"GOOGL": 150.0, "AMZN": 180.0},
+            nav_usd=10_000.0,
         )
 
         expected_return = 0.4 * 0.03 + 0.4 * 0.02
         assert abs(portfolio_return - expected_return) < 0.001
 
     def test_label_sac_calculates_log_return(self):
-        """Test that SAC reward uses log return."""
+        """Test that SAC reward uses log return.
+
+        With a no-trade rebalance the IBKR cost is zero, so the only
+        thing pushing the reward away from zero is the price return.
+        """
         actual_weights = {"NVDA": 1.0, "CASH": 0.0}
         symbol_returns = {"NVDA": 0.20}  # 20% return
 
         reward, _ = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
+            prior_weights=actual_weights,  # no rebalance
+            symbol_prices={"NVDA": 500.0},
+            nav_usd=10_000.0,
         )
 
         # Should be positive for positive return
         assert reward > 0
 
     def test_label_sac_includes_transaction_cost(self):
-        """Test that SAC reward includes transaction cost."""
+        """A 100% open-from-cash rebalance with zero return must produce
+        a negative reward (the IBKR commission floor on a single leg
+        binds and cuts into a flat-return portfolio)."""
         actual_weights = {"TSLA": 1.0, "CASH": 0.0}
         symbol_returns = {"TSLA": 0.0}
 
         reward, _ = _compute_reward_from_actual_weights(
             actual_weights=actual_weights,
             symbol_returns=symbol_returns,
-            cost_bps=20,  # Higher cost
+            prior_weights={"CASH": 1.0},  # 100% buy from cash
+            symbol_prices={"TSLA": 250.0},
+            nav_usd=10_000.0,
         )
 
         assert reward < 0
@@ -1048,8 +1066,107 @@ class TestUpdateExecutionWithMatching:
             assert data.get("orders_expired", 0) + data.get("orders_partial", 0) <= 1
 
 
+class TestLabelSACUsesIBKRCostModel:
+    """End-to-end check that the labeller's realised reward uses the IBKR-SG cost model.
+
+    Stubs ``load_prices_yfinance`` to return a known price series and
+    pre-populates the experience record with prior_weights + actual_weights
+    + nav_usd. The reward must then equal the analytic value produced by
+    ``compute_ibkr_rebalance_cost`` -- not the legacy flat 10 bps formula.
+    """
+
+    def test_label_sac_realised_reward_matches_ibkr_cost_model(self, temp_storage):
+        """Realised reward equals log((1 + r) / (1 + tc)) * 100 with tc from IBKR-SG."""
+        import numpy as np
+        import pandas as pd
+
+        from brain_api.core.portfolio_rl.broker_costs import (
+            IBKRSingaporeCostConfig,
+            compute_ibkr_rebalance_cost,
+        )
+
+        past_week_start = (date.today() - timedelta(days=14)).isoformat()
+        past_week_end = (date.today() - timedelta(days=10)).isoformat()
+        # Prior was 100% cash; actual is 50% AAPL / 50% MSFT.
+        actual_weights = {"AAPL": 0.5, "MSFT": 0.5, "CASH": 0.0}
+        prior_state = {
+            "signals": {},
+            "lstm_forecasts": {},
+            "patchtst_forecasts": {},
+            "current_weights": {"CASH": 1.0},
+        }
+        nav_usd = 10_000.0
+        record = ExperienceRecord(
+            run_id="paper:halal:2026-04-13:sac",
+            week_start=past_week_start,
+            week_end=past_week_end,
+            model_type="sac",
+            model_version="v1.0.0",
+            universe="halal",
+            state=prior_state,
+            intended_action=actual_weights,
+            intended_turnover=0.5,
+            actual_weights=actual_weights,
+            nav_usd=nav_usd,
+        )
+        temp_storage.store(record)
+
+        # Stub yfinance: AAPL +2%, MSFT +1% over the week.
+        # End-of-week prices: AAPL=204, MSFT=303 (from start 200/300).
+        def _fake_prices(symbols, start, end):
+            idx = pd.to_datetime([past_week_start, past_week_end])
+            return {
+                "AAPL": pd.DataFrame({"close": [200.0, 204.0]}, index=idx),
+                "MSFT": pd.DataFrame({"close": [300.0, 303.0]}, index=idx),
+            }
+
+        with (
+            patch("brain_api.core.lstm.load_prices_yfinance", side_effect=_fake_prices),
+            patch(
+                "brain_api.routes.experience.get_experience_storage",
+                return_value=temp_storage,
+            ),
+        ):
+            from brain_api.routes.experience import _label_experience_for_account
+
+            response = _label_experience_for_account("sac", None, temp_storage)
+
+        assert response.records_labeled == 1, response.errors
+
+        labelled = temp_storage.load("paper:halal:2026-04-13:sac")
+        assert labelled.reward is not None
+
+        # Analytic check using the same IBKR cost model the labeller
+        # invokes. Two open-from-cash buy legs (50% each), $5000 each.
+        cfg = IBKRSingaporeCostConfig.default().with_nav(nav_usd)
+        prior_arr = np.array([0.0, 0.0, 1.0])  # AAPL, MSFT, CASH (sorted)
+        target_arr = np.array([0.5, 0.5, 0.0])
+        prices = np.array([204.0, 303.0])  # end-of-week close, sorted alphabetically
+        expected_cost = compute_ibkr_rebalance_cost(
+            symbol_order=["AAPL", "MSFT"],
+            current_weights=prior_arr,
+            target_weights=target_arr,
+            prices=prices,
+            cfg=cfg,
+        )
+        expected_tc = expected_cost.total_fraction
+        # AAPL +2%, MSFT +1% -> portfolio simple return = 0.5*0.02 + 0.5*0.01 = 0.015
+        expected_return = 0.5 * 0.02 + 0.5 * 0.01
+        expected_log_return = np.log(1 + expected_return)
+        expected_reward = (expected_log_return - np.log(1 + expected_tc)) * 100.0
+
+        assert labelled.reward == pytest.approx(expected_reward, rel=1e-6)
+        assert labelled.realized_return == pytest.approx(expected_return, rel=1e-6)
+
+
 class TestRewardLogSpaceConsistency:
-    """Tests verifying reward function uses log-space for both return and cost."""
+    """Tests verifying reward function uses log-space for both return and cost.
+
+    The cost source moved from a flat ``cost_bps * turnover`` formula
+    to the IBKR-SG per-leg model (see broker_costs.py); these tests
+    pass the precomputed ``transaction_cost_fraction`` directly so
+    they exercise only the reward-shape invariant.
+    """
 
     def test_reward_log_space_consistency(self):
         """Verify reward = (log(1+r) - log(1+tc)) * scale equals log((1+r)/(1+tc)) * scale."""
@@ -1057,13 +1174,12 @@ class TestRewardLogSpaceConsistency:
 
         from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = RLBaseConfig(cost_bps=10, reward_scale=100.0)
+        config = RLBaseConfig(reward_scale=100.0)
         r = 0.02  # 2% weekly return
-        turnover = 0.5  # 50% turnover
-        tc = turnover * (config.cost_bps / 10_000)  # 0.0005
+        tc = 0.0005  # 5 bps fraction of NAV
 
         portfolio_log_return = np.log(1 + r)
-        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+        reward = compute_reward_from_log_return(portfolio_log_return, tc, config)
 
         # The reward should equal log((1+r)/(1+tc)) * scale
         expected = np.log((1 + r) / (1 + tc)) * config.reward_scale
@@ -1075,12 +1191,11 @@ class TestRewardLogSpaceConsistency:
 
         from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = RLBaseConfig(cost_bps=10, reward_scale=100.0)
-        turnover = 0.5
-        tc = turnover * (config.cost_bps / 10_000)
+        config = RLBaseConfig(reward_scale=100.0)
+        tc = 0.0005
 
         portfolio_log_return = 0.0  # log(1 + 0) = 0
-        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+        reward = compute_reward_from_log_return(portfolio_log_return, tc, config)
 
         expected = -np.log(1 + tc) * config.reward_scale
         assert abs(reward - expected) < 1e-10
@@ -1094,12 +1209,11 @@ class TestRewardLogSpaceConsistency:
 
         from brain_api.core.portfolio_rl.config import RLBaseConfig
 
-        config = RLBaseConfig(cost_bps=100, reward_scale=1.0)  # 1% cost for larger diff
-        turnover = 1.0  # 100% turnover for maximum cost
-        tc = turnover * (config.cost_bps / 10_000)  # 0.01
+        config = RLBaseConfig(reward_scale=1.0)
+        tc = 0.01  # 1% of NAV cost for a clearly visible log-vs-linear gap
 
         portfolio_log_return = 0.0
-        reward = compute_reward_from_log_return(portfolio_log_return, turnover, config)
+        reward = compute_reward_from_log_return(portfolio_log_return, tc, config)
 
         # With log transform: reward = -log(1.01) * 1.0 = -0.00995...
         # Without log transform (old bug): reward = -0.01 * 1.0 = -0.01

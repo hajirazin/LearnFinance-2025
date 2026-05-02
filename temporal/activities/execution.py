@@ -277,12 +277,25 @@ def _portfolio_to_weights(portfolio: PortfolioResponse) -> dict[str, float]:
     (an empty paper account before first deposit) we surface an
     all-cash slate rather than divide-by-zero.
     """
-    total_value = portfolio.cash + sum(p.market_value for p in portfolio.positions)
+    total_value = _portfolio_total_value(portfolio)
     if total_value <= 0:
         return {"CASH": 1.0}
     weights = {p.symbol: p.market_value / total_value for p in portfolio.positions}
     weights["CASH"] = portfolio.cash / total_value
     return weights
+
+
+def _portfolio_total_value(portfolio: PortfolioResponse) -> float:
+    """Cash + sum of position market values, in the account base currency.
+
+    Plumbed into ``/experience/update-execution`` as ``nav_usd`` so
+    the labeller's IBKR-SG cost model can size shares against the
+    actual portfolio NAV at the time of the post-trade snapshot
+    (instead of the cost-config default anchor). Both Alpaca and IBKR
+    paper accounts denominate in USD today, so no FX conversion is
+    needed.
+    """
+    return portfolio.cash + sum(p.market_value for p in portfolio.positions)
 
 
 @activity.defn
@@ -329,6 +342,7 @@ def update_execution_sac(
     }
     if post_trade_portfolio is not None:
         body["actual_weights"] = _portfolio_to_weights(post_trade_portfolio)
+        body["nav_usd"] = _portfolio_total_value(post_trade_portfolio)
     with get_client() as client:
         response = client.post("/experience/update-execution", json=body)
         response.raise_for_status()

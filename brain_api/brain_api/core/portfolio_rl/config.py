@@ -1,7 +1,9 @@
 """Base configuration for portfolio RL (shared by all RL allocators)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
 
 
 @dataclass
@@ -35,10 +37,19 @@ class RLBaseConfig:
     total_timesteps: int = 10_000  # total training steps
 
     # === Environment ===
-    cost_bps: int = 10  # transaction cost in basis points (0.10%)
+    # ``cost_bps`` is **deprecated** -- the live cost source is the
+    # IBKR Singapore Tiered model on ``cost_config``. Retained as a
+    # data field so existing serialised configs / experience records
+    # round-trip without breaking; the env no longer reads it.
+    cost_bps: int = 10  # DEPRECATED; see cost_config
     cash_buffer: float = 0.02  # minimum cash weight (2%)
     max_position_weight: float = 0.20  # max weight per stock (20%)
     reward_scale: float = 100.0  # multiply returns by this (1% → 1.0)
+    # IBKR Singapore Tiered transaction-cost schedule. See
+    # brain_api/core/portfolio_rl/broker_costs.py for the per-leg math.
+    cost_config: IBKRSingaporeCostConfig = field(
+        default_factory=IBKRSingaporeCostConfig.default
+    )
 
     # === Universe ===
     n_stocks: int = 15  # Top-15 stocks by liquidity
@@ -93,15 +104,20 @@ class RLBaseConfig:
             "min_sharpe_improvement": self.min_sharpe_improvement,
             "sharpe_weight": self.sharpe_weight,
             "sharpe_eta": self.sharpe_eta,
+            "cost_config": self.cost_config.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RLBaseConfig":
         """Create config from dictionary."""
+        data = data.copy()
         # Handle hidden_sizes conversion from list to tuple
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
-            data = data.copy()
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
+        # Round-trip the IBKR cost sub-config; legacy serialised configs
+        # without the field fall through to the dataclass default factory.
+        if "cost_config" in data and isinstance(data["cost_config"], dict):
+            data["cost_config"] = IBKRSingaporeCostConfig.from_dict(data["cost_config"])
         return cls(**data)
 
 

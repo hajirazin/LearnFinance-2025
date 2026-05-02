@@ -1,6 +1,6 @@
 """Reward computation for portfolio RL.
 
-Reward = scaled(portfolio_log_return - log(1 + transaction_cost))
+Reward = scaled(portfolio_log_return - log(1 + transaction_cost_fraction))
 
 Both terms are in log space for mathematical consistency.
 All rewards are scaled by reward_scale (default 100) so that
@@ -8,10 +8,26 @@ a 1% weekly return becomes a reward of 1.0.
 
 Includes Differential Sharpe Ratio (Moody & Saffell 2001) for
 risk-adjusted reward shaping.
+
+Cost source
+-----------
+The ``transaction_cost_fraction`` argument is **always pre-computed
+by the caller**. The canonical implementation lives in
+:mod:`brain_api.core.portfolio_rl.broker_costs` (IBKR Singapore
+Tiered: per-symbol commission with min/max, sell-side regulatory,
+clearing, pass-through). This module owns the *shape* of the reward
+formula; the broker cost model owns the *amount*.
+
+The legacy flat ``cost_bps * turnover`` formula
+(:func:`compute_transaction_cost`) is retained as a deprecation
+shim so any existing callers / experience records that still pass
+``turnover`` continue to work for one cycle. New code paths must use
+:mod:`broker_costs` and pass the resulting fraction in directly.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -76,7 +92,7 @@ class DifferentialSharpe:
 def compute_blended_reward(
     portfolio_log_return: float,
     portfolio_simple_return: float,
-    turnover: float,
+    transaction_cost_fraction: float,
     differential_sharpe: DifferentialSharpe,
     config: RLBaseConfig,
 ) -> float:
@@ -91,23 +107,30 @@ def compute_blended_reward(
     Args:
         portfolio_log_return: Log portfolio return log(1 + r).
         portfolio_simple_return: Simple portfolio return r.
-        turnover: Portfolio turnover (0 to 1).
+        transaction_cost_fraction: Pre-computed transaction cost as a
+            fraction of NAV (``total_dollar_cost / nav_usd``). The
+            canonical source is
+            :func:`brain_api.core.portfolio_rl.broker_costs.compute_ibkr_rebalance_cost`
+            (IBKR Singapore Tiered model). Must be >= 0; pass 0.0 for
+            cost-free episodes (e.g. initial reset).
         differential_sharpe: DifferentialSharpe instance (stateful, updates EMAs).
-        config: Config with cost_bps, reward_scale, sharpe_weight.
+        config: Config with reward_scale + sharpe_weight (cost_bps no longer read).
 
     Returns:
         Blended reward for RL training.
     """
-    # Return component (existing formula, in log space)
-    transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
+    if transaction_cost_fraction < 0:
+        raise ValueError(
+            f"transaction_cost_fraction must be >= 0, got {transaction_cost_fraction}"
+        )
+
     return_reward = (
-        portfolio_log_return - np.log(1 + transaction_cost)
+        portfolio_log_return - np.log(1 + transaction_cost_fraction)
     ) * config.reward_scale
 
     # Differential Sharpe component (uses simple return net of costs)
-    net_simple_return = portfolio_simple_return - transaction_cost
+    net_simple_return = portfolio_simple_return - transaction_cost_fraction
     dsr = differential_sharpe.update(net_simple_return)
-    # Scale DSR to similar magnitude as return_reward
     dsr_reward = dsr * config.reward_scale
 
     return (
@@ -158,7 +181,18 @@ def compute_transaction_cost(
     turnover: float,
     cost_bps: int = 10,
 ) -> float:
-    """Compute transaction cost from turnover.
+    """**Deprecated**: legacy flat ``turnover * cost_bps`` cost formula.
+
+    This is the pre-IBKR-SG cost model. New code must compute the
+    transaction-cost fraction via
+    :func:`brain_api.core.portfolio_rl.broker_costs.compute_ibkr_rebalance_cost`
+    and pass the resulting fraction directly to
+    :func:`compute_blended_reward` /
+    :func:`compute_reward_from_log_return`.
+
+    Retained as a deprecation shim so any in-flight code (or
+    experience-buffer records that still carry only ``turnover``)
+    keeps producing a number rather than crashing while we migrate.
 
     Args:
         turnover: Portfolio turnover (0 to 1).
@@ -167,39 +201,47 @@ def compute_transaction_cost(
     Returns:
         Transaction cost as a decimal (e.g., 0.001 for 0.1%).
     """
+    warnings.warn(
+        "compute_transaction_cost(turnover, cost_bps) is deprecated; use "
+        "broker_costs.compute_ibkr_rebalance_cost(...) and pass the "
+        "resulting total_fraction to compute_blended_reward / "
+        "compute_reward_from_log_return instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     cost_rate = cost_bps / 10_000
     return turnover * cost_rate
 
 
 def compute_reward(
     portfolio_return: float,
-    turnover: float,
+    transaction_cost_fraction: float,
     config: RLBaseConfig,
 ) -> float:
-    """Compute scaled reward for RL training.
+    """Compute scaled reward for RL training (simple-return form).
 
-    Reward = reward_scale * (portfolio_return - transaction_cost)
-
-    With default reward_scale=100:
-    - 1% weekly return with no turnover → reward = 1.0
-    - 1% weekly return with 50% turnover at 10bps → reward = 1.0 - 0.05 = 0.95
+    Reward = reward_scale * (portfolio_return - transaction_cost_fraction)
 
     Args:
         portfolio_return: Simple portfolio return (decimal).
-        turnover: Portfolio turnover (0 to 1).
-        config: RL config with cost_bps and reward_scale.
+        transaction_cost_fraction: Pre-computed transaction cost as a
+            fraction of NAV (see :func:`compute_blended_reward`).
+        config: RL config with reward_scale.
 
     Returns:
         Scaled reward for RL training.
     """
-    transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
-    net_return = portfolio_return - transaction_cost
+    if transaction_cost_fraction < 0:
+        raise ValueError(
+            f"transaction_cost_fraction must be >= 0, got {transaction_cost_fraction}"
+        )
+    net_return = portfolio_return - transaction_cost_fraction
     return net_return * config.reward_scale
 
 
 def compute_reward_from_log_return(
     portfolio_log_return: float,
-    turnover: float,
+    transaction_cost_fraction: float,
     config: RLBaseConfig,
 ) -> float:
     """Compute scaled reward using log return.
@@ -212,12 +254,16 @@ def compute_reward_from_log_return(
 
     Args:
         portfolio_log_return: Log portfolio return, i.e. log(1 + r).
-        turnover: Portfolio turnover (0 to 1).
+        transaction_cost_fraction: Pre-computed transaction cost as a
+            fraction of NAV (see :func:`compute_blended_reward`).
         config: RL config.
 
     Returns:
         Scaled reward for RL training.
     """
-    transaction_cost = compute_transaction_cost(turnover, config.cost_bps)
-    net_return = portfolio_log_return - np.log(1 + transaction_cost)
+    if transaction_cost_fraction < 0:
+        raise ValueError(
+            f"transaction_cost_fraction must be >= 0, got {transaction_cost_fraction}"
+        )
+    net_return = portfolio_log_return - np.log(1 + transaction_cost_fraction)
     return net_return * config.reward_scale

@@ -59,6 +59,10 @@ class TrainingData:
     signals: np.ndarray  # (n_weeks, n_stocks, n_signals)
     lstm_forecasts: np.ndarray  # (n_weeks, n_stocks)
     patchtst_forecasts: np.ndarray  # (n_weeks, n_stocks)
+    # End-of-week close prices (NOT returns); required by the IBKR-SG
+    # cost model in PortfolioEnv.step to convert weight deltas into
+    # share counts. Shape (n_weeks, n_stocks).
+    prices: np.ndarray
 
     # Metadata
     symbol_order: list[str]
@@ -103,8 +107,11 @@ def build_training_data(
     ]
     n_signals = len(signal_names)
 
-    # Build returns array
+    # Build returns array + parallel weekly-prices array (end-of-week
+    # close, lined up with the return realised over week t -- consumed
+    # by the IBKR-SG cost model in PortfolioEnv.step).
     symbol_returns = np.zeros((n_weeks, n_stocks))
+    weekly_prices = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
         price_series = prices.get(symbol)
         if price_series is not None and len(price_series) > 1:
@@ -113,6 +120,10 @@ def build_training_data(
                 price_series[:-1], 1e-10
             )
             symbol_returns[: len(returns), stock_idx] = returns[:n_weeks]
+            # End-of-week close at index t+1 corresponds to the return
+            # realised over week t.
+            usable = min(len(price_series) - 1, n_weeks)
+            weekly_prices[:usable, stock_idx] = price_series[1 : usable + 1]
 
     # Build signals array
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
@@ -145,6 +156,7 @@ def build_training_data(
         signals=signals_array,
         lstm_forecasts=lstm_array,
         patchtst_forecasts=patchtst_array,
+        prices=weekly_prices,
         symbol_order=symbol_order,
         n_weeks=n_weeks,
         n_stocks=n_stocks,
@@ -176,12 +188,14 @@ def create_env_from_training_data(
     signals = training_data.signals[start_week:end_week]
     lstm_forecasts = training_data.lstm_forecasts[start_week:end_week]
     patchtst_forecasts = training_data.patchtst_forecasts[start_week:end_week]
+    prices = training_data.prices[start_week:end_week]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
         signals=signals,
         lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
+        prices=prices,
         symbol_order=training_data.symbol_order,
         config=config,
     )

@@ -111,6 +111,7 @@ class TestMakeSACBaseConfigForNStocks:
             "min_cagr_improvement",
             "sharpe_weight",
             "sharpe_eta",
+            "cost_config",
         ):
             assert getattr(cfg, field) == getattr(DEFAULT_SAC_BASE_CONFIG, field), (
                 f"{field} unexpectedly differs"
