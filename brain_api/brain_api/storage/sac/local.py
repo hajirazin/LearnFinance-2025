@@ -583,6 +583,7 @@ def create_sac_metadata(
     eval_cagr: float,
     eval_max_drawdown: float,
     bucket_name: str = "sac_halal_filtered",
+    failure_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create metadata dictionary for SAC model.
 
@@ -605,6 +606,11 @@ def create_sac_metadata(
             ``sac_halal_filtered`` or ``sac_halal``). Threaded into
             the metadata's ``model_type`` field so the two parallel
             A/B buckets are distinguishable on disk and on HF.
+        failure_reasons: Human-readable strings explaining why
+            ``promoted`` is ``False`` (empty when promoted is True).
+            Defaults to ``[]`` so existing callers that have not yet
+            migrated to the always-promote-with-guardrails policy
+            keep working.
 
     Returns:
         Metadata dictionary.
@@ -621,6 +627,7 @@ def create_sac_metadata(
         "config": config.to_dict(),
         "promoted": promoted,
         "prior_version": prior_version,
+        "failure_reasons": list(failure_reasons) if failure_reasons else [],
         "metrics": {
             "actor_loss": actor_loss,
             "critic_loss": critic_loss,

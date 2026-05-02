@@ -92,10 +92,12 @@ class USForecastersTrainingWorkflow:
             "lstm": {
                 "version": lstm_result.version,
                 "promoted": lstm_result.promoted,
+                "failure_reasons": lstm_result.failure_reasons,
             },
             "patchtst": {
                 "version": patchtst_result.version,
                 "promoted": patchtst_result.promoted,
+                "failure_reasons": patchtst_result.failure_reasons,
             },
             "summary": {
                 "provider": summary_result.provider,

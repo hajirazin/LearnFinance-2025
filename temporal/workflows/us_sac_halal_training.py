@@ -97,7 +97,11 @@ class USSACHalalTrainingWorkflow:
                 "sentiment_gaps_filled": refresh_result.sentiment_gaps_filled,
                 "fundamentals_refreshed": len(refresh_result.fundamentals_refreshed),
             },
-            "sac": {"version": sac_result.version, "promoted": sac_result.promoted},
+            "sac": {
+                "version": sac_result.version,
+                "promoted": sac_result.promoted,
+                "failure_reasons": sac_result.failure_reasons,
+            },
             "summary": {
                 "provider": summary_result.provider,
                 "model_used": summary_result.model_used,

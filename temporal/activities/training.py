@@ -227,6 +227,7 @@ def _lstm_payload(lstm: TrainingResponse) -> dict:
         "data_window_end": lstm.data_window_end,
         "metrics": lstm.metrics,
         "promoted": lstm.promoted,
+        "failure_reasons": lstm.failure_reasons,
     }
 
 
@@ -243,6 +244,7 @@ def _patchtst_payload(patchtst: TrainingResponse) -> dict:
         "data_window_end": patchtst.data_window_end,
         "metrics": patchtst.metrics,
         "promoted": patchtst.promoted,
+        "failure_reasons": patchtst.failure_reasons,
         "num_input_channels": patchtst.num_input_channels or 0,
         "signals_used": patchtst.signals_used or [],
     }
@@ -261,6 +263,7 @@ def _sac_payload(sac: TrainingResponse) -> dict:
         "data_window_end": sac.data_window_end,
         "metrics": sac.metrics,
         "promoted": sac.promoted,
+        "failure_reasons": sac.failure_reasons,
         "symbols_used": sac.symbols_used or [],
     }
 

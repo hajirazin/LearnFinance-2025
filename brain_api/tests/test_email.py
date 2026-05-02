@@ -259,6 +259,46 @@ class TestForecastersTrainingSummaryEmailEndpoint:
         assert response.status_code == 200
         assert response.json()["is_success"] is True
 
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_promoted_renders_guardrail_pass_prose(
+        self,
+        mock_send_email,
+        mock_forecasters_email_request,
+    ):
+        """A promoted forecaster renders the guardrail-pass prose."""
+        mock_send_email.return_value = True
+        response = client.post(
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Passed all artifact health guardrails." in body
+        assert "Failed Guardrails" not in body
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_not_promoted_renders_failure_reasons(
+        self,
+        mock_send_email,
+        mock_forecasters_email_request,
+    ):
+        """A non-promoted forecaster renders bulleted failure_reasons."""
+        mock_send_email.return_value = True
+        mock_forecasters_email_request["lstm"]["promoted"] = False
+        mock_forecasters_email_request["lstm"]["failure_reasons"] = [
+            "val_loss is not finite",
+            "weights.pt missing or empty",
+        ]
+        response = client.post(
+            "/email/forecasters-training-summary",
+            json=mock_forecasters_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Failed Guardrails" in body
+        assert "val_loss is not finite" in body
+        assert "weights.pt missing or empty" in body
+
 
 class TestSACTrainingSummaryEmailEndpoint:
     """Tests for POST /email/sac-training-summary endpoint."""
@@ -397,6 +437,48 @@ class TestSACTrainingSummaryEmailEndpoint:
         )
         assert response.status_code == 200
         assert response.json()["is_success"] is True
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_promoted_renders_guardrail_pass_prose(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """A promoted SAC run renders the guardrail-pass prose."""
+        mock_send_email.return_value = True
+        mock_sac_email_request["sac"]["promoted"] = True
+        mock_sac_email_request["sac"]["failure_reasons"] = []
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Passed all SAC artifact health guardrails." in body
+        assert "Failed Guardrails" not in body
+
+    @patch("brain_api.routes.email.training_summary.send_html_email")
+    def test_not_promoted_renders_failure_reasons(
+        self,
+        mock_send_email,
+        mock_sac_email_request,
+    ):
+        """A non-promoted SAC run renders bulleted failure_reasons."""
+        mock_send_email.return_value = True
+        mock_sac_email_request["sac"]["promoted"] = False
+        mock_sac_email_request["sac"]["failure_reasons"] = [
+            "eval_cagr 0.10 below floor 0.12",
+            "actor.pt missing or empty",
+        ]
+        response = client.post(
+            "/email/sac-training-summary",
+            json=mock_sac_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Failed Guardrails" in body
+        assert "eval_cagr 0.10 below floor 0.12" in body
+        assert "actor.pt missing or empty" in body
 
 
 # =============================================================================

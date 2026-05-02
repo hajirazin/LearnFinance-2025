@@ -34,6 +34,7 @@ def mock_training():
         data_window_end="2024-01-01",
         metrics={"loss": 0.01},
         promoted=True,
+        failure_reasons=[],
     )
 
 
@@ -130,8 +131,10 @@ class TestUSForecastersTrainingWorkflow:
             assert result["halal_new"]["total_stocks"] == 410
             assert result["lstm"]["version"] == "v1.0.0"
             assert result["lstm"]["promoted"] is True
+            assert result["lstm"]["failure_reasons"] == []
             assert result["patchtst"]["version"] == "v1.0.0"
             assert result["patchtst"]["promoted"] is True
+            assert result["patchtst"]["failure_reasons"] == []
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
             assert "US Forecasters Training" in result["email"]["subject"]

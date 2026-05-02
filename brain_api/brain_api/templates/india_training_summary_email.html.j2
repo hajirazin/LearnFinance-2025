@@ -85,6 +85,17 @@
       </tr>
       {% endif %}
     </table>
+
+    {% if patchtst.promoted %}
+    <p style="margin: 12px 0 0 0; font-size: 13px; color: #2e7d32;">Passed all artifact health guardrails.</p>
+    {% else %}
+    <h3 style="margin: 16px 0 8px 0; font-size: 14px; color: #c62828;">Failed Guardrails</h3>
+    <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #c62828;">
+      {% for reason in patchtst.failure_reasons %}
+      <li>{{ reason }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </div>
 
   <!-- Footer -->

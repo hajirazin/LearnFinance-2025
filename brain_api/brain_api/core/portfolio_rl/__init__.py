@@ -41,7 +41,6 @@ from brain_api.core.portfolio_rl.eval import (
     compute_max_drawdown,
     compute_sharpe_ratio,
     evaluate_policy,
-    evaluate_rl_for_promotion,
 )
 from brain_api.core.portfolio_rl.rewards import (
     compute_portfolio_return,
@@ -94,7 +93,6 @@ __all__ = [
     "compute_turnover",
     "enforce_constraints",
     "evaluate_policy",
-    "evaluate_rl_for_promotion",
     "load_historical_fundamentals",
     "load_historical_news_sentiment",
 ]

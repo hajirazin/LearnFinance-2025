@@ -18,6 +18,11 @@ class TrainingResponse(BaseModel):
     metrics: dict[str, Any]
     promoted: bool
     prior_version: str | None = None
+    # Empty when ``promoted`` is True; otherwise lists every guardrail
+    # the new artifact failed (finite metrics, files-on-disk, SAC CAGR
+    # floor, SAC finetune symbol-order). Threaded through the LLM
+    # prompt + email template so the operator sees what to investigate.
+    failure_reasons: list[str] = []
     # Optional fields that vary by model type
     hf_repo: str | None = None
     hf_url: str | None = None

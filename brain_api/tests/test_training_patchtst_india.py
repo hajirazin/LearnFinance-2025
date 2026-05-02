@@ -290,8 +290,13 @@ def test_train_patchtst_india_first_model_always_promoted(client_india):
     assert response.json()["promoted"] is True
 
 
-def test_train_patchtst_india_not_promoted_when_worse(monkeypatch):
-    """India PatchTST model is NOT promoted when worse than prior."""
+def test_train_patchtst_india_promotes_even_when_worse_than_prior(monkeypatch):
+    """India PatchTST always-promote: a healthy model promotes regardless of prior val_loss.
+
+    Same policy as US PatchTST: the prior-comparison gate was removed
+    in favor of guardrails on the new artifact's own health, so a
+    healthy run with worse-than-prior val_loss MUST still promote.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = PatchTSTNiftyShariah500ModelStorage(base_path=tmpdir)
 
@@ -324,8 +329,10 @@ def test_train_patchtst_india_not_promoted_when_worse(monkeypatch):
             assert r2.status_code == 202
             r2b = client.post(train_url)
             assert r2b.status_code == 200
-            assert r2b.json()["promoted"] is False
-            assert storage.read_current_version() == first_version
+            data = r2b.json()
+            assert data["promoted"] is True
+            assert storage.read_current_version() == data["version"]
+            assert storage.read_current_version() != first_version
         finally:
             app.dependency_overrides.clear()
             os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)

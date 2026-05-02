@@ -8,6 +8,13 @@ This model predicts weekly stock returns using only historical close-price log r
 - **Version**: {{ lstm.version }}
 - **Data Window**: {{ lstm.data_window_start }} to {{ lstm.data_window_end }}
 - **Promoted to Production**: {{ "Yes" if lstm.promoted else "No" }}
+{% if lstm.promoted %}
+- **Promotion Result**: Passed all artifact health guardrails (finite train/val/baseline loss, weights/scaler/config/metadata files present and non-empty).
+{% else %}
+- **Promotion Result**: NOT promoted. Failed guardrails:
+{% for reason in lstm.failure_reasons %}    - {{ reason }}
+{% endfor %}
+{% endif %}
 - **Metrics**: {{ lstm.metrics | tojson }}
 
 ### PatchTST (OHLCV Forecaster)
@@ -16,6 +23,13 @@ This model predicts weekly stock returns using 5-channel OHLCV price data (open,
 - **Version**: {{ patchtst.version }}
 - **Data Window**: {{ patchtst.data_window_start }} to {{ patchtst.data_window_end }}
 - **Promoted to Production**: {{ "Yes" if patchtst.promoted else "No" }}
+{% if patchtst.promoted %}
+- **Promotion Result**: Passed all artifact health guardrails (finite train/val/baseline loss, weights/scaler/config/metadata files present and non-empty).
+{% else %}
+- **Promotion Result**: NOT promoted. Failed guardrails:
+{% for reason in patchtst.failure_reasons %}    - {{ reason }}
+{% endfor %}
+{% endif %}
 - **Input Channels**: {{ patchtst.num_input_channels }}
 - **Signals Used**: {{ patchtst.signals_used | join(", ") }}
 - **Metrics**: {{ patchtst.metrics | tojson }}
@@ -27,6 +41,8 @@ This model predicts weekly stock returns using 5-channel OHLCV price data (open,
 - PatchTST predictions feed downstream selection (``halal_filtered`` top-15) which the SAC allocator then trains on the next day.
 
 ## Instructions
+
+Promotion is now **guardrail-based**, not prior-comparison-based. A model is promoted if and only if it passes its model-specific artifact health checks (finite metrics, artifact files present and non-empty). Universe drift across months is no longer a reason to reject a healthy model. When `failure_reasons` is non-empty, those are the exact guardrails that failed -- do not invent prior-comparison narratives.
 
 Provide a concise analysis of these training results. Focus on:
 1. Overall forecaster training health and promotion outcomes

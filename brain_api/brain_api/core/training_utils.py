@@ -3,7 +3,12 @@
 This module contains common functions used by multiple model training pipelines.
 """
 
+import math
+from pathlib import Path
+
 import torch
+
+from brain_api.core.training_health import ArtifactHealthCheck
 
 
 class TrainingCancelledError(Exception):
@@ -28,21 +33,74 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
-def evaluate_for_promotion(
+# ---------------------------------------------------------------------------
+# Forecaster artifact health check (always-promote-with-guardrails policy)
+# ---------------------------------------------------------------------------
+
+# Files every forecaster training run must persist on disk before the
+# health check runs. Drifting from this list will cause the
+# file-existence guardrails to silently pass when they shouldn't, so
+# the constant lives next to the function rather than in a shared
+# config to keep the change surface obvious.
+_FORECASTER_REQUIRED_FILES: tuple[str, ...] = (
+    "weights.pt",
+    "feature_scaler.pkl",
+    "config.json",
+    "metadata.json",
+)
+
+
+def evaluate_forecaster_artifact_health(
+    *,
+    train_loss: float,
     val_loss: float,
-    prior_val_loss: float | None,
-) -> bool:
-    """Decide whether to promote the new model to current.
+    baseline_loss: float,
+    artifact_dir: Path,
+) -> ArtifactHealthCheck:
+    """Run the forecaster (LSTM, PatchTST US, PatchTST India) guardrails.
 
-    Promotion requires:
-    1. Beat the prior model (if one exists)
+    Replaces the prior ``evaluate_for_promotion(val_loss, prior_val_loss)``
+    gate. The new policy is "always promote when guardrails pass" --
+    the prior model's val_loss is no longer consulted because the
+    universe rebuild + sliding validation window made it an
+    apples-to-oranges baseline.
 
-    Args:
-        val_loss: Validation loss of new model
-        prior_val_loss: Validation loss of prior model (None if first model)
+    Guardrails (each failure appends a stable, human-readable string):
+
+    1. ``val_loss`` is finite AND ``> 0``
+    2. ``train_loss`` is finite AND ``> 0``
+    3. ``baseline_loss`` is finite AND ``> 0``
+    4-7. Each of ``weights.pt``, ``feature_scaler.pkl``, ``config.json``,
+       and ``metadata.json`` exists under ``artifact_dir`` with a
+       non-zero size
 
     Returns:
-        True if model should be promoted
+        :class:`ArtifactHealthCheck` whose ``is_healthy`` is the new
+        promotion decision.
     """
-    # Must beat prior (if exists)
-    return prior_val_loss is None or val_loss < prior_val_loss
+    failure_reasons: list[str] = []
+
+    if not math.isfinite(val_loss):
+        failure_reasons.append("val_loss is not finite")
+    elif val_loss <= 0:
+        failure_reasons.append(f"val_loss must be > 0, got {val_loss}")
+
+    if not math.isfinite(train_loss):
+        failure_reasons.append("train_loss is not finite")
+    elif train_loss <= 0:
+        failure_reasons.append(f"train_loss must be > 0, got {train_loss}")
+
+    if not math.isfinite(baseline_loss):
+        failure_reasons.append("baseline_loss is not finite")
+    elif baseline_loss <= 0:
+        failure_reasons.append(f"baseline_loss must be > 0, got {baseline_loss}")
+
+    for filename in _FORECASTER_REQUIRED_FILES:
+        path = artifact_dir / filename
+        if not path.exists() or path.stat().st_size <= 0:
+            failure_reasons.append(f"{filename} missing or zero bytes")
+
+    return ArtifactHealthCheck(
+        is_healthy=not failure_reasons,
+        failure_reasons=failure_reasons,
+    )

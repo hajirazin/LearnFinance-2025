@@ -598,6 +598,171 @@ class TestSACTrainingSummaryEndpoint:
         finally:
             app.dependency_overrides.clear()
 
+    def test_promoted_renders_guardrail_pass_prose(
+        self,
+        mock_sac_summary_request,
+        mock_sac_llm_json_response,
+    ):
+        """Promoted SAC run renders guardrail-pass copy in the prompt."""
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_sac_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            payload = dict(mock_sac_summary_request)
+            payload["sac"] = {**payload["sac"], "promoted": True, "failure_reasons": []}
+            response = client.post("/llm/sac-training-summary", json=payload)
+            assert response.status_code == 200, response.text
+            assert "Passed all SAC artifact health guardrails" in captured_prompts[0]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_failure_reasons_render_in_prompt(
+        self,
+        mock_sac_summary_request,
+        mock_sac_llm_json_response,
+    ):
+        """Non-promoted SAC run sends failure_reasons into the prompt.
+
+        The guardrail copy is what stops the LLM from inventing
+        prior-comparison narratives -- this test guards that contract.
+        """
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_sac_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            payload = dict(mock_sac_summary_request)
+            payload["sac"] = {
+                **payload["sac"],
+                "promoted": False,
+                "failure_reasons": [
+                    "eval_cagr 0.10 below floor 0.12",
+                    "actor.pt missing or empty",
+                ],
+            }
+            response = client.post("/llm/sac-training-summary", json=payload)
+            assert response.status_code == 200, response.text
+            prompt = captured_prompts[0]
+            assert "NOT promoted" in prompt
+            assert "eval_cagr 0.10 below floor 0.12" in prompt
+            assert "actor.pt missing or empty" in prompt
+            assert "guardrail-based" in prompt
+
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestForecastersTrainingSummaryGuardrails:
+    """Integration tests that verify forecaster prompt-rendering of guardrails."""
+
+    def test_promoted_renders_guardrail_pass_prose(
+        self,
+        mock_forecasters_summary_request,
+        mock_forecasters_llm_json_response,
+    ):
+        """Promoted forecaster runs render guardrail-pass copy in the prompt."""
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_forecasters_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            response = client.post(
+                "/llm/forecasters-training-summary",
+                json=mock_forecasters_summary_request,
+            )
+            assert response.status_code == 200, response.text
+            prompt = captured_prompts[0]
+            # Two passes, one per model.
+            assert prompt.count("Passed all artifact health guardrails") == 2
+            assert "guardrail-based" in prompt
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_failure_reasons_render_in_prompt(
+        self,
+        mock_forecasters_summary_request,
+        mock_forecasters_llm_json_response,
+    ):
+        """Non-promoted forecaster sends failure_reasons into the prompt."""
+        import json
+
+        captured_prompts: list[str] = []
+
+        class CapturingProvider(MockLLMProvider):
+            def generate(self, prompt: str) -> LLMResponse:
+                captured_prompts.append(prompt)
+                return super().generate(prompt)
+
+        mock_provider = CapturingProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_forecasters_llm_json_response),
+                model="gpt-4o-mini",
+                tokens_used=300,
+            ),
+        )
+        app.dependency_overrides[get_llm_provider] = lambda: mock_provider
+        try:
+            payload = dict(mock_forecasters_summary_request)
+            payload["lstm"] = {
+                **payload["lstm"],
+                "promoted": False,
+                "failure_reasons": ["val_loss is not finite"],
+            }
+            response = client.post(
+                "/llm/forecasters-training-summary",
+                json=payload,
+            )
+            assert response.status_code == 200, response.text
+            prompt = captured_prompts[0]
+            assert "NOT promoted" in prompt
+            assert "val_loss is not finite" in prompt
+        finally:
+            app.dependency_overrides.clear()
+
 
 # =============================================================================
 # Weekly Summary Endpoint Tests

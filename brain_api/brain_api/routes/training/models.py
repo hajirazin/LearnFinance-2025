@@ -35,6 +35,9 @@ class LSTMTrainResponse(BaseModel):
     metrics: dict[str, Any]
     promoted: bool
     prior_version: str | None = None
+    # Empty when promoted is True, otherwise lists every guardrail
+    # (finite metrics, artifact existence) the new model failed.
+    failure_reasons: list[str] = []
     hf_repo: str | None = None  # HuggingFace repo if uploaded
     hf_url: str | None = None  # URL to model on HuggingFace
 
@@ -48,6 +51,7 @@ class PatchTSTTrainResponse(BaseModel):
     metrics: dict[str, Any]
     promoted: bool
     prior_version: str | None = None
+    failure_reasons: list[str] = []
     hf_repo: str | None = None  # HuggingFace repo if uploaded
     hf_url: str | None = None  # URL to model on HuggingFace
     # PatchTST-specific fields
@@ -64,6 +68,7 @@ class SACTrainResponse(BaseModel):
     metrics: dict[str, float]
     promoted: bool
     prior_version: str | None = None
+    failure_reasons: list[str] = []
     symbols_used: list[str]
     hf_repo: str | None = None
     hf_url: str | None = None

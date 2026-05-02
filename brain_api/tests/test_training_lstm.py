@@ -90,7 +90,14 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
 def mock_trainer_worse_than_baseline(
     X, y, feature_scaler, config, shutdown_event=None
 ) -> TrainingResult:
-    """Return a mock training result that is worse than baseline."""
+    """Return a mock training result that is worse than baseline.
+
+    Under the always-promote-with-guardrails policy this still passes
+    every guardrail (all metrics finite + positive, all artifact files
+    written), so it is now PROMOTED. Tests that used to assert the
+    opposite were testing the prior-comparison gate, which has been
+    removed in favor of guardrails on the new artifact only.
+    """
     model = LSTMModel(config)
     return TrainingResult(
         model=model,
@@ -98,6 +105,26 @@ def mock_trainer_worse_than_baseline(
         config=config,
         train_loss=0.10,
         val_loss=0.10,
+        baseline_loss=0.05,
+    )
+
+
+def mock_trainer_nan_val_loss(
+    X, y, feature_scaler, config, shutdown_event=None
+) -> TrainingResult:
+    """Mock trainer that returns ``NaN`` val_loss to trip the guardrail.
+
+    The forecaster artifact health check rejects any non-finite metric;
+    this fixture is the canonical way to exercise that branch from the
+    HTTP layer.
+    """
+    model = LSTMModel(config)
+    return TrainingResult(
+        model=model,
+        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
+        config=config,
+        train_loss=0.01,
+        val_loss=float("nan"),
         baseline_loss=0.05,
     )
 
@@ -352,8 +379,15 @@ def test_train_lstm_first_model_always_promoted(client_with_mocks):
     assert data["promoted"] is True
 
 
-def test_train_lstm_not_promoted_when_worse_than_prior(monkeypatch):
-    """Model is NOT promoted when worse than prior model."""
+def test_train_lstm_promotes_even_when_worse_than_prior(monkeypatch):
+    """Always-promote policy: a healthy model promotes regardless of prior val_loss.
+
+    Pre-refactor this test asserted ``promoted is False``; the
+    universe-drift critique made that comparison meaningless. Now the
+    only thing the gate cares about is the new artifact's own health,
+    so a healthy run with worse-than-prior val_loss MUST still
+    promote and bump the ``current`` pointer.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         fresh_storage = LSTMHalalNewModelStorage(base_path=tmpdir)
 
@@ -378,6 +412,8 @@ def test_train_lstm_not_promoted_when_worse_than_prior(monkeypatch):
             first_version = response2.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
+            # Second run with WORSE val_loss than the prior. Under the
+            # old gate this would not promote; under guardrails it does.
             app.dependency_overrides[get_trainer] = (
                 lambda: mock_trainer_worse_than_baseline
             )
@@ -390,18 +426,25 @@ def test_train_lstm_not_promoted_when_worse_than_prior(monkeypatch):
             assert response4.status_code == 200
 
             data = response4.json()
-            assert data["promoted"] is False
+            assert data["promoted"] is True
 
             current = fresh_storage.read_current_version()
-            assert current == first_version
+            assert current == data["version"]
+            assert current != first_version
         finally:
             app.dependency_overrides.clear()
             os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_lstm_current_unchanged_when_not_promoted(temp_storage, monkeypatch):
-    """The 'current' pointer is unchanged when promotion fails."""
+def test_train_lstm_not_promoted_when_val_loss_is_nan(temp_storage, monkeypatch):
+    """The new guardrail rejects NaN val_loss and leaves ``current`` unchanged.
+
+    This is the canonical example of "the gate now cares about the new
+    artifact's health, not its relation to a prior". A trainer that
+    silently diverges to NaN must NOT ship; ``current`` stays on the
+    prior healthy version (or stays absent if there was no prior).
+    """
     app.dependency_overrides.clear()
 
     _override_lstm_halal_new_bucket(monkeypatch, temp_storage)
@@ -419,12 +462,11 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage, monkeypatc
 
     response2 = client.post(TRAIN_URL_NO_SNAPSHOT, json={})
     assert response2.status_code == 200
-    promoted_version = response2.json()["version"]
+    healthy_version = response2.json()["version"]
+    assert temp_storage.read_current_version() == healthy_version
 
-    current_before = temp_storage.read_current_version()
-    assert current_before == promoted_version
-
-    app.dependency_overrides[get_trainer] = lambda: mock_trainer_worse_than_baseline
+    # Second run produces NaN val_loss -- guardrail must reject.
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer_nan_val_loss
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
 
     response3 = client.post(TRAIN_URL_NO_SNAPSHOT, json={})
@@ -435,13 +477,51 @@ def test_train_lstm_current_unchanged_when_not_promoted(temp_storage, monkeypatc
     data4 = response4.json()
 
     assert data4["promoted"] is False
-
-    current_after = temp_storage.read_current_version()
-    assert current_after == promoted_version
+    # ``current`` must stay on the prior healthy version.
+    assert temp_storage.read_current_version() == healthy_version
 
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
     os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+def test_train_lstm_idempotent_rerun_returns_cached_failure_reasons(
+    temp_storage, monkeypatch
+):
+    """A rerun of an unhealthy version returns the same failure_reasons
+    from the cached metadata.json -- proves the field round-trips."""
+    app.dependency_overrides.clear()
+
+    _override_lstm_halal_new_bucket(monkeypatch, temp_storage)
+    app.dependency_overrides[get_price_loader] = lambda: mock_price_loader
+    app.dependency_overrides[get_dataset_builder] = lambda: mock_dataset_builder
+    app.dependency_overrides[get_trainer] = lambda: mock_trainer_nan_val_loss
+
+    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+    client = TestClient(app)
+
+    try:
+        response1 = client.post(TRAIN_URL_NO_SNAPSHOT, json={})
+        assert response1.status_code == 202
+
+        response2 = client.post(TRAIN_URL_NO_SNAPSHOT, json={})
+        assert response2.status_code == 200
+        first_data = response2.json()
+        assert first_data["promoted"] is False
+
+        # Idempotent rerun -- same window, same trainer -> 200 with the
+        # cached metadata. metadata.json is the source of truth on disk.
+        response3 = client.post(TRAIN_URL_NO_SNAPSHOT, json={})
+        assert response3.status_code == 200
+        rerun_data = response3.json()
+        assert rerun_data["version"] == first_data["version"]
+        assert rerun_data["promoted"] is False
+    finally:
+        app.dependency_overrides.clear()
+        os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+        os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
 # ============================================================================

@@ -54,6 +54,7 @@ def mock_sac_training():
         data_window_end="2024-01-01",
         metrics={"sharpe": 1.5, "cagr": 0.18},
         promoted=True,
+        failure_reasons=[],
         symbols_used=["AAPL", "MSFT", "GOOGL"],
     )
 
@@ -154,6 +155,7 @@ class TestUSSACTrainingWorkflow:
             assert result["refresh"]["fundamentals_refreshed"] == 2
             assert result["sac"]["version"] == "v2026-03-01-sac001"
             assert result["sac"]["promoted"] is True
+            assert result["sac"]["failure_reasons"] == []
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
             assert "US SAC Training" in result["email"]["subject"]

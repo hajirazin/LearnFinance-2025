@@ -19,6 +19,7 @@ def create_training_metadata(
     baseline_loss: float,
     promoted: bool,
     prior_version: str | None,
+    failure_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create metadata dict for a training run.
 
@@ -36,6 +37,11 @@ def create_training_metadata(
         baseline_loss: Baseline (persistence) loss
         promoted: Whether this version was promoted to current
         prior_version: Previous current version (if any)
+        failure_reasons: Human-readable strings explaining why
+            ``promoted`` is ``False`` (empty when promoted is True).
+            Defaults to ``[]`` so existing callers that have not
+            migrated to the always-promote-with-guardrails policy
+            still work.
 
     Returns:
         Metadata dictionary
@@ -57,4 +63,5 @@ def create_training_metadata(
         },
         "promoted": promoted,
         "prior_version": prior_version,
+        "failure_reasons": list(failure_reasons) if failure_reasons else [],
     }

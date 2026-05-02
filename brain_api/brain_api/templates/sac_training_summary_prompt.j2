@@ -8,6 +8,13 @@ This model learns portfolio allocation strategies using Soft Actor-Critic with d
 - **Version**: {{ sac.version }}
 - **Data Window**: {{ sac.data_window_start }} to {{ sac.data_window_end }}
 - **Promoted to Production**: {{ "Yes" if sac.promoted else "No" }}
+{% if sac.promoted %}
+- **Promotion Result**: Passed all SAC artifact health guardrails (finite actor/critic loss; finite eval CAGR/Sharpe/drawdown; eval CAGR above the configured floor; symbol count matches the bucket; SAC actor/critic/config/metadata files present and non-empty).
+{% else %}
+- **Promotion Result**: NOT promoted. Failed guardrails:
+{% for reason in sac.failure_reasons %}    - {{ reason }}
+{% endfor %}
+{% endif %}
 - **Symbols Used**: {{ sac.symbols_used | length }} stocks
 - **Metrics**: {{ sac.metrics | tojson }}
 
@@ -21,10 +28,12 @@ This model learns portfolio allocation strategies using Soft Actor-Critic with d
 {%- else %}
   - Bucket-resolved slate; size and selection rule depend on the universe.
 {%- endif %}
-- Promotion gate: SAC must beat the configured minimum CAGR threshold (and any prior promoted version) before it becomes ``current``. Each bucket has its own ``current`` pointer; promoting one MUST NOT touch the other.
+- Promotion gate: SAC must pass model-specific guardrails (artifact integrity, finite metrics, eval CAGR floor of 0.12, symbol count match against the bucket; finetune additionally requires symbol-order equality with the prior model's action space). There is no prior-comparison gate -- universe drift across months is no longer a reason to reject a healthy run. Each bucket has its own ``current`` pointer; promoting one MUST NOT touch the other.
 - The slate size matches the SAC action space, so any change in symbols comes from upstream universe movement -- worth flagging if the slate looks unstable.
 
 ## Instructions
+
+Promotion is now **guardrail-based**, not prior-comparison-based. The SAC model is promoted if and only if it passes its model-specific artifact health checks (see "Promotion gate" above). When `failure_reasons` is non-empty, those are the exact guardrails that failed -- do not invent prior-comparison narratives.
 
 Provide a concise analysis of this SAC training result. Focus on:
 1. Overall SAC training health and promotion outcome

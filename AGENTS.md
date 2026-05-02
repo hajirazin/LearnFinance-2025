@@ -471,8 +471,9 @@ The system must:
 Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. The four training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker).
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
-- **Promotion requires evaluation**: new model must beat prior + baseline before becoming `current`
+- **Promotion requires guardrails**: new model must pass model-specific health checks (artifact integrity, finite metrics, SAC CAGR floor of 0.12, SAC finetune symbol-order preservation). Universe drift no longer suppresses healthy promotions; rollback is the recovery mechanism (separate story).
 - **Rollback is always possible**: keep last known-good version; pointer swap is atomic
+- **No HF cold-start fallback**: HuggingFace `make_current` is set to `promoted` only. A failed inaugural run leaves HF `main` empty (and inference 503s) by design -- AGENTS.md rule #1 forbids the silent "ship the broken inaugural" fallback.
 
 ## Operational requirements
 
@@ -554,7 +555,8 @@ Before merging changes that touch ML/model code:
 
 - [ ] Confirm Monday inference does NOT trigger training
 - [ ] Confirm training writes new versioned artifact (not overwrite)
-- [ ] Confirm promotion requires evaluation gate
+- [ ] Confirm promotion uses the per-model guardrail check (forecaster: `evaluate_forecaster_artifact_health`; SAC full: `evaluate_sac_artifact_health`; SAC finetune: `evaluate_sac_finetune_artifact_health`) and that HF `make_current = promoted` with no cold-start fallback
+- [ ] Confirm `failure_reasons` is threaded end-to-end (metadata.json -> training response -> Temporal workflow return -> Jinja prompt + email template)
 - [ ] Confirm endpoints remain stateless (no global model cache)
 - [ ] Confirm storage abstraction is used (not hardcoded paths)
 - [ ] Confirm LSTM remains pure-price (no signals in input)

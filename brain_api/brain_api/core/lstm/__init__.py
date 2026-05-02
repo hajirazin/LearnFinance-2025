@@ -34,7 +34,7 @@ from brain_api.core.lstm.training import TrainingResult, train_model_pytorch
 # Version
 from brain_api.core.lstm.version import compute_version
 from brain_api.core.prices import load_prices_yfinance
-from brain_api.core.training_utils import evaluate_for_promotion, get_device
+from brain_api.core.training_utils import get_device
 
 __all__ = [
     "DEFAULT_CONFIG",
@@ -57,7 +57,6 @@ __all__ = [
     "compute_version",
     "compute_week_boundaries",
     "compute_week_from_cutoff",
-    "evaluate_for_promotion",
     "extract_trading_weeks",
     "get_device",
     "load_prices_yfinance",

@@ -122,6 +122,9 @@ def train_patchtst_india(
                 metrics=existing_metadata["metrics"],
                 promoted=existing_metadata["promoted"],
                 prior_version=existing_metadata.get("prior_version"),
+                # Backward-compat: pre-guardrail metadata files have no
+                # ``failure_reasons`` key. Treat missing as empty list.
+                failure_reasons=existing_metadata.get("failure_reasons", []),
                 num_input_channels=config.num_input_channels,
                 signals_used=["ohlcv"],
             )

@@ -151,8 +151,16 @@ def mock_config() -> SACConfig:
     )
 
 
-def create_mock_training_result(config: SACConfig) -> SACTrainingResult:
-    """Create a mock training result for testing."""
+def create_mock_training_result(
+    config: SACConfig, eval_cagr: float = 0.13
+) -> SACTrainingResult:
+    """Create a mock training result for testing.
+
+    Default ``eval_cagr=0.13`` is *above* the 0.12 promotion floor so
+    the always-promote-with-guardrails policy promotes by default.
+    Tests that need to exercise the rejection path pass an explicit
+    sub-floor value (e.g. ``eval_cagr=0.10``).
+    """
     n_stocks = config.n_stocks
     # State dim: signals (7 per stock) + forecasts (2 per stock) + weights
     # LSTM return + PatchTST return = 2 forecast features per stock (no volatility)
@@ -202,7 +210,7 @@ def create_mock_training_result(config: SACConfig) -> SACTrainingResult:
         avg_episode_return=0.02,
         avg_episode_sharpe=0.5,
         eval_sharpe=0.6,
-        eval_cagr=0.10,  # 10% CAGR, below 12% threshold (first model auto-promotes)
+        eval_cagr=eval_cagr,
         eval_max_drawdown=0.15,
     )
 
@@ -512,16 +520,18 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Per AGENTS.md rule: side effects mocked, never skipped.
     """
-    from brain_api.routes.training import sac as sac_route
+    from brain_api.routes.training.sac import full as sac_full_route
 
-    monkeypatch.setattr(sac_route, "load_prices_yfinance", mock_price_loader)
-    monkeypatch.setattr(sac_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
-    monkeypatch.setattr(sac_route, "build_dual_forecast_features", _mock_dual_forecasts)
+    monkeypatch.setattr(sac_full_route, "load_prices_yfinance", mock_price_loader)
+    monkeypatch.setattr(sac_full_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
     monkeypatch.setattr(
-        sac_route, "build_rl_training_signals", _mock_rl_training_signals
+        sac_full_route, "build_dual_forecast_features", _mock_dual_forecasts
     )
     monkeypatch.setattr(
-        sac_route,
+        sac_full_route, "build_rl_training_signals", _mock_rl_training_signals
+    )
+    monkeypatch.setattr(
+        sac_full_route,
         "train_sac",
         lambda training_data, config, shutdown_event=None: create_mock_training_result(
             config
@@ -576,13 +586,17 @@ class TestSACLSTMFinetune:
         """
         from datetime import date as dt_date
 
-        from brain_api.routes.training import sac
+        from brain_api.routes.training.sac import finetune as sac_ft_route
 
-        monkeypatch.setattr(sac, "load_prices_yfinance", mock_price_loader)
-        monkeypatch.setattr(sac, "build_dual_forecast_features", _mock_dual_forecasts)
-        monkeypatch.setattr(sac, "build_rl_training_signals", _mock_rl_training_signals)
+        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
         monkeypatch.setattr(
-            sac,
+            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+        )
+        monkeypatch.setattr(
+            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
+        )
+        monkeypatch.setattr(
+            sac_ft_route,
             "finetune_sac",
             lambda training_data,
             actor,
@@ -612,6 +626,121 @@ class TestSACLSTMFinetune:
 
             assert end_date.weekday() == 4, (
                 f"Expected Friday, got {end_date.strftime('%A')}"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_finetune_eval_cagr_below_floor_rejects(
+        self, trained_model_storage, monkeypatch
+    ):
+        """Finetune with eval_cagr=0.10 (sub-floor) -> promoted=False.
+
+        Same absolute floor as full training; finetune doesn't get a
+        free pass even though it inherits the prior's symbol set.
+        """
+        from brain_api.routes.training.sac import finetune as sac_ft_route
+
+        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
+        monkeypatch.setattr(
+            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+        )
+        monkeypatch.setattr(
+            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
+        )
+        monkeypatch.setattr(
+            sac_ft_route,
+            "finetune_sac",
+            lambda training_data,
+            actor,
+            critic,
+            critic_target,
+            log_alpha,
+            scaler,
+            prior_config,
+            finetune_config,
+            shutdown_event=None: create_mock_training_result(
+                prior_config, eval_cagr=0.10
+            ),
+        )
+
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
+
+        client = TestClient(app)
+
+        try:
+            response1 = client.post("/train/sac/finetune")
+            assert response1.status_code == 202
+            response = client.post("/train/sac/finetune")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["promoted"] is False
+            assert any(
+                "eval_cagr" in r and "below floor" in r for r in data["failure_reasons"]
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_finetune_symbol_order_mismatch_rejects(
+        self, trained_model_storage, monkeypatch
+    ):
+        """Finetune that returns a re-ordered symbol set -> promoted=False.
+
+        SAC's actor/critic action space is positional; if the trainer
+        permutes the symbol order vs. the prior, the action distribution
+        misaligns. The guardrail catches this and refuses to promote.
+        """
+        from brain_api.routes.training.sac import finetune as sac_ft_route
+
+        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
+        monkeypatch.setattr(
+            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+        )
+        monkeypatch.setattr(
+            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
+        )
+
+        # Return a healthy result, but make the available symbols
+        # appear permuted by patching mock_price_loader to drop the
+        # last symbol (forcing available_symbols != prior_symbol_order).
+        def _drop_last_symbol_loader(symbols, start_date, end_date):
+            # Drop the LAST prior symbol so available_symbols is a
+            # strict subset of prior_symbol_order -- order/length differs.
+            kept = list(symbols)[:-1]
+            return mock_price_loader(kept, start_date, end_date)
+
+        monkeypatch.setattr(
+            sac_ft_route, "load_prices_yfinance", _drop_last_symbol_loader
+        )
+        monkeypatch.setattr(
+            sac_ft_route,
+            "finetune_sac",
+            lambda training_data,
+            actor,
+            critic,
+            critic_target,
+            log_alpha,
+            scaler,
+            prior_config,
+            finetune_config,
+            shutdown_event=None: create_mock_training_result(prior_config),
+        )
+
+        app.dependency_overrides.clear()
+        app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
+
+        client = TestClient(app)
+
+        try:
+            response1 = client.post("/train/sac/finetune")
+            assert response1.status_code == 202
+            response = client.post("/train/sac/finetune")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["promoted"] is False
+            assert any(
+                "actual_symbol_order" in r and "does not match" in r
+                for r in data["failure_reasons"]
             )
         finally:
             app.dependency_overrides.clear()
@@ -774,6 +903,96 @@ class TestSACFullTraining:
             response = client.post("/train/sac/full", json={"universe": "halal"})
             assert response.status_code == 422
             assert "at least 5" in response.text
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_eval_cagr_below_floor_rejects(
+        self, temp_storage, monkeypatch
+    ):
+        """eval_cagr=0.10 is below the 0.12 floor -> promoted=False.
+
+        Under the old gate, an inaugural model with sub-floor CAGR
+        auto-promoted (cold-start fallback). The new policy keeps the
+        absolute floor as a guardrail and rejects regardless of prior.
+        """
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        # Override the SAC bucket BEFORE patching the in-process train_sac
+        # mock so the resolved bucket symbols match the test slate.
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+
+        # Patch the heavy SAC compute helpers, then override train_sac
+        # to return a sub-floor result so we exercise the rejection path.
+        _patch_sac_full_training_internals(monkeypatch)
+        monkeypatch.setattr(
+            sac_full_route,
+            "train_sac",
+            lambda training_data, config, shutdown_event=None: (
+                create_mock_training_result(config, eval_cagr=0.10)
+            ),
+        )
+
+        client = TestClient(app)
+        try:
+            r1 = client.post("/train/sac/full")
+            assert r1.status_code == 202
+            r2 = client.post("/train/sac/full")
+            assert r2.status_code == 200
+            data = r2.json()
+            assert data["promoted"] is False
+            assert any(
+                "eval_cagr" in r and "below floor" in r for r in data["failure_reasons"]
+            )
+            assert temp_storage.read_current_version() is None
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_symbol_count_mismatch_rejects(
+        self, temp_storage, monkeypatch
+    ):
+        """Bucket resolver and post-train slate diverge -> guardrail rejects.
+
+        The bucket resolver is the source of truth for the SAC
+        action-space dimension. Here the resolver returns 6 symbols
+        but the price loader only has prices for 5 of them, so
+        ``available_symbols`` collapses to 5 and the guardrail catches
+        the mismatch (expected 6, actual 5) and refuses to promote.
+        """
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        app.dependency_overrides.clear()
+
+        def _resolver_extra() -> list[str]:
+            # 6 symbols; the price loader below only covers 5.
+            return [*mock_symbols(), "EXTRA1"]
+
+        _override_sac_bucket(monkeypatch, temp_storage, _resolver_extra)
+        _patch_sac_full_training_internals(monkeypatch)
+
+        # Drop "EXTRA1" from the price loader output so available_symbols
+        # = 5 < expected_symbol_count = 6.
+        def _price_loader_drops_extra(symbols, start_date, end_date):
+            kept = [s for s in symbols if s != "EXTRA1"]
+            return mock_price_loader(kept, start_date, end_date)
+
+        monkeypatch.setattr(
+            sac_full_route, "load_prices_yfinance", _price_loader_drops_extra
+        )
+
+        client = TestClient(app)
+        try:
+            r1 = client.post("/train/sac/full")
+            assert r1.status_code == 202
+            r2 = client.post("/train/sac/full")
+            assert r2.status_code == 200
+            data = r2.json()
+            assert data["promoted"] is False
+            assert any(
+                "actual_symbol_count" in r and "expected_symbol_count" in r
+                for r in data["failure_reasons"]
+            )
+            assert temp_storage.read_current_version() is None
         finally:
             app.dependency_overrides.clear()
 

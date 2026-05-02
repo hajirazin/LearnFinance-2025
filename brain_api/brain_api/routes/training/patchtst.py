@@ -28,15 +28,15 @@ from brain_api.core.patchtst import (
     compute_version as patchtst_compute_version,
 )
 from brain_api.core.patchtst import (
-    evaluate_for_promotion as patchtst_evaluate_for_promotion,
-)
-from brain_api.core.patchtst import (
     load_prices_yfinance as patchtst_load_prices,
 )
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
-from brain_api.core.training_utils import TrainingCancelledError
+from brain_api.core.training_utils import (
+    TrainingCancelledError,
+    evaluate_forecaster_artifact_health,
+)
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
@@ -151,6 +151,10 @@ def _train_patchtst_core(
                 metrics=existing_metadata["metrics"],
                 promoted=existing_metadata["promoted"],
                 prior_version=existing_metadata.get("prior_version"),
+                # Backward-compat: pre-guardrail metadata files have no
+                # ``failure_reasons`` key. Treat missing as empty list
+                # so old artifacts continue to deserialize.
+                failure_reasons=existing_metadata.get("failure_reasons", []),
                 num_input_channels=config.num_input_channels,
                 signals_used=["ohlcv"],
             )
@@ -215,6 +219,10 @@ def _train_patchtst_core(
     )
 
     hf_model_repo = hf_model_repo_getter()
+    # prior_version is kept purely for audit lineage on metadata. The
+    # promotion decision is the artifact health check below; prior
+    # metrics are NEVER consulted (universe-drift made them an
+    # apples-to-oranges baseline).
     try:
         prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
     except StoragePolicyError as exc:
@@ -223,25 +231,51 @@ def _train_patchtst_core(
             f"{bucket.bucket_name}: {exc}; treating as inaugural"
         )
         prior_metadata = None
-    prior_version: str | None = None
-    prior_val_loss: float | None = None
-    if prior_metadata is not None:
-        prior_version = prior_metadata.get("version")
-        prior_val_loss = prior_metadata.get("metrics", {}).get("val_loss")
-        logger.info(
-            f"{log_prefix} Prior version: {prior_version}, val_loss: {prior_val_loss}"
-        )
-    else:
-        logger.info(f"{log_prefix} No prior version exists (first model)")
-
-    promoted = patchtst_evaluate_for_promotion(
-        val_loss=result.val_loss,
-        prior_val_loss=prior_val_loss,
+    prior_version: str | None = (
+        prior_metadata.get("version") if prior_metadata is not None else None
     )
+
+    # Two-write ordering: write artifacts first so the file-existence
+    # guardrails inside the health check can observe them, then
+    # re-write metadata.json with the populated promoted +
+    # failure_reasons.
+    provisional_metadata = create_patchtst_metadata(
+        version=version,
+        data_window_start=start_date.isoformat(),
+        data_window_end=end_date.isoformat(),
+        symbols=symbols,
+        config=config,
+        train_loss=result.train_loss,
+        val_loss=result.val_loss,
+        baseline_loss=result.baseline_loss,
+        promoted=False,  # placeholder
+        prior_version=prior_version,
+        failure_reasons=[],  # placeholder
+    )
+
+    logger.info(f"{log_prefix} Writing artifacts for version {version}...")
+    version_dir = storage.write_artifacts(
+        version=version,
+        model=result.model,
+        feature_scaler=result.feature_scaler,
+        config=config,
+        metadata=provisional_metadata,
+    )
+    logger.info(f"{log_prefix} Artifacts written successfully")
+
+    health = evaluate_forecaster_artifact_health(
+        train_loss=result.train_loss,
+        val_loss=result.val_loss,
+        baseline_loss=result.baseline_loss,
+        artifact_dir=version_dir,
+    )
+    promoted = health.is_healthy
     logger.info(
         f"{log_prefix} Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
+        + ("" if promoted else f" (failures: {health.failure_reasons})")
     )
 
+    # Final metadata write with the real promoted + failure_reasons.
     metadata = create_patchtst_metadata(
         version=version,
         data_window_start=start_date.isoformat(),
@@ -253,9 +287,8 @@ def _train_patchtst_core(
         baseline_loss=result.baseline_loss,
         promoted=promoted,
         prior_version=prior_version,
+        failure_reasons=health.failure_reasons,
     )
-
-    logger.info(f"{log_prefix} Writing artifacts for version {version}...")
     storage.write_artifacts(
         version=version,
         model=result.model,
@@ -263,9 +296,8 @@ def _train_patchtst_core(
         config=config,
         metadata=metadata,
     )
-    logger.info(f"{log_prefix} Artifacts written successfully")
 
-    if promoted or prior_version is None:
+    if promoted:
         storage.promote_version(version)
         logger.info(f"{log_prefix} Version {version} promoted to current")
 
@@ -277,11 +309,12 @@ def _train_patchtst_core(
     if hf_model_repo:
         try:
             hf_storage = hf_storage_class(repo_id=hf_model_repo, local_cache=storage)
-            hf_has_main = hf_storage.get_current_version() is not None
-            should_make_current = promoted or not hf_has_main
+            # make_current = promoted (no cold-start fallback). An
+            # unhealthy inaugural leaves HF main empty and forces the
+            # operator to investigate -- per AGENTS.md rule #1.
             logger.info(
-                f"{log_prefix} HF upload: promoted={promoted}, hf_has_main={hf_has_main}, "
-                f"make_current={should_make_current}"
+                f"{log_prefix} HF upload: promoted={promoted} "
+                f"-> make_current={promoted}"
             )
 
             hf_info = hf_storage.upload_model(
@@ -290,7 +323,7 @@ def _train_patchtst_core(
                 feature_scaler=result.feature_scaler,
                 config=config,
                 metadata=metadata,
-                make_current=should_make_current,
+                make_current=promoted,
             )
             hf_repo = hf_info.repo_id
             hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
@@ -353,6 +386,7 @@ def _train_patchtst_core(
         },
         promoted=promoted,
         prior_version=prior_version,
+        failure_reasons=health.failure_reasons,
         hf_repo=hf_repo,
         hf_url=hf_url,
         num_input_channels=config.num_input_channels,
@@ -416,6 +450,7 @@ def train_patchtst(
                 metrics=existing_metadata["metrics"],
                 promoted=existing_metadata["promoted"],
                 prior_version=existing_metadata.get("prior_version"),
+                failure_reasons=existing_metadata.get("failure_reasons", []),
                 num_input_channels=config.num_input_channels,
                 signals_used=["ohlcv"],
             )

@@ -79,7 +79,15 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
 def mock_trainer_worse_than_baseline(
     X, y, feature_scaler, config, shutdown_event=None
 ) -> TrainingResult:
-    """Return a mock training result that is worse than baseline."""
+    """Mock trainer worse than baseline.
+
+    Under the always-promote-with-guardrails policy this still passes
+    every guardrail (all metrics finite + positive, all artifact files
+    written). Tests that used to assert the prior-comparison gate
+    rejected this run have been rewritten to assert the new behavior:
+    a healthy model promotes regardless of how its val_loss compares
+    to a prior model trained on a different universe.
+    """
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
     return TrainingResult(
@@ -88,6 +96,22 @@ def mock_trainer_worse_than_baseline(
         config=config,
         train_loss=0.10,
         val_loss=0.10,
+        baseline_loss=0.05,
+    )
+
+
+def mock_trainer_nan_val_loss(
+    X, y, feature_scaler, config, shutdown_event=None
+) -> TrainingResult:
+    """Mock trainer that returns NaN val_loss to trip the guardrail."""
+    hf_config = config.to_hf_config()
+    model = PatchTSTForPrediction(hf_config)
+    return TrainingResult(
+        model=model,
+        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
+        config=config,
+        train_loss=0.01,
+        val_loss=float("nan"),
         baseline_loss=0.05,
     )
 
@@ -343,8 +367,14 @@ def test_train_patchtst_first_model_always_promoted(client_with_mocks):
     assert data["promoted"] is True
 
 
-def test_train_patchtst_not_promoted_when_worse_than_prior(monkeypatch):
-    """Model is NOT promoted when worse than prior model."""
+def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
+    """Always-promote: a healthy model promotes regardless of prior val_loss.
+
+    Pre-refactor this test asserted ``promoted is False`` based on the
+    prior-comparison gate. The universe-drift critique invalidated that
+    comparison; the new policy promotes any model whose own metrics
+    are finite + positive and whose artifacts are on disk.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         fresh_storage = PatchTSTHalalNewModelStorage(base_path=tmpdir)
 
@@ -382,18 +412,24 @@ def test_train_patchtst_not_promoted_when_worse_than_prior(monkeypatch):
             assert response2b.status_code == 200
 
             data = response2b.json()
-            assert data["promoted"] is False
+            assert data["promoted"] is True
 
             current = fresh_storage.read_current_version()
-            assert current == first_version
+            assert current == data["version"]
+            assert current != first_version
         finally:
             app.dependency_overrides.clear()
             os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage, monkeypatch):
-    """The 'current' pointer is unchanged when promotion fails."""
+def test_train_patchtst_not_promoted_when_val_loss_is_nan(temp_storage, monkeypatch):
+    """The new guardrail rejects NaN val_loss and leaves ``current`` pinned.
+
+    A trainer that silently diverges to NaN must NOT ship; ``current``
+    stays on the prior healthy version. This is the canonical example
+    of the new guardrail-based policy in action.
+    """
     app.dependency_overrides.clear()
 
     _override_us_patchtst_bucket(monkeypatch, temp_storage)
@@ -413,14 +449,10 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage, monkey
     assert response1.status_code == 202
     response1b = client.post(train_url, json={})
     assert response1b.status_code == 200
-    promoted_version = response1b.json()["version"]
+    healthy_version = response1b.json()["version"]
+    assert temp_storage.read_current_version() == healthy_version
 
-    current_before = temp_storage.read_current_version()
-    assert current_before == promoted_version
-
-    app.dependency_overrides[get_patchtst_trainer] = (
-        lambda: mock_trainer_worse_than_baseline
-    )
+    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer_nan_val_loss
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
 
     response2 = client.post(train_url, json={})
@@ -430,9 +462,8 @@ def test_train_patchtst_current_unchanged_when_not_promoted(temp_storage, monkey
     data2 = response2b.json()
 
     assert data2["promoted"] is False
-
-    current_after = temp_storage.read_current_version()
-    assert current_after == promoted_version
+    # ``current`` must stay pinned to the prior healthy version.
+    assert temp_storage.read_current_version() == healthy_version
 
     app.dependency_overrides.clear()
     os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)

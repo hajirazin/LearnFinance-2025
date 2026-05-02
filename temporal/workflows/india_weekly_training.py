@@ -83,6 +83,7 @@ class IndiaWeeklyTrainingWorkflow:
             "patchtst": {
                 "version": patchtst_result.version,
                 "promoted": patchtst_result.promoted,
+                "failure_reasons": patchtst_result.failure_reasons,
             },
             "halal_india": {
                 "stocks": len(india_filtered.get("stocks", [])),

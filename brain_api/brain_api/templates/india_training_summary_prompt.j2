@@ -8,6 +8,13 @@ This model predicts weekly stock returns for ~210 Nifty 500 Shariah-compliant In
 - **Version**: {{ patchtst.version }}
 - **Data Window**: {{ patchtst.data_window_start }} to {{ patchtst.data_window_end }}
 - **Promoted to Production**: {{ "Yes" if patchtst.promoted else "No" }}
+{% if patchtst.promoted %}
+- **Promotion Result**: Passed all artifact health guardrails (finite train/val/baseline loss, weights/scaler/config/metadata files present and non-empty).
+{% else %}
+- **Promotion Result**: NOT promoted. Failed guardrails:
+{% for reason in patchtst.failure_reasons %}    - {{ reason }}
+{% endfor %}
+{% endif %}
 - **Input Channels**: {{ patchtst.num_input_channels }}
 - **Signals Used**: {{ patchtst.signals_used | join(", ") }}
 - **Metrics**: {{ patchtst.metrics | tojson }}
@@ -20,6 +27,8 @@ This model predicts weekly stock returns for ~210 Nifty 500 Shariah-compliant In
 - No LSTM or SAC models are used for India
 
 ## Instructions
+
+Promotion is now **guardrail-based**, not prior-comparison-based. The model is promoted if and only if it passes its artifact health checks (finite metrics, artifact files present and non-empty). Universe drift across months is no longer a reason to reject a healthy model. When `failure_reasons` is non-empty, those are the exact guardrails that failed -- do not invent prior-comparison narratives.
 
 Provide a concise analysis of these training results. Focus on:
 1. Overall training health and model promotion status

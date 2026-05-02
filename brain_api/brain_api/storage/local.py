@@ -45,6 +45,7 @@ def create_metadata(
     baseline_loss: float,
     promoted: bool,
     prior_version: str | None,
+    failure_reasons: list[str] | None = None,
 ) -> dict:
     """Create metadata dict for LSTM training run (backward compatibility wrapper)."""
     return create_training_metadata(
@@ -59,6 +60,7 @@ def create_metadata(
         baseline_loss=baseline_loss,
         promoted=promoted,
         prior_version=prior_version,
+        failure_reasons=failure_reasons,
     )
 
 
@@ -73,6 +75,7 @@ def create_patchtst_metadata(
     baseline_loss: float,
     promoted: bool,
     prior_version: str | None,
+    failure_reasons: list[str] | None = None,
 ) -> dict:
     """Create metadata dict for PatchTST training run (backward compatibility wrapper)."""
     return create_training_metadata(
@@ -87,6 +90,7 @@ def create_patchtst_metadata(
         baseline_loss=baseline_loss,
         promoted=promoted,
         prior_version=prior_version,
+        failure_reasons=failure_reasons,
     )
 
 

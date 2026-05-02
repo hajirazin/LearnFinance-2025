@@ -33,6 +33,7 @@ def mock_training():
         data_window_end="2025-12-26",
         metrics={"train_loss": 0.01, "val_loss": 0.02},
         promoted=True,
+        failure_reasons=[],
         num_input_channels=5,
         signals_used=["ohlcv"],
     )
@@ -145,6 +146,7 @@ class TestIndiaWeeklyTrainingWorkflow:
             assert result["nifty_shariah_500"]["total_stocks"] == 210
             assert result["patchtst"]["version"] == "v2026-03-01-india123"
             assert result["patchtst"]["promoted"] is True
+            assert result["patchtst"]["failure_reasons"] == []
             assert result["halal_india"]["stocks"] == 15
             assert (
                 result["halal_india"]["selection_method"]

@@ -18,7 +18,6 @@ from brain_api.core.lstm import (
     LSTMConfig,
     build_dataset,
     compute_version,
-    evaluate_for_promotion,
     load_prices_yfinance,
     train_model_pytorch,
 )
@@ -27,7 +26,10 @@ from brain_api.core.model_buckets import (
     UnknownBucketError,
     get_bucket,
 )
-from brain_api.core.training_utils import TrainingCancelledError
+from brain_api.core.training_utils import (
+    TrainingCancelledError,
+    evaluate_forecaster_artifact_health,
+)
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
@@ -147,6 +149,9 @@ def train_lstm(
                 metrics=existing_metadata["metrics"],
                 promoted=existing_metadata["promoted"],
                 prior_version=existing_metadata.get("prior_version"),
+                # Backward-compat: pre-guardrail metadata files have no
+                # ``failure_reasons`` key. Treat missing as empty list.
+                failure_reasons=existing_metadata.get("failure_reasons", []),
             )
 
     job, is_new = get_or_create_job("lstm", version)
@@ -257,6 +262,10 @@ def _run_lstm_training(
 
         update_progress(job_id, {"phase": "promotion_check"})
         hf_model_repo = hf_repo_getter()
+        # prior_version is kept purely for audit lineage on metadata.
+        # The promotion decision is the artifact health check below;
+        # prior metrics are NEVER consulted (they were the source of
+        # the universe-drift problem the always-promote refactor fixes).
         try:
             prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
         except StoragePolicyError as exc:
@@ -265,27 +274,52 @@ def _run_lstm_training(
                 f"{bucket.bucket_name}: {exc}; treating as inaugural"
             )
             prior_metadata = None
-        prior_version: str | None = None
-        prior_val_loss: float | None = None
-        if prior_metadata is not None:
-            prior_version = prior_metadata.get("version")
-            prior_val_loss = prior_metadata.get("metrics", {}).get("val_loss")
-            logger.info(
-                f"[LSTM] Prior version: {prior_version}, val_loss: {prior_val_loss}"
-            )
-        else:
-            logger.info(
-                "[LSTM] No prior version (cold-start); inaugural promote applies"
-            )
-
-        promoted = evaluate_for_promotion(
-            val_loss=result.val_loss,
-            prior_val_loss=prior_val_loss,
+        prior_version: str | None = (
+            prior_metadata.get("version") if prior_metadata is not None else None
         )
+
+        # Two-write ordering: we must write artifacts to disk first so
+        # the file-existence guardrails inside the health check can
+        # see them, then re-write metadata.json with the populated
+        # ``promoted`` and ``failure_reasons``. Comments next to each
+        # write explain which one is the operator-facing copy.
+        provisional_metadata = create_metadata(
+            version=version,
+            data_window_start=start_date.isoformat(),
+            data_window_end=end_date.isoformat(),
+            symbols=symbols,
+            config=config,
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+            baseline_loss=result.baseline_loss,
+            promoted=False,  # placeholder; real value set below
+            prior_version=prior_version,
+            failure_reasons=[],  # placeholder
+        )
+
+        update_progress(job_id, {"phase": "writing_artifacts"})
+        logger.info(f"[LSTM] Writing artifacts for version {version}...")
+        version_dir = storage.write_artifacts(
+            version=version,
+            model=result.model,
+            feature_scaler=result.feature_scaler,
+            config=config,
+            metadata=provisional_metadata,
+        )
+
+        health = evaluate_forecaster_artifact_health(
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+            baseline_loss=result.baseline_loss,
+            artifact_dir=version_dir,
+        )
+        promoted = health.is_healthy
         logger.info(
             f"[LSTM] Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
+            + ("" if promoted else f" (failures: {health.failure_reasons})")
         )
 
+        # Final metadata: rewrite with the real promoted + failure_reasons.
         metadata = create_metadata(
             version=version,
             data_window_start=start_date.isoformat(),
@@ -297,10 +331,8 @@ def _run_lstm_training(
             baseline_loss=result.baseline_loss,
             promoted=promoted,
             prior_version=prior_version,
+            failure_reasons=health.failure_reasons,
         )
-
-        update_progress(job_id, {"phase": "writing_artifacts"})
-        logger.info(f"[LSTM] Writing artifacts for version {version}...")
         storage.write_artifacts(
             version=version,
             model=result.model,
@@ -309,7 +341,7 @@ def _run_lstm_training(
             metadata=metadata,
         )
 
-        if promoted or prior_version is None:
+        if promoted:
             storage.promote_version(version)
             logger.info(f"[LSTM] Version {version} promoted to current")
 
@@ -325,16 +357,17 @@ def _run_lstm_training(
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo, local_cache=storage
                 )
-                hf_has_main = hf_storage.get_current_version() is not None
-                should_make_current = promoted or not hf_has_main
-
+                # make_current = promoted (no cold-start fallback). An
+                # unhealthy inaugural leaves HF main empty and forces
+                # the operator to investigate -- per AGENTS.md rule #1,
+                # silently shipping bad data is forbidden.
                 hf_info = hf_storage.upload_model(
                     version=version,
                     model=result.model,
                     feature_scaler=result.feature_scaler,
                     config=config,
                     metadata=metadata,
-                    make_current=should_make_current,
+                    make_current=promoted,
                 )
                 hf_repo = hf_info.repo_id
                 hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
@@ -395,6 +428,7 @@ def _run_lstm_training(
             },
             promoted=promoted,
             prior_version=prior_version,
+            failure_reasons=health.failure_reasons,
             hf_repo=hf_repo,
             hf_url=hf_url,
         )
