@@ -113,6 +113,14 @@ This starts:
 - Temporal server at port 7233 (UI at port 8233)
 - Temporal worker (polls for workflows)
 
+**Raspberry Pi production stack only:** brain-api persists `data/` on the host so rebuilds do not wipe experience, HRP sticky history, IBKR order dedup, or audit snapshots. One-time on the Pi:
+
+```bash
+mkdir -p ~/learnfinance/brain-data && chmod 777 ~/learnfinance/brain-data
+```
+
+In `brain_api/.env` on the Pi, set `STORAGE_BACKEND=hf_first` and configure `HF_TOKEN` plus the per-bucket model repos (see `brain_api/.env.example`). Training on the Mac pushes artifacts to Hugging Face; the Pi pulls them on demand—**you do not need to rebuild the image to ship new model versions**, only for code changes. Override the mount path with `BRAIN_DATA_DIR` if your Pi user's home directory differs.
+
 ### 2. Start Brain API
 
 ```bash

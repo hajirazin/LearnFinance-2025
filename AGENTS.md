@@ -528,7 +528,7 @@ Key configuration:
 - **Activity concurrency cap** (per worker): `TEMPORAL_MAX_CONCURRENT_ACTIVITIES` env (default `10`) drives BOTH `Worker(max_concurrent_activities=N)` and the `ThreadPoolExecutor(max_workers=N)`. The Mac training worker sets this to `1` so heavy training activities are serialized; Pi inference keeps the default `10` so fast allocation activities run in parallel.
 
 **Host topology** (current production deployment):
-- **Pi** (`docker compose up`): runs Temporal server, brain_api, and one worker subscribed to `learnfinance-inference`. `temporal-schedules-init` is the one-shot container that registers all schedules on the server.
+- **Pi** (`docker compose up`): runs Temporal server, brain_api, and one worker subscribed to `learnfinance-inference`. `temporal-schedules-init` is the one-shot container that registers all schedules on the server. **brain-api `data/`** is bind-mounted to `${BRAIN_DATA_DIR:-/home/razin/learnfinance/brain-data}` -> `/app/data` (create the host dir once; `chmod 777` if the container user cannot write). Set **`STORAGE_BACKEND=hf_first`** in the Pi's `brain_api/.env` with `HF_TOKEN` and all required `HF_*_MODEL_REPO` vars so models lazy-download from Hugging Face after training on the Mac—rebuild the image for code changes only, not for model promotion.
 - **Mac** (manual, via `devbox`): user starts brain_api plus one or two workers as needed:
   - `devbox run temporal:worker:training` -- subscribes to `learnfinance-training`, concurrency cap 1. Required for the monthly training slots to actually execute.
   - `devbox run temporal:worker:inference` -- subscribes to `learnfinance-inference` as a redundant/faster backup to the Pi worker. Optional.

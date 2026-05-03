@@ -33,6 +33,15 @@ services:
       - "8000:8000"
     env_file:
       - ./brain_api/.env
+    volumes:
+      # Bind mount so Pi-generated state survives `docker compose up -d --build`.
+      # Critical: allocation/sticky_history.db (weekly HRP carry-set),
+      # ibkr/submitted_orders.db (IBKR dedup), experience/, raw/features/output audits.
+      # Nice-to-have: models/ (HF lazy-download when STORAGE_BACKEND=hf_first),
+      # cache/universe/, sentiment + fundamentals caches.
+      # Override BRAIN_DATA_DIR for other hosts. Default assumes Pi user 'razin'. Create once:
+      #   mkdir -p ~/learnfinance/brain-data && chmod 777 ~/learnfinance/brain-data
+      - ${BRAIN_DATA_DIR:-/home/razin/learnfinance/brain-data}:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/docs').read(); sys.exit(0)"]
       interval: 15s
