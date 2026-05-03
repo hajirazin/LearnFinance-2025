@@ -3,9 +3,7 @@ services:
     image: temporalio/temporal:latest
     container_name: learnfinance-temporal-server
     restart: always
-    ports:
-      - "7233:7233"
-      - "8233:8233"
+    network_mode: host
     command:
       - server
       - start-dev
@@ -29,8 +27,7 @@ services:
     build: ./brain_api
     container_name: learnfinance-brain-api
     restart: always
-    ports:
-      - "8000:8000"
+    network_mode: host
     env_file:
       - ./brain_api/.env
     volumes:
@@ -60,9 +57,8 @@ services:
   # per week; tap to confirm. If missed, the gateway auto-restarts and
   # retries every TWOFA_EXIT_INTERVAL seconds until accepted.
   #
-  # network_mode: host so brain-api on the same Pi can reach localhost:4002
-  # without docker-network NAT issues. ports: kept for visibility; on
-  # host networking they are informational only.
+  # network_mode: host so IB Gateway listens on the Pi (same namespace as
+  # brain-api and temporal-worker when those use host networking).
   ibkr-gateway:
     image: ghcr.io/gnzsnz/ib-gateway:stable
     container_name: learnfinance-ibkr-gateway
@@ -96,25 +92,27 @@ services:
     build: ./temporal
     container_name: learnfinance-temporal-worker
     restart: always
+    network_mode: host
     depends_on:
       temporal-server:
         condition: service_healthy
       brain-api:
         condition: service_healthy
     environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
-      - BRAIN_API_URL=http://brain-api:8000
+      - TEMPORAL_ADDRESS=localhost:7233
+      - BRAIN_API_URL=http://localhost:8000
       - TEMPORAL_TASK_QUEUE=learnfinance-inference
 
   temporal-schedules-init:
     build: ./temporal
     container_name: learnfinance-temporal-schedules-init
     restart: on-failure
+    network_mode: host
     depends_on:
       temporal-server:
         condition: service_healthy
     environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_ADDRESS=localhost:7233
     command: ["uv", "run", "python", "-m", "schedules"]
     # One-shot: exits 0 after registering (or skipping) schedules.
     # `Exited (0)` in `docker compose ps` is the EXPECTED healthy state for this service.
