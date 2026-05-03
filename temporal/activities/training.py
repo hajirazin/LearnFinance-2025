@@ -130,6 +130,8 @@ def fetch_halal_india_universe() -> dict:
 def _poll_training_job(
     endpoint: str,
     json_body: dict | None = None,
+    *,
+    params: dict[str, str] | None = None,
     poll_interval: float = 60.0,
 ) -> TrainingResponse:
     """Start a training job via POST and poll until completion.
@@ -140,9 +142,12 @@ def _poll_training_job(
     2. If 202, extract job_id and poll GET /train/status/{job_id}
     3. Heartbeat on each poll cycle to keep Temporal informed
     4. Return TrainingResponse on completion, raise on failure/cancel
+
+    ``params`` are forwarded as query parameters on the initial POST
+    (e.g. ``skip_snapshot`` for India PatchTST).
     """
     with get_training_client() as client:
-        response = client.post(endpoint, json=json_body)
+        response = client.post(endpoint, json=json_body, params=params)
         response.raise_for_status()
 
         if response.status_code == 200:
@@ -209,9 +214,18 @@ def train_sac(universe: str) -> TrainingResponse:
 
 @activity.defn
 def train_india_patchtst(universe: str) -> TrainingResponse:
-    """Train the India PatchTST OHLCV forecaster on the given universe."""
+    """Train the India PatchTST OHLCV forecaster on the given universe.
+
+    Snapshots are skipped: India PatchTST has no SAC consumer that
+    needs walk-forward snapshots, so producing them only wastes time
+    and disk. (US PatchTST keeps snapshots for SAC training.)
+    """
     logger.info(f"Starting India PatchTST training on universe={universe}...")
-    return _poll_training_job("/train/patchtst/india", json_body={"universe": universe})
+    return _poll_training_job(
+        "/train/patchtst/india",
+        json_body={"universe": universe},
+        params={"skip_snapshot": "true"},
+    )
 
 
 def _lstm_payload(lstm: TrainingResponse) -> dict:
