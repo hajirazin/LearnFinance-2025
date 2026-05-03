@@ -33,67 +33,6 @@ from brain_api.storage.sac.local import (
     create_sac_metadata,
 )
 
-
-def create_metadata(
-    version: str,
-    data_window_start: str,
-    data_window_end: str,
-    symbols: list[str],
-    config,
-    train_loss: float,
-    val_loss: float,
-    baseline_loss: float,
-    promoted: bool,
-    prior_version: str | None,
-    failure_reasons: list[str] | None = None,
-) -> dict:
-    """Create metadata dict for LSTM training run (backward compatibility wrapper)."""
-    return create_training_metadata(
-        model_type="lstm_halal_new",
-        version=version,
-        data_window_start=data_window_start,
-        data_window_end=data_window_end,
-        symbols=symbols,
-        config_dict=config.to_dict(),
-        train_loss=train_loss,
-        val_loss=val_loss,
-        baseline_loss=baseline_loss,
-        promoted=promoted,
-        prior_version=prior_version,
-        failure_reasons=failure_reasons,
-    )
-
-
-def create_patchtst_metadata(
-    version: str,
-    data_window_start: str,
-    data_window_end: str,
-    symbols: list[str],
-    config,
-    train_loss: float,
-    val_loss: float,
-    baseline_loss: float,
-    promoted: bool,
-    prior_version: str | None,
-    failure_reasons: list[str] | None = None,
-) -> dict:
-    """Create metadata dict for PatchTST training run (backward compatibility wrapper)."""
-    return create_training_metadata(
-        model_type="patchtst_halal_new",
-        version=version,
-        data_window_start=data_window_start,
-        data_window_end=data_window_end,
-        symbols=symbols,
-        config_dict=config.to_dict(),
-        train_loss=train_loss,
-        val_loss=val_loss,
-        baseline_loss=baseline_loss,
-        promoted=promoted,
-        prior_version=prior_version,
-        failure_reasons=failure_reasons,
-    )
-
-
 __all__ = [
     # Shared
     "DEFAULT_DATA_PATH",
@@ -113,8 +52,6 @@ __all__ = [
     "SACHalalFilteredModelStorage",
     "SACHalalModelStorage",
     "SACLocalStorage",  # Backward compatibility alias
-    "create_metadata",
-    "create_patchtst_metadata",
     "create_sac_metadata",
     "create_training_metadata",
 ]

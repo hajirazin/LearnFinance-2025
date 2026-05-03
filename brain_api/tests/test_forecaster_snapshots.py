@@ -19,6 +19,10 @@ from brain_api.storage.forecaster_snapshots import (
     create_snapshot_metadata,
 )
 
+_TEST_SNAPSHOT_DIGEST = (
+    "aaaaaaaaaaaa"  # 12 lowercase hex chars (matches compute_model_hash format)
+)
+
 
 class TestSnapshotLocalStorage:
     """Tests for SnapshotLocalStorage class."""
@@ -35,17 +39,23 @@ class TestSnapshotLocalStorage:
         assert storage.base_path == tmp_path
 
     def test_snapshot_path(self, tmp_path):
-        """Test snapshot path generation (flat structure, sibling to main versions)."""
+        """Hashed snapshots live under snapshot-{cutoff}-{digest}/."""
+
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        # Flat structure under the canonical bucket directory.
-        expected = tmp_path / "models" / "lstm_halal_new" / "snapshot-2019-12-31"
-        assert storage._snapshot_path(cutoff) == expected
+        digest = _TEST_SNAPSHOT_DIGEST
+        expected = (
+            tmp_path / "models" / "lstm_halal_new" / f"snapshot-2019-12-31-{digest}"
+        )
+        assert storage._snapshot_path(cutoff, digest) == expected
 
     def test_snapshot_exists_false(self, tmp_path):
-        """Test snapshot_exists returns False when no snapshot."""
+        """snapshot_exists checks the hashed folder basename."""
+
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
-        assert storage.snapshot_exists(date(2019, 12, 31)) is False
+        assert (
+            storage.snapshot_exists(date(2019, 12, 31), _TEST_SNAPSHOT_DIGEST) is False
+        )
 
     def test_list_snapshots_empty(self, tmp_path):
         """Test list_snapshots returns empty when no snapshots."""
@@ -57,7 +67,6 @@ class TestSnapshotLocalStorage:
         storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
 
-        # Create mock model and scaler
         mock_model = MagicMock()
         mock_model.state_dict.return_value = {"weight": torch.tensor([1.0])}
         mock_scaler = StandardScaler()
@@ -67,22 +76,21 @@ class TestSnapshotLocalStorage:
         mock_config.to_dict.return_value = {"hidden_size": 64}
         metadata = {"test": "value"}
 
-        # Write snapshot
         snapshot_path = storage.write_snapshot(
             cutoff_date=cutoff,
+            snapshot_digest=_TEST_SNAPSHOT_DIGEST,
             model=mock_model,
             feature_scaler=mock_scaler,
             config=mock_config,
             metadata=metadata,
         )
 
-        # Verify files exist
+        assert snapshot_path == storage._snapshot_path(cutoff, _TEST_SNAPSHOT_DIGEST)
         assert (snapshot_path / "weights.pt").exists()
         assert (snapshot_path / "feature_scaler.pkl").exists()
         assert (snapshot_path / "config.json").exists()
         assert (snapshot_path / "metadata.json").exists()
 
-        # List snapshots
         snapshots = storage.list_snapshots()
         assert len(snapshots) == 1
         assert snapshots[0] == cutoff
@@ -99,13 +107,14 @@ class TestSnapshotLocalStorage:
 
         storage.write_snapshot(
             cutoff_date=cutoff,
+            snapshot_digest=_TEST_SNAPSHOT_DIGEST,
             model=mock_model,
             feature_scaler=StandardScaler(),
             config=mock_config,
             metadata={},
         )
 
-        assert storage.snapshot_exists(cutoff) is True
+        assert storage.snapshot_exists(cutoff, _TEST_SNAPSHOT_DIGEST) is True
 
     def test_get_snapshot_for_year_exact_match(self, tmp_path):
         """Test get_snapshot_for_year with exact cutoff match."""
@@ -119,7 +128,12 @@ class TestSnapshotLocalStorage:
             mock_config = MagicMock()
             mock_config.to_dict.return_value = {}
             storage.write_snapshot(
-                cutoff, mock_model, StandardScaler(), mock_config, {}
+                cutoff_date=cutoff,
+                snapshot_digest=_TEST_SNAPSHOT_DIGEST,
+                model=mock_model,
+                feature_scaler=StandardScaler(),
+                config=mock_config,
+                metadata={},
             )
 
         # Year 2020 should use 2019-12-31 snapshot
@@ -137,7 +151,14 @@ class TestSnapshotLocalStorage:
         mock_model.state_dict.return_value = {}
         mock_config = MagicMock()
         mock_config.to_dict.return_value = {}
-        storage.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, {})
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=_TEST_SNAPSHOT_DIGEST,
+            model=mock_model,
+            feature_scaler=StandardScaler(),
+            config=mock_config,
+            metadata={},
+        )
 
         # Year 2020 should fall back to 2018-12-31 (no 2019-12-31 exists)
         assert storage.get_snapshot_for_year(2020) == date(2018, 12, 31)
@@ -152,7 +173,14 @@ class TestSnapshotLocalStorage:
         mock_model.state_dict.return_value = {}
         mock_config = MagicMock()
         mock_config.to_dict.return_value = {}
-        storage.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, {})
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=_TEST_SNAPSHOT_DIGEST,
+            model=mock_model,
+            feature_scaler=StandardScaler(),
+            config=mock_config,
+            metadata={},
+        )
 
         # Year 2020 needs 2019-12-31 which doesn't exist
         assert storage.get_snapshot_for_year(2020) is None
@@ -169,7 +197,12 @@ class TestSnapshotLocalStorage:
         metadata = {"forecaster_type": "lstm", "test": "value"}
 
         storage.write_snapshot(
-            cutoff, mock_model, StandardScaler(), mock_config, metadata
+            cutoff_date=cutoff,
+            snapshot_digest=_TEST_SNAPSHOT_DIGEST,
+            model=mock_model,
+            feature_scaler=StandardScaler(),
+            config=mock_config,
+            metadata=metadata,
         )
 
         read_meta = storage.read_metadata(cutoff)
@@ -199,6 +232,7 @@ class TestCreateSnapshotMetadata:
             config=mock_config,
             train_loss=0.01,
             val_loss=0.02,
+            config_symbols_hash="bbbbbbbbbbbb",
         )
 
         assert metadata["forecaster_type"] == "lstm"
@@ -206,9 +240,69 @@ class TestCreateSnapshotMetadata:
         assert metadata["data_window"]["start"] == "2016-01-01"
         assert metadata["data_window"]["end"] == "2019-12-31"
         assert metadata["symbols"] == ["AAPL", "MSFT"]
+        assert metadata["config_symbols_hash"] == "bbbbbbbbbbbb"
         assert metadata["metrics"]["train_loss"] == 0.01
         assert metadata["metrics"]["val_loss"] == 0.02
         assert "training_timestamp" in metadata
+
+
+class TestSnapshotFolderNaming:
+    """Naming + parsing helpers for hashed snapshot dirs / HF branches."""
+
+    def test_parse_hashed_folder_name_accept(self) -> None:
+        from brain_api.storage.forecaster_snapshots.snapshot_layout import (
+            parse_hashed_snapshot_folder_name,
+        )
+
+        name = "snapshot-2019-12-31-abcdef012345"
+        cutoff, digest = parse_hashed_snapshot_folder_name(name)
+        assert cutoff == date(2019, 12, 31)
+        assert digest == "abcdef012345"
+
+    def test_parse_legacy_flat_folder_name_rejected(self) -> None:
+        from brain_api.storage.forecaster_snapshots.snapshot_layout import (
+            parse_hashed_snapshot_folder_name,
+        )
+
+        assert parse_hashed_snapshot_folder_name("snapshot-2019-12-31") is None
+
+    def test_write_removes_other_digest_for_same_cutoff(self, tmp_path) -> None:
+        """Second write deletes sibling ``snapshot-{{cut}}-*`` dirs."""
+
+        storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
+        cutoff = date(2019, 12, 31)
+        mock_model = MagicMock()
+        mock_model.state_dict.return_value = {}
+        mock_cfg = MagicMock()
+        mock_cfg.to_dict.return_value = {}
+        scaler = StandardScaler()
+
+        digest_a = "aaaaaaaaaaaa"
+        digest_b = "bbbbbbbbbbbb"
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=digest_a,
+            model=mock_model,
+            feature_scaler=scaler,
+            config=mock_cfg,
+            metadata={},
+        )
+        legacy_flat = storage._models_path / f"snapshot-{cutoff.isoformat()}"
+        legacy_flat.mkdir()
+        assert len(storage.hashed_snapshot_dirs_for_cutoff(cutoff)) == 1
+
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=digest_b,
+            model=mock_model,
+            feature_scaler=scaler,
+            config=mock_cfg,
+            metadata={},
+        )
+        dirs = storage.hashed_snapshot_dirs_for_cutoff(cutoff)
+        assert len(dirs) == 1
+        assert digest_b in dirs[0].name
+        assert legacy_flat.exists()
 
 
 class TestWalkForwardForecasts:
@@ -385,7 +479,7 @@ class TestBackfillSnapshotRange:
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
         mock_storage.snapshot_exists_anywhere.return_value = False
-        mock_storage.forecaster_type = "patchtst"
+        mock_storage.forecaster_type = "patchtst_halal_new"
 
         mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
         mock_dataset = MagicMock()
@@ -442,7 +536,9 @@ class TestBackfillSnapshotRange:
         mock_storage.forecaster_type = "lstm_halal_new"
 
         # Simulate: 2015-12-31 exists, all others don't
-        def exists_side_effect(cutoff_date, check_hf=False):
+        def exists_side_effect(
+            cutoff_date, _snapshot_digest, *, check_hf=False
+        ) -> bool:
             return cutoff_date == date(2015, 12, 31)
 
         mock_storage.snapshot_exists_anywhere.side_effect = exists_side_effect
@@ -565,11 +661,15 @@ class TestPatchTSTSnapshots:
             SnapshotLocalStorage("not_a_bucket", base_path=tmp_path)
 
     def test_patchtst_snapshot_path(self, tmp_path):
-        """Test PatchTST snapshot path generation (flat structure)."""
+        """PatchTST snapshot path uses hashed layout under the canonical bucket."""
+
         storage = SnapshotLocalStorage("patchtst", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
-        expected = tmp_path / "models" / "patchtst_halal_new" / "snapshot-2019-12-31"
-        assert storage._snapshot_path(cutoff) == expected
+        digest = _TEST_SNAPSHOT_DIGEST
+        expected = (
+            tmp_path / "models" / "patchtst_halal_new" / f"snapshot-2019-12-31-{digest}"
+        )
+        assert storage._snapshot_path(cutoff, digest) == expected
 
 
 class TestSnapshotInferenceHelpers:

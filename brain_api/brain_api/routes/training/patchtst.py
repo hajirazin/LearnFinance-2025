@@ -37,11 +37,12 @@ from brain_api.core.training_utils import (
     TrainingCancelledError,
     evaluate_forecaster_artifact_health,
 )
+from brain_api.core.version import compute_model_hash
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
 )
-from brain_api.storage.local import create_patchtst_metadata
+from brain_api.storage.metadata import create_training_metadata
 from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
 from brain_api.storage.policy import (
     StoragePolicyError,
@@ -239,12 +240,13 @@ def _train_patchtst_core(
     # guardrails inside the health check can observe them, then
     # re-write metadata.json with the populated promoted +
     # failure_reasons.
-    provisional_metadata = create_patchtst_metadata(
+    provisional_metadata = create_training_metadata(
+        model_type=bucket.bucket_name,
         version=version,
         data_window_start=start_date.isoformat(),
         data_window_end=end_date.isoformat(),
         symbols=symbols,
-        config=config,
+        config_dict=config.to_dict(),
         train_loss=result.train_loss,
         val_loss=result.val_loss,
         baseline_loss=result.baseline_loss,
@@ -276,12 +278,13 @@ def _train_patchtst_core(
     )
 
     # Final metadata write with the real promoted + failure_reasons.
-    metadata = create_patchtst_metadata(
+    metadata = create_training_metadata(
+        model_type=bucket.bucket_name,
         version=version,
         data_window_start=start_date.isoformat(),
         data_window_end=end_date.isoformat(),
         symbols=symbols,
-        config=config,
+        config_dict=config.to_dict(),
         train_loss=result.train_loss,
         val_loss=result.val_loss,
         baseline_loss=result.baseline_loss,
@@ -336,7 +339,19 @@ def _train_patchtst_core(
         snapshot_hf_repo = snapshot_storage._get_hf_repo()
         check_hf = snapshot_hf_repo is not None
 
-        if not snapshot_storage.snapshot_exists_anywhere(end_date, check_hf=check_hf):
+        end_snap_digest = compute_model_hash(
+            snapshot_forecaster_type,
+            start_date,
+            end_date,
+            symbols,
+            config.to_dict(),
+        )
+
+        if not snapshot_storage.snapshot_exists_anywhere(
+            end_date,
+            end_snap_digest,
+            check_hf=check_hf,
+        ):
             snapshot_metadata = create_snapshot_metadata(
                 forecaster_type=snapshot_forecaster_type,
                 cutoff_date=end_date,
@@ -346,9 +361,11 @@ def _train_patchtst_core(
                 config=config,
                 train_loss=result.train_loss,
                 val_loss=result.val_loss,
+                config_symbols_hash=end_snap_digest,
             )
             snapshot_storage.write_snapshot(
                 cutoff_date=end_date,
+                snapshot_digest=end_snap_digest,
                 model=result.model,
                 feature_scaler=result.feature_scaler,
                 config=config,
@@ -358,7 +375,7 @@ def _train_patchtst_core(
 
             if snapshot_hf_repo:
                 try:
-                    snapshot_storage.upload_snapshot_to_hf(end_date)
+                    snapshot_storage.upload_snapshot_to_hf(end_date, end_snap_digest)
                     logger.info(
                         f"{log_prefix} Uploaded snapshot {end_date} to HuggingFace"
                     )
@@ -636,8 +653,17 @@ def _backfill_patchtst_snapshots(
     snapshots_needed = []
     for year in range(first_snapshot_year, end_year):
         cutoff_date = date(year, 12, 31)
+        backfill_digest = compute_model_hash(
+            snapshot_storage.forecaster_type,
+            snapshot_data_start,
+            cutoff_date,
+            symbols,
+            config.to_dict(),
+        )
         if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date, check_hf=check_hf
+            cutoff_date,
+            backfill_digest,
+            check_hf=check_hf,
         ):
             snapshots_needed.append(cutoff_date)
 
@@ -697,6 +723,14 @@ def _backfill_patchtst_snapshots(
             dataset.X, dataset.y, dataset.feature_scaler, config
         )
 
+        backfill_digest = compute_model_hash(
+            snapshot_forecaster_type,
+            snapshot_data_start,
+            cutoff_date,
+            symbols,
+            config.to_dict(),
+        )
+
         metadata = create_snapshot_metadata(
             forecaster_type=snapshot_forecaster_type,
             cutoff_date=cutoff_date,
@@ -706,10 +740,12 @@ def _backfill_patchtst_snapshots(
             config=config,
             train_loss=result.train_loss,
             val_loss=result.val_loss,
+            config_symbols_hash=backfill_digest,
         )
 
         snapshot_storage.write_snapshot(
             cutoff_date=cutoff_date,
+            snapshot_digest=backfill_digest,
             model=result.model,
             feature_scaler=result.feature_scaler,
             config=config,
@@ -721,7 +757,7 @@ def _backfill_patchtst_snapshots(
 
         if snapshot_hf_repo:
             try:
-                snapshot_storage.upload_snapshot_to_hf(cutoff_date)
+                snapshot_storage.upload_snapshot_to_hf(cutoff_date, backfill_digest)
                 logger.info(
                     f"[{backfill_prefix}] Uploaded snapshot {cutoff_date} to HuggingFace"
                 )

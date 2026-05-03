@@ -31,9 +31,8 @@ from brain_api.storage.local import (
     PatchTSTModelStorage,  # Backward compatibility alias
     PatchTSTNiftyShariah500ModelStorage,
     SACHalalFilteredModelStorage,
-    create_metadata,
-    create_patchtst_metadata,
 )
+from brain_api.storage.metadata import create_training_metadata
 
 __all__ = [
     # Local storage
@@ -51,6 +50,5 @@ __all__ = [
     "PatchTSTModelStorage",  # Backward compatibility alias
     "PatchTSTNiftyShariah500ModelStorage",
     "SACHalalFilteredModelStorage",
-    "create_metadata",
-    "create_patchtst_metadata",
+    "create_training_metadata",
 ]

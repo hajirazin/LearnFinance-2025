@@ -218,6 +218,8 @@ class TestHFVersionsMatch:
 class TestSnapshotExistsAnywhere:
     """``snapshot_exists_anywhere`` short-circuits on local hits."""
 
+    _DIGEST = "aaaaaaaaaaaa"
+
     def test_returns_true_when_local_exists(self, tmp_path):
         storage = SnapshotLocalStorage("lstm_halal_new", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
@@ -226,27 +228,54 @@ class TestSnapshotExistsAnywhere:
         mock_model.state_dict.return_value = {}
         mock_config = MagicMock()
         mock_config.to_dict.return_value = {}
-        storage.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, {})
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=self._DIGEST,
+            model=mock_model,
+            feature_scaler=StandardScaler(),
+            config=mock_config,
+            metadata={},
+        )
 
-        assert storage.snapshot_exists_anywhere(cutoff, check_hf=False) is True
-        assert storage.snapshot_exists_anywhere(cutoff, check_hf=True) is True
+        assert (
+            storage.snapshot_exists_anywhere(cutoff, self._DIGEST, check_hf=False)
+            is True
+        )
+        assert (
+            storage.snapshot_exists_anywhere(cutoff, self._DIGEST, check_hf=True)
+            is True
+        )
 
     def test_returns_false_when_no_local_and_check_hf_false(self, tmp_path):
         storage = SnapshotLocalStorage("lstm_halal_new", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
 
-        assert storage.snapshot_exists_anywhere(cutoff, check_hf=False) is False
+        assert (
+            storage.snapshot_exists_anywhere(cutoff, self._DIGEST, check_hf=False)
+            is False
+        )
 
     def test_checks_hf_when_no_local_and_check_hf_true(self, tmp_path):
         storage = SnapshotLocalStorage("lstm_halal_new", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
 
-        with patch.object(storage, "list_hf_snapshots", return_value=[cutoff]):
-            assert storage.snapshot_exists_anywhere(cutoff, check_hf=True) is True
+        with patch.object(
+            storage,
+            "snapshot_digest_exists_on_hf",
+            return_value=True,
+        ) as hf_check:
+            assert (
+                storage.snapshot_exists_anywhere(cutoff, self._DIGEST, check_hf=True)
+                is True
+            )
+        hf_check.assert_called_once_with(cutoff, self._DIGEST)
 
     def test_returns_false_when_not_in_local_or_hf(self, tmp_path):
         storage = SnapshotLocalStorage("lstm_halal_new", base_path=tmp_path)
         cutoff = date(2019, 12, 31)
 
-        with patch.object(storage, "list_hf_snapshots", return_value=[]):
-            assert storage.snapshot_exists_anywhere(cutoff, check_hf=True) is False
+        with patch.object(storage, "snapshot_digest_exists_on_hf", return_value=False):
+            assert (
+                storage.snapshot_exists_anywhere(cutoff, self._DIGEST, check_hf=True)
+                is False
+            )

@@ -152,7 +152,7 @@ class TestEnsureSnapshotForBucketContract:
 
     def test_local_first_short_circuits_when_local_present(self, tmp_path):
         from datetime import date
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock, patch
 
         from sklearn.preprocessing import StandardScaler
 
@@ -167,17 +167,31 @@ class TestEnsureSnapshotForBucketContract:
         mock_model.state_dict.return_value = {}
         mock_config = MagicMock()
         mock_config.to_dict.return_value = {}
-        snapshot.write_snapshot(cutoff, mock_model, StandardScaler(), mock_config, {})
 
-        # Should return True without touching HF (no env, no exception).
-        assert (
-            ensure_snapshot_for_bucket(
-                snapshot_storage=snapshot,
-                cutoff_date=cutoff,
-                policy=StoragePolicy.LOCAL_FIRST,
-            )
-            is True
+        pinned_digest = "aaaaaaaaaaaa"
+
+        snapshot.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=pinned_digest,
+            model=mock_model,
+            feature_scaler=StandardScaler(),
+            config=mock_config,
+            metadata={},
         )
+
+        with patch(
+            "brain_api.core.forecaster_snapshot_identity."
+            "expected_dec31_walkforward_snapshot_hash",
+            return_value=pinned_digest,
+        ):
+            assert (
+                ensure_snapshot_for_bucket(
+                    snapshot_storage=snapshot,
+                    cutoff_date=cutoff,
+                    policy=StoragePolicy.LOCAL_FIRST,
+                )
+                is True
+            )
 
 
 class TestLoadCurrentArtifactsForBucketContract:

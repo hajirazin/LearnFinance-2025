@@ -7,7 +7,6 @@ forecaster models trained only on prior data.
 import logging
 import threading
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -124,13 +123,12 @@ def generate_walkforward_forecasts(
 
             year_indices = year_groups[year]
             cutoff_date = date(year - 1, 12, 31)
-            snapshot_path = snapshot_storage._snapshot_path(cutoff_date)
             preds = _run_snapshot_inference(
-                snapshot_path,
                 forecaster_type,
                 symbol,
                 year_indices,
                 weekly_dates,
+                cutoff_date=cutoff_date,
             )
             for idx, pred in zip(year_indices, preds, strict=False):
                 if idx < n_weeks - 1:
@@ -142,11 +140,11 @@ def generate_walkforward_forecasts(
 
 
 def _run_snapshot_inference(
-    snapshot_path: Path,
     forecaster_type: str,
     symbol: str,
     year_indices: list[int],
     weekly_dates: pd.DatetimeIndex,
+    cutoff_date: date,
 ) -> list[float]:
     """Run inference using a snapshot model.
 
@@ -154,20 +152,16 @@ def _run_snapshot_inference(
     predictions for each week in the target year.
 
     Args:
-        snapshot_path: Path to snapshot directory
-        forecaster_type: "lstm" or "patchtst"
+        forecaster_type: ``"lstm"`` or ``"patchtst`` (legacy aliases mapped to buckets)
         symbol: Stock symbol
         year_indices: Indices for the target year
         weekly_dates: DatetimeIndex of weekly dates
+        cutoff_date: Snapshot cutoff directory ``snapshot-{cutoff}-{digest}``
 
     Returns:
         List of predictions for each week in year_indices
     """
     from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
-
-    # Load snapshot artifacts
-    cutoff_date_str = snapshot_path.name.replace("snapshot-", "")
-    cutoff_date = date.fromisoformat(cutoff_date_str)
 
     storage = SnapshotLocalStorage(forecaster_type)
     artifacts = storage.load_snapshot(cutoff_date)

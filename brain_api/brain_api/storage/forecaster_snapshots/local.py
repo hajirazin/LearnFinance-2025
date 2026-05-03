@@ -4,16 +4,16 @@ Stores yearly LSTM and PatchTST model snapshots for walk-forward
 forecast generation during RL training.
 
 Also supports HuggingFace Hub upload/download using the same repo
-as the main model but with different branch naming convention:
+as the main model but with branch naming convention:
 - Main model: v2025-01-05-abc123
-- Snapshots: snapshot-2024-12-31
+- Snapshots (hashed folder + branch): snapshot-2024-12-31-{12-hex-config-symbols-hash}
 """
 
 import json
 import logging
 import pickle
-from dataclasses import dataclass
-from datetime import UTC, date, datetime
+import shutil
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -32,68 +32,28 @@ from brain_api.core.config import (
     get_hf_token,
 )
 from brain_api.storage.base import DEFAULT_DATA_PATH
+from brain_api.storage.forecaster_snapshots.artifacts import (
+    LSTMSnapshotArtifacts,
+    PatchTSTSnapshotArtifacts,
+)
+from brain_api.storage.forecaster_snapshots.snapshot_layout import (
+    parse_hashed_snapshot_folder_name,
+    snapshot_branch_basename,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class LSTMSnapshotArtifacts:
-    """Loaded LSTM snapshot artifacts for inference.
-
-    Contains everything needed to run inference:
-    - config: model hyperparameters
-    - feature_scaler: fitted StandardScaler for input normalization
-    - model: PyTorch LSTM model with loaded weights
-    - cutoff_date: the data cutoff date for this snapshot
-    """
-
-    config: Any  # LSTMConfig
-    feature_scaler: StandardScaler
-    model: Any  # LSTMModel
-    cutoff_date: date
-
-
-@dataclass
-class PatchTSTSnapshotArtifacts:
-    """Loaded PatchTST snapshot artifacts for inference.
-
-    Contains everything needed to run inference:
-    - config: model hyperparameters
-    - feature_scaler: fitted StandardScaler for input normalization
-    - model: HuggingFace PatchTSTForPrediction model
-    - cutoff_date: the data cutoff date for this snapshot
-    """
-
-    config: Any  # PatchTSTConfig
-    feature_scaler: StandardScaler
-    model: Any  # PatchTSTForPrediction
-    cutoff_date: date
-
-
 class SnapshotLocalStorage:
-    """Local filesystem storage for forecaster snapshots.
+    """Local hashed snapshot storage (sibling to main model versions).
 
-    Snapshots are stored as siblings to main model versions with flat structure:
-        {base_path}/models/{forecaster_type}/snapshot-{cutoff_date}/
-            - weights.pt            (PyTorch model weights)
-            - feature_scaler.pkl    (sklearn StandardScaler)
-            - config.json           (model hyperparameters)
-            - metadata.json         (training info)
+    Layout: ``{base_path}/models/{forecaster_type}/snapshot-{cutoff}-{digest}/``
+    with ``weights.pt``, ``feature_scaler.pkl``, ``config.json``, ``metadata.json``.
 
-    Example:
-        data/models/lstm/v2024-01-01-abc123/    # Main model version
-        data/models/lstm/snapshot-2019-12-31/   # Snapshot (same flat structure)
-        data/models/lstm/snapshot-2020-12-31/   # Snapshot
-        data/models/patchtst/snapshot-2019-12-31/
+    The digest is twelve hex characters from :func:`~brain_api.core.version.compute_model_hash`.
+    Legacy ``snapshot-{date}/`` dirs (no digest) are ignored.
 
-    Pattern-based identification:
-        - Main model: v{date}-{hash}
-        - Snapshot: snapshot-{date}
-
-    HuggingFace Support:
-        Snapshots use the same repo as the main model with branch naming:
-        - Main model versions: v2025-01-05-abc123
-        - Snapshot branches: snapshot-2024-12-31
+    HuggingFace branches reuse the same basename as the local folder.
     """
 
     # Backwards-compat aliases mapping the legacy short forecaster name
@@ -154,7 +114,7 @@ class SnapshotLocalStorage:
         self._hf_token = hf_token
         # Models directory where both main versions and snapshots live as siblings
         self._models_path = self.base_path / "models" / self.forecaster_type
-        self._hf_missing: set[date] = set()
+        self._hf_missing: set[str] = set()
 
     def _get_hf_repo(self) -> str | None:
         """Get the HuggingFace repo ID for this forecaster bucket."""
@@ -174,136 +134,184 @@ class SnapshotLocalStorage:
         """Get HF token from instance or environment."""
         return self._hf_token or get_hf_token()
 
-    def _snapshot_branch_name(self, cutoff_date: date) -> str:
-        """Get the HF branch name for a snapshot."""
-        return f"snapshot-{cutoff_date.isoformat()}"
+    def _snapshot_branch_name(self, cutoff_date: date, snapshot_digest: str) -> str:
+        """HF branch name and local subdirectory basename for a hashed snapshot."""
+        return snapshot_branch_basename(cutoff_date, snapshot_digest)
 
-    def _snapshot_path(self, cutoff_date: date) -> Path:
-        """Get the path for a specific snapshot (sibling to main versions)."""
-        return self._models_path / f"snapshot-{cutoff_date.isoformat()}"
+    def _snapshot_path(self, cutoff_date: date, snapshot_digest: str) -> Path:
+        """Path to hashed snapshot folder under this bucket's ``models`` directory."""
+        return self._models_path / self._snapshot_branch_name(
+            cutoff_date, snapshot_digest
+        )
 
-    def snapshot_exists(self, cutoff_date: date) -> bool:
-        """Check if a snapshot already exists locally."""
-        return self._snapshot_path(cutoff_date).exists()
+    def hashed_snapshot_dirs_for_cutoff(self, cutoff_date: date) -> list[Path]:
+        """Return sorted hashed snapshot dirs for ``snapshot-{cutoff}-*`` pattern."""
+        if not self._models_path.exists():
+            return []
+        return sorted(
+            p
+            for p in self._models_path.glob(f"snapshot-{cutoff_date.isoformat()}-*")
+            if p.is_dir() and parse_hashed_snapshot_folder_name(p.name) is not None
+        )
+
+    def resolve_snapshot_directory(self, cutoff_date: date) -> Path:
+        """Resolve exactly one hashed snapshot directory for ``cutoff_date``.
+
+        Raises:
+            ValueError: No matching hashed snapshot folder.
+            RuntimeError: Multiple matching folders for the same cutoff.
+        """
+        matches = self.hashed_snapshot_dirs_for_cutoff(cutoff_date)
+        if len(matches) == 0:
+            raise ValueError(
+                f"No hashed snapshot folder for cutoff {cutoff_date} under "
+                f"{self._models_path}"
+            )
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Multiple snapshot folders for cutoff {cutoff_date}: {matches}"
+            )
+        return matches[0]
+
+    def snapshot_exists(self, cutoff_date: date, snapshot_digest: str) -> bool:
+        """Check if a hashed snapshot exists locally."""
+        return self._snapshot_path(cutoff_date, snapshot_digest).exists()
 
     def snapshot_exists_anywhere(
-        self, cutoff_date: date, check_hf: bool = False
+        self,
+        cutoff_date: date,
+        snapshot_digest: str,
+        *,
+        check_hf: bool = False,
     ) -> bool:
-        """Check if snapshot exists locally OR on HuggingFace (if check_hf=True).
+        """Whether ``snapshot-{cutoff}-{digest}`` exists locally or on HF."""
 
-        This is useful when deciding whether to create a new snapshot during training.
-        Callers pass ``check_hf=True`` whenever the bucket has an HF
-        repo configured (see ``snapshot_storage._get_hf_repo()`` in the
-        training routes); the read policy itself never gates HF checks
-        here, only the bucket's HF repo presence does.
-
-        Args:
-            cutoff_date: The snapshot cutoff date to check
-            check_hf: If True, also check HuggingFace for the snapshot
-
-        Returns:
-            True if snapshot exists locally or on HF (when check_hf=True)
-        """
-        if self.snapshot_exists(cutoff_date):
+        if self.snapshot_exists(cutoff_date, snapshot_digest):
             return True
 
         if check_hf:
-            hf_snapshots = self.list_hf_snapshots()
-            return cutoff_date in hf_snapshots
+            return self.snapshot_digest_exists_on_hf(cutoff_date, snapshot_digest)
 
         return False
 
-    def list_snapshots(self) -> list[date]:
-        """List all available snapshot cutoff dates.
+    def snapshot_digest_exists_on_hf(
+        self, cutoff_date: date, snapshot_digest: str
+    ) -> bool:
+        branch = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+        return branch in self._list_hf_hashed_snapshot_branch_names()
 
-        Returns:
-            Sorted list of cutoff dates.
-        """
+    def list_local_snapshot_identities(self) -> list[tuple[date, str]]:
+        """Pairs ``(cutoff_date, snapshot_digest)`` for every local hashed snapshot."""
         if not self._models_path.exists():
             return []
 
-        cutoff_dates = []
+        identities: list[tuple[date, str]] = []
         for entry in self._models_path.iterdir():
-            if entry.is_dir() and entry.name.startswith("snapshot-"):
-                try:
-                    date_str = entry.name.replace("snapshot-", "")
-                    cutoff_dates.append(date.fromisoformat(date_str))
-                except ValueError:
-                    continue
+            if entry.is_dir():
+                parsed = parse_hashed_snapshot_folder_name(entry.name)
+                if parsed is not None:
+                    identities.append(parsed)
+        return sorted(identities, key=lambda t: (t[0], t[1]))
 
-        return sorted(cutoff_dates)
+    def list_snapshots(self) -> list[date]:
+        """Sorted unique cutoff dates with at least one hashed local snapshot."""
+
+        cutoffs = {c for c, _ in self.list_local_snapshot_identities()}
+        return sorted(cutoffs)
+
+    def _list_hf_hashed_snapshot_branch_names(self) -> set[str]:
+        repo_id = self._get_hf_repo()
+        if not repo_id:
+            return set()
+
+        token = self._get_hf_token()
+        api = HfApi(token=token)
+
+        try:
+            refs = api.list_repo_refs(repo_id=repo_id, repo_type="model")
+        except Exception as e:
+            logger.warning(f"Failed to list HF snapshot branches: {e}")
+            return set()
+
+        return {
+            branch.name
+            for branch in refs.branches
+            if parse_hashed_snapshot_folder_name(branch.name) is not None
+        }
+
+    def list_hf_snapshot_identities(self) -> list[tuple[date, str]]:
+        """HF snapshot identities from hashed branches only (legacy branches ignored)."""
+        out: list[tuple[date, str]] = []
+        for branch in sorted(self._list_hf_hashed_snapshot_branch_names()):
+            parsed = parse_hashed_snapshot_folder_name(branch)
+            if parsed is not None:
+                out.append(parsed)
+        return sorted(out)
 
     def write_snapshot(
         self,
         cutoff_date: date,
+        snapshot_digest: str,
         model: Any,
         feature_scaler: StandardScaler,
         config: Any,
         metadata: dict[str, Any],
     ) -> Path:
-        """Write a snapshot for a specific cutoff date.
+        """Write a snapshot for ``snapshot-{cutoff}-{digest}/``.
 
-        Args:
-            cutoff_date: The data cutoff date (e.g., 2019-12-31)
-            model: Trained LSTM or PatchTST model
-            feature_scaler: Fitted StandardScaler
-            config: Model configuration
-            metadata: Training metadata
-
-        Returns:
-            Path to the snapshot directory
+        Removes sibling hashed folders for the same ``cutoff_date`` whose digest differs
+        (keeps exactly one hashed layout per cutoff). Legacy ``snapshot-{cutoff}/`` dirs
+        are untouched.
         """
-        snapshot_dir = self._snapshot_path(cutoff_date)
+
+        snapshot_dir = self._snapshot_path(cutoff_date, snapshot_digest)
+        for stale in self._models_path.glob(f"snapshot-{cutoff_date.isoformat()}-*"):
+            try:
+                if stale.resolve() != snapshot_dir.resolve():
+                    shutil.rmtree(stale)
+            except OSError as exc:
+                logger.warning(f"Could not remove stale snapshot dir {stale}: {exc}")
+
         snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save model weights
         weights_path = snapshot_dir / "weights.pt"
         torch.save(model.state_dict(), weights_path)
 
-        # Save scaler
         scaler_path = snapshot_dir / "feature_scaler.pkl"
         with open(scaler_path, "wb") as f:
             pickle.dump(feature_scaler, f)
 
-        # Save config
         config_path = snapshot_dir / "config.json"
         with open(config_path, "w") as f:
             json.dump(config.to_dict(), f, indent=2)
 
-        # Save metadata
         metadata_path = snapshot_dir / "metadata.json"
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2, default=str)
+
+        branch_key = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+        self._hf_missing.discard(branch_key)
 
         return snapshot_dir
 
     def load_snapshot(
         self, cutoff_date: date
     ) -> LSTMSnapshotArtifacts | PatchTSTSnapshotArtifacts:
-        """Load a snapshot for a specific cutoff date.
+        """Load the hashed snapshot folder for ``cutoff_date``.
 
-        Args:
-            cutoff_date: The data cutoff date
-
-        Returns:
-            Loaded snapshot artifacts
+        Exactly one matching ``snapshot-{cutoff}-{digest}/`` must exist.
         """
-        snapshot_dir = self._snapshot_path(cutoff_date)
 
-        if not snapshot_dir.exists():
-            raise ValueError(f"Snapshot not found for cutoff date {cutoff_date}")
+        snapshot_dir = self.resolve_snapshot_directory(cutoff_date)
 
-        # Load config
         config_path = snapshot_dir / "config.json"
         with open(config_path) as f:
             config_dict = json.load(f)
 
-        # Load scaler
         scaler_path = snapshot_dir / "feature_scaler.pkl"
         with open(scaler_path, "rb") as f:
             feature_scaler = pickle.load(f)
 
-        # Load model
         weights_path = snapshot_dir / "weights.pt"
 
         if self.forecaster_type.startswith("lstm"):
@@ -322,36 +330,35 @@ class SnapshotLocalStorage:
                 model=model,
                 cutoff_date=cutoff_date,
             )
-        else:
-            from transformers import PatchTSTForPrediction
+        from transformers import PatchTSTForPrediction
 
-            from brain_api.core.patchtst import PatchTSTConfig
+        from brain_api.core.patchtst import PatchTSTConfig
 
-            config = PatchTSTConfig(**config_dict)
-            hf_config = config.to_hf_config()
-            model = PatchTSTForPrediction(hf_config)
-            model.load_state_dict(
-                torch.load(weights_path, weights_only=True, map_location="cpu")
-            )
-            model.eval()
+        config = PatchTSTConfig(**config_dict)
+        hf_config = config.to_hf_config()
+        model = PatchTSTForPrediction(hf_config)
+        model.load_state_dict(
+            torch.load(weights_path, weights_only=True, map_location="cpu")
+        )
+        model.eval()
 
-            return PatchTSTSnapshotArtifacts(
-                config=config,
-                feature_scaler=feature_scaler,
-                model=model,
-                cutoff_date=cutoff_date,
-            )
+        return PatchTSTSnapshotArtifacts(
+            config=config,
+            feature_scaler=feature_scaler,
+            model=model,
+            cutoff_date=cutoff_date,
+        )
 
     def read_metadata(self, cutoff_date: date) -> dict[str, Any] | None:
-        """Read metadata for a snapshot.
+        """Read metadata for a snapshot (hashed folder only).
 
-        Args:
-            cutoff_date: The data cutoff date
-
-        Returns:
-            Metadata dict if exists, None otherwise.
+        Legacy ``snapshot-{date}/`` is not consulted.
         """
-        metadata_path = self._snapshot_path(cutoff_date) / "metadata.json"
+        matches = self.hashed_snapshot_dirs_for_cutoff(cutoff_date)
+        if len(matches) != 1:
+            return None
+
+        metadata_path = matches[0] / "metadata.json"
         if not metadata_path.exists():
             return None
         with open(metadata_path) as f:
@@ -361,25 +368,18 @@ class SnapshotLocalStorage:
         """Get the snapshot cutoff date to use for predictions in a given year.
 
         For year N, we need a snapshot trained on data up to Dec 31 of year N-1.
-
-        Args:
-            year: The year we want predictions for
-
-        Returns:
-            Cutoff date of the snapshot to use, or None if not available
         """
+
         target_cutoff = date(year - 1, 12, 31)
 
-        # First try exact match
-        if self.snapshot_exists(target_cutoff):
+        if self.hashed_snapshot_dirs_for_cutoff(target_cutoff):
             return target_cutoff
 
-        # Find the closest available snapshot that's <= target
         available = self.list_snapshots()
         valid_snapshots = [d for d in available if d <= target_cutoff]
 
         if valid_snapshots:
-            return max(valid_snapshots)  # Most recent valid snapshot
+            return max(valid_snapshots)
 
         return None
 
@@ -399,17 +399,11 @@ class SnapshotLocalStorage:
                 exist_ok=True,
             )
 
-    def upload_snapshot_to_hf(self, cutoff_date: date) -> str | None:
-        """Upload a local snapshot to HuggingFace Hub.
+    def upload_snapshot_to_hf(
+        self, cutoff_date: date, snapshot_digest: str
+    ) -> str | None:
+        """Upload a hashed local snapshot branch ``snapshot-{date}-{digest}``."""
 
-        Uses the same repo as the main model but with branch name 'snapshot-{date}'.
-
-        Args:
-            cutoff_date: The snapshot cutoff date to upload
-
-        Returns:
-            HF repo ID if successful, None if HF not configured or snapshot doesn't exist
-        """
         repo_id = self._get_hf_repo()
         if not repo_id:
             logger.warning(
@@ -417,9 +411,10 @@ class SnapshotLocalStorage:
             )
             return None
 
-        if not self.snapshot_exists(cutoff_date):
+        if not self.snapshot_exists(cutoff_date, snapshot_digest):
             logger.warning(
-                f"Snapshot {cutoff_date} does not exist locally, cannot upload"
+                f"Snapshot {cutoff_date}/{snapshot_digest} does not exist locally, "
+                "cannot upload"
             )
             return None
 
@@ -427,15 +422,14 @@ class SnapshotLocalStorage:
         api = HfApi(token=token)
         self._ensure_hf_repo_exists(api, repo_id)
 
-        snapshot_dir = self._snapshot_path(cutoff_date)
-        branch_name = self._snapshot_branch_name(cutoff_date)
+        snapshot_dir = self._snapshot_path(cutoff_date, snapshot_digest)
+        branch_name = self._snapshot_branch_name(cutoff_date, snapshot_digest)
 
         logger.info(
-            f"Uploading {self.forecaster_type} snapshot {cutoff_date} "
+            f"Uploading {self.forecaster_type} snapshot {branch_name} "
             f"to {repo_id} (branch: {branch_name})"
         )
 
-        # Create the snapshot branch first (huggingface_hub 0.21+ requires explicit branch creation)
         try:
             api.create_branch(
                 repo_id=repo_id,
@@ -444,7 +438,6 @@ class SnapshotLocalStorage:
             )
             logger.info(f"Created branch {branch_name} on {repo_id}")
         except Exception as e:
-            # Branch may already exist, which is fine
             if (
                 "already exists" not in str(e).lower()
                 and "reference already exists" not in str(e).lower()
@@ -456,23 +449,19 @@ class SnapshotLocalStorage:
             repo_id=repo_id,
             repo_type="model",
             revision=branch_name,
-            commit_message=f"Add {self.forecaster_type} snapshot for {cutoff_date}",
+            commit_message=(
+                f"Add {self.forecaster_type} snapshot {cutoff_date} ({snapshot_digest})"
+            ),
         )
 
         return repo_id
 
-    def download_snapshot_from_hf(self, cutoff_date: date) -> bool:
-        """Download a snapshot from HuggingFace Hub if not available locally.
+    def download_snapshot_from_hf(
+        self, cutoff_date: date, snapshot_digest: str
+    ) -> bool:
+        """Download ``snapshot-{cutoff}-{digest}`` from HuggingFace if missing locally."""
 
-        Args:
-            cutoff_date: The snapshot cutoff date to download
-
-        Returns:
-            True if snapshot is now available locally (downloaded or already existed),
-            False if download failed or HF not configured
-        """
-        # Already have it locally
-        if self.snapshot_exists(cutoff_date):
+        if self.snapshot_exists(cutoff_date, snapshot_digest):
             return True
 
         repo_id = self._get_hf_repo()
@@ -481,15 +470,17 @@ class SnapshotLocalStorage:
             return False
 
         token = self._get_hf_token()
-        branch_name = self._snapshot_branch_name(cutoff_date)
+        branch_name = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+
+        if branch_name in self._hf_missing:
+            return False
 
         try:
             logger.info(
-                f"Downloading {self.forecaster_type} snapshot {cutoff_date} "
-                f"from {repo_id} (branch: {branch_name})"
+                f"Downloading {self.forecaster_type} snapshot {branch_name} "
+                f"from {repo_id}"
             )
 
-            # Download to a temp location first
             local_dir = snapshot_download(
                 repo_id=repo_id,
                 revision=branch_name,
@@ -497,8 +488,20 @@ class SnapshotLocalStorage:
                 token=token,
             )
 
-            # Copy files to our local snapshot path
-            snapshot_dir = self._snapshot_path(cutoff_date)
+            snapshot_dir = self._snapshot_path(cutoff_date, snapshot_digest)
+
+            # Remove conflicting sibling hashed dirs for same cutoff before copy.
+            for stale in self._models_path.glob(
+                f"snapshot-{cutoff_date.isoformat()}-*"
+            ):
+                try:
+                    if stale.resolve() != snapshot_dir.resolve():
+                        shutil.rmtree(stale)
+                except OSError as exc:
+                    logger.warning(
+                        f"Could not remove stale snapshot dir {stale}: {exc}"
+                    )
+
             snapshot_dir.mkdir(parents=True, exist_ok=True)
 
             src_path = Path(local_dir)
@@ -511,52 +514,27 @@ class SnapshotLocalStorage:
                 src_file = src_path / file_name
                 if src_file.exists():
                     dst_file = snapshot_dir / file_name
-                    # Copy file content
                     dst_file.write_bytes(src_file.read_bytes())
 
             logger.info(
-                f"Successfully downloaded snapshot {cutoff_date} to {snapshot_dir}"
+                f"Successfully downloaded snapshot {branch_name} to {snapshot_dir}"
             )
+            self._hf_missing.discard(branch_name)
             return True
 
         except Exception as e:
-            logger.warning(f"Failed to download snapshot {cutoff_date} from HF: {e}")
-            self._hf_missing.add(cutoff_date)
+            logger.warning(f"Failed to download snapshot {branch_name} from HF: {e}")
+            self._hf_missing.add(branch_name)
             return False
 
     def ensure_snapshot_available(
         self,
         cutoff_date: date,
+        snapshot_digest: str,
         policy: "StoragePolicy | None" = None,
     ) -> bool:
-        """Ensure a snapshot is available locally, downloading from HF if needed.
+        """Ensure ``snapshot-{cutoff}-{digest}`` is available locally (HF fallback)."""
 
-        Snapshots are content-addressed by ``cutoff_date`` (year-end)
-        and do not have version drift the way main-branch artifacts do,
-        so both ``local_first`` and ``hf_first`` behave the same on the
-        happy path: prefer local, fall back to HF download. The
-        ``policy`` knob exists for two reasons:
-
-        1. ``hf_first`` requires the bucket's HF repo env to be set;
-           we surface that as a loud :class:`StoragePolicyError` so a
-           misconfigured ephemeral host doesn't silently work in
-           local-only mode.
-        2. Every storage read in the codebase flows through one
-           policy-aware helper so behavior is auditable from one place.
-
-        Args:
-            cutoff_date: The snapshot cutoff date
-            policy: Override; when ``None``, reads ``STORAGE_BACKEND``
-                via :func:`get_storage_policy`.
-
-        Returns:
-            True if snapshot is available locally (after potential download),
-            False otherwise.
-
-        Raises:
-            StoragePolicyError: when ``hf_first`` is active but the
-                forecaster bucket has no HF repo configured.
-        """
         from brain_api.storage.policy import (
             StoragePolicy,
             StoragePolicyError,
@@ -566,7 +544,9 @@ class SnapshotLocalStorage:
         if policy is None:
             policy = get_storage_policy()
 
-        if self.snapshot_exists(cutoff_date):
+        branch_name = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+
+        if self.snapshot_exists(cutoff_date, snapshot_digest):
             return True
 
         hf_repo = self._get_hf_repo()
@@ -576,115 +556,41 @@ class SnapshotLocalStorage:
                 f"{self.forecaster_type!r}; got none."
             )
 
-        if cutoff_date in self._hf_missing:
+        if not hf_repo:
             return False
 
-        return self.download_snapshot_from_hf(cutoff_date)
+        if branch_name in self._hf_missing:
+            return False
+
+        return self.download_snapshot_from_hf(cutoff_date, snapshot_digest)
 
     def list_hf_snapshots(self) -> list[date]:
-        """List all snapshot branches available on HuggingFace Hub.
+        """Sorted unique cutoff dates present on HF as hashed snapshot branches."""
 
-        Returns:
-            List of cutoff dates for available snapshots on HF
-        """
-        repo_id = self._get_hf_repo()
-        if not repo_id:
-            return []
+        return sorted({c for c, _ in self.list_hf_snapshot_identities()})
 
-        token = self._get_hf_token()
-        api = HfApi(token=token)
+    def sync_all_local_to_hf(self) -> list[tuple[date, str]]:
+        """Upload local hashed snapshots whose branch is missing on HF."""
 
-        try:
-            refs = api.list_repo_refs(repo_id=repo_id, repo_type="model")
-            snapshots = []
+        local_ident = set(self.list_local_snapshot_identities())
+        hf_ident = set(self.list_hf_snapshot_identities())
 
-            for branch in refs.branches:
-                if branch.name.startswith("snapshot-"):
-                    try:
-                        date_str = branch.name.replace("snapshot-", "")
-                        snapshots.append(date.fromisoformat(date_str))
-                    except ValueError:
-                        continue
-
-            return sorted(snapshots)
-        except Exception as e:
-            logger.warning(f"Failed to list HF snapshots: {e}")
-            return []
-
-    def sync_all_local_to_hf(self) -> list[date]:
-        """Upload all local snapshots that aren't on HF yet.
-
-        Returns:
-            List of cutoff dates that were uploaded
-        """
-        local_snapshots = set(self.list_snapshots())
-        hf_snapshots = set(self.list_hf_snapshots())
-
-        to_upload = local_snapshots - hf_snapshots
-        uploaded = []
-
-        for cutoff_date in sorted(to_upload):
-            if self.upload_snapshot_to_hf(cutoff_date):
-                uploaded.append(cutoff_date)
+        uploaded: list[tuple[date, str]] = []
+        for cutoff, digest in sorted(local_ident - hf_ident):
+            if self.upload_snapshot_to_hf(cutoff, digest):
+                uploaded.append((cutoff, digest))
 
         return uploaded
 
-    def sync_all_hf_to_local(self) -> list[date]:
-        """Download all HF snapshots that aren't local yet.
+    def sync_all_hf_to_local(self) -> list[tuple[date, str]]:
+        """Download HF hashed snapshots missing locally."""
 
-        Returns:
-            List of cutoff dates that were downloaded
-        """
-        local_snapshots = set(self.list_snapshots())
-        hf_snapshots = set(self.list_hf_snapshots())
+        local_ident = set(self.list_local_snapshot_identities())
+        hf_ident = set(self.list_hf_snapshot_identities())
 
-        to_download = hf_snapshots - local_snapshots
-        downloaded = []
-
-        for cutoff_date in sorted(to_download):
-            if self.download_snapshot_from_hf(cutoff_date):
-                downloaded.append(cutoff_date)
+        downloaded: list[tuple[date, str]] = []
+        for cutoff, digest in sorted(hf_ident - local_ident):
+            if self.download_snapshot_from_hf(cutoff, digest):
+                downloaded.append((cutoff, digest))
 
         return downloaded
-
-
-def create_snapshot_metadata(
-    forecaster_type: str,
-    cutoff_date: date,
-    data_window_start: str,
-    data_window_end: str,
-    symbols: list[str],
-    config: Any,
-    train_loss: float,
-    val_loss: float,
-) -> dict[str, Any]:
-    """Create metadata dictionary for a forecaster snapshot.
-
-    Args:
-        forecaster_type: "lstm" or "patchtst"
-        cutoff_date: Data cutoff date
-        data_window_start: Training data start date (ISO format)
-        data_window_end: Training data end date (ISO format)
-        symbols: List of symbols used
-        config: Model configuration
-        train_loss: Training loss
-        val_loss: Validation loss
-
-    Returns:
-        Metadata dictionary.
-    """
-    return {
-        "forecaster_type": forecaster_type,
-        "cutoff_date": cutoff_date.isoformat(),
-        "training_timestamp": datetime.now(UTC).isoformat(),
-        "data_window": {
-            "start": data_window_start,
-            "end": data_window_end,
-        },
-        "symbols": symbols,
-        "config": config.to_dict(),
-        "metrics": {
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-        },
-    }

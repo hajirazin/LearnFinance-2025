@@ -418,51 +418,41 @@ def ensure_snapshot_for_bucket(
     cutoff_date: date,
     policy: StoragePolicy | None = None,
 ) -> bool:
-    """Ensure a forecaster snapshot is available locally for inference.
+    """Ensure the expected hashed forecaster snapshot is available locally.
 
-    Snapshots are content-addressed by ``cutoff_date`` (year-end) and
-    do not have version drift in the way main-branch artifacts do, so
-    both policies behave the same on the happy path: prefer local,
-    fall back to HF download. The policy selector exists for two
-    reasons:
-
-    1. Consistency: every storage read in the codebase flows through
-       this module so behavior is auditable from one place.
-    2. Configuration check: ``hf_first`` requires the bucket's HF repo
-       env to be set; we surface that as a loud failure so an
-       ephemeral host doesn't silently work in local-only mode.
-
-    Args:
-        snapshot_storage: ``SnapshotLocalStorage`` for the forecaster
-            bucket (``lstm_halal_new``, ``patchtst_halal_new``,
-            ``patchtst_nifty_shariah_500``).
-        cutoff_date: Year-end cutoff for the snapshot to ensure.
-        policy: Override; when ``None``, reads ``STORAGE_BACKEND``.
-
-    Returns:
-        ``True`` if the snapshot is now available locally (after
-        potential download), ``False`` otherwise.
-
-    Raises:
-        StoragePolicyError: when ``hf_first`` is active but the
-            forecaster bucket has no HF repo configured.
+    Dec-31 walk-forward snapshots use resolver symbols + default forecast
+    config and the extended backfill window start (see
+    :mod:`brain_api.core.forecaster_snapshot_identity`). Folder / HF branch names
+    are ``snapshot-{{cutoff}}-{{digest}}``.
     """
-    if policy is None:
-        policy = get_storage_policy()
 
-    if snapshot_storage.snapshot_exists(cutoff_date):
-        return True
+    from brain_api.core.forecaster_snapshot_identity import (
+        expected_dec31_walkforward_snapshot_hash,
+        lstm_walkforward_expectation_bundle,
+        patchtst_walkforward_expectation_bundle,
+    )
 
-    hf_repo = snapshot_storage._get_hf_repo()
-    if policy is StoragePolicy.HF_FIRST and not hf_repo:
+    bucket_type = snapshot_storage.forecaster_type
+    if bucket_type == "lstm_halal_new":
+        identity_bucket, wf_symbols, wf_cfg = lstm_walkforward_expectation_bundle()
+    elif bucket_type == "patchtst_halal_new":
+        identity_bucket, wf_symbols, wf_cfg = patchtst_walkforward_expectation_bundle()
+    else:
         raise StoragePolicyError(
-            f"hf_first policy requires HF repo for snapshot bucket "
-            f"{snapshot_storage.forecaster_type!r}; got none."
+            f"SAC snapshot ensure is wired only for lstm_halal_new and "
+            f"patchtst_halal_new; got {bucket_type!r}"
         )
-    if not hf_repo:
-        return False
 
-    return snapshot_storage.download_snapshot_from_hf(cutoff_date)
+    snapshot_digest = expected_dec31_walkforward_snapshot_hash(
+        forecaster_bucket=identity_bucket,
+        cutoff_date=cutoff_date,
+        resolver_symbols=wf_symbols,
+        config_dict=wf_cfg,
+    )
+
+    return snapshot_storage.ensure_snapshot_available(
+        cutoff_date, snapshot_digest, policy=policy
+    )
 
 
 __all__ = [
