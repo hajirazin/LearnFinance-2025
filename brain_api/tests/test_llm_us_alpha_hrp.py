@@ -71,6 +71,7 @@ def llm_summary_payload():
         "para_2_selection_rationale": "Sticky kept 12, three new high-rank entrants.",
         "para_3_final_allocation": "HRP weights AAA=8.5%, BBB=8.2%.",
         "para_4_risk_observations": "Watch K_hold=30 across regime shifts.",
+        "para_5_stage_transition_insight": "AAA jumped from alpha rank 12 to HRP weight rank 1 due to low correlation with basket peers.",
     }
 
 

@@ -927,6 +927,7 @@ def mock_india_llm_json_response():
         "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
         "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
         "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
+        "para_5_stage_transition_insight": "TCS.NS jumped from alpha rank 12 to HRP weight rank 1 due to low correlation with IT peers in the basket.",
     }
 
 
@@ -968,6 +969,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
             assert "para_2_selection_rationale" in data["summary"]
             assert "para_3_final_allocation" in data["summary"]
             assert "para_4_risk_observations" in data["summary"]
+            assert "para_5_stage_transition_insight" in data["summary"]
         finally:
             app.dependency_overrides.clear()
 
@@ -1261,6 +1263,7 @@ def mock_us_double_hrp_llm_response():
         "para_2_selection_rationale": "Top 15 are tech-heavy with low correlation.",
         "para_3_final_allocation": "Stage 2 distributes evenly with NVDA at 7.5%.",
         "para_4_risk_observations": "Watch sector concentration in semis.",
+        "para_5_stage_transition_insight": "NVDA moved from Stage 1 rank 12 to Stage 2 rank 1 because the 252-day covariance over the chosen 15 isolated it from semi peers.",
     }
 
 

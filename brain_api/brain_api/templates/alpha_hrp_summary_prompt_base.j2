@@ -46,5 +46,9 @@ Showing the top 25 PatchTST forecasts so you can see context beyond the {{ top_n
 {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
 {% endfor %}
 
+## Stage 1 -> Stage 2 Rank-to-Weight Transition
+Stage 1 ranks stocks by predicted weekly return (alpha) while Stage 2 sizes them by HRP risk parity over a {{ stage2.lookback_days }}-day covariance of the chosen {{ top_n }} stocks -- they are different objectives, so alpha rank does NOT map directly to HRP weight rank. A name ranked low on alpha can earn the largest Stage 2 weight if it is the most uncorrelated/lowest-volatility name within the basket; a top-alpha name can shrink in Stage 2 if it clusters tightly with peers.
+Identify the 2-3 largest rank-to-weight movers (e.g. an alpha rank #12 ending up #1 by Stage 2 HRP weight, or vice versa) and explain mechanistically why the basket's covariance structure re-weighted them away from their alpha rank.
+
 ## Instructions
 {% block instructions %}{% endblock %}

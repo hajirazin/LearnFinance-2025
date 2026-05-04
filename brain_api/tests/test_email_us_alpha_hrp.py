@@ -22,6 +22,7 @@ def alpha_email_request():
             "para_2_selection_rationale": "Sticky kept 12 names, three new entrants.",
             "para_3_final_allocation": "HRP weights between 6.0% and 8.5%.",
             "para_4_risk_observations": "Watch K_hold across regime shifts.",
+            "para_5_stage_transition_insight": "S012 jumped from alpha rank 12 to HRP weight rank 1 due to low correlation with basket peers.",
         },
         "stage1_top_scores": [
             {"symbol": f"S{i:03d}", "score": 5.0 - 0.1 * i, "rank": i + 1}

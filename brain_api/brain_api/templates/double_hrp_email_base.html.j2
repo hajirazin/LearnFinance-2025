@@ -94,9 +94,16 @@ universe-agnostic. #}
     {% endif %}
 
     {% if summary.para_4_risk_observations %}
-    <div>
+    <div style="margin-bottom: 16px;">
       <h4 style="margin: 0 0 8px 0; opacity: 0.9;">4. Risk Observations</h4>
       <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_4_risk_observations }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary.para_5_stage_transition_insight %}
+    <div style="padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="margin: 0 0 8px 0;">5. Stage 1 &rarr; Stage 2 Insight</h4>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_5_stage_transition_insight }}</p>
     </div>
     {% endif %}
   </div>

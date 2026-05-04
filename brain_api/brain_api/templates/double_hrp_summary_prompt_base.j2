@@ -50,5 +50,9 @@ Symbols excluded in Stage 1 (insufficient data): {{ stage1.symbols_excluded | le
 {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
 {% endfor %}
 
+## Stage 1 -> Stage 2 Weight Transition
+The same stock can have a very different Stage 2 HRP weight than its Stage 1 weight rank because Stage 1 measures risk parity over the FULL universe with a {{ stage1.lookback_days }}-day covariance, while Stage 2 measures risk parity over only the chosen {{ top_n }} stocks with a {{ stage2.lookback_days }}-day covariance. A stock that was mid-pack in Stage 1 can dominate Stage 2 if it is the most uncorrelated name within the selected basket; conversely, a Stage 1 top-weighted name can shrink in Stage 2 if its risk profile clusters with others in the basket.
+Identify the 2-3 largest movers between Stage 1 rank-by-weight and Stage 2 weight (e.g. a name ranked #12 in Stage 1 ending up #1 in Stage 2) and explain mechanistically why the narrower basket + shorter lookback re-weighted them.
+
 ## Instructions
 {% block instructions %}{% endblock %}

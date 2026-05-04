@@ -585,6 +585,7 @@ def mock_india_weekly_report_email_request():
             "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
             "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
             "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
+            "para_5_stage_transition_insight": "TCS.NS jumped from alpha rank 12 to HRP weight rank 1 due to low correlation with NSE IT peers.",
         },
         "stage1_top_scores": [
             {"symbol": f"NSE{i:03d}.NS", "score": 5.0 - 0.1 * i, "rank": i + 1}
@@ -921,6 +922,7 @@ def mock_us_double_hrp_email_request():
             "para_2_selection_rationale": "Top 15 are tech-heavy.",
             "para_3_final_allocation": "Stage 2 distributes evenly.",
             "para_4_risk_observations": "Watch sector concentration.",
+            "para_5_stage_transition_insight": "NVDA jumped from Stage 1 weight rank 12 to Stage 2 rank 1 due to low correlation in the chosen 15.",
         },
         "stage1": {
             "percentage_weights": {f"S{i:03d}": 0.5 for i in range(20)},
@@ -1082,6 +1084,7 @@ def mock_india_double_hrp_email_request():
             "para_2_selection_rationale": "Top 15 lean towards IT services.",
             "para_3_final_allocation": "Stage 2 spreads weight broadly.",
             "para_4_risk_observations": "Watch sector concentration.",
+            "para_5_stage_transition_insight": "ONGC.NS jumped from Stage 1 weight rank 12 to Stage 2 rank 1 because the 252-day covariance over the chosen 15 isolated it from energy peers.",
         },
         "stage1": {
             "percentage_weights": {f"S{i:03d}.NS": 0.5 for i in range(20)},
