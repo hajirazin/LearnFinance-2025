@@ -26,6 +26,10 @@ from brain_api.core.model_buckets import (
 from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import compute_version as patchtst_compute_version
 from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
+from brain_api.storage.policy import (
+    build_common_train_response_kwargs,
+    try_load_existing_train_metadata,
+)
 
 from .dependencies import (
     PatchTSTDatasetBuilder,
@@ -111,23 +115,19 @@ def train_patchtst_india(
         f"[PatchTST India] Computed version: {version} (bucket={bucket.bucket_name})"
     )
 
-    if storage.version_exists(version):
+    # HF-aware idempotency skip: under hf_first the helper consults
+    # the bucket's HF repo for ``revision=version`` so a wiped local
+    # cache does not silently retrain work that already exists on HF.
+    existing_metadata = try_load_existing_train_metadata(
+        bucket=bucket, version=version, local_storage=storage
+    )
+    if existing_metadata:
         logger.info(f"[PatchTST India] Version {version} already exists (idempotent)")
-        existing_metadata = storage.read_metadata(version)
-        if existing_metadata:
-            return PatchTSTTrainResponse(
-                version=version,
-                data_window_start=existing_metadata["data_window"]["start"],
-                data_window_end=existing_metadata["data_window"]["end"],
-                metrics=existing_metadata["metrics"],
-                promoted=existing_metadata["promoted"],
-                prior_version=existing_metadata.get("prior_version"),
-                # Backward-compat: pre-guardrail metadata files have no
-                # ``failure_reasons`` key. Treat missing as empty list.
-                failure_reasons=existing_metadata.get("failure_reasons", []),
-                num_input_channels=config.num_input_channels,
-                signals_used=["ohlcv"],
-            )
+        return PatchTSTTrainResponse(
+            **build_common_train_response_kwargs(version, existing_metadata),
+            num_input_channels=config.num_input_channels,
+            signals_used=["ohlcv"],
+        )
 
     job, is_new = get_or_create_job("patchtst_india", version)
     if not is_new:

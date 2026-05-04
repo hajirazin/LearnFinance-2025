@@ -19,6 +19,30 @@ from models import (
 logger = logging.getLogger(__name__)
 
 
+def _compute_max_attempt(run_id: str, orders: list[dict]) -> int:
+    """Return the highest ``attempt-N`` integer found in a list of orders.
+
+    Shared by :func:`resolve_next_attempt` (Alpaca) and
+    :func:`resolve_next_attempt_ibkr` (IBKR). Both order-history routes
+    return the same ``OrderHistoryItem`` shape, and the
+    ``client_order_id`` format is broker-agnostic (per AGENTS.md
+    "Order idempotency"), so the regex aggregation is identical math:
+
+    * default form  ``paper:YYYY-MM-DD:attempt-N:SYMBOL:SIDE``
+    * variant form  ``paper:<universe>:YYYY-MM-DD:attempt-N:SYMBOL:SIDE``
+
+    Returns ``0`` if no order matches the prefix (cold start).
+    """
+    pattern = re.compile(rf"^{re.escape(run_id)}:attempt-(\d+):")
+    max_attempt = 0
+    for order in orders:
+        coid = order.get("client_order_id", "")
+        match = pattern.match(coid)
+        if match:
+            max_attempt = max(max_attempt, int(match.group(1)))
+    return max_attempt
+
+
 @activity.defn
 def resolve_next_attempt(
     run_id: str,
@@ -34,13 +58,17 @@ def resolve_next_attempt(
     only scan its own account(s). Defaults to the SAC+HRP pair (the
     legacy ``USWeeklyAllocationWorkflow`` accounts) so existing callers
     keep working without changes.
+
+    The IBKR equivalent is :func:`resolve_next_attempt_ibkr`. The
+    workflow picks the right sibling per broker, mirroring the existing
+    ``check_order_statuses`` / ``check_order_statuses_ibkr`` split --
+    we deliberately do NOT branch on ``account`` inside the activity
+    (per AGENTS.md rule #1, no silent broker-routing fallback).
     """
     if accounts is None:
         accounts = ["sac", "hrp"]
 
     max_attempt = 0
-    pattern = re.compile(rf"^{re.escape(run_id)}:attempt-(\d+):")
-
     for account in accounts:
         with get_client() as client:
             response = client.get(
@@ -48,17 +76,52 @@ def resolve_next_attempt(
                 params={"account": account, "after": as_of_date},
             )
             response.raise_for_status()
-
-        for order in response.json():
-            coid = order.get("client_order_id", "")
-            match = pattern.match(coid)
-            if match:
-                max_attempt = max(max_attempt, int(match.group(1)))
+        max_attempt = max(max_attempt, _compute_max_attempt(run_id, response.json()))
 
     next_attempt = max_attempt + 1
     logger.info(
         f"Resolved next attempt for {run_id} accounts={accounts}: {next_attempt} "
         f"(max existing: {max_attempt})"
+    )
+    return next_attempt
+
+
+@activity.defn
+def resolve_next_attempt_ibkr(
+    run_id: str,
+    as_of_date: str,
+    accounts: list[str],
+) -> int:
+    """IBKR sibling of :func:`resolve_next_attempt`.
+
+    Hits brain_api's ``/ibkr/order-history`` (backed by the local IBKR
+    ledger; see ``brain_api/storage/ibkr_orders.py``) instead of the
+    Alpaca route. The IB Gateway's own ``reqCompletedOrders()`` only
+    covers the current TWS session, so the ledger is the only source
+    of truth that survives the daily IBC soft-restart -- which is why
+    the IBKR docstring on ``/ibkr/order-history`` explicitly names
+    this activity as a consumer.
+
+    Same ``client_order_id`` regex as the Alpaca path (the IBKR ledger
+    preserves ``order_ref`` verbatim, so the variant form
+    ``paper:<universe>:YYYY-MM-DD:attempt-N:SYMBOL:SIDE`` parses
+    identically). ``accounts`` is required (no default) to keep the
+    workflow explicit about which IBKR account it owns.
+    """
+    max_attempt = 0
+    for account in accounts:
+        with get_client() as client:
+            response = client.get(
+                "/ibkr/order-history",
+                params={"account": account, "after": as_of_date},
+            )
+            response.raise_for_status()
+        max_attempt = max(max_attempt, _compute_max_attempt(run_id, response.json()))
+
+    next_attempt = max_attempt + 1
+    logger.info(
+        f"Resolved next attempt for {run_id} (IBKR) accounts={accounts}: "
+        f"{next_attempt} (max existing: {max_attempt})"
     )
     return next_attempt
 

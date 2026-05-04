@@ -193,6 +193,7 @@ def load_current_artifacts_for_bucket(
     bucket: BucketConfig,
     model_label: str,
     policy: StoragePolicy | None = None,
+    cold_start_status_code: int = 503,
 ) -> Any:
     """Load the current artifacts for a bucket per the active policy.
 
@@ -207,6 +208,19 @@ def load_current_artifacts_for_bucket(
         model_label: Human-readable label used in error messages
             (e.g. ``"LSTM halal_new"``, ``"SAC halal"``).
         policy: Override; when ``None``, reads ``STORAGE_BACKEND``.
+        cold_start_status_code: Status code to use when no model
+            exists anywhere (genuine cold-start). Defaults to ``503``
+            (Service Unavailable) so inference routes match the
+            AGENTS.md "Cold start ... surfaces as a 503 for inference"
+            contract. ``/models/active-symbols`` opts into ``400``
+            because its legacy contract is ``400 + "Train one first."``.
+            Only the two genuine cold-start branches honour this knob:
+            ``local_first`` "local empty + no HF repo configured" and
+            ``hf_first`` "HF main is missing". Transient/config 503s
+            (HF unreachable, ``hf_first`` without a repo, HF download
+            failed) stay as ``503`` regardless because they are NOT
+            cold-start (a model could still exist; the failure is
+            recoverable).
 
     Returns:
         The model-specific artifacts object (``LSTMArtifacts``,
@@ -214,22 +228,28 @@ def load_current_artifacts_for_bucket(
         inference.
 
     Raises:
-        HTTPException 503: if the artifacts cannot be loaded under the
-            active policy. The detail string explains which side
-            failed (local empty + no HF repo, HF unreachable, HF
-            ``main`` missing, etc.).
+        HTTPException ``cold_start_status_code``: on genuine cold-start
+            (no model anywhere).
+        HTTPException 503: on transient or config failures (HF
+            unreachable, ``hf_first`` without a repo, HF download
+            failed).
     """
     if policy is None:
         policy = get_storage_policy()
     local_storage = bucket.local_storage_class()
 
     if policy is StoragePolicy.LOCAL_FIRST:
-        return _load_local_first(local_storage, bucket, model_label)
-    return _load_hf_first(local_storage, bucket, model_label)
+        return _load_local_first(
+            local_storage, bucket, model_label, cold_start_status_code
+        )
+    return _load_hf_first(local_storage, bucket, model_label, cold_start_status_code)
 
 
 def _load_local_first(
-    local_storage: Any, bucket: BucketConfig, model_label: str
+    local_storage: Any,
+    bucket: BucketConfig,
+    model_label: str,
+    cold_start_status_code: int,
 ) -> Any:
     """Try local; on miss, fall back to HF."""
     try:
@@ -243,8 +263,12 @@ def _load_local_first(
 
     hf_storage, hf_repo = _instantiate_hf_storage(bucket, local_storage)
     if hf_storage is None:
+        # Cold-start: no model anywhere (local empty + no HF repo
+        # configured for this bucket). Honour the caller-supplied
+        # status code so /models/active-symbols can preserve its
+        # legacy 400 contract while inference routes stay on 503.
         raise HTTPException(
-            status_code=503,
+            status_code=cold_start_status_code,
             detail=(
                 f"No {model_label} model available: local is empty and no "
                 f"HF repo is configured for bucket {bucket.bucket_name!r}. "
@@ -254,6 +278,9 @@ def _load_local_first(
     try:
         return hf_storage.download_model(use_cache=True)
     except Exception as hf_err:
+        # Transient: a model could still exist on HF; this is a
+        # recoverable failure (network, auth, etc.). Always 503
+        # regardless of cold_start_status_code.
         raise HTTPException(
             status_code=503,
             detail=(
@@ -263,10 +290,19 @@ def _load_local_first(
         ) from None
 
 
-def _load_hf_first(local_storage: Any, bucket: BucketConfig, model_label: str) -> Any:
+def _load_hf_first(
+    local_storage: Any,
+    bucket: BucketConfig,
+    model_label: str,
+    cold_start_status_code: int,
+) -> Any:
     """Check HF main metadata; reuse local only if it matches that exact version."""
     hf_storage, hf_repo = _instantiate_hf_storage(bucket, local_storage)
     if hf_storage is None:
+        # Config error: hf_first policy was selected but the bucket
+        # has no HF repo configured. NOT cold-start (a local model
+        # could still exist; the policy just refuses to use it).
+        # Always 503 regardless of cold_start_status_code.
         raise HTTPException(
             status_code=503,
             detail=(
@@ -283,11 +319,15 @@ def _load_hf_first(local_storage: Any, bucket: BucketConfig, model_label: str) -
             model_label=model_label,
         )
     except StoragePolicyError as exc:
+        # Transient: HF metadata fetch failed (network/auth). Always 503.
         raise HTTPException(status_code=503, detail=str(exc)) from None
 
     if hf_metadata is None:
+        # Cold-start: HF main is missing -> no model has ever been
+        # promoted to this bucket. Honour the caller-supplied status
+        # code so /models/active-symbols can preserve its legacy 400.
         raise HTTPException(
-            status_code=503,
+            status_code=cold_start_status_code,
             detail=(
                 f"hf_first: HF main is missing for {model_label} "
                 f"(bucket {bucket.bucket_name!r}, repo {hf_repo}). "
@@ -408,6 +448,127 @@ def get_prior_metadata_for_bucket(
 
 
 # ---------------------------------------------------------------------------
+# Training: HF-aware "version already exists" idempotency skip
+# ---------------------------------------------------------------------------
+
+
+def try_load_existing_train_metadata(
+    *,
+    bucket: BucketConfig,
+    version: str,
+    local_storage: Any,
+    policy: StoragePolicy | None = None,
+) -> dict[str, Any] | None:
+    """Return metadata for ``version`` if it exists locally OR on HF.
+
+    Used by every ``/train/*`` endpoint to short-circuit retraining
+    when the deterministic version (``v{end_date}-{hash}``) has
+    already been produced. Mirrors the ``hf_first`` contract used by
+    ``/inference/*`` read paths so a wiped local cache (Pi cold
+    start, Mac reset) does not silently retrain work that already
+    exists on HF.
+
+    * Local hit (always checked first): ``read_metadata`` from disk.
+    * HF hit (``hf_first`` only): single ``hf_hub_download`` of
+      ``metadata.json`` at ``revision=<version>``. No artifact
+      download -- inference will populate local on demand via the
+      existing read path. Each version is its own HF branch (see
+      :class:`brain_api.storage.base_huggingface.BaseHuggingFaceModelStorage.list_versions`),
+      so ``revision=version`` is the right pointer.
+    * Miss: return ``None`` so the caller proceeds with training.
+
+    Under ``local_first`` the HF check is skipped (current behaviour
+    preserved). Per AGENTS.md rule #1, every failure path returns
+    ``None`` rather than raising -- training is the recovery action,
+    not a hard failure.
+
+    Args:
+        bucket: ``BucketConfig`` for the ``(model, universe)`` pair.
+        version: Deterministic version string (``v{end_date}-{hash}``).
+        local_storage: The bucket's local storage instance. Passed in
+            (rather than re-instantiated) so the caller can keep the
+            same instance it already used for downstream writes.
+        policy: Override; when ``None``, reads ``STORAGE_BACKEND``.
+
+    Returns:
+        Metadata dict from local or HF, or ``None`` if neither has
+        the version (or HF is unreachable / has no repo configured).
+    """
+    if local_storage.version_exists(version):
+        return local_storage.read_metadata(version)
+
+    if policy is None:
+        policy = get_storage_policy()
+    if policy is not StoragePolicy.HF_FIRST:
+        return None
+
+    hf_storage, hf_repo = _instantiate_hf_storage(bucket, local_storage)
+    if hf_storage is None:
+        # No HF repo configured for this bucket; nothing to consult.
+        # Returning None lets the caller train rather than 500.
+        return None
+
+    try:
+        path = hf_hub_download(
+            repo_id=hf_repo,
+            filename="metadata.json",
+            repo_type="model",
+            revision=version,
+            token=hf_storage.token,
+        )
+    except (RevisionNotFoundError, EntryNotFoundError, RepositoryNotFoundError):
+        # The branch / file genuinely doesn't exist -> not a hit.
+        return None
+    except Exception as exc:
+        # Transient error (network, auth, rate limit). Log and treat
+        # as miss so the caller can retrain rather than wedge on a
+        # transient HF outage. We deliberately don't raise: this is
+        # an idempotency optimization, not a correctness gate.
+        logger.warning(
+            f"[storage-policy:try_load_existing_train_metadata] "
+            f"{bucket.bucket_name}: HF metadata fetch for {version!r} "
+            f"failed transiently (treating as miss): {exc}"
+        )
+        return None
+    with open(path) as f:
+        metadata: dict[str, Any] = json.load(f)
+    logger.info(
+        f"[storage-policy:try_load_existing_train_metadata] "
+        f"{bucket.bucket_name}: HF hit for {version!r}; skipping retrain."
+    )
+    return metadata
+
+
+def build_common_train_response_kwargs(
+    version: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the 7 kwargs every ``*TrainResponse`` class shares.
+
+    Extracted from the 6 line-for-line identical idempotency-skip
+    blocks across LSTM / PatchTST x2 / PatchTST India / SAC full /
+    SAC finetune. Per AGENTS.md "Code reuse" -- this is provably
+    identical metadata-to-response mapping (no algorithm-specific
+    math), and per AGENTS.md rule #2 each call site keeps its
+    model-specific extras (``num_input_channels`` + ``signals_used``
+    for PatchTST; ``symbols_used`` for SAC) so the differences in
+    response shape are still visible at the call site.
+    """
+    return {
+        "version": version,
+        "data_window_start": metadata["data_window"]["start"],
+        "data_window_end": metadata["data_window"]["end"],
+        "metrics": metadata["metrics"],
+        "promoted": metadata["promoted"],
+        "prior_version": metadata.get("prior_version"),
+        # Backward-compat: pre-guardrail metadata files have no
+        # ``failure_reasons`` key. Treat missing as empty list so
+        # old artifacts continue to deserialize.
+        "failure_reasons": metadata.get("failure_reasons", []),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Snapshots: ensure-available helper (used by SAC walk-forward training)
 # ---------------------------------------------------------------------------
 
@@ -459,9 +620,11 @@ __all__ = [
     "ENV_STORAGE_BACKEND",
     "StoragePolicy",
     "StoragePolicyError",
+    "build_common_train_response_kwargs",
     "ensure_snapshot_for_bucket",
     "get_prior_metadata_for_bucket",
     "get_storage_policy",
     "hf_versions_match",
     "load_current_artifacts_for_bucket",
+    "try_load_existing_train_metadata",
 ]

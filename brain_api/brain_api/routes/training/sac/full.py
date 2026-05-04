@@ -32,7 +32,9 @@ from brain_api.core.sac.promotion import evaluate_sac_artifact_health
 from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.storage.policy import (
     StoragePolicyError,
+    build_common_train_response_kwargs,
     get_prior_metadata_for_bucket,
+    try_load_existing_train_metadata,
 )
 from brain_api.storage.sac import (
     SACHalalFilteredModelStorage,
@@ -110,21 +112,17 @@ def train_sac_endpoint(
     )
     version = sac_compute_version(start_date, end_date, symbols, config)
 
-    if storage.version_exists(version):
-        existing_metadata = storage.read_metadata(version)
-        if existing_metadata:
-            return SACTrainResponse(
-                version=version,
-                data_window_start=existing_metadata["data_window"]["start"],
-                data_window_end=existing_metadata["data_window"]["end"],
-                metrics=existing_metadata["metrics"],
-                promoted=existing_metadata["promoted"],
-                prior_version=existing_metadata.get("prior_version"),
-                # Backward-compat: pre-guardrail metadata files have no
-                # ``failure_reasons`` key. Treat missing as empty list.
-                failure_reasons=existing_metadata.get("failure_reasons", []),
-                symbols_used=existing_metadata["symbols"],
-            )
+    # HF-aware idempotency skip: under hf_first the helper consults
+    # the bucket's HF repo for ``revision=version`` so a wiped local
+    # cache does not silently retrain work that already exists on HF.
+    existing_metadata = try_load_existing_train_metadata(
+        bucket=bucket, version=version, local_storage=storage
+    )
+    if existing_metadata:
+        return SACTrainResponse(
+            **build_common_train_response_kwargs(version, existing_metadata),
+            symbols_used=existing_metadata["symbols"],
+        )
 
     job, is_new = get_or_create_job(f"sac_{request.universe}", version)
     if not is_new:

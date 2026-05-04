@@ -15,10 +15,10 @@ different SAC buckets AND different brokers:
 
 Broker selection lives in this workflow: it calls the IBKR-flavored
 ``submit_orders_ibkr_sac_halal`` / ``get_ibkr_sac_halal_portfolio`` /
-``get_order_history_ibkr_sac_halal`` activities, which hit
-brain_api's ``/ibkr/*`` routes. brain_api itself never branches on
-"which broker" -- the ``/alpaca/*`` and ``/ibkr/*`` route trees are
-disjoint.
+``get_order_history_ibkr_sac_halal`` / ``resolve_next_attempt_ibkr``
+activities, which hit brain_api's ``/ibkr/*`` routes. brain_api itself
+never branches on "which broker" -- the ``/alpaca/*`` and ``/ibkr/*``
+route trees are disjoint.
 
 Run-id namespace: ``paper:halal:YYYY-MM-DD`` is the documented variant
 form per AGENTS.md "Run identity & rerun semantics". Allowed because
@@ -106,7 +106,7 @@ with workflow.unsafe.imports_passed_through():
         get_active_symbols,
         get_ibkr_sac_halal_portfolio,
         get_order_history_ibkr_sac_halal,
-        resolve_next_attempt,
+        resolve_next_attempt_ibkr,
         submit_orders_ibkr_sac_halal,
     )
     from activities.reporting import (
@@ -142,7 +142,7 @@ class USSACHalalAllocationWorkflow:
         run_id = f"paper:{UNIVERSE}:{as_of_date}"
 
         attempt = await workflow.execute_activity(
-            resolve_next_attempt,
+            resolve_next_attempt_ibkr,
             args=[run_id, as_of_date, [ACCOUNT]],
             start_to_close_timeout=SHORT_TIMEOUT,
         )

@@ -11,6 +11,7 @@ from brain_api.core.model_buckets import (
     get_bucket,
     list_universes_for,
 )
+from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -44,11 +45,20 @@ def get_active_symbols(
     ``sac_halal_filtered`` (sticky-15 from PatchTST) and ``sac_halal``
     (legacy yfinance halal universe; variable size).
 
+    Routes through :func:`load_current_artifacts_for_bucket` so that
+    under ``STORAGE_BACKEND=hf_first`` the symbol slate is recovered
+    from HF when local is empty (e.g. on a freshly-deployed Pi). This
+    matches the contract used by ``/inference/sac`` -- the workflow's
+    Phase-0 symbol read and Phase-2 inference now share a single read
+    path rather than disagreeing on hf_first cold-start behaviour.
+
     Raises:
         HTTPException 422: if ``universe`` is not a registered SAC
             bucket (e.g. typo'd ``halal_new``).
-        HTTPException 400: if no SAC model is promoted yet for the
-            requested bucket.
+        HTTPException 400: on genuine cold-start (no model anywhere).
+            The legacy contract -- "Train one first." -- is preserved
+            via the ``cold_start_status_code=400`` knob; transient
+            failures (HF unreachable, etc.) still surface as 503.
     """
     try:
         bucket = get_bucket(ModelType.SAC, universe)
@@ -59,22 +69,19 @@ def get_active_symbols(
             detail=f"Unknown universe '{universe}' for SAC. Allowed: {allowed}",
         ) from exc
 
-    storage = bucket.local_storage_class()
-    version = storage.read_current_version()
-    if not version:
-        raise HTTPException(
-            400,
-            f"No promoted SAC model in bucket '{bucket.bucket_name}'. Train one first.",
-        )
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+        cold_start_status_code=400,
+    )
 
-    symbols = storage.load_symbol_order(version)
     logger.info(
         f"[Models] Active symbols from {bucket.bucket_name} "
-        f"({version}): {len(symbols)} symbols"
+        f"({artifacts.version}): {len(artifacts.symbol_order)} symbols"
     )
 
     return ActiveSymbolsResponse(
-        symbols=symbols,
+        symbols=artifacts.symbol_order,
         source_model=bucket.bucket_name,
-        model_version=version,
+        model_version=artifacts.version,
     )

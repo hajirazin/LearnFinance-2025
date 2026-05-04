@@ -8,7 +8,10 @@ it must:
    the dedicated ``sac_halal`` IBKR paper account, isolated from
    every Alpaca-routed strategy by virtue of being on a different
    broker entirely).
-2. Resolve next attempt against the ``sac_halal`` account only.
+2. Resolve next attempt against the ``sac_halal`` account only, via
+   the IBKR sibling activity ``resolve_next_attempt_ibkr`` (the Alpaca
+   ``resolve_next_attempt`` would 422 because ``AlpacaAccount`` no
+   longer has a ``sac_halal`` entry post IBKR migration).
 3. Read symbols from the ``halal`` SAC bucket (mandatory ``universe``
    arg on ``get_active_symbols``).
 4. Send ``universe='halal'`` to ``infer_sac``, ``generate_summary``
@@ -118,13 +121,24 @@ def _make_sac_halal_activities(
     sac_alloc = _make_sac_alloc(active_symbols.symbols)
     orders = _make_orders()
 
-    @activity.defn(name="resolve_next_attempt")
-    def mock_resolve_next_attempt(run_id, as_of_date, accounts=None) -> int:
-        captured_calls["resolve"] = {
+    @activity.defn(name="resolve_next_attempt_ibkr")
+    def mock_resolve_next_attempt_ibkr(run_id, as_of_date, accounts) -> int:
+        captured_calls["resolve_ibkr"] = {
             "run_id": run_id,
             "as_of_date": as_of_date,
             "accounts": list(accounts) if accounts else accounts,
         }
+        return 1
+
+    @activity.defn(name="resolve_next_attempt")
+    def mock_resolve_next_attempt(run_id, as_of_date, accounts=None) -> int:
+        # Post-IBKR-migration the halal workflow MUST resolve attempts
+        # via the IBKR ledger (resolve_next_attempt_ibkr). The Alpaca
+        # resolver hits ``/alpaca/order-history``, whose ``account``
+        # query rejects ``sac_halal`` since the IBKR migration
+        # stripped ``SAC_HALAL`` from ``AlpacaAccount``. Registering
+        # this stub purely to detect accidental re-introduction.
+        captured_calls["forbidden_resolve_next_attempt_alpaca"] = True
         return 1
 
     @activity.defn(name="get_active_symbols")
@@ -287,6 +301,7 @@ def _make_sac_halal_activities(
         )
 
     return [
+        mock_resolve_next_attempt_ibkr,
         mock_resolve_next_attempt,
         mock_get_active_symbols,
         mock_get_ibkr_sac_halal_portfolio,
@@ -372,10 +387,14 @@ class TestUSSACHalalAllocationHappyPath:
         # run_id MUST use the variant prefix; full form
         # paper:halal:YYYY-MM-DD per AGENTS.md.
         assert result["run_id"].startswith("paper:halal:")
-        assert captured["resolve"]["run_id"].startswith("paper:halal:")
+        assert captured["resolve_ibkr"]["run_id"].startswith("paper:halal:")
 
-        # resolve_next_attempt scoped to the dedicated Alpaca account.
-        assert captured["resolve"]["accounts"] == ["sac_halal"]
+        # resolve_next_attempt_ibkr scoped to the dedicated IBKR
+        # sac_halal account. The Alpaca resolver MUST NOT be invoked
+        # -- it would 422 because ``AlpacaAccount`` no longer has a
+        # ``sac_halal`` entry post IBKR migration.
+        assert captured["resolve_ibkr"]["accounts"] == ["sac_halal"]
+        assert "forbidden_resolve_next_attempt_alpaca" not in captured
 
         # Mandatory universe arg propagated everywhere.
         assert captured["get_active_symbols_universe"] == "halal"

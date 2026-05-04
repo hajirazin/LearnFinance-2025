@@ -46,6 +46,7 @@ from activities.portfolio import (
     get_order_history_sac,
     get_sac_portfolio,
     resolve_next_attempt,
+    resolve_next_attempt_ibkr,
     submit_orders_dhrp,
     submit_orders_hrp,
     submit_orders_ibkr_sac_halal,
@@ -142,6 +143,7 @@ ALL_ACTIVITIES = [
     check_order_statuses,
     check_order_statuses_ibkr,
     resolve_next_attempt,
+    resolve_next_attempt_ibkr,
     # Execution / experience
     generate_orders_sac,
     generate_orders_dhrp,
