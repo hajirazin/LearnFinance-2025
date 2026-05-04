@@ -86,8 +86,10 @@ Partitions per table (must be unique across the union):
     * ``halal_new`` -- US Double HRP (weight-band)
     * ``halal_new_alpha`` -- US Alpha-HRP (rank-band)
     * ``halal_india_alpha`` -- India Alpha-HRP (rank-band)
+    * ``halal_india_double_hrp`` -- India Double HRP (weight-band)
 - ``screening_history`` (sibling table, single-stage):
     * ``halal_filtered_alpha`` -- monthly halal_filtered builder
+    * ``halal_india_filtered_alpha`` -- monthly halal_india builder
 
 A new strategy added to either table must reserve a fresh partition
 key in ``brain_api.core.strategy_partitions``; reusing an existing key

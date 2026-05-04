@@ -12,6 +12,7 @@ from .models import (
     AlphaHRPEmailRequest,
     DoubleHRPEmailRequest,
     IndiaAlphaHRPEmailRequest,
+    IndiaDoubleHRPEmailRequest,
     SACWeeklyReportEmailRequest,
     USAlphaHRPEmailRequest,
     USDoubleHRPEmailRequest,
@@ -114,6 +115,40 @@ def _build_subject(
 
 # Type alias retained for callers that want a typed ``subject_fn`` style.
 SubjectFn = Callable[[bool], str]
+
+
+def _double_hrp_email_context(request: DoubleHRPEmailRequest) -> dict:
+    """Build the Jinja context dict for a Double-HRP email render.
+
+    Centralises the shape contract of the double-HRP email template
+    context across US and India. The base ``DoubleHRPEmailRequest``
+    carries every common field; the US subclass adds ``order_results``
+    and ``skipped`` (India does not trade so its base instance leaves
+    them at their defaults of ``None`` / ``False``).
+
+    The skipped/order-execution blocks in the template render based on
+    these context keys -- always present, always honest about whether
+    they apply to this market.
+    """
+    order_results = getattr(request, "order_results", None)
+    if order_results is not None:
+        order_results = order_results.model_dump()
+    return {
+        "summary": request.summary,
+        "stage1": request.stage1.model_dump(),
+        "stage2": request.stage2.model_dump(),
+        "universe": request.universe,
+        "top_n": request.top_n,
+        "target_week_start": request.target_week_start,
+        "target_week_end": request.target_week_end,
+        "as_of_date": request.as_of_date,
+        "kept_count": request.kept_count,
+        "fillers_count": request.fillers_count,
+        "previous_year_week_used": request.previous_year_week_used,
+        "stickiness_threshold_pp": request.stickiness_threshold_pp,
+        "order_results": order_results,
+        "skipped": getattr(request, "skipped", False),
+    }
 
 
 def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
@@ -225,34 +260,25 @@ def send_india_alpha_hrp_report_email(
 
 @router.post("/india-double-hrp-report", response_model=WeeklyReportEmailResponse)
 def send_india_double_hrp_report_email(
-    request: DoubleHRPEmailRequest,
+    request: IndiaDoubleHRPEmailRequest,
 ) -> WeeklyReportEmailResponse:
-    """Send a Double HRP portfolio analysis email.
+    """Send an India Double HRP portfolio analysis email.
 
-    Two-stage HRP: Stage 1 screens the full universe, Stage 2
-    re-allocates the top-N selected stocks. The email shows both
-    stages alongside the AI summary.
+    Two-stage HRP on the Nifty Shariah 500 universe with weight-band
+    sticky selection. Paper-only (no broker), so no order-execution or
+    skip blocks appear.
     """
-    logger.info("Generating Double HRP report email")
+    logger.info("Generating India Double HRP report email")
 
     return _render_and_send_email(
         template_name="india_double_hrp_report_email.html.j2",
-        context={
-            "summary": request.summary,
-            "stage1": request.stage1.model_dump(),
-            "stage2": request.stage2.model_dump(),
-            "universe": request.universe,
-            "top_n": request.top_n,
-            "target_week_start": request.target_week_start,
-            "target_week_end": request.target_week_end,
-            "as_of_date": request.as_of_date,
-        },
+        context=_double_hrp_email_context(request),
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,
-            base="Double HRP Portfolio Analysis",
+            base="India Double HRP Portfolio Analysis",
         ),
-        log_label="Double HRP report",
+        log_label="India Double HRP report",
     )
 
 
@@ -263,32 +289,14 @@ def send_us_double_hrp_report_email(
     """Send a US Double HRP portfolio analysis email.
 
     Mirrors the India Double HRP email but adds an Alpaca order execution
-    section (because US trades through a paper account) and a skip block
-    when last week's orders were still open at run time.
+    section (because US trades through the ``dhrp`` paper account) and a
+    skip block when last week's orders were still open at run time.
     """
     logger.info("Generating US Double HRP report email")
 
-    order_results = (
-        request.order_results.model_dump() if request.order_results else None
-    )
-
     return _render_and_send_email(
         template_name="us_double_hrp_report_email.html.j2",
-        context={
-            "summary": request.summary,
-            "stage1": request.stage1.model_dump(),
-            "stage2": request.stage2.model_dump(),
-            "universe": request.universe,
-            "top_n": request.top_n,
-            "target_week_start": request.target_week_start,
-            "target_week_end": request.target_week_end,
-            "as_of_date": request.as_of_date,
-            "order_results": order_results,
-            "skipped": request.skipped,
-            "sticky_kept_count": request.sticky_kept_count,
-            "sticky_fillers_count": request.sticky_fillers_count,
-            "previous_year_week_used": request.previous_year_week_used,
-        },
+        context=_double_hrp_email_context(request),
         subject=_build_subject(
             target_week_start=request.target_week_start,
             target_week_end=request.target_week_end,

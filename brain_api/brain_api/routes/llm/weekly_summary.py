@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from .models import (
     AlphaHRPSummaryRequest,
     DoubleHRPSummaryRequest,
+    IndiaDoubleHRPSummaryRequest,
     SACWeeklySummaryRequest,
     USDoubleHRPSummaryRequest,
     WeeklySummaryResponse,
@@ -207,38 +208,42 @@ def generate_india_alpha_hrp_summary(
     )
 
 
-@router.post("/us-double-hrp-summary", response_model=WeeklySummaryResponse)
-def generate_us_double_hrp_summary(
-    request: USDoubleHRPSummaryRequest,
-    provider: LLMProvider = Depends(get_llm_provider),
+def _render_double_hrp_summary(
+    *,
+    template_name: str,
+    request: DoubleHRPSummaryRequest,
+    provider: LLMProvider,
+    log_label: str,
 ) -> WeeklySummaryResponse:
-    """Generate an LLM summary of US Double HRP with sticky selection.
+    """Render a Double-HRP prompt and call the LLM provider.
 
-    Stage 1 screens the full halal_new universe; sticky selection keeps
-    week-over-week stable picks; Stage 2 re-allocates the resulting 15
-    stocks. The summary frames the choice in terms of US paper trading
-    via the dhrp Alpaca account.
+    Both the US and India Double-HRP summary endpoints share an
+    identical pipeline:
 
-    Args:
-        request: Both stage results, universe label, and top_n.
-        provider: LLM provider (injected via dependency).
+    1. Load market-specific Jinja prompt (Strategy Overview + Stage 1
+       top-25 + sticky outcome + Stage 2 sections come from a shared
+       base template; only the analyst intro and JSON schema paragraphs
+       differ per market).
+    2. Render with the same ``DoubleHRPSummaryRequest`` payload shape.
+    3. Call the provider; parse JSON; fall back to a single-paragraph
+       error stub on parse failure.
 
-    Returns:
-        Summary with paragraph fields and metadata.
-
-    Raises:
-        HTTPException: If template loading or LLM call fails.
+    The fallback paragraph key is fixed to ``para_1_screening_overview``
+    because both markets' Double-HRP prompts use that as their first
+    paragraph (different from Alpha-HRP's ``para_1_market_outlook`` --
+    see AGENTS.md rule #2 on keeping the two pipeline summaries
+    distinct).
     """
-    logger.info(f"Generating US Double HRP summary using provider={provider.name}")
+    logger.info(f"Generating {log_label} summary using provider={provider.name}")
 
     try:
         env = get_jinja_env()
-        template = env.get_template("us_double_hrp_summary_prompt.j2")
+        template = env.get_template(template_name)
     except TemplateNotFound as e:
         logger.error(f"Template not found: {e}")
         raise HTTPException(
             status_code=500,
-            detail="Template not found: us_double_hrp_summary_prompt.j2",
+            detail=f"Template not found: {template_name}",
         ) from e
 
     prompt = template.render(
@@ -246,9 +251,13 @@ def generate_us_double_hrp_summary(
         stage2=request.stage2.model_dump(),
         universe=request.universe,
         top_n=request.top_n,
+        kept_count=request.kept_count,
+        fillers_count=request.fillers_count,
+        previous_year_week_used=request.previous_year_week_used,
+        stickiness_threshold_pp=request.stickiness_threshold_pp,
     )
 
-    logger.debug(f"Generated US Double HRP prompt length: {len(prompt)} chars")
+    logger.debug(f"Generated {log_label} prompt length: {len(prompt)} chars")
 
     try:
         llm_response = provider.generate(prompt)
@@ -273,6 +282,26 @@ def generate_us_double_hrp_summary(
         provider=provider.name,
         model_used=llm_response.model,
         tokens_used=llm_response.tokens_used,
+    )
+
+
+@router.post("/us-double-hrp-summary", response_model=WeeklySummaryResponse)
+def generate_us_double_hrp_summary(
+    request: USDoubleHRPSummaryRequest,
+    provider: LLMProvider = Depends(get_llm_provider),
+) -> WeeklySummaryResponse:
+    """Generate an LLM summary of US Double HRP with weight-band sticky.
+
+    Stage 1 screens the full halal_new universe; weight-band sticky keeps
+    week-over-week stable picks; Stage 2 re-allocates the resulting 15
+    stocks. The summary frames the choice in terms of US paper trading
+    via the dhrp Alpaca account.
+    """
+    return _render_double_hrp_summary(
+        template_name="us_double_hrp_summary_prompt.j2",
+        request=request,
+        provider=provider,
+        log_label="US Double HRP",
     )
 
 
@@ -300,66 +329,19 @@ def generate_us_alpha_hrp_summary(
 
 @router.post("/india-double-hrp-summary", response_model=WeeklySummaryResponse)
 def generate_india_double_hrp_summary(
-    request: DoubleHRPSummaryRequest,
+    request: IndiaDoubleHRPSummaryRequest,
     provider: LLMProvider = Depends(get_llm_provider),
 ) -> WeeklySummaryResponse:
-    """Generate an LLM summary of two-stage Double HRP allocation.
+    """Generate an LLM summary of India Double HRP with weight-band sticky.
 
-    Stage 1 screens the full universe with a long lookback, then the
-    top-N stocks are re-allocated with a shorter lookback in Stage 2.
-
-    Args:
-        request: Both stage results, universe label, and top_n.
-        provider: LLM provider (injected via dependency).
-
-    Returns:
-        Summary with paragraph fields and metadata.
-
-    Raises:
-        HTTPException: If template loading or LLM call fails.
+    Stage 1 screens the full Nifty Shariah 500 universe; weight-band
+    sticky keeps week-over-week stable picks; Stage 2 re-allocates the
+    resulting 15 stocks. The summary frames the choice in terms of
+    paper-only NSE India tracking (no broker).
     """
-    logger.info(f"Generating Double HRP summary using provider={provider.name}")
-
-    try:
-        env = get_jinja_env()
-        template = env.get_template("india_double_hrp_summary_prompt.j2")
-    except TemplateNotFound as e:
-        logger.error(f"Template not found: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Template not found: india_double_hrp_summary_prompt.j2",
-        ) from e
-
-    prompt = template.render(
-        stage1=request.stage1.model_dump(),
-        stage2=request.stage2.model_dump(),
-        universe=request.universe,
-        top_n=request.top_n,
-    )
-
-    logger.debug(f"Generated Double HRP prompt length: {len(prompt)} chars")
-
-    try:
-        llm_response = provider.generate(prompt)
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"LLM service unavailable: {e}",
-        ) from e
-
-    try:
-        summary = parse_json_response(llm_response.content)
-    except ValueError as e:
-        logger.warning(f"Failed to parse LLM response as JSON: {e}")
-        summary = {
-            "para_1_screening_overview": "Unable to generate AI summary. Please check the logs for details.",
-            "raw_response": llm_response.content[:500],
-        }
-
-    return WeeklySummaryResponse(
-        summary=summary,
-        provider=provider.name,
-        model_used=llm_response.model,
-        tokens_used=llm_response.tokens_used,
+    return _render_double_hrp_summary(
+        template_name="india_double_hrp_summary_prompt.j2",
+        request=request,
+        provider=provider,
+        log_label="India Double HRP",
     )

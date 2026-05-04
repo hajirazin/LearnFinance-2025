@@ -400,3 +400,148 @@ class TestMultiUniverseIsolation:
         ind = repo.read_week("nifty_shariah_500", "202609")[0]
         assert us.final_allocation_pct == 50.0
         assert ind.final_allocation_pct is None
+
+
+# ----------------------------------------------------------------------------
+# halal_india_double_hrp partition (per-strategy isolation)
+# ----------------------------------------------------------------------------
+
+
+class TestHalalIndiaDoubleHRPPartition:
+    """Pin behaviour for the ``halal_india_double_hrp`` partition.
+
+    These tests exist because the partition is strategy-named (not
+    universe-named) on purpose: the underlying tradable universe is
+    ``nifty_shariah_500``, but the carry-set must NOT mix with
+    ``halal_india_alpha`` (rank-band, different math primitive). Both
+    cohabit ``stage1_weight_history`` and target the same NSE symbols,
+    so cross-partition isolation is the only thing preventing
+    cross-contamination of "previously held" semantics.
+    """
+
+    def test_halal_india_double_hrp_does_not_see_halal_india_alpha(
+        self, repo: StickyHistoryRepository
+    ):
+        repo.persist_stage1(
+            [
+                _row(
+                    universe="halal_india_alpha",
+                    year_week="202608",
+                    stock="INFY.NS",
+                    final_allocation_pct=10.0,
+                    selected_in_final=True,
+                ),
+            ]
+        )
+        # Even though both strategies screen the SAME underlying NSE
+        # universe, the double-HRP partition starts cold because nothing
+        # has been written to it yet.
+        assert repo.read_previous_final_set("halal_india_double_hrp", "202609") is None
+        # And alpha-HRP still sees its own prior week unaffected.
+        alpha_prev = repo.read_previous_final_set("halal_india_alpha", "202609")
+        assert alpha_prev is not None
+        assert alpha_prev.final_set == {"INFY.NS"}
+
+    def test_halal_india_double_hrp_does_not_see_halal_new(
+        self, repo: StickyHistoryRepository
+    ):
+        # US Double HRP and India Double HRP both use weight-band sticky
+        # but they MUST stay in their own partitions -- they trade on
+        # disjoint symbol universes (and would in any case be wrong to
+        # blend even on shared tickers).
+        repo.persist_stage1(
+            [
+                _row(
+                    universe="halal_new",
+                    year_week="202608",
+                    stock="AAPL",
+                    final_allocation_pct=8.0,
+                    selected_in_final=True,
+                ),
+            ]
+        )
+        assert repo.read_previous_final_set("halal_india_double_hrp", "202609") is None
+
+    def test_halal_india_double_hrp_cold_start_then_steady_state(
+        self, repo: StickyHistoryRepository
+    ):
+        # Week 1: nothing in the partition -> cold start.
+        assert repo.read_previous_final_set("halal_india_double_hrp", "202609") is None
+
+        # Persist Stage 1 + record final weights for week 1.
+        rows = [
+            _row(
+                universe="halal_india_double_hrp",
+                year_week="202609",
+                stock="INFY.NS",
+                stage1_rank=1,
+                initial_allocation_pct=8.0,
+                selected_in_final=True,
+                selection_reason="top_rank",
+            ),
+            _row(
+                universe="halal_india_double_hrp",
+                year_week="202609",
+                stock="TCS.NS",
+                stage1_rank=2,
+                initial_allocation_pct=7.0,
+                selected_in_final=True,
+                selection_reason="top_rank",
+            ),
+        ]
+        repo.persist_stage1(rows)
+        repo.update_final_weights(
+            "halal_india_double_hrp",
+            "202609",
+            {"INFY.NS": 60.0, "TCS.NS": 40.0},
+        )
+
+        # Week 2: the partition can now read week 1 as the "previous"
+        # snapshot, and only stocks with non-null final_allocation_pct
+        # appear in final_set (so a future Stage 1 row that was screened
+        # but not picked won't pollute the carry-set).
+        snap = repo.read_previous_final_set("halal_india_double_hrp", "202610")
+        assert snap is not None
+        assert isinstance(snap, PreviousWeekSnapshot)
+        assert snap.year_week == "202609"
+        assert snap.final_set == {"INFY.NS", "TCS.NS"}
+
+    def test_halal_india_double_hrp_rerun_same_week_is_delete_then_insert(
+        self, repo: StickyHistoryRepository
+    ):
+        # First write to the partition.
+        repo.persist_stage1(
+            [
+                _row(
+                    universe="halal_india_double_hrp",
+                    year_week="202609",
+                    stock="INFY.NS",
+                    stage1_rank=1,
+                    initial_allocation_pct=5.0,
+                ),
+                _row(
+                    universe="halal_india_double_hrp",
+                    year_week="202609",
+                    stock="TCS.NS",
+                    stage1_rank=2,
+                    initial_allocation_pct=4.0,
+                ),
+            ]
+        )
+        # Rerun in the same week with a different ranking. The repo must
+        # delete the prior week's rows and insert the new ones rather
+        # than UPSERT-merging, because rank ordering is part of the
+        # math-aware payload (see persist_stage1 docstring).
+        repo.persist_stage1(
+            [
+                _row(
+                    universe="halal_india_double_hrp",
+                    year_week="202609",
+                    stock="HDFCBANK.NS",
+                    stage1_rank=1,
+                    initial_allocation_pct=6.0,
+                ),
+            ]
+        )
+        rows = repo.read_week("halal_india_double_hrp", "202609")
+        assert {r.stock for r in rows} == {"HDFCBANK.NS"}

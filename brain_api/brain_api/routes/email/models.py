@@ -22,6 +22,7 @@ __all__ = [
     "DoubleHRPEmailRequest",
     "ForecastersTrainingSummaryEmailRequest",
     "IndiaAlphaHRPEmailRequest",
+    "IndiaDoubleHRPEmailRequest",
     "IndiaTrainingSummaryEmailRequest",
     "IndiaTrainingSummaryEmailResponse",
     "OrderResultsData",
@@ -224,50 +225,65 @@ class IndiaAlphaHRPEmailRequest(AlphaHRPEmailRequest):
 
 
 class DoubleHRPEmailRequest(BaseModel):
-    """Request model for POST /email/india-double-hrp-report.
+    """Shared base for POST /email/{us,india}-double-hrp-report.
 
-    Two-stage HRP: Stage 1 screens the full universe, Stage 2
-    re-allocates the top-N selected stocks. Email shows both stages.
+    Both markets ship the same Stage 1 (HRP weight screen) + weight-band
+    sticky + Stage 2 (HRP) data to the email template. The base owns
+    every common field; the US subclass adds Alpaca-specific
+    ``order_results`` + ``skipped`` since India does not trade.
+
+    Sticky-history partition keys: ``halal_new`` (US),
+    ``halal_india_double_hrp`` (India). Tradable universe label lives in
+    ``universe`` and is shown to the human reader of the email; the
+    storage partition is strategy-named (not universe-named) and never
+    appears here -- see ``brain_api.core.strategy_partitions``.
+
+    Field naming aligns with :class:`AlphaHRPEmailRequest` for symmetry
+    across the two HRP families: ``kept_count`` / ``fillers_count``
+    match the ``StickyTopNResponse`` shape from
+    ``/allocation/sticky-top-n``.
     """
 
-    summary: dict[str, str]  # from POST /llm/india-double-hrp-summary
+    summary: dict[str, str]
     stage1: HRPAllocationResponse  # full universe, long lookback
     stage2: HRPAllocationResponse  # top-N stocks, short lookback
-    universe: str  # e.g. "nifty_shariah_500"
+    universe: str  # e.g. "halal_new" / "nifty_shariah_500"
     top_n: int  # e.g. 15
     target_week_start: str
     target_week_end: str
     as_of_date: str
+    kept_count: int = 0
+    fillers_count: int = 0
+    previous_year_week_used: str | None = None
+    # Default 1.0pp matches the policy threshold both markets use today;
+    # surfaced so the email template can phrase the sticky rule
+    # correctly even if the threshold ever moves.
+    stickiness_threshold_pp: float = 1.0
 
 
-class USDoubleHRPEmailRequest(BaseModel):
+class IndiaDoubleHRPEmailRequest(DoubleHRPEmailRequest):
+    """Request model for POST /email/india-double-hrp-report.
+
+    Same fields as the shared :class:`DoubleHRPEmailRequest` base. India
+    has no Alpaca paper account, so no ``order_results`` / ``skipped``
+    fields are added.
+    """
+
+
+class USDoubleHRPEmailRequest(DoubleHRPEmailRequest):
     """Request model for POST /email/us-double-hrp-report.
 
-    US Double HRP with sticky selection. Differs from the India variant
-    in two ways:
-    - It includes Alpaca order execution results because US Double HRP
-      trades through a paper account.
-    - It supports a ``skipped`` short-circuit when last week's orders
-      were still open at run time.
+    Extends :class:`DoubleHRPEmailRequest` with Alpaca-specific fields
+    (``order_results``, ``skipped``); India does not trade so its
+    request omits these.
 
     On the skip path, ``stage1``/``stage2`` are still required (they will
     typically be the prior-week's snapshot or empty) but the email
     template hides allocation tables.
     """
 
-    summary: dict[str, str]  # from POST /llm/us-double-hrp-summary
-    stage1: HRPAllocationResponse  # halal_new universe, long lookback
-    stage2: HRPAllocationResponse  # selected 15, short lookback
-    universe: str  # e.g. "halal_new"
-    top_n: int  # e.g. 15
-    target_week_start: str
-    target_week_end: str
-    as_of_date: str
     order_results: AlgorithmOrderResult | None = None
     skipped: bool = False
-    sticky_kept_count: int = 0
-    sticky_fillers_count: int = 0
-    previous_year_week_used: str | None = None
 
 
 # =============================================================================

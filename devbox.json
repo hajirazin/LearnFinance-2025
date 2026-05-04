@@ -29,6 +29,7 @@
       "temporal:server": ["temporal server start-dev --db-filename data/temporal.db --ui-port 8233"],
       "temporal:worker:training": ["cd temporal && TEMPORAL_TASK_QUEUE=learnfinance-training TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1 uv run python -m worker"],
       "temporal:worker:inference": ["cd temporal && TEMPORAL_TASK_QUEUE=learnfinance-inference uv run python -m worker"],
+      "temporal:worker:legacy": ["cd temporal && TEMPORAL_TASK_QUEUE=learnfinance uv run python -m worker"],
       "temporal:schedule": ["cd temporal && uv run python -m schedules"],
       "temporal:setup": ["cd temporal && uv sync --all-extras"],
       "temporal:test": ["cd temporal && uv sync --all-extras && uv run pytest"],

@@ -24,6 +24,7 @@ __all__ = [
     "AlphaScoreItem",
     "DoubleHRPSummaryRequest",
     "ForecastersTrainingSummaryRequest",
+    "IndiaDoubleHRPSummaryRequest",
     "IndiaTrainingSummaryRequest",
     "SACTrainingSummaryRequest",
     "SACWeeklySummaryRequest",
@@ -142,31 +143,53 @@ class IndiaTrainingSummaryRequest(BaseModel):
 
 
 class DoubleHRPSummaryRequest(BaseModel):
-    """Request model for POST /llm/india-double-hrp-summary.
+    """Shared base for POST /llm/{us,india}-double-hrp-summary.
 
-    Two-stage HRP: Stage 1 screens the full universe, Stage 2
-    re-allocates the top-N selected stocks.
+    Both markets share an identical Stage 1 (HRP weight screen) ->
+    weight-band sticky -> Stage 2 (HRP) pipeline; only the underlying
+    universe differs. The LLM payload shape is therefore one DTO. The
+    ``universe`` field discriminates -- e.g. ``halal_new`` for US,
+    ``nifty_shariah_500`` for India -- and downstream prompt copy can
+    branch on it.
+
+    Sticky-history partition keys (``halal_new``,
+    ``halal_india_double_hrp``) keep weight-band rows isolated from any
+    other strategy on the same tradable universe -- see
+    :mod:`brain_api.core.strategy_partitions`.
+
+    Sticky outcome fields (``kept_count``, ``fillers_count``,
+    ``previous_year_week_used``) come from ``StickyTopNResponse``;
+    defaults make cold-start runs valid.
     """
 
     stage1: HRPAllocationResponse  # full universe, long lookback
-    stage2: HRPAllocationResponse  # top-N stocks, short lookback
-    universe: str  # e.g. "nifty_shariah_500"
+    stage2: HRPAllocationResponse  # selected top_n, short lookback
+    universe: str  # e.g. "halal_new" / "nifty_shariah_500"
     top_n: int  # e.g. 15
+    kept_count: int = 0
+    fillers_count: int = 0
+    previous_year_week_used: str | None = None
+    stickiness_threshold_pp: float = 1.0
 
 
-class USDoubleHRPSummaryRequest(BaseModel):
-    """Request model for POST /llm/us-double-hrp-summary.
+class IndiaDoubleHRPSummaryRequest(DoubleHRPSummaryRequest):
+    """Request model for POST /llm/india-double-hrp-summary.
 
-    US two-stage HRP with sticky selection. Stage 1 screens the full
-    halal_new universe (~410 stocks); sticky selection picks 15; Stage 2
-    re-allocates those 15. The summary helps the human reviewer
-    understand why the chosen 15 were chosen.
+    Same fields as the shared :class:`DoubleHRPSummaryRequest` base.
+    Subclassed for symmetry with :class:`USDoubleHRPSummaryRequest`
+    and to give each endpoint its own OpenAPI schema entry.
     """
 
-    stage1: HRPAllocationResponse  # halal_new universe, 756d lookback
-    stage2: HRPAllocationResponse  # selected 15, 252d lookback
-    universe: str  # e.g. "halal_new"
-    top_n: int  # e.g. 15
+
+class USDoubleHRPSummaryRequest(DoubleHRPSummaryRequest):
+    """Request model for POST /llm/us-double-hrp-summary.
+
+    Same fields as the shared :class:`DoubleHRPSummaryRequest` base;
+    US two-stage HRP runs on ``halal_new`` and trades through the
+    ``dhrp`` Alpaca paper account. The summary helps the human reviewer
+    understand why the chosen ``top_n`` were chosen and how stable the
+    weight-band sticky kept holdings vs prior week.
+    """
 
 
 # =============================================================================

@@ -152,6 +152,7 @@ class USDoubleHRPWorkflow:
                     0,
                     0,
                     None,
+                    STICKINESS_THRESHOLD_PP,
                     SkippedSubmitResponse(account="dhrp", skipped=True),
                     True,
                 ],
@@ -233,10 +234,20 @@ class USDoubleHRPWorkflow:
         sells, buys = split_orders_by_side(orders)
         submit = await sell_wait_buy("dhrp", sells, buys, orders, submit_orders_dhrp)
 
-        # Phase 5: LLM summary on the two stages.
+        # Phase 5: LLM summary on the two stages (with sticky context so
+        # the prompt can describe weight-band stability vs prior week).
         summary = await workflow.execute_activity(
             generate_us_double_hrp_summary,
-            args=[stage1, stage2, UNIVERSE_LABEL, TOP_N],
+            args=[
+                stage1,
+                stage2,
+                UNIVERSE_LABEL,
+                TOP_N,
+                sticky.kept_count,
+                sticky.fillers_count,
+                sticky.previous_year_week_used,
+                STICKINESS_THRESHOLD_PP,
+            ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
@@ -256,6 +267,7 @@ class USDoubleHRPWorkflow:
                 sticky.kept_count,
                 sticky.fillers_count,
                 sticky.previous_year_week_used,
+                STICKINESS_THRESHOLD_PP,
                 submit,
                 False,
             ],

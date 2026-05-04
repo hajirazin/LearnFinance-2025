@@ -1,0 +1,54 @@
+{# Shared base for Double-HRP LLM summary prompts (US + India).
+
+The math-aware sections -- Stage 1 HRP weight table (top 25 with the
+"context beyond the picked top_n" framing), weight-band sticky outcome
+(threshold_pp semantics, kept/fillers/prev_yw), and Stage 2 final
+allocation -- live here so US and India cannot disagree on what the
+numbers mean. Market-specific narrative (sector hints, trading account
+context, JSON paragraph schema) lives in child templates via the
+{% block analyst_intro %}, {% block strategy_overview_extras %}, and
+{% block instructions %} overrides.
+
+Children only need to override:
+
+* analyst_intro -- one line of "You are a financial analyst specializing
+  in <market>" framing.
+* strategy_overview_extras -- optional bullets that close the strategy
+  overview with market context (e.g. "Trading account: Alpaca paper").
+* instructions -- the full JSON schema block (4 paragraphs) so each
+  market can name its sectors, currency, etc.
+
+Everything else (Stage 1 HRP-weight rank table, sticky stats, HRP
+weights) is one implementation. The first paragraph key is
+``para_1_screening_overview`` (not ``para_1_market_outlook`` like
+Alpha-HRP) on purpose -- Double HRP's Stage 1 is an HRP-weight screen,
+not an alpha forecast, so the first paragraph should describe screening
+behaviour, not market outlook. Keeping the two prompt families distinct
+is a math-correctness choice per AGENTS.md rule #2. #}
+{% block analyst_intro %}You are a financial analyst specializing in equity markets and quantitative portfolio construction.{% endblock %}
+Analyze a two-stage "Double HRP" (Hierarchical Risk Parity) portfolio allocation for the {{ universe }} universe.
+
+## Strategy Overview
+- **Stage 1 (Screening)**: HRP was run on the full {{ universe }} universe ({{ stage1.symbols_used }} stocks survived data filters) using a {{ stage1.lookback_days }}-day lookback (~{{ (stage1.lookback_days / 252) | round(1) }} years).
+- **Weight-band sticky selection**: From those Stage 1 weights, a rebalance-band primitive picks the final {{ top_n }} stocks. Stocks held last week whose Stage 1 weight moved less than {{ "%.1f" | format(stickiness_threshold_pp) }}pp are retained even if their rank slipped; remaining slots are filled by top current-week weight. Goal: lower turnover and sticky-selection-driven friction without sacrificing risk parity.
+- **Stage 2 (Final Allocation)**: HRP was re-run on only those {{ top_n }} stocks using a {{ stage2.lookback_days }}-day lookback (~{{ (stage2.lookback_days / 252) | round(1) }} year).
+- As-of Date: {{ stage2.as_of_date }}
+{% block strategy_overview_extras %}{% endblock %}
+
+## Stage 1: Screening Results (top 25 by Stage 1 weight)
+Showing the top 25 from Stage 1 so you can see context beyond the {{ top_n }} that were actually picked. Weight-band sticky retained {{ kept_count }} of last week's holdings and filled {{ fillers_count }} slots from this week's highest current-week weights.
+{% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= 25 %}- #{{ loop.index }} {{ sym }}: {{ "%.2f" | format(wt) }}% (stage 1 weight)
+{% endif %}{% endfor %}
+Symbols excluded in Stage 1 (insufficient data): {{ stage1.symbols_excluded | length }}
+
+## Sticky Selection Outcome
+- Kept from last week (Stage 1 weight moved < {{ "%.1f" | format(stickiness_threshold_pp) }}pp): {{ kept_count }}
+- Newly entered (top {{ top_n }} by current-week weight): {{ fillers_count }}
+- Comparison week: {{ previous_year_week_used or "cold start (no prior week)" }}
+
+## Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks weighted by HRP)
+{% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}- {{ sym }}: {{ "%.1f" | format(wt) }}%
+{% endfor %}
+
+## Instructions
+{% block instructions %}{% endblock %}

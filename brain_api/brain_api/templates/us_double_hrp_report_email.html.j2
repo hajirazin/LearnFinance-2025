@@ -1,14 +1,20 @@
-{% extends "us_report_base.html.j2" %}
+{# US Double HRP weekly email.
+
+Inherits the math-aware Stage 1 + Sticky + Stage 2 sections from
+``double_hrp_email_base.html.j2`` so US and India read identically.
+Only US-specific copy + the Alpaca-paper order-execution / skipped
+notice blocks are overridden here. #}
+{% extends "double_hrp_email_base.html.j2" %}
 
 {% block document_title %}US Double HRP Portfolio Analysis{% endblock %}
 
 {% block header %}
   <h1 style="color: #1f2937; margin-bottom: 8px;">US Double HRP Portfolio Analysis (Alpaca Paper)</h1>
-  <div style="background-color: #ede9fe; padding: 16px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid #7c3aed;">
+  <div style="background-color: {{ self.strategy_header_bg() }}; padding: 16px; border-radius: 8px; margin-bottom: 24px; border-left: 4px solid {{ self.strategy_primary() }};">
     <strong>Target Week:</strong> {{ target_week_start }} &rarr; {{ target_week_end }} &nbsp;|&nbsp;
     <strong>As-of Date:</strong> {{ as_of_date }} &nbsp;|&nbsp;
     <strong>Universe:</strong> {{ universe }} &nbsp;|&nbsp;
-    <strong>Strategy:</strong> Two-stage HRP + Sticky Selection (screen {{ stage1.symbols_used }} &rarr; top {{ top_n }})
+    <strong>Strategy:</strong> Two-stage HRP + weight-band sticky (screen {{ stage1.symbols_used }} &rarr; top {{ top_n }})
   </div>
 {% endblock %}
 
@@ -23,106 +29,4 @@
   </div>
 {% endblock %}
 
-{% block ai_summary %}
-  <div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); border-radius: 12px; color: white;">
-    <h2 style="margin-top: 0; margin-bottom: 16px;">AI Analysis Summary</h2>
-
-    {% if summary.para_1_screening_overview %}
-    <div style="margin-bottom: 16px;">
-      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">1. Screening Overview</h4>
-      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_1_screening_overview }}</p>
-    </div>
-    {% endif %}
-
-    {% if summary.para_2_selection_rationale %}
-    <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-      <h4 style="margin: 0 0 8px 0;">2. Selection Rationale</h4>
-      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_2_selection_rationale }}</p>
-    </div>
-    {% endif %}
-
-    {% if summary.para_3_final_allocation %}
-    <div style="margin-bottom: 16px;">
-      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">3. Final Allocation</h4>
-      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_3_final_allocation }}</p>
-    </div>
-    {% endif %}
-
-    {% if summary.para_4_risk_observations %}
-    <div>
-      <h4 style="margin: 0 0 8px 0; opacity: 0.9;">4. Risk Observations</h4>
-      <p style="font-size: 14px; line-height: 1.6; margin: 0;">{{ summary.para_4_risk_observations }}</p>
-    </div>
-    {% endif %}
-  </div>
-{% endblock %}
-
-{% block sticky %}
-  <div style="margin-bottom: 24px; padding: 16px; background-color: #ecfeff; border-radius: 8px; border-left: 4px solid #06b6d4;">
-    <h3 style="margin-top: 0; color: #0e7490;">Sticky Selection</h3>
-    <p style="margin: 0; font-size: 14px; color: #155e75;">
-      Sticky retained from prior week: <strong>{{ sticky_kept_count }}</strong> &nbsp;|&nbsp;
-      New top-rank fillers this week: <strong>{{ sticky_fillers_count }}</strong> &nbsp;|&nbsp;
-      Prior week compared: <strong>{{ previous_year_week_used or "(cold start)" }}</strong>
-    </p>
-  </div>
-{% endblock %}
-
-{% block stage1 %}
-  <div style="margin-bottom: 24px;">
-    <h3 style="color: #374151; border-bottom: 2px solid #7c3aed; padding-bottom: 8px;">Stage 1: Screening (Top 25 from {{ stage1.symbols_used }})</h3>
-    <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage1.lookback_days }} trading days (~{{ (stage1.lookback_days / 252) | round(1) }}yr) | Excluded: {{ stage1.symbols_excluded | length }} symbols | Final {{ top_n }} chosen via sticky selection (see Stage 2)</p>
-    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
-      <thead>
-        <tr style="background-color: #f5f3ff;">
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #7c3aed; width: 40px;">#</th>
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #7c3aed;">Symbol</th>
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #7c3aed;">Stage 1 Weight</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for sym, wt in stage1.percentage_weights.items() %}{% if loop.index <= 25 %}
-        <tr style="background-color: {% if loop.index <= 3 %}#f5f3ff{% elif loop.index <= top_n %}white{% else %}#f9fafb{% endif %};">
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ loop.index }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ sym }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if loop.index <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ "%.2f" | format(wt) }}%</td>
-        </tr>
-        {% endif %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% endblock %}
-
-{% block stage2 %}
-  <div style="margin-bottom: 24px;">
-    <h3 style="color: #374151; border-bottom: 2px solid #10b981; padding-bottom: 8px;">Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks)</h3>
-    <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage2.lookback_days }} trading days (~{{ (stage2.lookback_days / 252) | round(1) }}yr) | As-of: {{ stage2.as_of_date }}</p>
-    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
-      <thead>
-        <tr style="background-color: #f0fdf4;">
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #10b981; width: 40px;">#</th>
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #10b981;">Symbol</th>
-          <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #10b981;">Weight</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}{% if wt > 0 %}
-        <tr>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">{{ loop.index }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">{{ sym }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <div style="width: {{ (wt * 3) | int }}px; height: 12px; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 3px;"></div>
-              <span>{{ "%.1f" | format(wt) }}%</span>
-            </div>
-          </td>
-        </tr>
-        {% endif %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% endblock %}
-
 {% block order_execution_heading %}Alpaca Order Execution (dhrp account){% endblock %}
-
-{% block footer_signature %}Generated by LearnFinance-2025 | Double HRP (Two-Stage Risk Parity) + Sticky Selection{% endblock %}

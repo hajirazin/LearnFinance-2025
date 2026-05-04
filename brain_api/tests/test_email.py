@@ -947,9 +947,10 @@ def mock_us_double_hrp_email_request():
             "skipped": False,
         },
         "skipped": False,
-        "sticky_kept_count": 12,
-        "sticky_fillers_count": 3,
+        "kept_count": 12,
+        "fillers_count": 3,
         "previous_year_week_used": "202608",
+        "stickiness_threshold_pp": 1.0,
     }
 
 
@@ -1053,6 +1054,157 @@ class TestUSDoubleHRPReportEmailEndpoint:
             json={
                 "summary": {"para_1": "x"},
                 "universe": "halal_new",
+                "top_n": 15,
+                "target_week_start": "2026-02-23",
+                "target_week_end": "2026-02-27",
+                "as_of_date": "2026-02-23",
+            },
+        )
+        assert response.status_code == 422
+
+
+# =============================================================================
+# India Double HRP Report Email Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_india_double_hrp_email_request():
+    """Valid request payload for /email/india-double-hrp-report.
+
+    Mirrors the US fixture's shape because both endpoints share the
+    DoubleHRPEmailRequest base. India omits ``order_results`` /
+    ``skipped`` -- they are US-only fields on USDoubleHRPEmailRequest.
+    """
+    return {
+        "summary": {
+            "para_1_screening_overview": "HRP screened 210 NSE Shariah stocks.",
+            "para_2_selection_rationale": "Top 15 lean towards IT services.",
+            "para_3_final_allocation": "Stage 2 spreads weight broadly.",
+            "para_4_risk_observations": "Watch sector concentration.",
+        },
+        "stage1": {
+            "percentage_weights": {f"S{i:03d}.NS": 0.5 for i in range(20)},
+            "symbols_used": 20,
+            "symbols_excluded": [],
+            "lookback_days": 756,
+            "as_of_date": "2026-02-23",
+        },
+        "stage2": {
+            "percentage_weights": {f"S{i:03d}.NS": 100.0 / 15 for i in range(15)},
+            "symbols_used": 15,
+            "symbols_excluded": [],
+            "lookback_days": 252,
+            "as_of_date": "2026-02-23",
+        },
+        "universe": "halal_india_double_hrp",
+        "top_n": 15,
+        "target_week_start": "2026-02-23",
+        "target_week_end": "2026-02-27",
+        "as_of_date": "2026-02-23",
+        "kept_count": 12,
+        "fillers_count": 3,
+        "previous_year_week_used": "202608",
+        "stickiness_threshold_pp": 1.0,
+    }
+
+
+class TestIndiaDoubleHRPReportEmailEndpoint:
+    """Tests for POST /email/india-double-hrp-report endpoint.
+
+    Cross-checks shared-base parity with US Double HRP -- both should
+    render the same Stage 1 + Sticky + Stage 2 sections from
+    ``double_hrp_email_base.html.j2``. India-specific differences:
+
+    * No "Alpaca Order Execution" block (paper-only, no broker).
+    * No "Run Skipped" block (no open-orders gate).
+    * Footer says "Paper-only, no broker" instead of "Alpaca Paper
+      Trading".
+    """
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_happy_path_renders_shared_sections(
+        self,
+        mock_send_email,
+        mock_india_double_hrp_email_request,
+    ):
+        mock_send_email.return_value = True
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json=mock_india_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_success"] is True
+        assert "India Double HRP Portfolio Analysis" in data["subject"]
+
+        body = data["body"]
+        # Math-aware sections come from the shared base, so they MUST
+        # appear identically across markets.
+        assert "AI Analysis Summary" in body
+        assert "Stage 1: Screening" in body
+        assert "Stage 2: Final Allocation" in body
+        assert "Weight-band Sticky Selection" in body
+        # Universe label is rendered verbatim -- partition string is
+        # acceptable here, mirrors India Alpha-HRP convention.
+        assert "halal_india_double_hrp" in body
+        # Sticky stats from the request must round-trip into the email.
+        assert ">12<" in body or "<strong>12</strong>" in body
+        assert ">3<" in body or "<strong>3</strong>" in body
+        assert "202608" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_no_alpaca_or_skipped_blocks_render(
+        self,
+        mock_send_email,
+        mock_india_double_hrp_email_request,
+    ):
+        mock_send_email.return_value = True
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json=mock_india_double_hrp_email_request,
+        )
+        body = response.json()["body"]
+        # India does not trade -- the order-execution and skipped
+        # blocks must be absent; otherwise the email lies about Alpaca.
+        assert "Alpaca Order Execution" not in body
+        assert "Run Skipped" not in body
+        # Footer signals paper-only NSE India, not Alpaca.
+        assert "Paper-only, no broker" in body
+        assert "Alpaca Paper Trading" not in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_stage1_renders_top_25_with_greying_when_universe_has_25_plus(
+        self,
+        mock_send_email,
+        mock_india_double_hrp_email_request,
+    ):
+        # Bump the Stage 1 universe to >25 so the table renders the full
+        # top-25 context -- proves India inherits the same greying pass
+        # the US email gets.
+        mock_send_email.return_value = True
+        big_weights = {f"S{i:03d}.NS": 1.0 for i in range(30)}
+        mock_india_double_hrp_email_request["stage1"]["percentage_weights"] = (
+            big_weights
+        )
+        mock_india_double_hrp_email_request["stage1"]["symbols_used"] = 30
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json=mock_india_double_hrp_email_request,
+        )
+        body = response.json()["body"]
+        # All top-25 symbols should be referenced in Stage 1 rows.
+        for i in range(25):
+            assert f"S{i:03d}.NS" in body
+        # The 26th symbol must NOT appear (rendering caps at 25).
+        assert "S025.NS" not in body
+
+    def test_missing_required_field_returns_422(self):
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json={
+                "summary": {"para_1_screening_overview": "x"},
+                "universe": "halal_india_double_hrp",
                 "top_n": 15,
                 "target_week_start": "2026-02-23",
                 "target_week_end": "2026-02-27",

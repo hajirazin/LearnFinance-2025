@@ -33,6 +33,14 @@ Definitions:
   policy on Indian equities. Two-stage; lives in
   ``stage1_weight_history``.
 
+- ``HALAL_INDIA_DOUBLE_HRP_PARTITION = "halal_india_double_hrp"`` --
+  India Double HRP (weight-band sticky on Stage 1 HRP weights) on the
+  Nifty Shariah 500 universe. Mirrors the US Double HRP policy on
+  Indian equities; the partition is strategy-named (not universe-named)
+  because the universe label ``nifty_shariah_500`` belongs to display
+  copy and another India strategy might also screen the same universe
+  in the future. Two-stage; lives in ``stage1_weight_history``.
+
 - ``HALAL_FILTERED_ALPHA_PARTITION = "halal_filtered_alpha"`` -- the
   ``halal_filtered`` universe builder (PatchTST predicted weekly return
   -> rank-band sticky -> top 15). Same selector core as US Alpha-HRP but
@@ -72,6 +80,7 @@ HALAL_NEW_ALPHA_PARTITION = "halal_new_alpha"
 
 # India strategies on the nifty_shariah_500 universe (two-stage; stage1_weight_history).
 HALAL_INDIA_ALPHA_PARTITION = "halal_india_alpha"
+HALAL_INDIA_DOUBLE_HRP_PARTITION = "halal_india_double_hrp"
 
 # Single-stage screening strategies (monthly cadence; screening_history).
 HALAL_FILTERED_ALPHA_PARTITION = "halal_filtered_alpha"
@@ -82,6 +91,7 @@ ALL_PARTITIONS: tuple[str, ...] = (
     HALAL_NEW_PARTITION,
     HALAL_NEW_ALPHA_PARTITION,
     HALAL_INDIA_ALPHA_PARTITION,
+    HALAL_INDIA_DOUBLE_HRP_PARTITION,
     HALAL_FILTERED_ALPHA_PARTITION,
     HALAL_INDIA_FILTERED_ALPHA_PARTITION,
 )

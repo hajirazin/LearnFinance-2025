@@ -306,7 +306,7 @@ def _make_us_double_hrp_activities(
         ]
 
     @activity.defn(name="generate_us_double_hrp_summary")
-    def mock_generate_us_double_hrp_summary(s1, s2, universe, top_n):
+    def mock_generate_us_double_hrp_summary(*args, **kwargs):
         return summary
 
     @activity.defn(name="send_us_double_hrp_email")

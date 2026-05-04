@@ -210,9 +210,21 @@ def generate_double_hrp_summary(
     stage2: HRPAllocationResponse,
     universe: str,
     top_n: int,
+    kept_count: int = 0,
+    fillers_count: int = 0,
+    previous_year_week_used: str | None = None,
+    stickiness_threshold_pp: float = 1.0,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of Double HRP two-stage allocation."""
-    logger.info("Generating Double HRP LLM summary...")
+    """Generate LLM summary of India Double HRP two-stage allocation.
+
+    Sticky outcome (kept_count, fillers_count, previous_year_week_used,
+    stickiness_threshold_pp) is forwarded so the prompt can describe
+    weight-band stability across weeks. Defaults match a cold-start run
+    so legacy callers without sticky data still get a renderable
+    summary, though those defaults misrepresent reality and should be
+    replaced by real workflow values.
+    """
+    logger.info("Generating India Double HRP LLM summary...")
     with get_client() as client:
         response = client.post(
             "/llm/india-double-hrp-summary",
@@ -221,12 +233,17 @@ def generate_double_hrp_summary(
                 "stage2": stage2.model_dump(),
                 "universe": universe,
                 "top_n": top_n,
+                "kept_count": kept_count,
+                "fillers_count": fillers_count,
+                "previous_year_week_used": previous_year_week_used,
+                "stickiness_threshold_pp": stickiness_threshold_pp,
             },
         )
         response.raise_for_status()
     result = WeeklySummaryResponse(**response.json())
     logger.info(
-        f"Generated Double HRP summary via {result.provider} ({result.model_used})"
+        "Generated India Double HRP summary via "
+        f"{result.provider} ({result.model_used})"
     )
     return result
 
@@ -241,9 +258,19 @@ def send_double_hrp_email(
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
+    kept_count: int = 0,
+    fillers_count: int = 0,
+    previous_year_week_used: str | None = None,
+    stickiness_threshold_pp: float = 1.0,
 ) -> WeeklyReportEmailResponse:
-    """Send Double HRP report email (both stages + AI summary)."""
-    logger.info("Sending Double HRP report email...")
+    """Send India Double HRP report email (both stages + sticky + AI summary).
+
+    Sticky outcome counts are forwarded so the email's "Weight-band
+    Sticky Selection" block matches the workflow's actual rank churn
+    against the prior week. Cold-start defaults render as
+    ``"(cold start)"`` in the template.
+    """
+    logger.info("Sending India Double HRP report email...")
     with get_client() as client:
         response = client.post(
             "/email/india-double-hrp-report",
@@ -256,11 +283,15 @@ def send_double_hrp_email(
                 "target_week_start": target_week_start,
                 "target_week_end": target_week_end,
                 "as_of_date": as_of_date,
+                "kept_count": kept_count,
+                "fillers_count": fillers_count,
+                "previous_year_week_used": previous_year_week_used,
+                "stickiness_threshold_pp": stickiness_threshold_pp,
             },
         )
         response.raise_for_status()
     result = WeeklyReportEmailResponse(**response.json())
-    logger.info(f"Double HRP email sent: {result.subject}")
+    logger.info(f"India Double HRP email sent: {result.subject}")
     return result
 
 
@@ -270,8 +301,17 @@ def generate_us_double_hrp_summary(
     stage2: HRPAllocationResponse,
     universe: str,
     top_n: int,
+    kept_count: int = 0,
+    fillers_count: int = 0,
+    previous_year_week_used: str | None = None,
+    stickiness_threshold_pp: float = 1.0,
 ) -> WeeklySummaryResponse:
-    """Generate LLM summary of US Double HRP two-stage allocation."""
+    """Generate LLM summary of US Double HRP two-stage allocation.
+
+    See :func:`generate_double_hrp_summary` for the sticky-field
+    contract; US shares it identically with India because the prompt
+    base is shared.
+    """
     logger.info("Generating US Double HRP LLM summary...")
     with get_client() as client:
         response = client.post(
@@ -281,6 +321,10 @@ def generate_us_double_hrp_summary(
                 "stage2": stage2.model_dump(),
                 "universe": universe,
                 "top_n": top_n,
+                "kept_count": kept_count,
+                "fillers_count": fillers_count,
+                "previous_year_week_used": previous_year_week_used,
+                "stickiness_threshold_pp": stickiness_threshold_pp,
             },
         )
         response.raise_for_status()
@@ -301,13 +345,18 @@ def send_us_double_hrp_email(
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
-    sticky_kept_count: int = 0,
-    sticky_fillers_count: int = 0,
+    kept_count: int = 0,
+    fillers_count: int = 0,
     previous_year_week_used: str | None = None,
+    stickiness_threshold_pp: float = 1.0,
     order_results: SubmitOrdersResponse | SkippedSubmitResponse | None = None,
     skipped: bool = False,
 ) -> WeeklyReportEmailResponse:
     """Send US Double HRP report email.
+
+    Sticky outcome fields use the same names as the India variant and
+    the email request schema (``kept_count`` / ``fillers_count``) for
+    cross-market consistency.
 
     On the skip path (``skipped=True`` or ``order_results`` is a
     :class:`SkippedSubmitResponse`), the email body suppresses the
@@ -324,9 +373,10 @@ def send_us_double_hrp_email(
         "target_week_start": target_week_start,
         "target_week_end": target_week_end,
         "as_of_date": as_of_date,
-        "sticky_kept_count": sticky_kept_count,
-        "sticky_fillers_count": sticky_fillers_count,
+        "kept_count": kept_count,
+        "fillers_count": fillers_count,
         "previous_year_week_used": previous_year_week_used,
+        "stickiness_threshold_pp": stickiness_threshold_pp,
         "skipped": skipped,
     }
     if order_results is not None:
