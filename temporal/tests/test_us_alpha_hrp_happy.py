@@ -92,6 +92,71 @@ class TestUSAlphaHRPHappyPath:
         assert record_final_calls[0]["n_weights"] == 15
 
     @pytest.mark.asyncio
+    async def test_email_receives_order_details_and_prior_allocation(
+        self,
+        universe_data,
+        hrp_portfolio_no_open,
+        patchtst_scores,
+        stage2_alloc,
+        sticky_cold_start,
+        record_final_resp,
+        alpha_orders_buys_only,
+        submit_resp,
+        summary_resp,
+        email_resp,
+    ):
+        """Workflow plumbing: email activity must see the new fields."""
+        email_calls: list[dict] = []
+        activities = make_us_alpha_hrp_activities(
+            universe_data=universe_data,
+            hrp_portfolio=hrp_portfolio_no_open,
+            scores=patchtst_scores,
+            stage2=stage2_alloc,
+            sticky=sticky_cold_start,
+            record_final=record_final_resp,
+            orders=alpha_orders_buys_only,
+            submit_resp=submit_resp,
+            summary=summary_resp,
+            email=email_resp,
+            email_calls=email_calls,
+        )
+
+        async with worker_with_activities([USAlphaHRPWorkflow], activities) as env:
+            await env.client.execute_workflow(
+                USAlphaHRPWorkflow.run,
+                id="test-us-alpha-hrp-email-payload",
+                task_queue="test-queue",
+            )
+
+        # The harness binds positional args/kwargs against the real
+        # send_us_alpha_hrp_email signature, so we assert by name and
+        # don't have to track the parameter order. New optional kwargs
+        # added to the activity in the future won't shift any indices.
+        assert len(email_calls) == 1
+        captured = email_calls[0]
+        order_details = captured["order_details"]
+        prior_allocation = captured["prior_allocation"]
+
+        # The Temporal Pydantic data converter rehydrates the workflow-
+        # side payload as the real model when a typed parameter exists,
+        # but the mock declares ``*args`` so values come through as
+        # dicts. Normalize via getattr/dict access either way.
+        def _attr(obj, name):
+            return obj[name] if isinstance(obj, dict) else getattr(obj, name)
+
+        assert isinstance(order_details, list)
+        assert len(order_details) >= 1
+        first = order_details[0]
+        assert _attr(first, "stop_loss_reason") in {
+            "atr14",
+            "atr_unavailable",
+            "sell_no_stop",
+        }
+        assert prior_allocation is not None
+        assert "live Alpaca account: hrp" in _attr(prior_allocation, "source_label")
+        assert _attr(prior_allocation, "weights"), "prior allocation must not be empty"
+
+    @pytest.mark.asyncio
     async def test_stable_week_all_kept(
         self,
         universe_data,

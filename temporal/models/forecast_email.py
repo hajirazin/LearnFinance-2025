@@ -234,7 +234,13 @@ class FundamentalsResponse(BaseModel):
 
 
 class OrderModel(BaseModel):
-    """A single order to submit to Alpaca."""
+    """A single order to submit to Alpaca.
+
+    ``stop_loss_*`` fields are populated by brain_api's
+    ``/orders/generate`` (computed via
+    ``brain_api.core.stop_loss.compute_stop_loss``). Defaults preserve
+    compatibility with skip-path / legacy fixtures that don't ship them.
+    """
 
     client_order_id: str
     symbol: str
@@ -243,6 +249,9 @@ class OrderModel(BaseModel):
     type: str
     limit_price: float | None = None
     time_in_force: str
+    stop_loss_price: float | None = None
+    stop_loss_distance_pct: float | None = None
+    stop_loss_reason: str = "atr_unavailable"
 
 
 class OrderSummary(BaseModel):
@@ -263,6 +272,40 @@ class GenerateOrdersResponse(BaseModel):
     orders: list[OrderModel]
     summary: OrderSummary
     prices_used: dict[str, float]
+    # ATR(14) per symbol; default empty so legacy fixtures still parse.
+    atr_used: dict[str, float] = {}
+
+
+class OrderDetail(BaseModel):
+    """Per-order row threaded into the email payload (US-only).
+
+    Mirrors the shape of ``brain_api.routes.email.models.OrderDetail``
+    so the workflow can build the list once and ship it directly to
+    ``/email/*``.
+    """
+
+    symbol: str
+    side: str
+    qty: float
+    current_price: float
+    trade_value: float
+    stop_loss_price: float | None = None
+    stop_loss_distance_pct: float | None = None
+    stop_loss_reason: str
+    client_order_id: str
+    submission_status: str
+
+
+class PriorAllocation(BaseModel):
+    """ "Going Into This Week" snapshot (live broker for US, DB for India).
+
+    Same shape as the brain_api email model so the workflow can pass
+    the dict straight through.
+    """
+
+    weights: dict[str, float] = {}
+    source_label: str = ""
+    as_of: str | None = None
 
 
 # ============================================================================

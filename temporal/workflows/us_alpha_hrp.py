@@ -49,6 +49,10 @@ from workflows._order_execution import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import (
+        build_order_details,
+        build_prior_allocation_from_portfolio,
+    )
     from activities.execution import generate_orders_alpha_hrp
     from activities.inference import (
         allocate_hrp,
@@ -197,6 +201,14 @@ class USAlphaHRPWorkflow:
                 start_to_close_timeout=ACTIVITY_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
             )
+            # Skip path still surfaces "going into this week" so the
+            # operator sees what's currently held on the hrp account
+            # (the very reason we couldn't rebalance).
+            skip_prior = build_prior_allocation_from_portfolio(
+                hrp_portfolio,
+                source_label="live Alpaca account: hrp",
+                as_of=as_of_date,
+            )
             email = await workflow.execute_activity(
                 send_us_alpha_hrp_email,
                 args=[
@@ -212,6 +224,8 @@ class USAlphaHRPWorkflow:
                     as_of_date,
                     SkippedSubmitResponse(account="hrp", skipped=True),
                     True,
+                    [],  # order_details (empty on skip path)
+                    skip_prior,
                 ],
                 start_to_close_timeout=ACTIVITY_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
@@ -307,6 +321,17 @@ class USAlphaHRPWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Build the per-order detail rows (with ATR-based stop-loss) and
+        # the "going into this week" snapshot (live broker state at run
+        # start). Both are pure helpers -- inline calls in workflow code,
+        # no extra activity round-trip.
+        order_details = build_order_details(orders, submit)
+        prior_allocation = build_prior_allocation_from_portfolio(
+            hrp_portfolio,
+            source_label="live Alpaca account: hrp",
+            as_of=as_of_date,
+        )
+
         # Phase 6: Email report.
         email = await workflow.execute_activity(
             send_us_alpha_hrp_email,
@@ -323,6 +348,8 @@ class USAlphaHRPWorkflow:
                 as_of_date,
                 submit,
                 False,
+                order_details,
+                prior_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

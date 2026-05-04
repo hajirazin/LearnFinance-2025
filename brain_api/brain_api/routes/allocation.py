@@ -33,6 +33,7 @@ from brain_api.core.sticky_selection import (
 from brain_api.routes.allocation_models import (
     HRPAllocationRequest,
     HRPAllocationResponse,
+    PreviousFinalAllocationResponse,
     RankBandTopNRequest,
     RankBandTopNResponse,
     RecordFinalWeightsRequest,
@@ -51,6 +52,7 @@ from brain_api.storage.sticky_history import (
 __all__ = [
     "HRPAllocationRequest",
     "HRPAllocationResponse",
+    "PreviousFinalAllocationResponse",
     "RankBandTopNRequest",
     "RankBandTopNResponse",
     "RecordFinalWeightsRequest",
@@ -342,4 +344,47 @@ def select_rank_band_top_n_endpoint(
         year_week=request.year_week,
         top_n=request.top_n,
         hold_threshold=request.hold_threshold,
+    )
+
+
+# ============================================================================
+# /allocation/previous-final-allocation  (read-only DB lookup)
+# ============================================================================
+
+
+@router.get(
+    "/previous-final-allocation",
+    response_model=PreviousFinalAllocationResponse,
+)
+def get_previous_final_allocation(
+    universe: str,
+    current_year_week: str,
+    repo: StickyHistoryRepository = Depends(get_sticky_history_repo),
+) -> PreviousFinalAllocationResponse:
+    """Return the prior week's Stage 2 final weights for ``universe``.
+
+    Used by paper-only (no broker) markets -- currently India -- to
+    surface the "Going Into This Week" snapshot in the weekly email
+    when there is no live broker portfolio to query. US strategies
+    bypass this endpoint and source the snapshot from
+    ``/alpaca/portfolio`` or ``/ibkr/portfolio`` instead, since live
+    broker state is the more honest source (failed orders surface as
+    missing positions).
+
+    Cold start (no prior row strictly less than ``current_year_week``)
+    returns an empty payload; the caller renders a "(cold start)"
+    label rather than hiding the lookup error.
+    """
+    snapshot = repo.read_previous_final_set(
+        universe=universe,
+        current_year_week=current_year_week,
+    )
+    if snapshot is None:
+        return PreviousFinalAllocationResponse(
+            year_week=None,
+            final_weights_pct={},
+        )
+    return PreviousFinalAllocationResponse(
+        year_week=snapshot.year_week,
+        final_weights_pct=snapshot.final_allocation_by_stock,
     )

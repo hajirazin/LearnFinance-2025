@@ -213,6 +213,18 @@ def _make_double_hrp_activities(
             summary_calls.append({"args": args, "kwargs": kwargs})
         return summary
 
+    @activity.defn(name="get_previous_final_allocation")
+    def mock_get_previous_final_allocation(universe, current_year_week):
+        # India workflow tests don't currently exercise the prior-
+        # allocation block; return a cold-start payload so the email
+        # activity still receives a serialisable PriorAllocation.
+        from models import PreviousFinalAllocationResponse
+
+        return PreviousFinalAllocationResponse(
+            year_week=None,
+            final_weights_pct={},
+        )
+
     @activity.defn(name="send_double_hrp_email")
     def mock_send_email(*args, **kwargs):
         if email_calls is not None:
@@ -225,6 +237,7 @@ def _make_double_hrp_activities(
         mock_select_sticky,
         mock_record_final,
         mock_generate_summary,
+        mock_get_previous_final_allocation,
         mock_send_email,
     ]
 

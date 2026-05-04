@@ -1,0 +1,71 @@
+{# "Going Into This Week" snapshot, shared across all six weekly emails.
+
+   The math is identical in both markets:
+   * ``prior_allocation.weights``  -> what is/was held going into this week
+   * ``target_weights``            -> what this week's allocator wants
+   * ``delta = target - prior``    -> the rebalance leg this week is asking for
+
+   The *source* differs (live broker for US, prior-week DB row for India),
+   but enters the partial as a string label (``source_label``) so the
+   render path is one set of math for both markets -- AGENTS.md rule #2
+   satisfied.
+
+   Includers must pass:
+   * ``prior_allocation`` (PriorAllocation pydantic; ``None`` -> nothing renders)
+   * ``target_weights``    (dict[str, float] in 0..1 fraction form, including CASH)
+#}
+{% if prior_allocation and prior_allocation.weights %}
+<div style="margin-bottom: 24px; padding: 16px; background-color: #fffbeb; border-radius: 8px; border-left: 4px solid #f59e0b;">
+  <h3 style="margin-top: 0; color: #92400e;">Going Into This Week</h3>
+  <p style="margin: 0 0 12px 0; font-size: 13px; color: #78350f;">
+    Source: <strong>{{ prior_allocation.source_label }}</strong>
+    {% if prior_allocation.as_of %} &nbsp;|&nbsp; As-of: <strong>{{ prior_allocation.as_of }}</strong>{% endif %}
+  </p>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+    <thead>
+      <tr style="background-color: #fef3c7;">
+        <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #f59e0b;">Symbol</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #f59e0b;">Prior Weight</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #f59e0b;">This Week's Target</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #f59e0b;">&Delta;</th>
+      </tr>
+    </thead>
+    <tbody>
+      {# Union of prior + target symbols so dropped names show as
+         "->0%" and new names show as "0%->X%". CASH always last. #}
+      {% set _prior = prior_allocation.weights %}
+      {% set _target = target_weights or {} %}
+      {% set _all = (_prior.keys() | list) + (_target.keys() | list) %}
+      {% set _seen = [] %}
+      {% set _ordered = [] %}
+      {% for sym in _all %}{% if sym not in _seen and sym != 'CASH' %}{% set _ = _seen.append(sym) %}{% set _ = _ordered.append(sym) %}{% endif %}{% endfor %}
+      {% for sym in _ordered %}
+      {% set prior_w = _prior.get(sym, 0.0) %}
+      {% set target_w = _target.get(sym, 0.0) %}
+      {% set delta = target_w - prior_w %}
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #fde68a; font-weight: bold;">{{ sym }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #fde68a; text-align: right;">{{ "%.2f" | format(prior_w * 100) }}%</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #fde68a; text-align: right;">{{ "%.2f" | format(target_w * 100) }}%</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #fde68a; text-align: right; color: {{ '#16a34a' if delta > 0 else '#dc2626' if delta < 0 else '#6b7280' }};">
+          {{ "%+.2f" | format(delta * 100) }}%
+        </td>
+      </tr>
+      {% endfor %}
+      {% if 'CASH' in _prior or 'CASH' in _target %}
+      {% set prior_cash = _prior.get('CASH', 0.0) %}
+      {% set target_cash = _target.get('CASH', 0.0) %}
+      {% set delta_cash = target_cash - prior_cash %}
+      <tr style="background-color: #fef3c7;">
+        <td style="padding: 6px 8px; border-top: 2px solid #f59e0b; font-weight: bold;">CASH</td>
+        <td style="padding: 6px 8px; border-top: 2px solid #f59e0b; text-align: right;">{{ "%.2f" | format(prior_cash * 100) }}%</td>
+        <td style="padding: 6px 8px; border-top: 2px solid #f59e0b; text-align: right;">{{ "%.2f" | format(target_cash * 100) }}%</td>
+        <td style="padding: 6px 8px; border-top: 2px solid #f59e0b; text-align: right; color: {{ '#16a34a' if delta_cash > 0 else '#dc2626' if delta_cash < 0 else '#6b7280' }};">
+          {{ "%+.2f" | format(delta_cash * 100) }}%
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

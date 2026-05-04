@@ -12,9 +12,6 @@ the Temporal worker; the workflow-level tests in
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Any
-
 import pytest
 
 from activities import execution as execution_module
@@ -24,8 +21,10 @@ from models import (
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
+    OrderDetail,
     PatchTSTBatchScores,
     PositionModel,
+    PriorAllocation,
     RankBandTopNResponse,
     SkippedAllocation,
     SkippedSubmitResponse,
@@ -33,69 +32,7 @@ from models import (
     WeeklyReportEmailResponse,
     WeeklySummaryResponse,
 )
-
-# ---------------------------------------------------------------------------
-# Fakes
-# ---------------------------------------------------------------------------
-
-
-class _FakeResponse:
-    def __init__(self, json_payload: dict, status: int = 200) -> None:
-        self._payload = json_payload
-        self.status_code = status
-        self.text = str(json_payload)
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
-
-    def json(self) -> dict:
-        return self._payload
-
-
-class _FakeClient:
-    """Records the path + json body of each POST/GET, returns a queued response."""
-
-    def __init__(
-        self,
-        responses: dict[str, dict],
-        statuses: dict[str, int] | None = None,
-    ) -> None:
-        self._responses = responses
-        self._statuses = statuses or {}
-        self.calls: list[dict[str, Any]] = []
-
-    def post(self, path: str, json: dict | None = None) -> _FakeResponse:
-        self.calls.append({"method": "POST", "path": path, "json": json})
-        if path not in self._responses:
-            raise AssertionError(f"Unexpected POST {path}")
-        return _FakeResponse(
-            self._responses[path], status=self._statuses.get(path, 200)
-        )
-
-    def get(self, path: str) -> _FakeResponse:
-        self.calls.append({"method": "GET", "path": path, "json": None})
-        if path not in self._responses:
-            raise AssertionError(f"Unexpected GET {path}")
-        return _FakeResponse(self._responses[path])
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-
-@contextmanager
-def _patch_client(module, fake: _FakeClient):
-    """Swap ``module.get_client`` for one that yields the fake client."""
-    original = module.get_client
-    module.get_client = lambda: fake
-    try:
-        yield fake
-    finally:
-        module.get_client = original
-
+from tests._fake_client import FakeClient, patch_client
 
 # ---------------------------------------------------------------------------
 # C1: score_halal_new_with_patchtst
@@ -123,8 +60,8 @@ class TestScoreHalalNewWithPatchTST:
             "predicted_count": 20,
             "excluded_symbols": [],
         }
-        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
-        with _patch_client(inference_module, fake):
+        fake = FakeClient({"/inference/patchtst/score-batch": fake_response})
+        with patch_client(inference_module, fake):
             result = inference_module.score_halal_new_with_patchtst(
                 symbols=symbols,
                 as_of_date="2026-04-28",
@@ -159,8 +96,8 @@ class TestScoreHalalNewWithPatchTST:
             "predicted_count": 2,
             "excluded_symbols": ["B"],
         }
-        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
-        with _patch_client(inference_module, fake):
+        fake = FakeClient({"/inference/patchtst/score-batch": fake_response})
+        with patch_client(inference_module, fake):
             result = inference_module.score_halal_new_with_patchtst(
                 symbols=["A", "B", "C"],
                 as_of_date="2026-04-28",
@@ -174,7 +111,7 @@ class TestScoreHalalNewWithPatchTST:
         # (non-finite scores or below ``min_predictions`` floor) fail.
         # The activity must surface that as RuntimeError so the
         # workflow's RetryPolicy treats it as terminal.
-        fake = _FakeClient(
+        fake = FakeClient(
             responses={
                 "/inference/patchtst/score-batch": {
                     "detail": (
@@ -185,7 +122,7 @@ class TestScoreHalalNewWithPatchTST:
             statuses={"/inference/patchtst/score-batch": 422},
         )
         with (
-            _patch_client(inference_module, fake),
+            patch_client(inference_module, fake),
             pytest.raises(RuntimeError, match="min_predictions"),
         ):
             inference_module.score_halal_new_with_patchtst(
@@ -208,8 +145,8 @@ class TestScoreHalalIndiaWithPatchTST:
             "predicted_count": 3,
             "excluded_symbols": [],
         }
-        fake = _FakeClient({"/inference/patchtst/score-batch": fake_response})
-        with _patch_client(inference_module, fake):
+        fake = FakeClient({"/inference/patchtst/score-batch": fake_response})
+        with patch_client(inference_module, fake):
             result = inference_module.score_halal_india_with_patchtst(
                 symbols=symbols,
                 as_of_date="2026-04-28",
@@ -247,8 +184,8 @@ class TestSelectRankBandTopN:
             "top_n": 3,
             "hold_threshold": 5,
         }
-        fake = _FakeClient({"/allocation/rank-band-top-n": fake_response})
-        with _patch_client(inference_module, fake):
+        fake = FakeClient({"/allocation/rank-band-top-n": fake_response})
+        with patch_client(inference_module, fake):
             result = inference_module.select_rank_band_top_n(
                 scores={"A": 1.0, "B": 0.5, "C": 0.25},
                 universe="halal_new_alpha",
@@ -310,8 +247,8 @@ class TestGenerateOrdersAlphaHrp:
             },
             "prices_used": {"A": 100.0},
         }
-        fake = _FakeClient({"/orders/generate": fake_response})
-        with _patch_client(execution_module, fake):
+        fake = FakeClient({"/orders/generate": fake_response})
+        with patch_client(execution_module, fake):
             result = execution_module.generate_orders_alpha_hrp(
                 allocation=allocation,
                 portfolio=portfolio,
@@ -336,8 +273,8 @@ class TestGenerateOrdersAlphaHrp:
         skipped = SkippedAllocation(skipped=True, algorithm="alpha_hrp")
         # No HTTP call should happen on the skipped path; pass an empty
         # fake to make any call explode.
-        fake = _FakeClient({})
-        with _patch_client(execution_module, fake):
+        fake = FakeClient({})
+        with patch_client(execution_module, fake):
             result = execution_module.generate_orders_alpha_hrp(
                 allocation=skipped,
                 portfolio=portfolio,
@@ -390,7 +327,7 @@ def _alpha_payload_fixtures():
 class TestGenerateUSAlphaHrpSummary:
     def test_posts_to_alpha_hrp_summary_endpoint_with_top_25_scores(self):
         scores, sticky, stage2 = _alpha_payload_fixtures()
-        fake = _FakeClient(
+        fake = FakeClient(
             {
                 "/llm/us-alpha-hrp-summary": {
                     "summary": {"para_1_market_outlook": "Top names look strong."},
@@ -400,7 +337,7 @@ class TestGenerateUSAlphaHrpSummary:
                 }
             }
         )
-        with _patch_client(reporting_module, fake):
+        with patch_client(reporting_module, fake):
             result = reporting_module.generate_us_alpha_hrp_summary(
                 scores=scores,
                 sticky=sticky,
@@ -441,7 +378,7 @@ class TestSendUSAlphaHrpEmail:
             skipped=False,
             results=[],
         )
-        fake = _FakeClient(
+        fake = FakeClient(
             {
                 "/email/us-alpha-hrp-report": {
                     "is_success": True,
@@ -450,7 +387,7 @@ class TestSendUSAlphaHrpEmail:
                 }
             }
         )
-        with _patch_client(reporting_module, fake):
+        with patch_client(reporting_module, fake):
             result = reporting_module.send_us_alpha_hrp_email(
                 summary=summary,
                 scores=scores,
@@ -484,7 +421,7 @@ class TestSendUSAlphaHrpEmail:
             tokens_used=10,
         )
         order_results = SkippedSubmitResponse(account="hrp", skipped=True)
-        fake = _FakeClient(
+        fake = FakeClient(
             {
                 "/email/us-alpha-hrp-report": {
                     "is_success": True,
@@ -493,7 +430,7 @@ class TestSendUSAlphaHrpEmail:
                 }
             }
         )
-        with _patch_client(reporting_module, fake):
+        with patch_client(reporting_module, fake):
             reporting_module.send_us_alpha_hrp_email(
                 summary=summary,
                 scores=scores,
@@ -513,3 +450,97 @@ class TestSendUSAlphaHrpEmail:
         assert body["skipped"] is True
         assert body["order_results"]["skipped"] is True
         assert body["order_results"]["orders_submitted"] == 0
+
+    def test_threads_order_details_and_prior_allocation_into_payload(self):
+        """``order_details`` + ``prior_allocation`` round-trip into the email body.
+
+        Workflow plumbing test: the activity must serialise both
+        new fields verbatim so the brain_api template renders the
+        per-order detail table and the "Going Into This Week" block.
+        """
+        scores, sticky, stage2 = _alpha_payload_fixtures()
+        summary = WeeklySummaryResponse(
+            summary={"para_1_market_outlook": "x"},
+            provider="openai",
+            model_used="gpt-4o-mini",
+            tokens_used=10,
+        )
+        order_results = SubmitOrdersResponse(
+            account="hrp",
+            orders_submitted=1,
+            orders_failed=0,
+            skipped=False,
+            results=[],
+        )
+        order_details = [
+            OrderDetail(
+                symbol="A",
+                side="buy",
+                qty=10.0,
+                current_price=100.0,
+                trade_value=1000.0,
+                stop_loss_price=94.0,
+                stop_loss_distance_pct=0.06,
+                stop_loss_reason="atr14",
+                client_order_id="paper:2026-04-28:attempt-1:A:buy",
+                submission_status="submitted",
+            ),
+        ]
+        prior_allocation = PriorAllocation(
+            weights={"A": 0.05, "CASH": 0.95},
+            source_label="live Alpaca account: hrp",
+            as_of="2026-04-21",
+        )
+        fake = FakeClient(
+            {
+                "/email/us-alpha-hrp-report": {
+                    "is_success": True,
+                    "subject": "US Alpha-HRP Report",
+                    "body": "<html>x</html>",
+                }
+            }
+        )
+        with patch_client(reporting_module, fake):
+            reporting_module.send_us_alpha_hrp_email(
+                summary=summary,
+                scores=scores,
+                sticky=sticky,
+                stage2=stage2,
+                universe="halal_new",
+                top_n=15,
+                hold_threshold=30,
+                target_week_start="2026-04-27",
+                target_week_end="2026-05-01",
+                as_of_date="2026-04-28",
+                order_results=order_results,
+                skipped=False,
+                order_details=order_details,
+                prior_allocation=prior_allocation,
+            )
+
+        body = fake.calls[0]["json"]
+        assert body["order_results"]["orders"] == [
+            {
+                "symbol": "A",
+                "side": "buy",
+                "qty": 10.0,
+                "current_price": 100.0,
+                "trade_value": 1000.0,
+                "stop_loss_price": 94.0,
+                "stop_loss_distance_pct": 0.06,
+                "stop_loss_reason": "atr14",
+                "client_order_id": "paper:2026-04-28:attempt-1:A:buy",
+                "submission_status": "submitted",
+            }
+        ]
+        assert body["prior_allocation"] == {
+            "weights": {"A": 0.05, "CASH": 0.95},
+            "source_label": "live Alpaca account: hrp",
+            "as_of": "2026-04-21",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Pure-helper tests (build_order_details, build_prior_allocation_*) live in
+# test_email_enrichment.py to keep this file under the 600-line limit.
+# ---------------------------------------------------------------------------

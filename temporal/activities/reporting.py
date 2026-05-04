@@ -10,8 +10,10 @@ from models import (
     HRPAllocationResponse,
     LSTMInferenceResponse,
     NewsSignalResponse,
+    OrderDetail,
     PatchTSTBatchScores,
     PatchTSTInferenceResponse,
+    PriorAllocation,
     RankBandTopNResponse,
     SACInferenceResponse,
     SkippedAllocation,
@@ -43,14 +45,26 @@ def _alloc_to_dict(alloc) -> dict:
     return alloc.model_dump()
 
 
-def _submit_to_dict(submit) -> dict:
-    """Convert submit response to dict."""
+def _submit_to_dict(submit, order_details: list[OrderDetail] | None = None) -> dict:
+    """Convert submit response to dict for the email payload.
+
+    When ``order_details`` is provided (US weekly path), the per-order
+    rows are attached so the email can render its detail table next to
+    the count summary. The list defaults to empty for backwards
+    compatibility with skip-path fixtures and India callers.
+    """
     if isinstance(submit, SkippedSubmitResponse) or getattr(submit, "skipped", False):
-        return {"orders_submitted": 0, "orders_failed": 0, "skipped": True}
+        return {
+            "orders_submitted": 0,
+            "orders_failed": 0,
+            "skipped": True,
+            "orders": [],
+        }
     return {
         "orders_submitted": submit.orders_submitted,
         "orders_failed": submit.orders_failed,
         "skipped": False,
+        "orders": [d.model_dump() for d in (order_details or [])],
     }
 
 
@@ -99,12 +113,19 @@ def send_weekly_email(
     as_of_date: str,
     skipped_algorithms: list[str],
     universe: str,
+    order_details: list[OrderDetail] | None = None,
+    prior_allocation: PriorAllocation | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send the SAC-only weekly report email.
 
     ``universe`` is mandatory (no default) and renders into the email
     subject (``US SAC ({universe}) Weekly Portfolio Analysis ...``)
     so the two A/B reports are distinguishable in the inbox.
+
+    ``order_details`` (per-order table with ATR-based stop-loss) and
+    ``prior_allocation`` (live broker snapshot) are optional so legacy
+    callers / skip-path tests don't have to construct them; both
+    default to ``None`` (table renders empty, prior block hidden).
     """
     logger.info(f"Sending SAC weekly report email (universe={universe})...")
     with get_client() as client:
@@ -113,7 +134,7 @@ def send_weekly_email(
             json={
                 "summary": summary.summary,
                 "order_results": {
-                    "sac": _submit_to_dict(sac_submit),
+                    "sac": _submit_to_dict(sac_submit, order_details),
                 },
                 "skipped_algorithms": skipped_algorithms,
                 "target_week_start": target_week_start,
@@ -123,6 +144,11 @@ def send_weekly_email(
                 "sac": _alloc_to_dict(sac),
                 "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),
+                "prior_allocation": (
+                    prior_allocation.model_dump()
+                    if prior_allocation is not None
+                    else None
+                ),
             },
         )
         response.raise_for_status()
@@ -175,6 +201,7 @@ def send_india_alpha_hrp_email(
     target_week_start: str,
     target_week_end: str,
     as_of_date: str,
+    prior_allocation: PriorAllocation | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send the India Alpha-HRP weekly report email.
 
@@ -182,6 +209,9 @@ def send_india_alpha_hrp_email(
     ``order_results`` / ``skipped`` parameters -- the email template's
     order-execution and skipped-notice blocks render empty via the
     base template's defaults.
+
+    ``prior_allocation`` is sourced from the prior-week DB row
+    (paper-only, so DB == reality) by the workflow.
     """
     logger.info("Sending India Alpha-HRP report email...")
     payload: dict = {
@@ -192,6 +222,9 @@ def send_india_alpha_hrp_email(
         "target_week_start": target_week_start,
         "target_week_end": target_week_end,
         "as_of_date": as_of_date,
+        "prior_allocation": (
+            prior_allocation.model_dump() if prior_allocation is not None else None
+        ),
     }
     with get_client() as client:
         response = client.post(
@@ -262,6 +295,7 @@ def send_double_hrp_email(
     fillers_count: int = 0,
     previous_year_week_used: str | None = None,
     stickiness_threshold_pp: float = 1.0,
+    prior_allocation: PriorAllocation | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send India Double HRP report email (both stages + sticky + AI summary).
 
@@ -269,6 +303,9 @@ def send_double_hrp_email(
     Sticky Selection" block matches the workflow's actual rank churn
     against the prior week. Cold-start defaults render as
     ``"(cold start)"`` in the template.
+
+    ``prior_allocation`` is sourced from the prior-week DB row
+    (paper-only, so DB == reality) by the workflow.
     """
     logger.info("Sending India Double HRP report email...")
     with get_client() as client:
@@ -287,6 +324,11 @@ def send_double_hrp_email(
                 "fillers_count": fillers_count,
                 "previous_year_week_used": previous_year_week_used,
                 "stickiness_threshold_pp": stickiness_threshold_pp,
+                "prior_allocation": (
+                    prior_allocation.model_dump()
+                    if prior_allocation is not None
+                    else None
+                ),
             },
         )
         response.raise_for_status()
@@ -351,6 +393,8 @@ def send_us_double_hrp_email(
     stickiness_threshold_pp: float = 1.0,
     order_results: SubmitOrdersResponse | SkippedSubmitResponse | None = None,
     skipped: bool = False,
+    order_details: list[OrderDetail] | None = None,
+    prior_allocation: PriorAllocation | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send US Double HRP report email.
 
@@ -378,9 +422,12 @@ def send_us_double_hrp_email(
         "previous_year_week_used": previous_year_week_used,
         "stickiness_threshold_pp": stickiness_threshold_pp,
         "skipped": skipped,
+        "prior_allocation": (
+            prior_allocation.model_dump() if prior_allocation is not None else None
+        ),
     }
     if order_results is not None:
-        payload["order_results"] = _submit_to_dict(order_results)
+        payload["order_results"] = _submit_to_dict(order_results, order_details)
     with get_client() as client:
         response = client.post(
             "/email/us-double-hrp-report",
@@ -493,6 +540,8 @@ def send_us_alpha_hrp_email(
     as_of_date: str,
     order_results: SubmitOrdersResponse | SkippedSubmitResponse | None = None,
     skipped: bool = False,
+    order_details: list[OrderDetail] | None = None,
+    prior_allocation: PriorAllocation | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send the US Alpha-HRP weekly report email.
 
@@ -512,9 +561,12 @@ def send_us_alpha_hrp_email(
         "target_week_end": target_week_end,
         "as_of_date": as_of_date,
         "skipped": skipped,
+        "prior_allocation": (
+            prior_allocation.model_dump() if prior_allocation is not None else None
+        ),
     }
     if order_results is not None:
-        payload["order_results"] = _submit_to_dict(order_results)
+        payload["order_results"] = _submit_to_dict(order_results, order_details)
     with get_client() as client:
         response = client.post(
             "/email/us-alpha-hrp-report",

@@ -7,13 +7,33 @@ mock-activity harness.
 
 from __future__ import annotations
 
+import inspect
+
 from temporalio import activity
 
+from activities.reporting import send_us_alpha_hrp_email
 from models import (
     AlpacaPortfolioResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
 )
+
+
+def _bind_args(activity_fn, args, kwargs) -> dict:
+    """Bind positional args + kwargs against the real activity signature.
+
+    Captures the call by parameter name so tests can do
+    ``captured["order_details"]`` instead of ``args[12]``. The activity
+    is wrapped by ``@activity.defn`` so we read the underlying
+    ``__wrapped__`` if present, otherwise fall back to the decorated
+    callable (Temporal preserves the original signature in either
+    case).
+    """
+    target = getattr(activity_fn, "__wrapped__", activity_fn)
+    sig = inspect.signature(target)
+    bound = sig.bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    return dict(bound.arguments)
 
 
 def make_us_alpha_hrp_activities(
@@ -35,6 +55,7 @@ def make_us_alpha_hrp_activities(
     record_final_calls=None,
     submit_calls=None,
     check_order_statuses_fn=None,
+    email_calls=None,
 ):
     """Build mock activity functions for ``USAlphaHRPWorkflow``."""
 
@@ -136,6 +157,8 @@ def make_us_alpha_hrp_activities(
 
     @activity.defn(name="send_us_alpha_hrp_email")
     def mock_send_email(*args, **kwargs):
+        if email_calls is not None:
+            email_calls.append(_bind_args(send_us_alpha_hrp_email, args, kwargs))
         return email
 
     return [
@@ -167,6 +190,7 @@ def make_india_alpha_hrp_activities(
     select_calls=None,
     hrp_calls=None,
     record_final_calls=None,
+    previous_final_allocation=None,
 ):
     """Build mock activity functions for ``IndiaWeeklyAllocationWorkflow``.
 
@@ -247,6 +271,19 @@ def make_india_alpha_hrp_activities(
     def mock_generate_summary(*args, **kwargs):
         return summary
 
+    @activity.defn(name="get_previous_final_allocation")
+    def mock_get_previous_final_allocation(universe, current_year_week):
+        # Default to a cold-start payload so callers that don't care
+        # about the prior allocation block still see a sensible default.
+        if previous_final_allocation is not None:
+            return previous_final_allocation
+        from models import PreviousFinalAllocationResponse
+
+        return PreviousFinalAllocationResponse(
+            year_week=None,
+            final_weights_pct={},
+        )
+
     @activity.defn(name="send_india_alpha_hrp_email")
     def mock_send_email(*args, **kwargs):
         return email
@@ -258,5 +295,6 @@ def make_india_alpha_hrp_activities(
         mock_allocate_hrp,
         mock_record_final,
         mock_generate_summary,
+        mock_get_previous_final_allocation,
         mock_send_email,
     ]

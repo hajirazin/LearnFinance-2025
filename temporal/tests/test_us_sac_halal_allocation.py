@@ -28,9 +28,12 @@ universe is variable size depending on yfinance ETF top-holdings.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from temporalio import activity
 
+from activities.reporting import send_weekly_email as _send_weekly_email_signature
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
@@ -262,7 +265,19 @@ def _make_sac_halal_activities(
 
     @activity.defn(name="send_weekly_email")
     def mock_send_weekly_email(*args, **kwargs) -> WeeklyReportEmailResponse:
-        captured_calls["email_universe"] = args[9] if len(args) > 9 else None
+        # Bind to the real activity signature so test assertions read by
+        # name rather than positional index. New optional kwargs added
+        # later won't shift any indices here.
+        target = getattr(
+            _send_weekly_email_signature, "__wrapped__", _send_weekly_email_signature
+        )
+        bound = inspect.signature(target).bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+        captured_calls["email_universe"] = bound.arguments.get("universe")
+        captured_calls["email_order_details"] = bound.arguments.get("order_details")
+        captured_calls["email_prior_allocation"] = bound.arguments.get(
+            "prior_allocation"
+        )
         return WeeklyReportEmailResponse(
             is_success=True,
             subject=(
@@ -409,6 +424,31 @@ class TestUSSACHalalAllocationHappyPath:
         # Email subject reflects the new universe-tagged form.
         assert "halal" in result["email"]["subject"]
         assert result["email"]["is_success"] is True
+
+        # Per the email-enhancement plan, the per-order detail table
+        # plus the "Going Into This Week" prior-allocation snapshot
+        # must reach send_weekly_email on the halal A/B path too.
+        # Prior allocation is sourced from the live IBKR sac_halal
+        # portfolio (not from the DB).
+        def _attr(obj, name):
+            return obj[name] if isinstance(obj, dict) else getattr(obj, name)
+
+        order_details = captured.get("email_order_details")
+        assert order_details is not None
+        assert len(order_details) >= 1
+        first_detail = order_details[0]
+        assert _attr(first_detail, "symbol")
+        assert _attr(first_detail, "side") in {"buy", "sell"}
+        assert _attr(first_detail, "stop_loss_reason") in {
+            "atr14",
+            "atr_unavailable",
+            "sell_no_stop",
+        }
+
+        prior = captured.get("email_prior_allocation")
+        assert prior is not None
+        assert _attr(prior, "source_label")  # IBKR live-broker label
+        assert isinstance(_attr(prior, "weights"), dict)
 
     @pytest.mark.asyncio
     async def test_halal_skipped_when_open_orders(

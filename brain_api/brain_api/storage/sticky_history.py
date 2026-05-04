@@ -101,7 +101,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from brain_api.storage.base import DEFAULT_DATA_PATH
@@ -212,6 +212,12 @@ class PreviousWeekSnapshot:
     year_week: str
     initial_allocation_by_stock: dict[str, float]
     final_set: set[str]
+    # Stage 2 final weights (in %) keyed by stock. Populated alongside
+    # ``final_set`` from the same SQL row so consumers that want the
+    # "what did we actually hold last week, and at what weight" view
+    # don't need a second round-trip. The two maps share the same
+    # universe of keys: ``set(final_allocation_by_stock) == final_set``.
+    final_allocation_by_stock: dict[str, float] = field(default_factory=dict)
 
 
 class StickyHistoryRepository:
@@ -433,17 +439,20 @@ class StickyHistoryRepository:
 
         initial_by_stock: dict[str, float] = {}
         final_set: set[str] = set()
+        final_by_stock: dict[str, float] = {}
         for r in rows:
             initial = r["initial_allocation_pct"]
             if initial is not None:
                 initial_by_stock[r["stock"]] = initial
             if r["final_allocation_pct"] is not None:
                 final_set.add(r["stock"])
+                final_by_stock[r["stock"]] = r["final_allocation_pct"]
 
         return PreviousWeekSnapshot(
             year_week=prev_yw,
             initial_allocation_by_stock=initial_by_stock,
             final_set=final_set,
+            final_allocation_by_stock=final_by_stock,
         )
 
 

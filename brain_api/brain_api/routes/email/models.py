@@ -25,7 +25,9 @@ __all__ = [
     "IndiaDoubleHRPEmailRequest",
     "IndiaTrainingSummaryEmailRequest",
     "IndiaTrainingSummaryEmailResponse",
+    "OrderDetail",
     "OrderResultsData",
+    "PriorAllocation",
     "SACTrainingSummaryEmailRequest",
     "SACWeeklyReportEmailRequest",
     "TrainingSummaryEmailResponse",
@@ -92,12 +94,67 @@ class TrainingSummaryEmailResponse(BaseModel):
 # =============================================================================
 
 
+class OrderDetail(BaseModel):
+    """A single order row rendered in the per-order email table (US-only).
+
+    Carries everything the email needs to show "what was ordered, at
+    what price, with what stop-loss reference". The stop-loss is
+    display-only (no Alpaca bracket order is submitted) so
+    ``stop_loss_*`` fields are advisory; they exist so the operator
+    has a manual exit reference.
+
+    ``stop_loss_reason`` is one of:
+
+    - ``"atr14"``       -- happy path, ATR(14)-based stop computed
+    - ``"atr_unavailable"`` -- ATR could not be computed (missing
+      OHLC history / fetch failure). Per AGENTS.md rule #1 we surface
+      this verbatim rather than falling back to a flat percent.
+    - ``"sell_no_stop"`` -- this row is a sell; exits don't carry a stop.
+
+    ``submission_status`` reflects the Alpaca/IBKR submission outcome
+    so the operator can see at a glance whether each order actually
+    landed on the broker (``"submitted"``), was rejected
+    (``"failed"``), or was deduped against a prior attempt
+    (``"deduped"``).
+    """
+
+    symbol: str
+    side: str
+    qty: float
+    current_price: float
+    trade_value: float
+    stop_loss_price: float | None = None
+    stop_loss_distance_pct: float | None = None
+    stop_loss_reason: str
+    client_order_id: str
+    submission_status: str
+
+
+class PriorAllocation(BaseModel):
+    """ "Going Into This Week" snapshot rendered in the email.
+
+    For US strategies this is sourced live from the broker
+    (``/alpaca/portfolio`` or ``/ibkr/portfolio``) so failed orders
+    surface as missing positions. For India it is sourced from the
+    prior week's ``final_allocation_pct`` rows in
+    ``stage1_weight_history`` (paper-only -> DB matches reality).
+
+    The shared partial template renders the source label verbatim so
+    the operator knows which one they are looking at.
+    """
+
+    weights: dict[str, float] = {}
+    source_label: str = ""
+    as_of: str | None = None
+
+
 class AlgorithmOrderResult(BaseModel):
     """Order execution result for a single algorithm (from Alpaca)."""
 
     orders_submitted: int
     orders_failed: int
     skipped: bool = False
+    orders: list[OrderDetail] = []
 
 
 class OrderResultsData(BaseModel):
@@ -140,6 +197,10 @@ class SACWeeklyReportEmailRequest(BaseModel):
 
     lstm: LSTMInferenceResponse
     patchtst: PatchTSTInferenceResponse
+
+    # "Going Into This Week" -- live broker snapshot for US (Alpaca for
+    # ``sac``, IBKR for ``sac_halal``). Empty for legacy callers.
+    prior_allocation: PriorAllocation | None = None
 
 
 class WeeklyReportEmailResponse(BaseModel):
@@ -209,6 +270,11 @@ class AlphaHRPEmailRequest(BaseModel):
     target_week_end: str
     as_of_date: str
 
+    # "Going Into This Week" snapshot. Live broker for US, prior-week
+    # ``final_allocation_pct`` from the strategy's sticky partition
+    # for India. Empty by default so legacy callers still validate.
+    prior_allocation: PriorAllocation | None = None
+
 
 class IndiaAlphaHRPEmailRequest(AlphaHRPEmailRequest):
     """Request model for POST /email/india-alpha-hrp-report.
@@ -259,6 +325,11 @@ class DoubleHRPEmailRequest(BaseModel):
     # surfaced so the email template can phrase the sticky rule
     # correctly even if the threshold ever moves.
     stickiness_threshold_pp: float = 1.0
+
+    # "Going Into This Week" snapshot. Live broker for US, prior-week
+    # ``final_allocation_pct`` from the strategy's sticky partition
+    # for India. Empty by default so legacy callers still validate.
+    prior_allocation: PriorAllocation | None = None
 
 
 class IndiaDoubleHRPEmailRequest(DoubleHRPEmailRequest):

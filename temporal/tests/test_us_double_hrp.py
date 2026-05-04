@@ -7,6 +7,7 @@ Covers:
 - Attempt isolation: resolve_next_attempt called with accounts=['dhrp']
 """
 
+import inspect
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -15,6 +16,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from activities.reporting import send_us_double_hrp_email
 from models import (
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
@@ -215,6 +217,7 @@ def _make_us_double_hrp_activities(
     record_final_calls=None,
     submit_calls=None,
     check_order_statuses_fn=None,
+    email_calls=None,
 ):
     """Build mock activity functions for USDoubleHRPWorkflow."""
 
@@ -311,6 +314,13 @@ def _make_us_double_hrp_activities(
 
     @activity.defn(name="send_us_double_hrp_email")
     def mock_send_us_double_hrp_email(*args, **kwargs):
+        if email_calls is not None:
+            target = getattr(
+                send_us_double_hrp_email, "__wrapped__", send_us_double_hrp_email
+            )
+            bound = inspect.signature(target).bind_partial(*args, **kwargs)
+            bound.apply_defaults()
+            email_calls.append(dict(bound.arguments))
         return email
 
     return [
@@ -346,6 +356,7 @@ class TestUSDoubleHRPHappyPath:
         hrp_calls: list[dict] = []
         sticky_calls: list[dict] = []
         record_final_calls: list[dict] = []
+        email_calls: list[dict] = []
 
         activities = _make_us_double_hrp_activities(
             universe_data=universe_data,
@@ -361,6 +372,7 @@ class TestUSDoubleHRPHappyPath:
             hrp_calls=hrp_calls,
             sticky_calls=sticky_calls,
             record_final_calls=record_final_calls,
+            email_calls=email_calls,
         )
 
         async with (
@@ -390,6 +402,25 @@ class TestUSDoubleHRPHappyPath:
         assert result["kept_count"] == 0
         assert result["fillers_count"] == 15
         assert result["email"]["is_success"] is True
+
+        # Assert order_details and prior_allocation reach the email
+        # activity. The harness binds against ``send_us_double_hrp_email``'s
+        # signature so we read by name; new optional kwargs added to
+        # the activity later won't shift any indices here.
+        assert len(email_calls) == 1
+        captured = email_calls[0]
+        order_details = captured["order_details"]
+        prior_allocation = captured["prior_allocation"]
+
+        # Pydantic models may be deserialized as dicts when the mock
+        # uses ``*args``; normalize the lookup either way.
+        def _attr(obj, name):
+            return obj[name] if isinstance(obj, dict) else getattr(obj, name)
+
+        assert isinstance(order_details, list)
+        assert len(order_details) >= 1
+        assert "live Alpaca account: dhrp" in _attr(prior_allocation, "source_label")
+        assert _attr(prior_allocation, "weights"), "prior allocation must not be empty"
 
         assert len(hrp_calls) == 2
         assert hrp_calls[0]["lookback_days"] == 756

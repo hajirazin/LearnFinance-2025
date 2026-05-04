@@ -13,6 +13,7 @@ from models import (
     NewsSignalResponse,
     PatchTSTBatchScores,
     PatchTSTInferenceResponse,
+    PreviousFinalAllocationResponse,
     RankBandTopNResponse,
     RecordFinalWeightsResponse,
     SACInferenceResponse,
@@ -150,6 +151,39 @@ def select_sticky_top_n(
     logger.info(
         f"[Sticky] kept={result.kept_count} fillers={result.fillers_count} "
         f"prev_yw={result.previous_year_week_used}"
+    )
+    return result
+
+
+@activity.defn
+def get_previous_final_allocation(
+    universe: str,
+    current_year_week: str,
+) -> PreviousFinalAllocationResponse:
+    """Return the prior week's Stage 2 final weights for a partition.
+
+    Used by paper-only India workflows to populate the "Going Into
+    This Week" email block when there is no live broker to query.
+    Cold-start (no prior row) returns ``year_week=None`` -- the
+    workflow surfaces it as a "(cold start)" label.
+    """
+    logger.info(
+        f"[Sticky] Reading prior final allocation for {universe}/{current_year_week}"
+    )
+    with get_client() as client:
+        response = client.get(
+            "/allocation/previous-final-allocation",
+            params={
+                "universe": universe,
+                "current_year_week": current_year_week,
+            },
+        )
+        response.raise_for_status()
+    result = PreviousFinalAllocationResponse(**response.json())
+    logger.info(
+        f"[Sticky] Prior final allocation: "
+        f"year_week={result.year_week} "
+        f"stocks={len(result.final_weights_pct)}"
     )
     return result
 

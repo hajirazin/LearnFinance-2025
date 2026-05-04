@@ -39,6 +39,10 @@ from workflows._order_execution import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import (
+        build_order_details,
+        build_prior_allocation_from_portfolio,
+    )
     from activities.execution import generate_orders_dhrp
     from activities.inference import (
         allocate_hrp,
@@ -138,6 +142,14 @@ class USDoubleHRPWorkflow:
                 start_to_close_timeout=ACTIVITY_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
             )
+            # Surface "going into this week" on the skip path too -- the
+            # operator's first instinct will be "what am I currently
+            # holding in the dhrp account that I couldn't rebalance?".
+            skip_prior = build_prior_allocation_from_portfolio(
+                dhrp_portfolio,
+                source_label="live Alpaca account: dhrp",
+                as_of=as_of_date,
+            )
             email = await workflow.execute_activity(
                 send_us_double_hrp_email,
                 args=[
@@ -155,6 +167,8 @@ class USDoubleHRPWorkflow:
                     STICKINESS_THRESHOLD_PP,
                     SkippedSubmitResponse(account="dhrp", skipped=True),
                     True,
+                    [],  # order_details (empty on skip path)
+                    skip_prior,
                 ],
                 start_to_close_timeout=ACTIVITY_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
@@ -252,6 +266,16 @@ class USDoubleHRPWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Build the per-order detail rows (with ATR-based stop-loss) and
+        # the "going into this week" snapshot (live broker state at run
+        # start). Both are pure helpers.
+        order_details = build_order_details(orders, submit)
+        prior_allocation = build_prior_allocation_from_portfolio(
+            dhrp_portfolio,
+            source_label="live Alpaca account: dhrp",
+            as_of=as_of_date,
+        )
+
         # Phase 6: Email report.
         email = await workflow.execute_activity(
             send_us_double_hrp_email,
@@ -270,6 +294,8 @@ class USDoubleHRPWorkflow:
                 STICKINESS_THRESHOLD_PP,
                 submit,
                 False,
+                order_details,
+                prior_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

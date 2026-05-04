@@ -48,3 +48,16 @@ class RankBandTopNResponse(BaseModel):
     year_week: str
     top_n: int
     hold_threshold: int
+
+
+class PreviousFinalAllocationResponse(BaseModel):
+    """Response from GET /allocation/previous-final-allocation.
+
+    Used by paper-only India workflows to populate the email's "Going
+    Into This Week" block from the prior week's Stage 2 final weights.
+    Cold start (no prior row for this partition) returns ``year_week=None``
+    and an empty map.
+    """
+
+    year_week: str | None = None
+    final_weights_pct: dict[str, float] = {}

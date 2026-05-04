@@ -21,6 +21,8 @@ each strategy is free to evolve its own copy/colour scheme. #}
 
   {% block ai_summary %}{% endblock %}
 
+  {% block prior_allocation %}{% endblock %}
+
   {% block sticky %}{% endblock %}
 
   {% block stage1 %}{% endblock %}
@@ -54,6 +56,9 @@ each strategy is free to evolve its own copy/colour scheme. #}
       </tbody>
     </table>
   </div>
+  {% if order_results.orders %}
+    {% include "_us_orders_table.html.j2" %}
+  {% endif %}
   {% endif %}
   {% endblock %}
 

@@ -10,6 +10,7 @@ from models.forecast_email import (
     HRPAllocationResponse,
     LSTMInferenceResponse,
     NewsSignalResponse,
+    OrderDetail,
     OrderHistoryItem,
     OrderModel,
     OrderSubmitResult,
@@ -17,6 +18,7 @@ from models.forecast_email import (
     PatchTSTInferenceResponse,
     PortfolioResponse,
     PositionModel,
+    PriorAllocation,
     SACInferenceResponse,
     SkippedAllocation,
     SkippedOrdersResponse,
@@ -29,6 +31,7 @@ from models.forecast_email import (
 )
 from models.llm import TrainingSummaryResponse
 from models.sticky import (
+    PreviousFinalAllocationResponse,
     RankBandTopNResponse,
     RecordFinalWeightsResponse,
     StickyTopNResponse,
@@ -53,6 +56,7 @@ __all__ = [
     "HRPAllocationResponse",
     "LSTMInferenceResponse",
     "NewsSignalResponse",
+    "OrderDetail",
     "OrderHistoryItem",
     "OrderModel",
     "OrderSummary",
@@ -60,6 +64,7 @@ __all__ = [
     "PatchTSTInferenceResponse",
     "PortfolioResponse",
     "PositionModel",
+    "PriorAllocation",
     "SACInferenceResponse",
     "SkippedAllocation",
     "SkippedOrdersResponse",
@@ -73,5 +78,6 @@ __all__ = [
     "StickyTopNResponse",
     "RecordFinalWeightsResponse",
     "RankBandTopNResponse",
+    "PreviousFinalAllocationResponse",
     "PatchTSTBatchScores",
 ]

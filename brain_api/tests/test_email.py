@@ -907,6 +907,60 @@ class TestSACWeeklyReportEmailEndpoint:
         # Check footer
         assert "LearnFinance-2025" in body
 
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_with_per_order_detail_table(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Detailed order table renders when ``orders`` list is populated."""
+        mock_send_email.return_value = True
+        mock_weekly_report_email_request["order_results"]["sac"]["orders"] = [
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "qty": 12.0,
+                "current_price": 200.0,
+                "trade_value": 2400.0,
+                "stop_loss_price": 188.0,
+                "stop_loss_distance_pct": 0.06,
+                "stop_loss_reason": "atr14",
+                "client_order_id": "paper:2026-02-03:attempt-1:AAPL:buy",
+                "submission_status": "submitted",
+            },
+        ]
+        response = client.post(
+            "/email/sac-weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Order Execution Detail" in body
+        assert "AAPL" in body
+        assert "$188.00" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_weekly_report_with_prior_allocation_block(
+        self,
+        mock_send_email,
+        mock_weekly_report_email_request,
+    ):
+        """Prior allocation block renders the live broker label for US SAC."""
+        mock_send_email.return_value = True
+        mock_weekly_report_email_request["prior_allocation"] = {
+            "weights": {"AAPL": 0.10, "MSFT": 0.08, "CASH": 0.82},
+            "source_label": "live Alpaca account: sac",
+            "as_of": "2026-01-27",
+        }
+        response = client.post(
+            "/email/sac-weekly-report",
+            json=mock_weekly_report_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Going Into This Week" in body
+        assert "live Alpaca account: sac" in body
+
 
 # =============================================================================
 # US Double HRP Report Email Tests
@@ -1215,3 +1269,30 @@ class TestIndiaDoubleHRPReportEmailEndpoint:
             },
         )
         assert response.status_code == 422
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_with_prior_allocation_db_label(
+        self,
+        mock_send_email,
+        mock_india_double_hrp_email_request,
+    ):
+        """India sources prior allocation from DB (paper-only, no broker)."""
+        mock_send_email.return_value = True
+        mock_india_double_hrp_email_request["prior_allocation"] = {
+            "weights": {"S001.NS": 0.07, "S002.NS": 0.06, "CASH": 0.0},
+            "source_label": "recorded last week (202608)",
+            "as_of": "202608",
+        }
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json=mock_india_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        # India never gets an order detail table -- the partial is gated
+        # on ``order_results.orders`` and India never sets order_results.
+        assert "Order Execution Detail" not in body
+        # Prior allocation block IS visible with the DB label.
+        assert "Going Into This Week" in body
+        assert "recorded last week" in body
+        assert "S001.NS" in body

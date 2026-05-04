@@ -41,6 +41,25 @@
     </table>
   </div>
 
+  {# Per-order detail table (shared partial). Renders only when the
+     workflow threaded the actual order list through; legacy callers
+     that only ship counts continue to render just the summary above. #}
+  {% if order_results.sac.orders %}
+    {# Adapt SAC's nested ``order_results.sac.orders`` shape to the
+       partial's contract (it expects ``order_results.orders``).
+       Done with a ``with`` to avoid mutating the outer context. #}
+    {% with order_results=order_results.sac %}
+      {% include "_us_orders_table.html.j2" %}
+    {% endwith %}
+  {% endif %}
+
+  {# "Going Into This Week" snapshot. The partial expects
+     ``target_weights`` in 0..1 fraction form -- SAC's
+     ``sac.target_weights`` already matches that contract. #}
+  {% with target_weights=sac.target_weights %}
+    {% include "_prior_allocation_block.html.j2" %}
+  {% endwith %}
+
   <!-- AI Analysis Section -->
   <div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;">
     <h2 style="margin-top: 0; margin-bottom: 16px;">AI Analysis Summary</h2>

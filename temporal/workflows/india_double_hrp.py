@@ -38,12 +38,17 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import build_prior_allocation_from_db
     from activities.inference import (
         allocate_hrp,
+        get_previous_final_allocation,
         record_final_weights,
         select_sticky_top_n,
     )
-    from activities.reporting import generate_double_hrp_summary, send_double_hrp_email
+    from activities.reporting import (
+        generate_double_hrp_summary,
+        send_double_hrp_email,
+    )
     from activities.training import fetch_nifty_shariah_500_universe
 
 ACTIVITY_TIMEOUT = timedelta(minutes=5)
@@ -165,6 +170,25 @@ class IndiaDoubleHRPWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Read prior week's final weights for the "Going Into This Week"
+        # email block. India is paper-only so the DB row is the truth
+        # (no live broker drift to worry about).
+        prior_final = await workflow.execute_activity(
+            get_previous_final_allocation,
+            args=[SELECT_PARTITION, year_week],
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
+        )
+        prior_allocation = build_prior_allocation_from_db(
+            prior_final.final_weights_pct,
+            source_label=(
+                f"recorded last week ({prior_final.year_week})"
+                if prior_final.year_week
+                else "recorded last week (cold start)"
+            ),
+            as_of=prior_final.year_week,
+        )
+
         # Phase 4: Email report (paper-only -- no order_results / skip).
         email_result = await workflow.execute_activity(
             send_double_hrp_email,
@@ -181,6 +205,7 @@ class IndiaDoubleHRPWorkflow:
                 sticky.fillers_count,
                 sticky.previous_year_week_used,
                 STICKINESS_THRESHOLD_PP,
+                prior_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

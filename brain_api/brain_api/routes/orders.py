@@ -88,6 +88,23 @@ class OrderModel(BaseModel):
         default=None, gt=0, description="Limit price (only for limit orders)"
     )
     time_in_force: str = Field(..., description="Time in force ('day')")
+    # Display-only stop-loss reference. Computed in core/orders.py via
+    # core/stop_loss.compute_stop_loss using ATR(14)*2 clamped to
+    # [5%, 10%] of entry. Sells carry "sell_no_stop"; buys without ATR
+    # carry "atr_unavailable" (no flat-percent fallback per AGENTS.md
+    # rule #1).
+    stop_loss_price: float | None = Field(
+        default=None,
+        description="Stop-loss reference price; None on sells / no ATR",
+    )
+    stop_loss_distance_pct: float | None = Field(
+        default=None,
+        description="Stop distance as a fraction of entry price",
+    )
+    stop_loss_reason: str = Field(
+        default="atr_unavailable",
+        description="'atr14' / 'atr_unavailable' / 'sell_no_stop'",
+    )
 
 
 class OrderSummaryModel(BaseModel):
@@ -122,6 +139,15 @@ class GenerateOrdersResponse(BaseModel):
     prices_used: dict[str, float] = Field(
         ...,
         description="Prices used for calculations (symbol -> price)",
+    )
+    atr_used: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "ATR(14) per symbol (Wilder smoothing). Used by the email "
+            "layer to render a stop-loss reference next to each buy. "
+            "Symbols with insufficient history are absent (no silent "
+            "fallback)."
+        ),
     )
 
 
@@ -277,6 +303,9 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             type=o.order_type,
             limit_price=o.limit_price,
             time_in_force=o.time_in_force,
+            stop_loss_price=o.stop_loss_price,
+            stop_loss_distance_pct=o.stop_loss_distance_pct,
+            stop_loss_reason=o.stop_loss_reason,
         )
         for o in result.orders
     ]
@@ -295,4 +324,5 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         orders=orders,
         summary=summary,
         prices_used=result.prices_used,
+        atr_used=result.atr_used,
     )

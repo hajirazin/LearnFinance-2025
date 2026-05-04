@@ -37,6 +37,10 @@ from workflows._order_execution import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import (
+        build_order_details,
+        build_prior_allocation_from_portfolio,
+    )
     from activities.execution import (
         generate_orders_sac,
         store_experience_sac,
@@ -56,7 +60,10 @@ with workflow.unsafe.imports_passed_through():
         resolve_next_attempt,
         submit_orders_sac,
     )
-    from activities.reporting import generate_summary, send_weekly_email
+    from activities.reporting import (
+        generate_summary,
+        send_weekly_email,
+    )
     from models import SkippedAllocation
 
 INFERENCE_TIMEOUT = timedelta(minutes=20)
@@ -208,6 +215,16 @@ class USWeeklyAllocationWorkflow:
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
+        # Build the per-order detail rows (with ATR-based stop-loss) and
+        # the "going into this week" snapshot (live SAC Alpaca account
+        # state at run start). Pure helpers -- no extra activity round-trip.
+        sac_order_details = build_order_details(sac_orders, sac_submit)
+        sac_prior_allocation = build_prior_allocation_from_portfolio(
+            sac_portfolio,
+            source_label="live Alpaca account: sac",
+            as_of=as_of_date,
+        )
+
         email_result = await workflow.execute_activity(
             send_weekly_email,
             args=[
@@ -221,6 +238,8 @@ class USWeeklyAllocationWorkflow:
                 as_of_date,
                 skipped_algorithms,
                 "halal_filtered",
+                sac_order_details,
+                sac_prior_allocation,
             ],
             start_to_close_timeout=SHORT_TIMEOUT,
         )

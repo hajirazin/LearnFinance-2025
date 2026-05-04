@@ -1,0 +1,68 @@
+{# Per-order detail table, used by all four US weekly emails (SAC
+   halal_filtered, SAC halal, US Alpha-HRP, US Double HRP).
+
+   India never sets ``order_results`` so this partial is rendered
+   inside an ``{% if order_results and order_results.orders %}`` guard
+   in every includer -- there is no ``{% if market == 'us' %}``
+   branching anywhere; presence of the order list is the contract.
+
+   The stop-loss column shows whatever ``stop_loss_reason`` says:
+
+   * ``atr14``           -> the computed price + distance %
+   * ``atr_unavailable`` -> the literal text "n/a (no ATR)" -- per
+     AGENTS.md rule #1 we never substitute a flat percent here.
+   * ``sell_no_stop``    -> em-dash, because exits don't carry stops.
+
+   Trade value is rendered to two decimals; qty to four (matches the
+   fractional-share precision from ``core/orders.py``). #}
+<div style="margin-bottom: 24px;">
+  <h3 style="color: #374151; border-bottom: 2px solid #2563eb; padding-bottom: 8px;">Order Execution Detail</h3>
+  <p style="color: #6b7280; font-size: 13px; margin-top: 0;">
+    Stop-loss is a display-only reference computed via ATR(14) &times; 2 with 5% floor / 10% cap. Sells do not carry a stop.
+  </p>
+  <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px;">
+    <thead>
+      <tr style="background-color: #eff6ff;">
+        <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #2563eb;">Symbol</th>
+        <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #2563eb;">Side</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #2563eb;">Qty</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #2563eb;">Price</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #2563eb;">Trade Value</th>
+        <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #2563eb;">Stop Loss</th>
+        <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #2563eb;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in order_results.orders %}
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">{{ o.symbol }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {{ '#16a34a' if o.side == 'buy' else '#dc2626' }}; font-weight: bold;">{{ o.side | upper }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">{{ "%.4f" | format(o.qty) }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${{ "%.2f" | format(o.current_price) }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${{ "%.2f" | format(o.trade_value) }}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">
+          {% if o.stop_loss_reason == 'atr14' and o.stop_loss_price is not none %}
+            ${{ "%.2f" | format(o.stop_loss_price) }}
+            <span style="color: #6b7280; font-size: 11px;">(-{{ "%.1f" | format(o.stop_loss_distance_pct * 100) }}%)</span>
+          {% elif o.stop_loss_reason == 'sell_no_stop' %}
+            <span style="color: #9ca3af;">&mdash;</span>
+          {% else %}
+            <span style="color: #9ca3af; font-style: italic;">n/a (no ATR)</span>
+          {% endif %}
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">
+          {% if o.submission_status == 'submitted' %}
+            <span style="color: #16a34a;">submitted</span>
+          {% elif o.submission_status == 'failed' %}
+            <span style="color: #dc2626; font-weight: bold;">failed</span>
+          {% elif o.submission_status == 'deduped' %}
+            <span style="color: #6b7280;">deduped</span>
+          {% else %}
+            <span style="color: #6b7280;">{{ o.submission_status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

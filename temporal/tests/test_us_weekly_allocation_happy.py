@@ -99,3 +99,28 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         # actual_weights.
         assert update_execution_calls
         assert update_execution_calls[0]["has_post_trade_portfolio"] is True
+
+        # Per the email-enhancement plan, the per-order detail table
+        # plus the "Going Into This Week" prior-allocation snapshot
+        # must reach send_weekly_email. Both are US-only inputs and
+        # built inside the workflow from generated orders + the live
+        # broker portfolio respectively; if they aren't threaded the
+        # email body silently regresses to the old summary-only form.
+        def _attr(obj, name):
+            return obj[name] if isinstance(obj, dict) else getattr(obj, name)
+
+        assert email_calls[0]["order_details"] is not None
+        assert len(email_calls[0]["order_details"]) >= 1
+        first_detail = email_calls[0]["order_details"][0]
+        assert _attr(first_detail, "symbol")
+        assert _attr(first_detail, "side") in {"buy", "sell"}
+        assert _attr(first_detail, "stop_loss_reason") in {
+            "atr14",
+            "atr_unavailable",
+            "sell_no_stop",
+        }
+
+        prior = email_calls[0]["prior_allocation"]
+        assert prior is not None
+        assert _attr(prior, "source_label")  # US live-broker label, never empty
+        assert isinstance(_attr(prior, "weights"), dict)

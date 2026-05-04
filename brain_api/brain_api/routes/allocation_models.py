@@ -269,3 +269,26 @@ class RankBandTopNResponse(BaseModel):
     year_week: str
     top_n: int
     hold_threshold: int
+
+
+class PreviousFinalAllocationResponse(BaseModel):
+    """Response model for /allocation/previous-final-allocation.
+
+    Returns the prior week's Stage 2 final weights for a given sticky
+    partition, suitable for the email "Going Into This Week" block on
+    paper-only markets (India) where there is no live broker to query.
+
+    ``year_week`` is the actual prior year-week used for the lookup.
+    On cold start (no row strictly less than ``current_year_week``)
+    both fields are empty / ``None`` -- the caller surfaces "(cold
+    start)" in the email rather than hiding the lookup error.
+    """
+
+    year_week: str | None = Field(
+        None,
+        description="Year-week of the snapshot, None on cold start",
+    )
+    final_weights_pct: dict[str, float] = Field(
+        default_factory=dict,
+        description="Stage 2 HRP weights (in %) keyed by symbol",
+    )

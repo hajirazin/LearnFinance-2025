@@ -85,6 +85,10 @@ from workflows._order_execution import (
 )
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import (
+        build_order_details,
+        build_prior_allocation_from_portfolio,
+    )
     from activities.execution import (
         generate_orders_sac,
         store_experience_sac,
@@ -105,7 +109,10 @@ with workflow.unsafe.imports_passed_through():
         resolve_next_attempt,
         submit_orders_ibkr_sac_halal,
     )
-    from activities.reporting import generate_summary, send_weekly_email
+    from activities.reporting import (
+        generate_summary,
+        send_weekly_email,
+    )
     from models import SkippedAllocation
 
 INFERENCE_TIMEOUT = timedelta(minutes=20)
@@ -285,6 +292,17 @@ class USSACHalalAllocationWorkflow:
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
+        # Build per-order detail rows and "going into this week" snapshot.
+        # The IBKR portfolio shape is identical to Alpaca's (broker-agnostic
+        # ``PortfolioResponse``), so the same helpers that serve the
+        # Alpaca-backed workflows work here without a per-broker branch.
+        sac_order_details = build_order_details(sac_orders, sac_submit)
+        sac_prior_allocation = build_prior_allocation_from_portfolio(
+            sac_portfolio,
+            source_label="live IBKR account: sac_halal",
+            as_of=as_of_date,
+        )
+
         email_result = await workflow.execute_activity(
             send_weekly_email,
             args=[
@@ -298,6 +316,8 @@ class USSACHalalAllocationWorkflow:
                 as_of_date,
                 skipped_algorithms,
                 UNIVERSE,
+                sac_order_details,
+                sac_prior_allocation,
             ],
             start_to_close_timeout=SHORT_TIMEOUT,
         )

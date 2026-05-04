@@ -49,8 +49,10 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from activities.email_enrichment import build_prior_allocation_from_db
     from activities.inference import (
         allocate_hrp,
+        get_previous_final_allocation,
         record_final_weights,
         score_halal_india_with_patchtst,
         select_rank_band_top_n,
@@ -188,6 +190,25 @@ class IndiaWeeklyAllocationWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Read prior week's final weights for the "Going Into This Week"
+        # email block. India is paper-only so the DB row is the truth
+        # (no live broker drift to worry about).
+        prior_final = await workflow.execute_activity(
+            get_previous_final_allocation,
+            args=[params.sticky_partition, year_week],
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
+        )
+        prior_allocation = build_prior_allocation_from_db(
+            prior_final.final_weights_pct,
+            source_label=(
+                f"recorded last week ({prior_final.year_week})"
+                if prior_final.year_week
+                else "recorded last week (cold start)"
+            ),
+            as_of=prior_final.year_week,
+        )
+
         # Phase 4: Email report. India does not trade -- no order_results.
         email = await workflow.execute_activity(
             send_india_alpha_hrp_email,
@@ -202,6 +223,7 @@ class IndiaWeeklyAllocationWorkflow:
                 target_week_start,
                 target_week_end,
                 as_of_date,
+                prior_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

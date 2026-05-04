@@ -27,6 +27,7 @@ from activities.inference import (
     get_lstm_forecast,
     get_news_sentiment,
     get_patchtst_forecast,
+    get_previous_final_allocation,
     infer_sac,
     record_final_weights,
     score_halal_india_with_patchtst,
@@ -125,6 +126,7 @@ ALL_ACTIVITIES = [
     score_halal_new_with_patchtst,
     score_halal_india_with_patchtst,
     record_final_weights,
+    get_previous_final_allocation,
     # Portfolio / orders
     get_active_symbols,
     get_sac_portfolio,

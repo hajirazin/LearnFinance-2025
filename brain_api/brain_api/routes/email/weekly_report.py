@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
+from brain_api.routes.allocation import HRPAllocationResponse
+
 from .gmail import GmailConfigError, send_html_email
 from .models import (
     AlphaHRPEmailRequest,
@@ -117,6 +119,18 @@ def _build_subject(
 SubjectFn = Callable[[bool], str]
 
 
+def _hrp_target_weights_fraction(stage2: HRPAllocationResponse) -> dict[str, float]:
+    """Convert HRP ``percentage_weights`` (0..100) to 0..1 fractions.
+
+    The shared ``_prior_allocation_block.html.j2`` partial expects
+    target weights in 0..1 form so the math (``delta = target - prior``)
+    is unit-consistent with the prior allocation map (also 0..1). This
+    helper centralises the conversion so the SAC and HRP code paths
+    don't drift on units.
+    """
+    return {sym: pct / 100.0 for sym, pct in stage2.percentage_weights.items()}
+
+
 def _double_hrp_email_context(request: DoubleHRPEmailRequest) -> dict:
     """Build the Jinja context dict for a Double-HRP email render.
 
@@ -133,6 +147,11 @@ def _double_hrp_email_context(request: DoubleHRPEmailRequest) -> dict:
     order_results = getattr(request, "order_results", None)
     if order_results is not None:
         order_results = order_results.model_dump()
+    prior_allocation = (
+        request.prior_allocation.model_dump()
+        if request.prior_allocation is not None
+        else None
+    )
     return {
         "summary": request.summary,
         "stage1": request.stage1.model_dump(),
@@ -148,6 +167,8 @@ def _double_hrp_email_context(request: DoubleHRPEmailRequest) -> dict:
         "stickiness_threshold_pp": request.stickiness_threshold_pp,
         "order_results": order_results,
         "skipped": getattr(request, "skipped", False),
+        "prior_allocation": prior_allocation,
+        "target_weights": _hrp_target_weights_fraction(request.stage2),
     }
 
 
@@ -167,6 +188,11 @@ def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
     order_results = getattr(request, "order_results", None)
     if order_results is not None:
         order_results = order_results.model_dump()
+    prior_allocation = (
+        request.prior_allocation.model_dump()
+        if request.prior_allocation is not None
+        else None
+    )
     return {
         "summary": request.summary,
         "stage1_top_scores": [item.model_dump() for item in request.stage1_top_scores],
@@ -187,6 +213,8 @@ def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
         "as_of_date": request.as_of_date,
         "order_results": order_results,
         "skipped": getattr(request, "skipped", False),
+        "prior_allocation": prior_allocation,
+        "target_weights": _hrp_target_weights_fraction(request.stage2),
     }
 
 
@@ -209,6 +237,11 @@ def send_sac_weekly_report_email(
     """
     logger.info("Generating SAC weekly report email")
 
+    prior_allocation = (
+        request.prior_allocation.model_dump()
+        if request.prior_allocation is not None
+        else None
+    )
     return _render_and_send_email(
         template_name="sac_weekly_report_email.html.j2",
         context={
@@ -222,6 +255,7 @@ def send_sac_weekly_report_email(
             "sac": request.sac.model_dump(),
             "lstm": request.lstm.model_dump(),
             "patchtst": request.patchtst.model_dump(),
+            "prior_allocation": prior_allocation,
         },
         subject=_build_subject(
             target_week_start=request.target_week_start,

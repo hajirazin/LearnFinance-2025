@@ -6,8 +6,11 @@ record) when invoked, proving the workflow no longer depends on them.
 
 from __future__ import annotations
 
+import inspect
+
 from temporalio import activity
 
+from activities.reporting import send_weekly_email
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
@@ -15,6 +18,14 @@ from models import (
     SkippedSubmitResponse,
     WeeklySummaryResponse,
 )
+
+
+def _bind_email_args(args, kwargs) -> dict:
+    """Bind to ``send_weekly_email``'s signature for assertion-by-name."""
+    target = getattr(send_weekly_email, "__wrapped__", send_weekly_email)
+    bound = inspect.signature(target).bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    return dict(bound.arguments)
 
 
 def make_sac_only_activities(
@@ -166,15 +177,16 @@ def make_sac_only_activities(
     @activity.defn(name="send_weekly_email")
     def mock_send_weekly_email(*args, **kwargs):
         if email_calls is not None:
-            sac = args[3] if len(args) > 3 else None
-            sac_submit = args[4] if len(args) > 4 else None
-            # The trailing positional arg (10th) is `universe`.
-            universe = args[9] if len(args) > 9 else None
+            bound = _bind_email_args(args, kwargs)
             email_calls.append(
                 {
-                    "sac_skipped": _coerce(sac, "skipped") or False,
-                    "sac_submit_skipped": _coerce(sac_submit, "skipped") or False,
-                    "universe": universe,
+                    "sac_skipped": _coerce(bound.get("sac"), "skipped") or False,
+                    "sac_submit_skipped": (
+                        _coerce(bound.get("sac_submit"), "skipped") or False
+                    ),
+                    "universe": bound.get("universe"),
+                    "order_details": bound.get("order_details"),
+                    "prior_allocation": bound.get("prior_allocation"),
                 }
             )
         return email_resp

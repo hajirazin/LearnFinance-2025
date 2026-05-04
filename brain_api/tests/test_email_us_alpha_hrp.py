@@ -144,3 +144,116 @@ class TestUSAlphaHRPReportEmailEndpoint:
             },
         )
         assert response.status_code == 422
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_with_per_order_detail_table(self, mock_send_email, alpha_email_request):
+        """Detailed order table renders when ``orders`` list is populated.
+
+        The plumbing test: brain_api must surface symbol/qty/price/stop
+        for every row the workflow shipped, and never substitute a flat
+        percent when ATR is missing (AGENTS.md rule #1).
+        """
+        mock_send_email.return_value = True
+        alpha_email_request["order_results"] = {
+            "orders_submitted": 2,
+            "orders_failed": 0,
+            "skipped": False,
+            "orders": [
+                {
+                    "symbol": "S001",
+                    "side": "buy",
+                    "qty": 10.5,
+                    "current_price": 100.0,
+                    "trade_value": 1050.0,
+                    "stop_loss_price": 94.0,
+                    "stop_loss_distance_pct": 0.06,
+                    "stop_loss_reason": "atr14",
+                    "client_order_id": "paper:2026-04-27:attempt-1:S001:buy",
+                    "submission_status": "submitted",
+                },
+                {
+                    "symbol": "S002",
+                    "side": "sell",
+                    "qty": 3.0,
+                    "current_price": 50.0,
+                    "trade_value": 150.0,
+                    "stop_loss_price": None,
+                    "stop_loss_distance_pct": None,
+                    "stop_loss_reason": "sell_no_stop",
+                    "client_order_id": "paper:2026-04-27:attempt-1:S002:sell",
+                    "submission_status": "submitted",
+                },
+            ],
+        }
+        response = client.post(
+            "/email/us-alpha-hrp-report",
+            json=alpha_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Order Execution Detail" in body
+        assert "S001" in body
+        assert "S002" in body
+        # Stop-loss price rendered for the buy.
+        assert "$94.00" in body
+        # Sell row: em-dash, NOT a flat percent fallback.
+        assert "sell_no_stop" not in body  # reason string itself isn't shown
+        # Buys with ATR show the distance %.
+        assert "6.0%" in body or "-6.0%" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_atr_unavailable_renders_n_a_not_flat_percent(
+        self, mock_send_email, alpha_email_request
+    ):
+        """Missing ATR shows ``n/a (no ATR)`` instead of a faked stop.
+
+        AGENTS.md rule #1: never silently substitute a flat percent.
+        """
+        mock_send_email.return_value = True
+        alpha_email_request["order_results"] = {
+            "orders_submitted": 1,
+            "orders_failed": 0,
+            "skipped": False,
+            "orders": [
+                {
+                    "symbol": "S099",
+                    "side": "buy",
+                    "qty": 1.0,
+                    "current_price": 100.0,
+                    "trade_value": 100.0,
+                    "stop_loss_price": None,
+                    "stop_loss_distance_pct": None,
+                    "stop_loss_reason": "atr_unavailable",
+                    "client_order_id": "paper:2026-04-27:attempt-1:S099:buy",
+                    "submission_status": "submitted",
+                },
+            ],
+        }
+        response = client.post(
+            "/email/us-alpha-hrp-report",
+            json=alpha_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "n/a (no ATR)" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_with_prior_allocation_block(self, mock_send_email, alpha_email_request):
+        """ "Going Into This Week" block renders with the source label."""
+        mock_send_email.return_value = True
+        alpha_email_request["prior_allocation"] = {
+            "weights": {"S001": 0.10, "S002": 0.05, "CASH": 0.85},
+            "source_label": "live Alpaca account: hrp",
+            "as_of": "2026-04-21",
+        }
+        response = client.post(
+            "/email/us-alpha-hrp-report",
+            json=alpha_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Going Into This Week" in body
+        assert "live Alpaca account: hrp" in body
+        # Symbols from the prior snapshot show up in the delta table.
+        assert "S001" in body
+        assert "CASH" in body

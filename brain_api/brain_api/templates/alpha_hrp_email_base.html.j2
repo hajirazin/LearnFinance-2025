@@ -101,6 +101,17 @@ universe-agnostic. #}
   </div>
 {% endblock %}
 
+{# ---- "Going Into This Week" snapshot (prior allocation).
+
+       Source label is parameterised so the same partial renders both
+       a live-broker label for US ("live Alpaca account: hrp") and a
+       DB label for India ("recorded last week"). Math is shared
+       across markets per AGENTS.md rule #2 (the weight delta is the
+       same operation regardless of source). #}
+{% block prior_allocation %}
+  {% include "_prior_allocation_block.html.j2" %}
+{% endblock %}
+
 {# ---- Sticky selection (kept/fillers/evicted/prev-week) ---- #}
 {% block sticky %}
   <div style="margin-bottom: 24px; padding: 16px; background-color: {{ self.sticky_primary_bg() }}; border-radius: 8px; border-left: 4px solid {{ self.sticky_primary() }};">
