@@ -77,8 +77,21 @@ services:
       # vs Monday 20:30 SGT trade slot = ~31 hours = ~30 retry attempts.
       TWOFA_EXIT_INTERVAL: "3600"
       TIME_ZONE: Asia/Singapore
+      # Auto-approve incoming API connections from brain_api (default
+      # 'manual' would pop a GUI dialog that nobody can click in
+      # headless mode).
+      TWS_ACCEPT_INCOMING: accept
+      # Force write-enabled API so /ibkr/submit-orders works even if a
+      # prior session toggled the read-only checkbox in jts.ini.
+      READ_ONLY_API: "no"
+      # Suppress the API "Precautions" warning dialogs that would
+      # otherwise block automated order submission until acknowledged.
+      BYPASS_WARNING: "yes"
+      # Pin 2FA to IBKR Mobile so IBC does not stall on a 'select 2FA
+      # device' prompt during first login or weekend reauth.
+      TWOFA_DEVICE: "IBKR Mobile"
       # Credentials must be provided via .env (see brain_api/.env.example).
-      # IB_USERNAME / IB_PASSWORD are the gnzsnz image's documented vars.
+      # TWS_USERID / TWS_PASSWORD are the gnzsnz image's documented vars.
     env_file:
       - ./brain_api/.env
     healthcheck:
