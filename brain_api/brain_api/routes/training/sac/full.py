@@ -94,6 +94,44 @@ def train_sac_endpoint(
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
+    # Symbol-equality short-circuit: if the bucket's current promoted
+    # model was trained on the exact same symbol set, skip retraining
+    # and return the current model's metadata. Sits before the
+    # version-equality short-circuit (lines below) because it is the
+    # broader gate -- it fires even when the data window has moved
+    # forward, as long as the slate is unchanged. Per AGENTS.md rule
+    # #1, an HF outage under hf_first surfaces as 503 rather than a
+    # silent retrain so the operator notices HF is down.
+    try:
+        prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
+    except StoragePolicyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"SAC full: prior metadata fetch failed for bucket "
+                f"{bucket.bucket_name!r}: {exc}. Refusing to retrain "
+                f"silently; check HF reachability or STORAGE_BACKEND."
+            ),
+        ) from exc
+
+    if (
+        not request.force
+        and prior_metadata is not None
+        and set(prior_metadata.get("symbols", [])) == set(symbols)
+    ):
+        logger.info(
+            f"[SAC] Symbol-equality short-circuit: bucket={bucket.bucket_name} "
+            f"current version={prior_metadata['version']} symbols match resolved "
+            f"slate ({len(symbols)} stocks); returning current metadata "
+            f"(set force=True to bypass)."
+        )
+        return SACTrainResponse(
+            **build_common_train_response_kwargs(
+                prior_metadata["version"], prior_metadata
+            ),
+            symbols_used=prior_metadata["symbols"],
+        )
+
     # Build a per-bucket SAC config: ``n_stocks`` and
     # ``target_entropy`` are rewritten to match the resolved slate.
     # For halal_filtered (validator pins to 15) this returns a config

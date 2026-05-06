@@ -996,6 +996,139 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
+    def test_full_training_force_false_short_circuits_when_symbols_match(
+        self, temp_storage, monkeypatch
+    ):
+        """force=False short-circuits when current symbol set matches.
+
+        Proves the new symbol-equality short-circuit fires (and not the
+        existing version-equality one). After the first run, we patch
+        ``resolve_training_window`` to a clearly different end_date so
+        the recomputed deterministic version would differ from the
+        stored v1; the only way the second POST can return 200 with
+        ``version == v1`` is via the new symbol-equality branch.
+        """
+        from datetime import date as dt_date
+
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        _patch_sac_full_training_internals(monkeypatch)
+
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+
+        client = TestClient(app)
+
+        try:
+            r1 = client.post("/train/sac/full")
+            assert r1.status_code == 202
+
+            v1 = temp_storage.read_current_version()
+            assert v1 is not None, "First training run should have promoted v1"
+
+            monkeypatch.setattr(
+                sac_full_route,
+                "resolve_training_window",
+                lambda: (dt_date(2015, 1, 2), dt_date(2025, 12, 26)),
+            )
+
+            r2 = client.post("/train/sac/full")
+            assert r2.status_code == 200
+            data = r2.json()
+            assert data["version"] == v1, (
+                f"Expected current version {v1!r} (proves symbol-equality "
+                f"short-circuit fired), got {data['version']!r}"
+            )
+            assert set(data["symbols_used"]) == set(mock_symbols())
+            assert data["promoted"] is True
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_force_true_bypasses_short_circuit_when_symbols_match(
+        self, temp_storage, monkeypatch
+    ):
+        """force=True bypasses the new short-circuit and re-enters training.
+
+        Same setup as the force=False test, but with ``{"force": true}``
+        on the second POST. Because the patched window also produces a
+        new deterministic version that doesn't yet exist on disk, the
+        existing version-equality short-circuit also misses, so the
+        endpoint creates a new background job and returns 202.
+        """
+        from datetime import date as dt_date
+
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        _patch_sac_full_training_internals(monkeypatch)
+
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+
+        client = TestClient(app)
+
+        try:
+            r1 = client.post("/train/sac/full")
+            assert r1.status_code == 202
+
+            v1 = temp_storage.read_current_version()
+            assert v1 is not None
+
+            monkeypatch.setattr(
+                sac_full_route,
+                "resolve_training_window",
+                lambda: (dt_date(2015, 1, 2), dt_date(2025, 12, 26)),
+            )
+
+            r2 = client.post("/train/sac/full", json={"force": True})
+            assert r2.status_code == 202, (
+                f"Expected 202 (force=True bypasses symbol-equality and "
+                f"new window produces a fresh version), got {r2.status_code}"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_force_false_proceeds_when_symbols_differ(
+        self, temp_storage, monkeypatch
+    ):
+        """force=False with a different slate -> training proceeds.
+
+        Trains once with ``mock_symbols`` (5 names), then swaps the
+        bucket resolver to a disjoint 5-name slate. The new
+        symbol-equality short-circuit must NOT fire (set difference),
+        so training restarts and the endpoint returns 202.
+        """
+        _patch_sac_full_training_internals(monkeypatch)
+
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+
+        client = TestClient(app)
+
+        try:
+            r1 = client.post("/train/sac/full")
+            assert r1.status_code == 202
+
+            v1 = temp_storage.read_current_version()
+            assert v1 is not None
+
+            def _different_symbols() -> list[str]:
+                return ["NVDA", "TSLA", "ADBE", "INTC", "ORCL"]
+
+            assert set(_different_symbols()).isdisjoint(set(mock_symbols())), (
+                "Test precondition: replacement slate must be disjoint "
+                "from mock_symbols so symbol-equality cannot fire."
+            )
+
+            _override_sac_bucket(monkeypatch, temp_storage, _different_symbols)
+
+            r2 = client.post("/train/sac/full")
+            assert r2.status_code == 202, (
+                f"Expected 202 (different symbols -> short-circuit misses, "
+                f"training restarts), got {r2.status_code}"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
 
 # ============================================================================
 # Experience endpoint tests

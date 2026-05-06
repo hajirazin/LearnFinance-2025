@@ -48,3 +48,12 @@ class SACTrainRequest(BaseModel):
             "comparison; each writes to its own bucket."
         ),
     )
+    force: bool = Field(
+        default=False,
+        description=(
+            "When False (default), if the bucket's current model was trained "
+            "on the exact same symbol set, return 200 with the current "
+            "model's metadata instead of starting a new training job. "
+            "Set True to bypass this short-circuit and force retraining."
+        ),
+    )
