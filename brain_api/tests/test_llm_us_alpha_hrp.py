@@ -81,7 +81,7 @@ class TestUSAlphaHRPSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(llm_summary_payload),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=420,
             ),
         )
@@ -95,7 +95,7 @@ class TestUSAlphaHRPSummaryEndpoint:
             data = response.json()
             assert "para_1_market_outlook" in data["summary"]
             assert data["provider"] == "openai"
-            assert data["model_used"] == "gpt-4o-mini"
+            assert data["model_used"] == "gpt-5-mini"
             assert data["tokens_used"] == 420
         finally:
             app.dependency_overrides.clear()
@@ -131,7 +131,7 @@ class TestUSAlphaHRPSummaryEndpoint:
         provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
-                content="not json", model="gpt-4o-mini", tokens_used=50
+                content="not json", model="gpt-5-mini", tokens_used=50
             ),
         )
         app.dependency_overrides[get_llm_provider] = lambda: provider
@@ -173,7 +173,7 @@ class TestUSAlphaHRPSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(llm_summary_payload),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=120,
             ),
         )

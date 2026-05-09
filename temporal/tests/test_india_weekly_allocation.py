@@ -110,7 +110,7 @@ def india_summary_resp():
     return WeeklySummaryResponse(
         summary={"para_1_market_outlook": "Top NSE names look strong."},
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=350,
     )
 

@@ -65,7 +65,7 @@ class OpenAIProvider(LLMProvider):
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
 
-        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-5-mini")
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client = OpenAI(api_key=self.api_key)

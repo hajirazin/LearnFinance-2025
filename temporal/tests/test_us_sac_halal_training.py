@@ -72,7 +72,7 @@ def mock_summary():
     return TrainingSummaryResponse(
         summary={"para_1_overall": "SAC (halal) trained successfully."},
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=180,
     )
 

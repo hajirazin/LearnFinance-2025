@@ -80,7 +80,7 @@ class TrainingSummaryResponse(BaseModel):
 
     summary: dict[str, str]  # Paragraph fields from LLM
     provider: str  # "openai" or "ollama"
-    model_used: str  # e.g., "gpt-4o-mini" or "llama3.2"
+    model_used: str  # e.g., "gpt-5-mini" or "llama3.2"
     tokens_used: int | None  # Total tokens (None for OLLAMA)
 
 
@@ -119,7 +119,7 @@ class WeeklySummaryResponse(BaseModel):
 
     summary: dict[str, str]  # 8 paragraph fields from LLM
     provider: str  # "openai" or "ollama"
-    model_used: str  # e.g., "gpt-4o-mini" or "llama3.2"
+    model_used: str  # e.g., "gpt-5-mini" or "llama3.2"
     tokens_used: int | None  # Total tokens (None for OLLAMA)
 
 

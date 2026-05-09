@@ -230,7 +230,7 @@ def summary_resp():
     return WeeklySummaryResponse(
         summary={"para_1_market_outlook": "Top names look strong."},
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=350,
     )
 
@@ -412,7 +412,7 @@ def sac_summary_resp():
     return WeeklySummaryResponse(
         summary={"overview": "Weekly analysis."},
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=500,
     )
 

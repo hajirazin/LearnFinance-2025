@@ -185,7 +185,7 @@ def summary_resp():
     return WeeklySummaryResponse(
         summary={"para_1_screening_overview": "Sticky retention 0/15 fillers."},
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=350,
     )
 

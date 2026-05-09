@@ -258,7 +258,7 @@ class TestForecastersTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_forecasters_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=500,
             ),
         )
@@ -272,7 +272,7 @@ class TestForecastersTrainingSummaryEndpoint:
             data = response.json()
             assert "summary" in data
             assert data["provider"] == "openai"
-            assert data["model_used"] == "gpt-4o-mini"
+            assert data["model_used"] == "gpt-5-mini"
             assert data["tokens_used"] == 500
             assert "para_1_overall" in data["summary"]
             assert "para_2_lstm" in data["summary"]
@@ -334,7 +334,7 @@ class TestForecastersTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content="This is not valid JSON",
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=100,
             ),
         )
@@ -406,7 +406,7 @@ class TestForecastersTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps({"para_1_overall": "ok"}),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=10,
             ),
         )
@@ -446,7 +446,7 @@ class TestSACTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_sac_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -490,7 +490,7 @@ class TestSACTrainingSummaryEndpoint:
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
-                content="not json", model="gpt-4o-mini", tokens_used=42
+                content="not json", model="gpt-5-mini", tokens_used=42
             ),
         )
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider
@@ -543,7 +543,7 @@ class TestSACTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_sac_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -583,7 +583,7 @@ class TestSACTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_sac_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -617,7 +617,7 @@ class TestSACTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_sac_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -654,7 +654,7 @@ class TestSACTrainingSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_sac_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -703,7 +703,7 @@ class TestForecastersTrainingSummaryGuardrails:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_forecasters_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -740,7 +740,7 @@ class TestForecastersTrainingSummaryGuardrails:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_forecasters_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=300,
             ),
         )
@@ -946,7 +946,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_india_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=350,
             ),
         )
@@ -963,7 +963,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
             data = response.json()
             assert "summary" in data
             assert data["provider"] == "openai"
-            assert data["model_used"] == "gpt-4o-mini"
+            assert data["model_used"] == "gpt-5-mini"
             assert data["tokens_used"] == 350
             assert "para_1_market_outlook" in data["summary"]
             assert "para_2_selection_rationale" in data["summary"]
@@ -1006,7 +1006,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content="This is not valid JSON at all",
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=100,
             ),
         )
@@ -1090,7 +1090,7 @@ class TestSACWeeklySummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_weekly_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=800,
             ),
         )
@@ -1107,7 +1107,7 @@ class TestSACWeeklySummaryEndpoint:
             data = response.json()
             assert "summary" in data
             assert data["provider"] == "openai"
-            assert data["model_used"] == "gpt-4o-mini"
+            assert data["model_used"] == "gpt-5-mini"
             assert data["tokens_used"] == 800
             assert "para_1_overall_summary" in data["summary"]
         finally:
@@ -1146,7 +1146,7 @@ class TestSACWeeklySummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content="This is not valid JSON at all",
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=100,
             ),
         )
@@ -1203,7 +1203,7 @@ class TestSACWeeklySummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_weekly_llm_json_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=400,
             ),
         )
@@ -1279,7 +1279,7 @@ class TestUSDoubleHRPSummaryEndpoint:
             name="openai",
             response=LLMResponse(
                 content=json.dumps(mock_us_double_hrp_llm_response),
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 tokens_used=400,
             ),
         )
@@ -1294,7 +1294,7 @@ class TestUSDoubleHRPSummaryEndpoint:
             assert "para_1_screening_overview" in data["summary"]
             assert "para_2_selection_rationale" in data["summary"]
             assert data["provider"] == "openai"
-            assert data["model_used"] == "gpt-4o-mini"
+            assert data["model_used"] == "gpt-5-mini"
             assert data["tokens_used"] == 400
         finally:
             app.dependency_overrides.clear()
@@ -1329,7 +1329,7 @@ class TestUSDoubleHRPSummaryEndpoint:
         mock_provider = MockLLMProvider(
             name="openai",
             response=LLMResponse(
-                content="not json", model="gpt-4o-mini", tokens_used=50
+                content="not json", model="gpt-5-mini", tokens_used=50
             ),
         )
         app.dependency_overrides[get_llm_provider] = lambda: mock_provider

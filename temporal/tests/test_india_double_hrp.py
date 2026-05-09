@@ -123,7 +123,7 @@ def mock_summary():
             "para_1_screening_overview": "Stage 1 distributed weights across 20 stocks."
         },
         provider="openai",
-        model_used="gpt-4o-mini",
+        model_used="gpt-5-mini",
         tokens_used=400,
     )
 

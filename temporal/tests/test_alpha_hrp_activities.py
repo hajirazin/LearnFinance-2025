@@ -332,7 +332,7 @@ class TestGenerateUSAlphaHrpSummary:
                 "/llm/us-alpha-hrp-summary": {
                     "summary": {"para_1_market_outlook": "Top names look strong."},
                     "provider": "openai",
-                    "model_used": "gpt-4o-mini",
+                    "model_used": "gpt-5-mini",
                     "tokens_used": 400,
                 }
             }
@@ -368,7 +368,7 @@ class TestSendUSAlphaHrpEmail:
         summary = WeeklySummaryResponse(
             summary={"para_1_market_outlook": "x"},
             provider="openai",
-            model_used="gpt-4o-mini",
+            model_used="gpt-5-mini",
             tokens_used=10,
         )
         order_results = SubmitOrdersResponse(
@@ -417,7 +417,7 @@ class TestSendUSAlphaHrpEmail:
         summary = WeeklySummaryResponse(
             summary={"para_1_market_outlook": "x"},
             provider="openai",
-            model_used="gpt-4o-mini",
+            model_used="gpt-5-mini",
             tokens_used=10,
         )
         order_results = SkippedSubmitResponse(account="hrp", skipped=True)
@@ -462,7 +462,7 @@ class TestSendUSAlphaHrpEmail:
         summary = WeeklySummaryResponse(
             summary={"para_1_market_outlook": "x"},
             provider="openai",
-            model_used="gpt-4o-mini",
+            model_used="gpt-5-mini",
             tokens_used=10,
         )
         order_results = SubmitOrdersResponse(

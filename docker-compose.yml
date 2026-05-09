@@ -65,7 +65,6 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      TRADING_MODE: paper
       # Soft restart cycles the JVM in-place; keeps the 2FA-blessed
       # session token alive so no daily push fires.
       AUTO_RESTART_TIME: "11:59 PM"

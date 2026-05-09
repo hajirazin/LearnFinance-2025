@@ -273,7 +273,7 @@ def _make_sac_halal_activities(
         return WeeklySummaryResponse(
             summary={"overview": "halal A/B summary"},
             provider="openai",
-            model_used="gpt-4o-mini",
+            model_used="gpt-5-mini",
             tokens_used=400,
         )
 
