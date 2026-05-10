@@ -82,14 +82,26 @@ def _filter_prices_by_cutoff(
     identical for both (filter by the DatetimeIndex), so keeping one
     copy is safe per AGENTS.md rule #2 (provably-identical filter).
 
+    yfinance returns a tz-aware DatetimeIndex (``America/New_York``)
+    while the backfill cutoff is a naive ``date``. Comparing them
+    directly raises pandas' ``Invalid comparison between
+    dtype=datetime64[ns, America/New_York] and Timestamp``. Localize
+    the cutoff to each symbol's index tz before comparing -- mirrors
+    the canonical pattern at
+    :mod:`brain_api.core.lstm.inference` lines 89-91.
+
     Symbols that have no rows after filtering are dropped.
     """
     cutoff_ts = pd.Timestamp(cutoff_date)
-    return {
-        symbol: df[df.index <= cutoff_ts].copy()
-        for symbol, df in prices.items()
-        if len(df[df.index <= cutoff_ts]) > 0
-    }
+    out: dict[str, pd.DataFrame] = {}
+    for symbol, df in prices.items():
+        symbol_cutoff = cutoff_ts
+        if df.index.tz is not None and symbol_cutoff.tz is None:
+            symbol_cutoff = symbol_cutoff.tz_localize(df.index.tz)
+        filtered = df[df.index <= symbol_cutoff]
+        if len(filtered) > 0:
+            out[symbol] = filtered.copy()
+    return out
 
 
 def _filter_signals_by_cutoff(
@@ -112,11 +124,21 @@ def _filter_signals_by_cutoff(
             continue
 
         if isinstance(df.index, pd.DatetimeIndex):
-            filtered = df[df.index <= cutoff_ts]
+            symbol_cutoff = cutoff_ts
+            if df.index.tz is not None and symbol_cutoff.tz is None:
+                symbol_cutoff = symbol_cutoff.tz_localize(df.index.tz)
+            filtered = df[df.index <= symbol_cutoff]
         else:
             try:
                 idx = pd.to_datetime(df.index)
-                mask = idx <= cutoff_ts
+                symbol_cutoff = cutoff_ts
+                if (
+                    isinstance(idx, pd.DatetimeIndex)
+                    and idx.tz is not None
+                    and symbol_cutoff.tz is None
+                ):
+                    symbol_cutoff = symbol_cutoff.tz_localize(idx.tz)
+                mask = idx <= symbol_cutoff
                 filtered = df[mask]
             except (ValueError, TypeError):
                 filtered = df

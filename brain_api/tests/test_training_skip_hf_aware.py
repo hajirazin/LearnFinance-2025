@@ -583,7 +583,7 @@ def test_patchtst_us_hf_main_present_with_missing_snapshots_returns_202(monkeypa
 #
 # These rows exercise the inventory scan's policy-aware branch. The
 # scan itself is covered in detail in
-# ``tests/test_forecaster_snapshots.py`` (TestCountMissingSnapshots),
+# ``tests/test_forecaster_snapshots_inventory.py`` (TestCountMissingSnapshots),
 # so here we only stub ``count_missing_snapshots`` at the route to
 # focus on how the route reacts to its result. This avoids the cost
 # of constructing a fake HF Hub client just to verify the route's

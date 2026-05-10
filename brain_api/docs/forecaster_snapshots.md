@@ -312,7 +312,10 @@ No additional env vars needed. Snapshots use existing model repos:
 | `brain_api/storage/forecaster_snapshots/local.py` | Local + HF snapshot storage |
 | `brain_api/core/portfolio_rl/walkforward.py` | Walk-forward forecast generation |
 | `brain_api/routes/training.py` | Training endpoints with integrated snapshots |
-| `tests/test_forecaster_snapshots.py` | Tests for snapshots |
+| `tests/test_forecaster_snapshots_storage.py` | Tests: storage class, metadata, folder naming, PatchTST buckets |
+| `tests/test_forecaster_snapshots_walkforward.py` | Tests: walk-forward forecasts + inference helpers |
+| `tests/test_forecaster_snapshots_backfill.py` | Tests: backfill loops + tz-aware cutoff filter + policy threading |
+| `tests/test_forecaster_snapshots_inventory.py` | Tests: ``_resolve_check_hf`` truth table + ``count_missing_snapshots`` |
 
 ---
 
@@ -322,7 +325,10 @@ Run snapshot-specific tests:
 
 ```bash
 cd brain_api
-uv run pytest tests/test_forecaster_snapshots.py -v
+uv run pytest tests/test_forecaster_snapshots_storage.py \
+              tests/test_forecaster_snapshots_walkforward.py \
+              tests/test_forecaster_snapshots_backfill.py \
+              tests/test_forecaster_snapshots_inventory.py -v
 ```
 
 All snapshot tests should pass.

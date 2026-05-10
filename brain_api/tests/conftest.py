@@ -142,7 +142,7 @@ def isolate_external_universe_calls(monkeypatch):
     """Block real network access for every universe builder.
 
     Three pre-existing tests (``test_storage_policy.py::TestEnsureSnapshotForBucketContract::*``
-    and ``test_forecaster_snapshots.py::TestWalkForwardForecasts::test_build_forecast_features_raises_on_missing_snapshots``)
+    and ``test_forecaster_snapshots_walkforward.py::TestWalkForwardForecasts::test_build_forecast_features_raises_on_missing_snapshots``)
     transitively invoke ``ensure_snapshot_for_bucket`` ->
     ``lstm_walkforward_expectation_bundle`` ->
     ``halal_new_lstm_resolver_symbols`` ->
