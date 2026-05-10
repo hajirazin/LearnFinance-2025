@@ -5,8 +5,6 @@ import logging
 import time
 from datetime import date
 
-import pandas as pd
-import torch
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -14,12 +12,13 @@ from pydantic import BaseModel, Field
 from brain_api.core.config import (
     resolve_training_window,
 )
+from brain_api.core.forecaster_snapshot_identity import (
+    MissingSnapshotInventory,
+    count_missing_snapshots,
+)
 from brain_api.core.lstm import (
     LSTMConfig,
-    build_dataset,
     compute_version,
-    load_prices_yfinance,
-    train_model_pytorch,
 )
 from brain_api.core.model_buckets import (
     ModelType,
@@ -30,10 +29,8 @@ from brain_api.core.training_utils import (
     TrainingCancelledError,
     evaluate_forecaster_artifact_health,
 )
-from brain_api.core.version import compute_model_hash
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
-    create_snapshot_metadata,
 )
 from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
 from brain_api.storage.metadata import create_training_metadata
@@ -61,6 +58,10 @@ from .job_registry import (
     update_progress,
 )
 from .models import LSTMTrainResponse, TrainingJobResponse
+from .snapshot_phase import (
+    _LSTMMainTrainingArtifacts,
+    _run_lstm_snapshot_phase,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -150,9 +151,21 @@ def train_lstm(
         bucket=bucket, version=version, local_storage=storage
     )
     if existing_metadata:
-        logger.info(f"[LSTM] Version {version} already exists (idempotent)")
-        return LSTMTrainResponse(
-            **build_common_train_response_kwargs(version, existing_metadata),
+        # Main version is cached. Don't skip outright -- check whether
+        # any forecaster snapshot is missing (per AGENTS.md plan: "if
+        # main exists, then start checking snapshots, if any are
+        # missing, do those"). The scan is policy-aware
+        # (``count_missing_snapshots`` consults HF via _resolve_check_hf)
+        # so the decision matches the storage backend the operator chose.
+        return _handle_lstm_existing_metadata(
+            background_tasks=background_tasks,
+            bucket=bucket,
+            symbols=symbols,
+            config=config,
+            train_window=(start_date, end_date),
+            version=version,
+            existing_metadata=existing_metadata,
+            skip_snapshot=skip_snapshot,
         )
 
     job, is_new = get_or_create_job("lstm", version)
@@ -187,6 +200,111 @@ def train_lstm(
             job_id=job.job_id,
             status="pending",
             message=f"LSTM training started for {version}",
+        ).model_dump(),
+    )
+
+
+def _handle_lstm_existing_metadata(
+    *,
+    background_tasks: BackgroundTasks,
+    bucket,
+    symbols: list[str],
+    config: LSTMConfig,
+    train_window: tuple[date, date],
+    version: str,
+    existing_metadata: dict,
+    skip_snapshot: bool,
+) -> LSTMTrainResponse | JSONResponse:
+    """Branch the cached-main response on the snapshot inventory.
+
+    Three outcomes:
+
+    * ``inventory.is_empty`` (or ``skip_snapshot=True``): return 200
+      with the cached metadata. Backwards-compatible fast path.
+    * Some snapshots missing: schedule the snapshots-only background
+      runner under a dedicated job key (``{bucket}_snapshots``) so it
+      cannot collide with a real main-training job for the same
+      ``version``. Return 202 with the new ``job_id``.
+    * ``StoragePolicyError`` raised by ``count_missing_snapshots`` (i.e.
+      ``hf_first`` + the snapshot bucket has no HF repo configured):
+      surface as 503. Same shape as the inference layer's transient
+      config error contract.
+    """
+    cached_response_kwargs = build_common_train_response_kwargs(
+        version, existing_metadata
+    )
+
+    if skip_snapshot:
+        # Operator explicitly opted out of snapshot bookkeeping. Return
+        # cached without scanning -- preserves the legacy contract used
+        # by the existing idempotent-rerun tests that pass
+        # ``?skip_snapshot=true``.
+        logger.info(
+            f"[LSTM] Version {version} already exists (idempotent, skip_snapshot=true)"
+        )
+        return LSTMTrainResponse(**cached_response_kwargs)
+
+    snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
+    try:
+        inventory: MissingSnapshotInventory = count_missing_snapshots(
+            forecaster_type=bucket.bucket_name,
+            train_window=train_window,
+            symbols=symbols,
+            config_dict=config.to_dict(),
+            snapshot_storage=snapshot_storage,
+        )
+    except StoragePolicyError as exc:
+        logger.error(f"[LSTM] Snapshot inventory scan failed for {version}: {exc}")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if inventory.is_empty:
+        logger.info(
+            f"[LSTM] Version {version} already exists and all snapshots "
+            f"present (idempotent)"
+        )
+        return LSTMTrainResponse(**cached_response_kwargs)
+
+    snapshots_job_key = f"{bucket.bucket_name}_snapshots"
+    job, is_new = get_or_create_job(snapshots_job_key, version)
+    if not is_new:
+        logger.info(
+            f"[LSTM] Snapshots-only job {job.job_id} already in progress for {version}"
+        )
+        return JSONResponse(
+            status_code=202,
+            content=TrainingJobResponse(
+                job_id=job.job_id,
+                status=job.status,
+                message=(
+                    f"LSTM snapshots-only backfill already in progress for {version}"
+                ),
+            ).model_dump(),
+        )
+
+    background_tasks.add_task(
+        _run_lstm_snapshots_only,
+        job_id=job.job_id,
+        symbols=symbols,
+        config=config,
+        bucket=bucket,
+        train_window=train_window,
+        version=version,
+        existing_metadata=existing_metadata,
+    )
+    logger.info(
+        f"[LSTM] Snapshots-only backfill started: {job.job_id} "
+        f"({inventory.total_missing} cutoff(s) missing)"
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content=TrainingJobResponse(
+            job_id=job.job_id,
+            status="pending",
+            message=(
+                f"LSTM snapshots-only backfill started for {version} "
+                f"({inventory.total_missing} cutoff(s) missing)"
+            ),
         ).model_dump(),
     )
 
@@ -381,57 +499,18 @@ def _run_lstm_training(
         if not skip_snapshot:
             update_progress(job_id, {"phase": "snapshots"})
             snapshot_storage = SnapshotLocalStorage(bucket_name)
-            snapshot_hf_repo = snapshot_storage._get_hf_repo()
-            check_hf = snapshot_hf_repo is not None
-
-            end_snap_digest = compute_model_hash(
-                snapshot_storage.forecaster_type,
-                start_date,
-                end_date,
-                symbols,
-                config.to_dict(),
-            )
-
-            if not snapshot_storage.snapshot_exists_anywhere(
-                end_date,
-                end_snap_digest,
-                check_hf=check_hf,
-            ):
-                snapshot_metadata = create_snapshot_metadata(
-                    forecaster_type=snapshot_storage.forecaster_type,
-                    cutoff_date=end_date,
-                    data_window_start=start_date.isoformat(),
-                    data_window_end=end_date.isoformat(),
-                    symbols=available_symbols,
-                    config=config,
-                    train_loss=result.train_loss,
-                    val_loss=result.val_loss,
-                    config_symbols_hash=end_snap_digest,
-                )
-                snapshot_storage.write_snapshot(
-                    cutoff_date=end_date,
-                    snapshot_digest=end_snap_digest,
+            _run_lstm_snapshot_phase(
+                train_window=(start_date, end_date),
+                symbols=symbols,
+                config=config,
+                snapshot_storage=snapshot_storage,
+                main_artifacts=_LSTMMainTrainingArtifacts(
                     model=result.model,
                     feature_scaler=result.feature_scaler,
-                    config=config,
-                    metadata=snapshot_metadata,
-                )
-                logger.info(f"[LSTM] Saved snapshot for cutoff {end_date}")
-
-                if snapshot_hf_repo:
-                    try:
-                        snapshot_storage.upload_snapshot_to_hf(
-                            end_date, end_snap_digest
-                        )
-                        logger.info(
-                            f"[LSTM] Uploaded snapshot {end_date} to HuggingFace"
-                        )
-                    except Exception as e:
-                        logger.error(f"[LSTM] Failed to upload snapshot to HF: {e}")
-
-            logger.info("[LSTM] Backfilling historical snapshots...")
-            _backfill_lstm_snapshots(
-                symbols, config, start_date, end_date, snapshot_storage
+                    train_loss=result.train_loss,
+                    val_loss=result.val_loss,
+                    available_symbols=available_symbols,
+                ),
             )
 
         response = LSTMTrainResponse(
@@ -460,178 +539,52 @@ def _run_lstm_training(
         logger.error(f"[LSTM] Job {job_id} failed: {e}")
 
 
-def _filter_prices_by_cutoff(
-    prices: dict[str, pd.DataFrame],
-    cutoff_date: date,
-) -> dict[str, pd.DataFrame]:
-    """Filter price DataFrames to include only data up to cutoff_date.
-
-    Args:
-        prices: Dict mapping symbol -> DataFrame with DatetimeIndex
-        cutoff_date: Include data up to and including this date
-
-    Returns:
-        Filtered dict with same structure, excluding symbols with no data after filtering
-    """
-    cutoff_ts = pd.Timestamp(cutoff_date)
-    return {
-        symbol: df[df.index <= cutoff_ts].copy()
-        for symbol, df in prices.items()
-        if len(df[df.index <= cutoff_ts]) > 0
-    }
-
-
-def _backfill_lstm_snapshots(
+def _run_lstm_snapshots_only(
+    *,
+    job_id: str,
     symbols: list[str],
     config: LSTMConfig,
-    start_date: date,
-    end_date: date,
-    snapshot_storage: SnapshotLocalStorage,
+    bucket,
+    train_window: tuple[date, date],
+    version: str,
+    existing_metadata: dict,
 ) -> None:
-    """Backfill LSTM snapshots for all years that RL walk-forward training needs.
+    """Background task that runs only the snapshot phase.
 
-    RL training covering years start_year..end_year needs snapshot-(Y-1)-12-31
-    for each year Y.  The earliest snapshot is (start_year-1)-12-31.  To train
-    that snapshot we need ``bootstrap_years`` of price history before its cutoff,
-    so the price window is extended back to (start_year - 1 - bootstrap_years).
+    Used by the cached-main path in :func:`_handle_lstm_existing_metadata`
+    when at least one snapshot is missing. Skips the entire main
+    training pipeline (price load, dataset build, model train,
+    artifact write, promotion check, HF upload of main) and goes
+    straight to the snapshot phase with ``main_artifacts=None`` so
+    the end-of-window snapshot is warned-and-skipped if missing while
+    historical year-end snapshots are backfilled by
+    :func:`_backfill_lstm_snapshots`.
 
-    Optimization: Loads prices ONCE for the extended window and filters
-    incrementally by cutoff instead of re-downloading for each snapshot.
-
-    Snapshot uploads are now gated solely on whether the bucket has an
-    HF repo configured (``snapshot_storage._get_hf_repo()``) rather
-    than on a process-wide policy. This keeps writes consistent
-    between ``local_first`` and ``hf_first`` callers and closes audit
-    Bug 7.
-
-    Args:
-        symbols: List of stock symbols
-        config: LSTM configuration
-        start_date: RL training data start date (from resolve_training_window)
-        end_date: Training data end date
-        snapshot_storage: Storage instance
+    On ``StoragePolicyError`` (``hf_first`` + no HF repo) the job is
+    marked failed with the policy error message; the route handler
+    already mapped that case to 503 synchronously, but a transient
+    HF outage between the synchronous scan and the background run is
+    still possible.
     """
-    start_year = start_date.year
-    end_year = end_date.year
-    bootstrap_years = 4
-    snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = snapshot_hf_repo is not None
-
-    # RL year Y needs snapshot-(Y-1)-12-31.  Create from (start_year-1) onward.
-    first_snapshot_year = start_year - 1
-    snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
-
-    snapshots_needed = []
-    for year in range(first_snapshot_year, end_year):
-        cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_model_hash(
-            snapshot_storage.forecaster_type,
-            snapshot_data_start,
-            cutoff_date,
-            symbols,
-            config.to_dict(),
-        )
-        if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date,
-            backfill_digest,
-            check_hf=check_hf,
-        ):
-            snapshots_needed.append(cutoff_date)
-
-    if not snapshots_needed:
-        logger.info("[LSTM Backfill] All snapshots already exist, nothing to do")
-        return
-
-    logger.info(
-        f"[LSTM Backfill] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
-    )
-
-    # Load prices ONCE for extended window (covers bootstrap for earliest snapshot)
-    logger.info(
-        f"[LSTM Backfill] Loading prices from {snapshot_data_start} to {end_date}..."
-    )
-    t0 = time.time()
-    prices_full = load_prices_yfinance(symbols, snapshot_data_start, end_date)
-    t_prices = time.time() - t0
-    logger.info(
-        f"[LSTM Backfill] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
-    )
-
-    if len(prices_full) == 0:
-        logger.warning("[LSTM Backfill] No price data loaded, cannot create snapshots")
-        return
-
-    # Train each snapshot using filtered prices
-    for cutoff_date in snapshots_needed:
-        logger.info(f"[LSTM Backfill] Training snapshot for cutoff {cutoff_date}")
-        t0 = time.time()
-
-        # Filter prices to cutoff (no re-download!)
-        prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
-        if len(prices) == 0:
-            logger.warning(
-                f"[LSTM Backfill] No price data for cutoff {cutoff_date}, skipping"
-            )
-            continue
-
-        dataset = build_dataset(prices, config)
-        if len(dataset.X) == 0:
-            logger.warning(
-                f"[LSTM Backfill] Empty dataset for cutoff {cutoff_date}, skipping"
-            )
-            continue
-
-        result = train_model_pytorch(
-            dataset.X, dataset.y, dataset.feature_scaler, config
-        )
-
-        backfill_digest = compute_model_hash(
-            snapshot_storage.forecaster_type,
-            snapshot_data_start,
-            cutoff_date,
-            symbols,
-            config.to_dict(),
-        )
-
-        metadata = create_snapshot_metadata(
-            forecaster_type=snapshot_storage.forecaster_type,
-            cutoff_date=cutoff_date,
-            data_window_start=snapshot_data_start.isoformat(),
-            data_window_end=cutoff_date.isoformat(),
-            symbols=list(prices.keys()),
+    try:
+        update_progress(job_id, {"phase": "snapshots_only_backfill"})
+        snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
+        _run_lstm_snapshot_phase(
+            train_window=train_window,
+            symbols=symbols,
             config=config,
-            train_loss=result.train_loss,
-            val_loss=result.val_loss,
-            config_symbols_hash=backfill_digest,
+            snapshot_storage=snapshot_storage,
+            main_artifacts=None,
+            log_prefix="[LSTM Snapshots-only]",
         )
-
-        snapshot_storage.write_snapshot(
-            cutoff_date=cutoff_date,
-            snapshot_digest=backfill_digest,
-            model=result.model,
-            feature_scaler=result.feature_scaler,
-            config=config,
-            metadata=metadata,
+        response = LSTMTrainResponse(
+            **build_common_train_response_kwargs(version, existing_metadata),
         )
-        logger.info(
-            f"[LSTM Backfill] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
-        )
-
-        # Upload to HuggingFace whenever the bucket's HF repo env is
-        # configured (writes ignore the read policy).
-        if snapshot_hf_repo:
-            try:
-                snapshot_storage.upload_snapshot_to_hf(cutoff_date, backfill_digest)
-                logger.info(
-                    f"[LSTM Backfill] Uploaded snapshot {cutoff_date} to HuggingFace"
-                )
-            except Exception as e:
-                logger.error(f"[LSTM Backfill] Failed to upload snapshot to HF: {e}")
-
-        # Memory cleanup after each snapshot to prevent accumulation
-        del dataset, result, prices, metadata
-        gc.collect()
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
-        elif torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        complete_job(job_id, response.model_dump())
+        logger.info(f"[LSTM Snapshots-only] Job {job_id} completed successfully")
+    except StoragePolicyError as exc:
+        fail_job(job_id, str(exc))
+        logger.error(f"[LSTM Snapshots-only] Job {job_id} failed (policy): {exc}")
+    except Exception as e:
+        fail_job(job_id, str(e))
+        logger.error(f"[LSTM Snapshots-only] Job {job_id} failed: {e}")

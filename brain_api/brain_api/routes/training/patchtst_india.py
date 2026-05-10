@@ -27,7 +27,6 @@ from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import compute_version as patchtst_compute_version
 from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 from brain_api.storage.policy import (
-    build_common_train_response_kwargs,
     try_load_existing_train_metadata,
 )
 
@@ -42,7 +41,7 @@ from .dependencies import (
 )
 from .job_registry import get_or_create_job
 from .models import PatchTSTTrainResponse, TrainingJobResponse
-from .patchtst import _run_patchtst_training
+from .patchtst import _run_patchtst_training, handle_patchtst_existing_metadata
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -122,11 +121,16 @@ def train_patchtst_india(
         bucket=bucket, version=version, local_storage=storage
     )
     if existing_metadata:
-        logger.info(f"[PatchTST India] Version {version} already exists (idempotent)")
-        return PatchTSTTrainResponse(
-            **build_common_train_response_kwargs(version, existing_metadata),
-            num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
+        return handle_patchtst_existing_metadata(
+            background_tasks=background_tasks,
+            bucket=bucket,
+            symbols=symbols,
+            config=config,
+            train_window=(start_date, end_date),
+            version=version,
+            existing_metadata=existing_metadata,
+            skip_snapshot=skip_snapshot,
+            log_prefix="[PatchTST India]",
         )
 
     job, is_new = get_or_create_job("patchtst_india", version)

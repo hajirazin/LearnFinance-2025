@@ -361,3 +361,325 @@ def test_sac_finetune_endpoint_hf_cold_start_short_circuits_via_helper(monkeypat
             assert data["symbols_used"] == [f"S{i}" for i in range(15)]
         finally:
             app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# HF-aware skip x snapshot inventory interaction matrix
+#
+# These tests pin the new contract: even when
+# ``try_load_existing_train_metadata`` says "main is cached", the
+# forecaster routes still consult the snapshot inventory before
+# returning 200. The four rows below cover the cross product of
+#
+#   (HF main hits) x (snapshot inventory empty | non-empty | unable-to-scan)
+#
+# for both forecaster families. SAC routes do not have a snapshot
+# inventory and stay covered by the existing 200-cached tests above.
+# ---------------------------------------------------------------------------
+
+
+def _bind_lstm_bucket(monkeypatch, tmpdir, *, symbols=None):
+    """Helper: rebind the LSTM halal_new bucket to a tmpdir storage."""
+    from brain_api.core import model_buckets
+    from brain_api.storage.lstm.local import LSTMHalalNewModelStorage
+
+    storage = LSTMHalalNewModelStorage(base_path=tmpdir)
+    original = get_bucket(ModelType.LSTM, "halal_new")
+    patched = replace(
+        original,
+        local_storage_class=lambda: storage,
+        symbols_resolver=lambda: list(symbols or ["AAPL", "MSFT"]),
+    )
+    monkeypatch.setitem(
+        model_buckets._BUCKETS,
+        (ModelType.LSTM, "halal_new"),
+        patched,
+    )
+    return storage
+
+
+def test_lstm_hf_main_present_with_missing_snapshots_returns_202(monkeypatch):
+    """HF says main exists but the snapshot inventory finds work to do
+    (no snapshots on disk and no HF repo configured for snapshots);
+    the route must enqueue a snapshots-only job rather than return
+    200 cached.
+
+    The snapshot phase background task is replaced with a no-op spy
+    so the test never invokes the real ``load_prices_yfinance`` /
+    ``train_model_pytorch`` pair. The route's scheduling contract --
+    which is what this test pins -- only depends on the inventory
+    scan and the registry key shape, not on the actual training.
+    """
+    from brain_api.routes.training import (
+        get_dataset_builder,
+        get_price_loader,
+        get_trainer,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _bind_lstm_bucket(monkeypatch, tmpdir)
+
+        # Tripwires: the cached-main path must not reach the main
+        # trainer DI chain at all.
+        def _fail_if_called(*_a, **_kw):
+            raise AssertionError(
+                "Main trainer must not run when snapshots-only path is taken"
+            )
+
+        app.dependency_overrides[get_price_loader] = lambda: _fail_if_called
+        app.dependency_overrides[get_dataset_builder] = lambda: _fail_if_called
+        app.dependency_overrides[get_trainer] = lambda: _fail_if_called
+
+        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+        try:
+            with (
+                patch(
+                    "brain_api.routes.training.lstm.try_load_existing_train_metadata",
+                    return_value=_FAKE_METADATA,
+                ),
+                # CRITICAL: stub the snapshot phase. The scheduled
+                # background task runs synchronously after TestClient
+                # returns; without this, it would call real
+                # ``load_prices_yfinance`` / ``train_model_pytorch``.
+                patch(
+                    "brain_api.routes.training.lstm._run_lstm_snapshot_phase",
+                    return_value=None,
+                ) as snapshot_phase_spy,
+            ):
+                client = TestClient(app)
+                # No ?skip_snapshot=true -- exercise the new branching.
+                response = client.post("/train/lstm", json={})
+
+            assert response.status_code == 202, response.text
+            body = response.json()
+            assert body["job_id"].startswith("lstm_halal_new_snapshots:")
+            # Snapshot phase ran exactly once with main_artifacts=None
+            # (the cached-main contract: no end-window recreation).
+            assert snapshot_phase_spy.call_count == 1
+            kwargs = snapshot_phase_spy.call_args.kwargs
+            assert kwargs["main_artifacts"] is None
+            assert kwargs["log_prefix"] == "[LSTM Snapshots-only]"
+        finally:
+            app.dependency_overrides.clear()
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+def test_lstm_hf_main_present_with_hf_first_no_repo_returns_503(monkeypatch):
+    """Operator chose ``hf_first`` but the LSTM bucket has no HF repo
+    configured (the conftest clears the bucket-keyed HF env vars).
+    The synchronous inventory scan must surface ``StoragePolicyError``
+    as a 503 -- per AGENTS.md rule #1 (no silent fallback to local).
+
+    No background task is enqueued in this branch, so no snapshot
+    phase mock is needed; the synchronous inventory scan itself
+    raises before any ``add_task`` call.
+    """
+    from brain_api.storage.policy import StoragePolicy
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _bind_lstm_bucket(monkeypatch, tmpdir)
+
+        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+        monkeypatch.setattr(
+            "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
+            lambda: StoragePolicy.HF_FIRST,
+        )
+
+        try:
+            with patch(
+                "brain_api.routes.training.lstm.try_load_existing_train_metadata",
+                return_value=_FAKE_METADATA,
+            ):
+                client = TestClient(app)
+                response = client.post("/train/lstm", json={})
+
+            assert response.status_code == 503, response.text
+            assert "hf_first" in response.text
+        finally:
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+def test_patchtst_us_hf_main_present_with_missing_snapshots_returns_202(monkeypatch):
+    """PatchTST US: same contract as the LSTM test above. HF main hits
+    but snapshots are missing -> 202 + snapshots-only job key.
+
+    Stubs the PatchTST snapshot phase so the background task does NOT
+    invoke the real ``patchtst_load_prices`` / ``patchtst_train_model``
+    pair (which would download yfinance data + train a real Transformer).
+    """
+    from brain_api.core import model_buckets
+    from brain_api.core.patchtst import PatchTSTConfig
+    from brain_api.routes.training.dependencies import (
+        get_patchtst_config,
+        get_patchtst_dataset_builder,
+        get_patchtst_price_loader,
+        get_patchtst_trainer,
+    )
+    from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        storage = PatchTSTHalalNewModelStorage(base_path=tmpdir)
+        original = get_bucket(ModelType.PATCHTST, "halal_new")
+        patched = replace(
+            original,
+            local_storage_class=lambda: storage,
+            symbols_resolver=lambda: ["AAPL", "MSFT"],
+        )
+        monkeypatch.setitem(
+            model_buckets._BUCKETS, (ModelType.PATCHTST, "halal_new"), patched
+        )
+
+        app.dependency_overrides[get_patchtst_config] = lambda: PatchTSTConfig()
+
+        def _fail_if_called(*_a, **_kw):
+            raise AssertionError(
+                "Main trainer must not run when snapshots-only path is taken"
+            )
+
+        app.dependency_overrides[get_patchtst_price_loader] = lambda: _fail_if_called
+        app.dependency_overrides[get_patchtst_dataset_builder] = lambda: _fail_if_called
+        app.dependency_overrides[get_patchtst_trainer] = lambda: _fail_if_called
+
+        try:
+            with (
+                patch(
+                    "brain_api.routes.training.patchtst.try_load_existing_train_metadata",
+                    return_value=_FAKE_METADATA,
+                ),
+                # Stub the snapshot phase -- see the LSTM sibling test
+                # above for why this is critical.
+                patch(
+                    "brain_api.routes.training.patchtst._run_patchtst_snapshot_phase",
+                    return_value=None,
+                ) as snapshot_phase_spy,
+            ):
+                client = TestClient(app)
+                response = client.post("/train/patchtst", json={})
+
+            assert response.status_code == 202, response.text
+            body = response.json()
+            assert body["job_id"].startswith("patchtst_halal_new_snapshots:")
+            assert snapshot_phase_spy.call_count == 1
+            assert snapshot_phase_spy.call_args.kwargs["main_artifacts"] is None
+            # US route's log_prefix is "[PatchTST]" -> snapshots-only
+            # variant becomes "[PatchTST] Snapshots-only" (the route
+            # appends, the runner forwards verbatim).
+            assert (
+                snapshot_phase_spy.call_args.kwargs["log_prefix"]
+                == "[PatchTST] Snapshots-only"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# HF-aware "all snapshots present" / "one HF snapshot missing" matrix.
+#
+# These rows exercise the inventory scan's policy-aware branch. The
+# scan itself is covered in detail in
+# ``tests/test_forecaster_snapshots.py`` (TestCountMissingSnapshots),
+# so here we only stub ``count_missing_snapshots`` at the route to
+# focus on how the route reacts to its result. This avoids the cost
+# of constructing a fake HF Hub client just to verify the route's
+# 200 vs 202 branching, which is exactly what these tests pin.
+# ---------------------------------------------------------------------------
+
+
+def test_lstm_hf_main_present_with_all_snapshots_present_returns_200(monkeypatch):
+    """HF (or local) reports every cutoff present -> 200 cached, no
+    snapshots-only job created. Pins that the inventory scan's
+    ``is_empty`` branch wins over the snapshot-job branch."""
+    from brain_api.core.forecaster_snapshot_identity import (
+        MissingSnapshotInventory,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _bind_lstm_bucket(monkeypatch, tmpdir)
+
+        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+        empty_inventory = MissingSnapshotInventory(
+            end_window_cutoff=None, historical_cutoffs=()
+        )
+
+        try:
+            with (
+                patch(
+                    "brain_api.routes.training.lstm.try_load_existing_train_metadata",
+                    return_value=_FAKE_METADATA,
+                ),
+                patch(
+                    "brain_api.routes.training.lstm.count_missing_snapshots",
+                    return_value=empty_inventory,
+                ),
+                patch(
+                    "brain_api.routes.training.lstm._run_lstm_snapshot_phase",
+                    return_value=None,
+                ) as snapshot_phase_spy,
+            ):
+                client = TestClient(app)
+                response = client.post("/train/lstm", json={})
+
+            assert response.status_code == 200, response.text
+            data = response.json()
+            assert data["promoted"] is True
+            # Critical: no background snapshots-only job ran.
+            assert snapshot_phase_spy.call_count == 0
+        finally:
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+
+
+def test_lstm_hf_main_present_with_one_hf_snapshot_missing_returns_202(monkeypatch):
+    """HF reports exactly one historical snapshot missing -> 202 with
+    a snapshots-only job whose message reflects ``1 cutoff(s) missing``."""
+    from datetime import date
+
+    from brain_api.core.forecaster_snapshot_identity import (
+        MissingSnapshotInventory,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _bind_lstm_bucket(monkeypatch, tmpdir)
+
+        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
+        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
+
+        partial_inventory = MissingSnapshotInventory(
+            end_window_cutoff=None,
+            historical_cutoffs=(date(2022, 12, 31),),
+        )
+
+        try:
+            with (
+                patch(
+                    "brain_api.routes.training.lstm.try_load_existing_train_metadata",
+                    return_value=_FAKE_METADATA,
+                ),
+                patch(
+                    "brain_api.routes.training.lstm.count_missing_snapshots",
+                    return_value=partial_inventory,
+                ),
+                patch(
+                    "brain_api.routes.training.lstm._run_lstm_snapshot_phase",
+                    return_value=None,
+                ) as snapshot_phase_spy,
+            ):
+                client = TestClient(app)
+                response = client.post("/train/lstm", json={})
+
+            assert response.status_code == 202, response.text
+            body = response.json()
+            assert body["job_id"].startswith("lstm_halal_new_snapshots:")
+            assert "1 cutoff(s) missing" in body["message"]
+            assert snapshot_phase_spy.call_count == 1
+        finally:
+            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
+            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)

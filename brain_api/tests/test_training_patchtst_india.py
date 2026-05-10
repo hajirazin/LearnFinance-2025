@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
-import brain_api.routes.training.patchtst as patchtst_route
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
@@ -125,25 +124,26 @@ def _override_india_patchtst_bucket(
 def _patch_india_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the heavy compute helpers used by ``_backfill_patchtst_snapshots``.
 
-    The India training endpoint delegates to ``_run_patchtst_training``
-    imported from :mod:`brain_api.routes.training.patchtst`, so its
-    backfill loop reads the same module-level names as the US route.
-    Patching them once on ``patchtst_route`` covers both endpoints
-    (per AGENTS.md rule: mock side effects, never skip them).
+    Backfill mechanics now live in
+    :mod:`brain_api.routes.training.snapshot_phase`, shared between
+    US and India PatchTST. Patching there covers both endpoints in
+    one place.
     """
-    monkeypatch.setattr(patchtst_route, "patchtst_load_prices", _mock_price_loader)
+    from brain_api.routes.training import snapshot_phase
+
+    monkeypatch.setattr(snapshot_phase, "patchtst_load_prices", _mock_price_loader)
     monkeypatch.setattr(
-        patchtst_route, "align_multivariate_data", lambda prices, config: prices
+        snapshot_phase, "align_multivariate_data", lambda prices, config: prices
     )
     monkeypatch.setattr(
-        patchtst_route,
+        snapshot_phase,
         "patchtst_build_dataset",
         lambda aligned_features, prices, config: _mock_dataset_builder(
             aligned_features, prices, config
         ),
     )
     monkeypatch.setattr(
-        patchtst_route,
+        snapshot_phase,
         "patchtst_train_model",
         lambda X, y, feature_scaler, config, shutdown_event=None: _mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
@@ -432,3 +432,138 @@ def test_train_patchtst_india_skip_snapshot_false_writes_snapshots(
         "Backfill must populate historical India snapshots in addition to "
         f"the end-date one. Got only: {[s.isoformat() for s in snapshots]}"
     )
+
+
+# ============================================================================
+# Snapshot-backfill-on-cached-main branching for the India endpoint
+# (delegates to ``handle_patchtst_existing_metadata`` shared with US)
+# ============================================================================
+
+
+def _wait_for_terminal_status(
+    client: TestClient, job_id: str, max_attempts: int = 5
+) -> dict:
+    for _ in range(max_attempts):
+        resp = client.get(f"/train/status/{job_id}")
+        if resp.status_code != 200:
+            continue
+        body = resp.json()
+        if body["status"] not in {"pending", "in_progress"}:
+            return body
+    raise AssertionError(
+        f"Job {job_id} did not reach a terminal status within {max_attempts} polls"
+    )
+
+
+def test_train_patchtst_india_cached_main_all_snapshots_present_returns_200(
+    client_india_with_backfill_mocks,
+):
+    """Scenario A: cached India main + all snapshots present -> 200."""
+    _ = _wait_for_terminal_response(
+        client_india_with_backfill_mocks, "/train/patchtst/india"
+    )
+
+    response = client_india_with_backfill_mocks.post("/train/patchtst/india")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["signals_used"] == ["ohlcv"]
+
+
+def test_train_patchtst_india_cached_main_one_historical_missing_returns_202(
+    client_india_with_backfill_mocks,
+):
+    """Scenario B: missing historical snapshot triggers snapshots-only job
+    on the dedicated ``patchtst_nifty_shariah_500_snapshots`` key."""
+    _ = _wait_for_terminal_response(
+        client_india_with_backfill_mocks, "/train/patchtst/india"
+    )
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    earliest = snapshots[0]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(earliest):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_india_with_backfill_mocks.post("/train/patchtst/india")
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    assert job_id.startswith("patchtst_nifty_shariah_500_snapshots:")
+
+    final = _wait_for_terminal_status(client_india_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
+
+
+def test_train_patchtst_india_cached_main_recreated_snapshot_preserves_ns_suffix(
+    client_india_with_backfill_mocks,
+):
+    """India invariant: recreated snapshots must keep ``.NS`` symbols
+    in the on-disk metadata (AGENTS.md India universe rule)."""
+    import json
+
+    _ = _wait_for_terminal_response(
+        client_india_with_backfill_mocks, "/train/patchtst/india"
+    )
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    earliest = snapshots[0]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(earliest):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_india_with_backfill_mocks.post("/train/patchtst/india")
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_india_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
+
+    storage_after = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    recreated_dirs = storage_after.hashed_snapshot_dirs_for_cutoff(earliest)
+    assert recreated_dirs, "snapshot dir was not recreated"
+    metadata_path = recreated_dirs[0] / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata_symbols = metadata["symbols"]
+    assert all(s.endswith(".NS") for s in metadata_symbols), (
+        f"India snapshot metadata symbols must keep .NS suffix, got: {metadata_symbols}"
+    )
+
+
+def test_train_patchtst_india_cached_main_skip_snapshot_returns_200(
+    client_india,
+):
+    """Scenario G: ``?skip_snapshot=true`` bypasses scan."""
+    response1 = client_india.post(TRAIN_INDIA_URL)
+    assert response1.status_code == 202
+
+    response2 = client_india.post(TRAIN_INDIA_URL)
+    assert response2.status_code == 200, response2.text
+
+
+def test_train_patchtst_india_cached_main_hf_first_no_repo_returns_503(
+    client_india_with_backfill_mocks, monkeypatch
+):
+    """Scenario J: ``hf_first`` + no HF repo on India bucket -> 503."""
+    _ = _wait_for_terminal_response(
+        client_india_with_backfill_mocks, "/train/patchtst/india"
+    )
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_nifty_shariah_500")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    from brain_api.storage.policy import StoragePolicy
+
+    monkeypatch.setattr(
+        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
+        lambda: StoragePolicy.HF_FIRST,
+    )
+
+    response = client_india_with_backfill_mocks.post("/train/patchtst/india")
+    assert response.status_code == 503, response.text
+    assert "patchtst_nifty_shariah_500" in response.text

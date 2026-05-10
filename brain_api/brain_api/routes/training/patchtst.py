@@ -6,13 +6,16 @@ import threading
 import time
 from datetime import date
 
-import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from brain_api.core.config import (
     resolve_training_window,
+)
+from brain_api.core.forecaster_snapshot_identity import (
+    MissingSnapshotInventory,
+    count_missing_snapshots,
 )
 from brain_api.core.model_buckets import (
     BucketConfig,
@@ -22,25 +25,14 @@ from brain_api.core.model_buckets import (
 )
 from brain_api.core.patchtst import PatchTSTConfig, align_multivariate_data
 from brain_api.core.patchtst import (
-    build_dataset as patchtst_build_dataset,
-)
-from brain_api.core.patchtst import (
     compute_version as patchtst_compute_version,
-)
-from brain_api.core.patchtst import (
-    load_prices_yfinance as patchtst_load_prices,
-)
-from brain_api.core.patchtst import (
-    train_model_pytorch as patchtst_train_model,
 )
 from brain_api.core.training_utils import (
     TrainingCancelledError,
     evaluate_forecaster_artifact_health,
 )
-from brain_api.core.version import compute_model_hash
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
-    create_snapshot_metadata,
 )
 from brain_api.storage.metadata import create_training_metadata
 from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
@@ -68,6 +60,10 @@ from .job_registry import (
     update_progress,
 )
 from .models import PatchTSTTrainResponse, TrainingJobResponse
+from .snapshot_phase import (
+    _PatchTSTMainTrainingArtifacts,
+    _run_patchtst_snapshot_phase,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -333,59 +329,18 @@ def _train_patchtst_core(
 
     if not skip_snapshot:
         snapshot_storage = SnapshotLocalStorage(snapshot_forecaster_type)
-        snapshot_hf_repo = snapshot_storage._get_hf_repo()
-        check_hf = snapshot_hf_repo is not None
-
-        end_snap_digest = compute_model_hash(
-            snapshot_forecaster_type,
-            start_date,
-            end_date,
-            symbols,
-            config.to_dict(),
-        )
-
-        if not snapshot_storage.snapshot_exists_anywhere(
-            end_date,
-            end_snap_digest,
-            check_hf=check_hf,
-        ):
-            snapshot_metadata = create_snapshot_metadata(
-                forecaster_type=snapshot_forecaster_type,
-                cutoff_date=end_date,
-                data_window_start=start_date.isoformat(),
-                data_window_end=end_date.isoformat(),
-                symbols=available_symbols,
-                config=config,
-                train_loss=result.train_loss,
-                val_loss=result.val_loss,
-                config_symbols_hash=end_snap_digest,
-            )
-            snapshot_storage.write_snapshot(
-                cutoff_date=end_date,
-                snapshot_digest=end_snap_digest,
+        _run_patchtst_snapshot_phase(
+            train_window=(start_date, end_date),
+            symbols=symbols,
+            config=config,
+            snapshot_storage=snapshot_storage,
+            main_artifacts=_PatchTSTMainTrainingArtifacts(
                 model=result.model,
                 feature_scaler=result.feature_scaler,
-                config=config,
-                metadata=snapshot_metadata,
-            )
-            logger.info(f"{log_prefix} Saved snapshot for cutoff {end_date}")
-
-            if snapshot_hf_repo:
-                try:
-                    snapshot_storage.upload_snapshot_to_hf(end_date, end_snap_digest)
-                    logger.info(
-                        f"{log_prefix} Uploaded snapshot {end_date} to HuggingFace"
-                    )
-                except Exception as e:
-                    logger.error(f"{log_prefix} Failed to upload snapshot to HF: {e}")
-
-        logger.info(f"{log_prefix} Backfilling historical snapshots...")
-        _backfill_patchtst_snapshots(
-            symbols,
-            config,
-            start_date,
-            end_date,
-            snapshot_storage,
+                train_loss=result.train_loss,
+                val_loss=result.val_loss,
+                available_symbols=available_symbols,
+            ),
             log_prefix=log_prefix,
         )
 
@@ -462,11 +417,16 @@ def train_patchtst(
         bucket=bucket, version=version, local_storage=storage
     )
     if existing_metadata:
-        logger.info(f"[PatchTST] Version {version} already exists (idempotent)")
-        return PatchTSTTrainResponse(
-            **build_common_train_response_kwargs(version, existing_metadata),
-            num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
+        return handle_patchtst_existing_metadata(
+            background_tasks=background_tasks,
+            bucket=bucket,
+            symbols=symbols,
+            config=config,
+            train_window=(start_date, end_date),
+            version=version,
+            existing_metadata=existing_metadata,
+            skip_snapshot=skip_snapshot,
+            log_prefix="[PatchTST]",
         )
 
     job, is_new = get_or_create_job("patchtst", version)
@@ -502,6 +462,123 @@ def train_patchtst(
             job_id=job.job_id,
             status="pending",
             message=f"PatchTST training started for {version}",
+        ).model_dump(),
+    )
+
+
+def handle_patchtst_existing_metadata(
+    *,
+    background_tasks: BackgroundTasks,
+    bucket: BucketConfig,
+    symbols: list[str],
+    config: PatchTSTConfig,
+    train_window: tuple[date, date],
+    version: str,
+    existing_metadata: dict,
+    skip_snapshot: bool,
+    log_prefix: str,
+) -> PatchTSTTrainResponse | JSONResponse:
+    """Branch the cached-main response on the snapshot inventory.
+
+    Shared by US (``/train/patchtst``) and India (``/train/patchtst/india``)
+    routes. India imports this directly so the bucket-aware path lives
+    in one place.
+
+    Three outcomes:
+
+    * ``inventory.is_empty`` (or ``skip_snapshot=True``): return 200
+      cached. Backwards-compatible fast path.
+    * Some snapshots missing: schedule snapshots-only background runner
+      under a dedicated ``{bucket}_snapshots`` key. Return 202.
+    * ``StoragePolicyError`` from ``count_missing_snapshots`` (i.e.
+      ``hf_first`` + the snapshot bucket has no HF repo configured):
+      surface as 503.
+    """
+    cached_response_kwargs = build_common_train_response_kwargs(
+        version, existing_metadata
+    )
+
+    if skip_snapshot:
+        logger.info(
+            f"{log_prefix} Version {version} already exists (idempotent, "
+            f"skip_snapshot=true)"
+        )
+        return PatchTSTTrainResponse(
+            **cached_response_kwargs,
+            num_input_channels=config.num_input_channels,
+            signals_used=["ohlcv"],
+        )
+
+    snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
+    try:
+        inventory: MissingSnapshotInventory = count_missing_snapshots(
+            forecaster_type=bucket.bucket_name,
+            train_window=train_window,
+            symbols=symbols,
+            config_dict=config.to_dict(),
+            snapshot_storage=snapshot_storage,
+        )
+    except StoragePolicyError as exc:
+        logger.error(
+            f"{log_prefix} Snapshot inventory scan failed for {version}: {exc}"
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if inventory.is_empty:
+        logger.info(
+            f"{log_prefix} Version {version} already exists and all "
+            f"snapshots present (idempotent)"
+        )
+        return PatchTSTTrainResponse(
+            **cached_response_kwargs,
+            num_input_channels=config.num_input_channels,
+            signals_used=["ohlcv"],
+        )
+
+    snapshots_job_key = f"{bucket.bucket_name}_snapshots"
+    job, is_new = get_or_create_job(snapshots_job_key, version)
+    if not is_new:
+        logger.info(
+            f"{log_prefix} Snapshots-only job {job.job_id} already in "
+            f"progress for {version}"
+        )
+        return JSONResponse(
+            status_code=202,
+            content=TrainingJobResponse(
+                job_id=job.job_id,
+                status=job.status,
+                message=(
+                    f"PatchTST snapshots-only backfill already in progress "
+                    f"for {version}"
+                ),
+            ).model_dump(),
+        )
+
+    background_tasks.add_task(
+        _run_patchtst_snapshots_only,
+        job_id=job.job_id,
+        symbols=symbols,
+        config=config,
+        bucket=bucket,
+        train_window=train_window,
+        version=version,
+        existing_metadata=existing_metadata,
+        log_prefix=f"{log_prefix} Snapshots-only",
+    )
+    logger.info(
+        f"{log_prefix} Snapshots-only backfill started: {job.job_id} "
+        f"({inventory.total_missing} cutoff(s) missing)"
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content=TrainingJobResponse(
+            job_id=job.job_id,
+            status="pending",
+            message=(
+                f"PatchTST snapshots-only backfill started for {version} "
+                f"({inventory.total_missing} cutoff(s) missing)"
+            ),
         ).model_dump(),
     )
 
@@ -546,219 +623,54 @@ def _run_patchtst_training(
         logger.error(f"{log_prefix} Job {job_id} failed: {e}")
 
 
-def _filter_prices_by_cutoff(
-    prices: dict[str, pd.DataFrame],
-    cutoff_date: date,
-) -> dict[str, pd.DataFrame]:
-    """Filter price DataFrames to include only data up to cutoff_date.
-
-    Args:
-        prices: Dict mapping symbol -> DataFrame with DatetimeIndex
-        cutoff_date: Include data up to and including this date
-
-    Returns:
-        Filtered dict with same structure, excluding symbols with no data after filtering
-    """
-    cutoff_ts = pd.Timestamp(cutoff_date)
-    return {
-        symbol: df[df.index <= cutoff_ts].copy()
-        for symbol, df in prices.items()
-        if len(df[df.index <= cutoff_ts]) > 0
-    }
-
-
-def _filter_signals_by_cutoff(
-    signals: dict[str, pd.DataFrame],
-    cutoff_date: date,
-) -> dict[str, pd.DataFrame]:
-    """Filter signal DataFrames to include only data up to cutoff_date.
-
-    Works with both DatetimeIndex and regular index (will try to convert).
-
-    Args:
-        signals: Dict mapping symbol -> DataFrame
-        cutoff_date: Include data up to and including this date
-
-    Returns:
-        Filtered dict with same structure, excluding symbols with no data after filtering
-    """
-    cutoff_ts = pd.Timestamp(cutoff_date)
-    result = {}
-
-    for symbol, df in signals.items():
-        if df.empty:
-            continue
-
-        if isinstance(df.index, pd.DatetimeIndex):
-            filtered = df[df.index <= cutoff_ts]
-        else:
-            try:
-                idx = pd.to_datetime(df.index)
-                mask = idx <= cutoff_ts
-                filtered = df[mask]
-            except (ValueError, TypeError):
-                filtered = df
-
-        if len(filtered) > 0:
-            result[symbol] = filtered.copy()
-
-    return result
-
-
-def _backfill_patchtst_snapshots(
+def _run_patchtst_snapshots_only(
+    *,
+    job_id: str,
     symbols: list[str],
     config: PatchTSTConfig,
-    start_date: date,
-    end_date: date,
-    snapshot_storage: SnapshotLocalStorage,
-    log_prefix: str = "[PatchTST Backfill]",
+    bucket: BucketConfig,
+    train_window: tuple[date, date],
+    version: str,
+    existing_metadata: dict,
+    log_prefix: str = "[PatchTST Snapshots-only]",
 ) -> None:
-    """Backfill PatchTST snapshots for all years that RL walk-forward training needs.
+    """Background task that runs only the snapshot phase.
 
-    RL training covering years start_year..end_year needs snapshot-(Y-1)-12-31
-    for each year Y.  The earliest snapshot is (start_year-1)-12-31.  To train
-    that snapshot we need ``bootstrap_years`` of price history before its cutoff,
-    so the price window is extended back to (start_year - 1 - bootstrap_years).
+    Mirror of :func:`brain_api.routes.training.lstm._run_lstm_snapshots_only`.
 
-    Optimization: Loads prices ONCE for the extended window and filters
-    incrementally by cutoff instead of re-downloading for each snapshot.
+    Used by the cached-main path in :func:`handle_patchtst_existing_metadata`
+    when at least one snapshot is missing. Skips the entire main
+    training pipeline and goes straight to the snapshot phase with
+    ``main_artifacts=None`` so the end-of-window snapshot is
+    warned-and-skipped if missing while historical year-end snapshots
+    are backfilled.
 
-    Snapshot uploads are gated on whether the bucket has an HF repo
-    configured (``snapshot_storage._get_hf_repo()``) rather than on a
-    process-wide policy. Closes audit Bug 7.
-
-    Args:
-        symbols: List of stock symbols
-        config: PatchTST configuration
-        start_date: RL training data start date (from resolve_training_window)
-        end_date: Training data end date
-        snapshot_storage: Storage instance
-        log_prefix: Logging prefix string
+    On ``StoragePolicyError`` (``hf_first`` + no HF repo) the job is
+    marked failed; the route handler already mapped that case to 503
+    synchronously, but a transient HF outage between the synchronous
+    scan and the background run is still possible.
     """
-    backfill_prefix = (
-        f"{log_prefix} Backfill" if "Backfill" not in log_prefix else log_prefix
-    )
-    start_year = start_date.year
-    end_year = end_date.year
-    bootstrap_years = 4
-    snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = snapshot_hf_repo is not None
-
-    first_snapshot_year = start_year - 1
-    snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
-
-    snapshots_needed = []
-    for year in range(first_snapshot_year, end_year):
-        cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_model_hash(
-            snapshot_storage.forecaster_type,
-            snapshot_data_start,
-            cutoff_date,
-            symbols,
-            config.to_dict(),
-        )
-        if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date,
-            backfill_digest,
-            check_hf=check_hf,
-        ):
-            snapshots_needed.append(cutoff_date)
-
-    if not snapshots_needed:
-        logger.info(f"[{backfill_prefix}] All snapshots already exist, nothing to do")
-        return
-
-    logger.info(
-        f"[{backfill_prefix}] Need to create {len(snapshots_needed)} snapshots: {snapshots_needed}"
-    )
-
-    logger.info(
-        f"[{backfill_prefix}] Loading prices from {snapshot_data_start} to {end_date}..."
-    )
-    t0 = time.time()
-    prices_full = patchtst_load_prices(symbols, snapshot_data_start, end_date)
-    t_prices = time.time() - t0
-    logger.info(
-        f"[{backfill_prefix}] Loaded prices for {len(prices_full)} symbols in {t_prices:.1f}s"
-    )
-
-    if len(prices_full) == 0:
-        logger.warning(
-            f"[{backfill_prefix}] No price data loaded, cannot create snapshots"
-        )
-        return
-
-    snapshot_forecaster_type = snapshot_storage.forecaster_type
-
-    for cutoff_date in snapshots_needed:
-        logger.info(f"[{backfill_prefix}] Training snapshot for cutoff {cutoff_date}")
-        t0 = time.time()
-
-        prices = _filter_prices_by_cutoff(prices_full, cutoff_date)
-        if len(prices) == 0:
-            logger.warning(
-                f"[{backfill_prefix}] No price data for cutoff {cutoff_date}, skipping"
-            )
-            continue
-
-        aligned_features = align_multivariate_data(prices, config)
-
-        if len(aligned_features) == 0:
-            logger.warning(
-                f"[{backfill_prefix}] No aligned features for cutoff {cutoff_date}, skipping"
-            )
-            continue
-
-        dataset = patchtst_build_dataset(aligned_features, prices, config)
-        if len(dataset.X) == 0:
-            logger.warning(
-                f"[{backfill_prefix}] Empty dataset for cutoff {cutoff_date}, skipping"
-            )
-            continue
-
-        result = patchtst_train_model(
-            dataset.X, dataset.y, dataset.feature_scaler, config
-        )
-
-        backfill_digest = compute_model_hash(
-            snapshot_forecaster_type,
-            snapshot_data_start,
-            cutoff_date,
-            symbols,
-            config.to_dict(),
-        )
-
-        metadata = create_snapshot_metadata(
-            forecaster_type=snapshot_forecaster_type,
-            cutoff_date=cutoff_date,
-            data_window_start=snapshot_data_start.isoformat(),
-            data_window_end=cutoff_date.isoformat(),
-            symbols=list(prices.keys()),
+    try:
+        update_progress(job_id, {"phase": "snapshots_only_backfill"})
+        snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
+        _run_patchtst_snapshot_phase(
+            train_window=train_window,
+            symbols=symbols,
             config=config,
-            train_loss=result.train_loss,
-            val_loss=result.val_loss,
-            config_symbols_hash=backfill_digest,
+            snapshot_storage=snapshot_storage,
+            main_artifacts=None,
+            log_prefix=log_prefix,
         )
-
-        snapshot_storage.write_snapshot(
-            cutoff_date=cutoff_date,
-            snapshot_digest=backfill_digest,
-            model=result.model,
-            feature_scaler=result.feature_scaler,
-            config=config,
-            metadata=metadata,
+        response = PatchTSTTrainResponse(
+            **build_common_train_response_kwargs(version, existing_metadata),
+            num_input_channels=config.num_input_channels,
+            signals_used=["ohlcv"],
         )
-        logger.info(
-            f"[{backfill_prefix}] Saved snapshot for {cutoff_date} in {time.time() - t0:.1f}s"
-        )
-
-        if snapshot_hf_repo:
-            try:
-                snapshot_storage.upload_snapshot_to_hf(cutoff_date, backfill_digest)
-                logger.info(
-                    f"[{backfill_prefix}] Uploaded snapshot {cutoff_date} to HuggingFace"
-                )
-            except Exception as e:
-                logger.error(
-                    f"[{backfill_prefix}] Failed to upload snapshot to HF: {e}"
-                )
+        complete_job(job_id, response.model_dump())
+        logger.info(f"{log_prefix} Job {job_id} completed successfully")
+    except StoragePolicyError as exc:
+        fail_job(job_id, str(exc))
+        logger.error(f"{log_prefix} Job {job_id} failed (policy): {exc}")
+    except Exception as e:
+        fail_job(job_id, str(e))
+        logger.error(f"{log_prefix} Job {job_id} failed: {e}")

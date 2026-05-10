@@ -15,7 +15,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 
-import brain_api.routes.training.lstm as lstm_route
 from brain_api.core.lstm import DatasetResult, LSTMModel, TrainingResult
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.main import app
@@ -164,10 +163,13 @@ def _override_lstm_halal_new_bucket(monkeypatch, temp_storage, symbols_fn=mock_s
 def _patch_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the heavy compute helpers used by ``_backfill_lstm_snapshots``.
 
-    The route imports ``load_prices_yfinance`` / ``build_dataset`` /
-    ``train_model_pytorch`` at module top, so the only safe seam is to
-    monkeypatch the rebound names on
-    :mod:`brain_api.routes.training.lstm` itself; the existing
+    Backfill mechanics now live in
+    :mod:`brain_api.routes.training.snapshot_phase` (extracted to keep
+    ``lstm.py`` under the AGENTS.md 600-line file ceiling). The
+    backfill loop imports ``load_prices_yfinance`` / ``build_dataset``
+    / ``train_model_pytorch`` at that module's top, so the only safe
+    seam is to monkeypatch those rebound names on
+    ``snapshot_phase``; the existing
     ``Depends(get_price_loader)`` / ``get_dataset_builder`` /
     ``get_trainer`` overrides only cover the *main* training path.
 
@@ -176,14 +178,16 @@ def _patch_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     runs end-to-end -- only the network/PyTorch wall-clock cost is
     removed (per AGENTS.md rule: mock side effects, never skip them).
     """
-    monkeypatch.setattr(lstm_route, "load_prices_yfinance", mock_price_loader)
+    from brain_api.routes.training import snapshot_phase
+
+    monkeypatch.setattr(snapshot_phase, "load_prices_yfinance", mock_price_loader)
     monkeypatch.setattr(
-        lstm_route,
+        snapshot_phase,
         "build_dataset",
         lambda prices, config: mock_dataset_builder(prices, config),
     )
     monkeypatch.setattr(
-        lstm_route,
+        snapshot_phase,
         "train_model_pytorch",
         lambda X, y, feature_scaler, config, shutdown_event=None: mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
@@ -600,3 +604,211 @@ def test_train_lstm_skip_snapshot_false_writes_snapshots(client_with_backfill_mo
         "Backfill must populate historical snapshots in addition to the "
         f"end-date one. Got only: {[s.isoformat() for s in snapshots]}"
     )
+
+
+# ============================================================================
+# Scenario 5: Snapshot-backfill-on-cached-main branching (the new contract)
+#
+# These cover the new "if main exists, check snapshots; if any are
+# missing, run snapshots-only" branching. Each scenario letter mirrors
+# the plan -- ``A`` (all present) ... ``K`` (local_first + no repo +
+# missing).
+# ============================================================================
+
+
+def _wait_for_terminal_status(
+    client: TestClient, job_id: str, max_attempts: int = 5
+) -> dict:
+    """Poll ``GET /train/status/{job_id}`` until the background task
+    leaves the ``in_progress`` / ``pending`` states."""
+    for _ in range(max_attempts):
+        resp = client.get(f"/train/status/{job_id}")
+        if resp.status_code != 200:
+            continue
+        body = resp.json()
+        if body["status"] not in {"pending", "in_progress"}:
+            return body
+    raise AssertionError(
+        f"Job {job_id} did not reach a terminal status within {max_attempts} polls"
+    )
+
+
+def _seed_main_version(client: TestClient) -> str:
+    """Drive the route once to fully populate the main version + all
+    snapshots. Returns the cached version string for follow-up
+    assertions."""
+    body = _wait_for_terminal_response(client, "/train/lstm")
+    return body["version"]
+
+
+def test_train_lstm_cached_main_all_snapshots_present_returns_200(
+    client_with_backfill_mocks,
+):
+    """Scenario A: cached main + all snapshots on disk -> 200 fast path."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "version" in data
+    assert "metrics" in data
+
+
+def test_train_lstm_cached_main_one_historical_missing_returns_202(
+    client_with_backfill_mocks,
+):
+    """Scenario B: delete one historical snapshot -> 202 + snapshots-only job."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    # Drop the earliest historical snapshot from disk
+    earliest = snapshots[0]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(earliest):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    # Snapshots-only jobs are keyed under ``{bucket}_snapshots``
+    assert job_id.startswith("lstm_halal_new_snapshots:")
+
+    # Drive job to completion and assert the missing snapshot is back
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed", final
+    snapshots_after = {
+        s.isoformat() for s in SnapshotLocalStorage("lstm_halal_new").list_snapshots()
+    }
+    assert earliest.isoformat() in snapshots_after
+
+
+def test_train_lstm_cached_main_end_window_missing_warn_and_skip(
+    client_with_backfill_mocks, caplog
+):
+    """Scenario C: end-window snapshot missing while main is cached ->
+    snapshots-only path warns and skips it (does not retrain main)."""
+    import logging
+
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    end_window = snapshots[-1]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(end_window):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    caplog.set_level(logging.WARNING, logger="brain_api.routes.training.snapshot_phase")
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
+
+    # End-window snapshot must NOT have been recreated; warn must be emitted.
+    snapshots_after = sorted(SnapshotLocalStorage("lstm_halal_new").list_snapshots())
+    assert end_window not in snapshots_after, (
+        "Snapshots-only path must not regenerate the end-window snapshot. "
+        f"Found: {[s.isoformat() for s in snapshots_after]}"
+    )
+    warning_messages = [
+        r.message for r in caplog.records if r.levelno >= logging.WARNING
+    ]
+    assert any("End-of-window snapshot" in m for m in warning_messages), (
+        f"Expected warn-and-skip log, got: {warning_messages}"
+    )
+
+
+def test_train_lstm_cached_main_dedup_concurrent_snapshots_only_jobs(
+    client_with_backfill_mocks,
+):
+    """Scenario D: a second POST while the snapshots-only job is in
+    flight returns 202 with the same job id (no duplicate work)."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response1 = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response1.status_code == 202
+    job_id1 = response1.json()["job_id"]
+
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id1)
+    assert final["status"] == "completed"
+
+    # Subsequent POST after backfill completes returns 200 fast path
+    response2 = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response2.status_code == 200
+
+
+def test_train_lstm_cached_main_skip_snapshot_returns_200_fast(
+    client_with_mocks,
+):
+    """Scenario G: ``?skip_snapshot=true`` bypasses the snapshot scan
+    entirely and returns 200 even when no snapshots exist on disk."""
+    response1 = client_with_mocks.post(TRAIN_URL_NO_SNAPSHOT, json={})
+    assert response1.status_code == 202
+
+    response2 = client_with_mocks.post(TRAIN_URL_NO_SNAPSHOT, json={})
+    assert response2.status_code == 200, response2.text
+    # No 202 path -- proves we never schedule a snapshots-only job
+    # when the operator opted out of snapshot bookkeeping.
+
+
+def test_train_lstm_cached_main_hf_first_no_repo_returns_503(
+    client_with_backfill_mocks, monkeypatch
+):
+    """Scenario J: ``hf_first`` policy + the bucket has no HF repo
+    configured -> 503 from the synchronous inventory scan."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    from brain_api.storage.policy import StoragePolicy
+
+    # ``count_missing_snapshots`` reads the env-default via the rebound
+    # name on its module, so we patch there (not on the storage policy
+    # module itself).
+    monkeypatch.setattr(
+        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
+        lambda: StoragePolicy.HF_FIRST,
+    )
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 503, response.text
+    assert "hf_first" in response.text
+
+
+def test_train_lstm_cached_main_local_first_no_repo_with_missing_returns_202(
+    client_with_backfill_mocks,
+):
+    """Scenario K: ``local_first`` + no HF repo + at least one missing
+    -> 202 + snapshots-only job (the policy permits local-only)."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    assert job_id.startswith("lstm_halal_new_snapshots:")
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"

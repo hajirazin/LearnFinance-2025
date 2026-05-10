@@ -27,7 +27,6 @@ from .dependencies import (
 from .job_registry import get_job
 
 # Re-export internal functions for backward compatibility
-from .lstm import _backfill_lstm_snapshots
 from .lstm import router as lstm_router
 
 # Re-export response models for backward compatibility
@@ -37,10 +36,19 @@ from .models import (
     SACTrainResponse,
     TrainingJobStatusResponse,
 )
-from .patchtst import _backfill_patchtst_snapshots
 from .patchtst import router as patchtst_router
 from .patchtst_india import router as patchtst_india_router
 from .sac import router as sac_router
+
+# Snapshot helpers moved to ``snapshot_phase.py`` per the AGENTS.md
+# 600-line file ceiling. Re-exported here so legacy imports
+# ``from brain_api.routes.training import _backfill_lstm_snapshots``
+# (used by the test suite and the long-form ``__all__`` audit) keep
+# working without forcing every caller to learn the new module name.
+from .snapshot_phase import (
+    _backfill_lstm_snapshots,
+    _backfill_patchtst_snapshots,
+)
 
 # Backward compat alias for _snapshots_available
 _snapshots_available = snapshots_available

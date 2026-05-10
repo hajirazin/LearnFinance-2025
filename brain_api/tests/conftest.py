@@ -120,6 +120,100 @@ def isolate_universe_cache(tmp_path, monkeypatch):
     )
 
 
+# Static halal_new universe used by the autouse network isolation
+# fixture below. Must contain enough symbols to satisfy the
+# ``min_history`` filter in ``halal_filtered`` plus the LSTM/PatchTST
+# default ``n_stocks=15`` slate. Symbols are intentionally short so
+# ``compute_model_hash`` digests in the snapshot inventory unit tests
+# stay readable.
+_FAKE_HALAL_NEW_UNIVERSE: dict = {
+    "stocks": [
+        {"symbol": f"S{i:02d}", "name": f"Test Stock {i}", "max_weight": 0.05}
+        for i in range(20)
+    ],
+    "etfs_used": ["SPUS", "SPTE", "SPWO", "HLAL", "UMMA"],
+    "total_stocks": 20,
+    "fetched_at": "2026-01-01T00:00:00+00:00",
+}
+
+
+@pytest.fixture(autouse=True)
+def isolate_external_universe_calls(monkeypatch):
+    """Block real network access for every universe builder.
+
+    Three pre-existing tests (``test_storage_policy.py::TestEnsureSnapshotForBucketContract::*``
+    and ``test_forecaster_snapshots.py::TestWalkForwardForecasts::test_build_forecast_features_raises_on_missing_snapshots``)
+    transitively invoke ``ensure_snapshot_for_bucket`` ->
+    ``lstm_walkforward_expectation_bundle`` ->
+    ``halal_new_lstm_resolver_symbols`` ->
+    ``get_halal_new_universe`` -> ``fetch_alpaca_tradable_symbols``,
+    which hits the real Alpaca API and the SP-Funds / Wahed scrapers.
+    Without this fixture each costs ~8 s of real network and silently
+    consumes Alpaca quota whenever ``ALPACA_API_KEY`` leaks from
+    ``.env`` (the host's ``isolate_from_env`` only clears HF vars).
+
+    Mocks at the universe-builder boundary (``halal_new`` / ``halal``
+    / ``nifty_shariah_500``) so any call to a resolver returns the
+    static :data:`_FAKE_HALAL_NEW_UNIVERSE` slate instead of touching
+    the network. Tests that need a specific symbol slate already
+    monkeypatch the rebound resolver name on the consumer module
+    (e.g. ``halal_filtered.get_halal_new_universe``); those patches
+    stack ON TOP of this autouse layer per pytest's monkeypatch
+    semantics, so behaviour is unchanged for any test that already
+    does its own bucket binding.
+
+    Also clears ``ALPACA_API_KEY`` / ``ALPACA_API_SECRET`` so a test
+    that bypasses the universe mock (e.g. via a bucket rebind that
+    keeps the real ``symbols_resolver``) raises a loud
+    ``RuntimeError`` instead of silently calling Alpaca.
+    """
+
+    def _fake_get_halal_new_universe() -> dict:
+        return dict(_FAKE_HALAL_NEW_UNIVERSE)
+
+    def _fake_get_halal_new_symbols() -> list[str]:
+        return [s["symbol"] for s in _FAKE_HALAL_NEW_UNIVERSE["stocks"]]
+
+    def _fake_alpaca_tradable_symbols() -> set[str]:
+        return {s["symbol"] for s in _FAKE_HALAL_NEW_UNIVERSE["stocks"]} | {
+            "SPUS",
+            "SPTE",
+            "SPWO",
+            "HLAL",
+            "UMMA",
+        }
+
+    monkeypatch.setattr(
+        "brain_api.universe.halal_new.get_halal_new_universe",
+        _fake_get_halal_new_universe,
+    )
+    monkeypatch.setattr(
+        "brain_api.universe.halal_new.get_halal_new_symbols",
+        _fake_get_halal_new_symbols,
+    )
+    monkeypatch.setattr(
+        "brain_api.universe.halal_new.fetch_alpaca_tradable_symbols",
+        _fake_alpaca_tradable_symbols,
+    )
+    # Belt and braces: any leftover direct call into the scrapers
+    # (network endpoints) returns an empty list rather than raising,
+    # so a test that exercises the merge path without re-mocking sees
+    # an empty universe instead of a connection error.
+    monkeypatch.setattr(
+        "brain_api.universe.halal_new.scrape_sp_funds",
+        lambda _slug: [],
+    )
+    monkeypatch.setattr(
+        "brain_api.universe.halal_new.scrape_wahed",
+        lambda _slug: [],
+    )
+    # Final guardrail: clear Alpaca creds so a test that somehow
+    # reaches ``fetch_alpaca_tradable_symbols`` directly fails loudly
+    # with the RuntimeError it raises when keys are missing.
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_API_SECRET", raising=False)
+
+
 @pytest.fixture(autouse=True)
 def isolate_sticky_history_db(tmp_path, monkeypatch):
     """Route the sticky/screening history DB defaults to a temp file.
@@ -217,8 +311,13 @@ def disable_route_memory_cleanup(monkeypatch):
     the memory-hygiene helpers are no-oped.
 
     Patches ``gc.collect`` and the torch cache cleaners on the LSTM /
-    PatchTST route modules' rebound names. SAC route does not call
-    ``gc.collect`` so it is not affected.
+    PatchTST / shared-snapshot-phase modules' rebound names. The
+    snapshot helpers were extracted into
+    ``brain_api.routes.training.snapshot_phase`` for the AGENTS.md
+    600-line file ceiling, so ``gc.collect`` / ``torch.mps.empty_cache``
+    inside the backfill loops now resolves on that module rather than
+    the original route files. SAC route does not call ``gc.collect``
+    so it is not affected.
     """
     import contextlib
     import importlib
@@ -228,6 +327,7 @@ def disable_route_memory_cleanup(monkeypatch):
     for module_path in (
         "brain_api.routes.training.lstm",
         "brain_api.routes.training.patchtst",
+        "brain_api.routes.training.snapshot_phase",
     ):
         try:
             module = importlib.import_module(module_path)

@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
-import brain_api.routes.training.patchtst as patchtst_route
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
 from brain_api.main import app
@@ -149,28 +148,27 @@ def _override_us_patchtst_bucket(monkeypatch, temp_storage, symbols_fn=mock_symb
 def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the heavy compute helpers used by ``_backfill_patchtst_snapshots``.
 
-    The route imports ``patchtst_load_prices`` / ``align_multivariate_data``
-    / ``patchtst_build_dataset`` / ``patchtst_train_model`` at module
-    top, so the only safe seam is to monkeypatch the rebound names on
-    :mod:`brain_api.routes.training.patchtst` itself; the existing
-    ``Depends`` overrides only cover the *main* training path. Mocks
-    preserve return shapes so the backfill loop's snapshot-write +
-    HF-upload-gate code still runs end-to-end (per AGENTS.md rule:
-    mock side effects, never skip them).
+    Backfill mechanics now live in
+    :mod:`brain_api.routes.training.snapshot_phase` (extracted to keep
+    the per-family route files under the AGENTS.md 600-line file
+    ceiling). Patches go on that module so both the US backfill and
+    the India backfill (which share the same code path) are covered.
     """
-    monkeypatch.setattr(patchtst_route, "patchtst_load_prices", mock_price_loader)
+    from brain_api.routes.training import snapshot_phase
+
+    monkeypatch.setattr(snapshot_phase, "patchtst_load_prices", mock_price_loader)
     monkeypatch.setattr(
-        patchtst_route, "align_multivariate_data", lambda prices, config: prices
+        snapshot_phase, "align_multivariate_data", lambda prices, config: prices
     )
     monkeypatch.setattr(
-        patchtst_route,
+        snapshot_phase,
         "patchtst_build_dataset",
         lambda aligned_features, prices, config: mock_dataset_builder(
             aligned_features, prices, config
         ),
     )
     monkeypatch.setattr(
-        patchtst_route,
+        snapshot_phase,
         "patchtst_train_model",
         lambda X, y, feature_scaler, config, shutdown_event=None: mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
@@ -562,3 +560,166 @@ def test_train_patchtst_skip_snapshot_false_writes_snapshots(
         "Backfill must populate historical snapshots in addition to the "
         f"end-date one. Got only: {[s.isoformat() for s in snapshots]}"
     )
+
+
+# ============================================================================
+# Scenario 5: Snapshot-backfill-on-cached-main branching (the new contract)
+# ============================================================================
+
+
+def _wait_for_terminal_status(
+    client: TestClient, job_id: str, max_attempts: int = 5
+) -> dict:
+    for _ in range(max_attempts):
+        resp = client.get(f"/train/status/{job_id}")
+        if resp.status_code != 200:
+            continue
+        body = resp.json()
+        if body["status"] not in {"pending", "in_progress"}:
+            return body
+    raise AssertionError(
+        f"Job {job_id} did not reach a terminal status within {max_attempts} polls"
+    )
+
+
+def _seed_main_version(client: TestClient) -> str:
+    body = _wait_for_terminal_response(client, "/train/patchtst")
+    return body["version"]
+
+
+def test_train_patchtst_cached_main_all_snapshots_present_returns_200(
+    client_with_backfill_mocks,
+):
+    """Scenario A: cached main + all snapshots on disk -> 200 fast path."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    response = client_with_backfill_mocks.post("/train/patchtst", json={})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "num_input_channels" in data
+    assert data["signals_used"] == ["ohlcv"]
+
+
+def test_train_patchtst_cached_main_one_historical_missing_returns_202(
+    client_with_backfill_mocks,
+):
+    """Scenario B: delete one historical snapshot -> 202 + snapshots-only job."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    earliest = snapshots[0]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(earliest):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_with_backfill_mocks.post("/train/patchtst", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    assert job_id.startswith("patchtst_halal_new_snapshots:")
+
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed", final
+    snapshots_after = {
+        s.isoformat()
+        for s in SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
+    }
+    assert earliest.isoformat() in snapshots_after
+
+
+def test_train_patchtst_cached_main_end_window_missing_warn_and_skip(
+    client_with_backfill_mocks, caplog
+):
+    """Scenario C: end-window snapshot missing while main is cached ->
+    snapshots-only path warns and skips it."""
+    import logging
+
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    end_window = snapshots[-1]
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(end_window):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    caplog.set_level(logging.WARNING, logger="brain_api.routes.training.snapshot_phase")
+
+    response = client_with_backfill_mocks.post("/train/patchtst", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
+
+    snapshots_after = sorted(
+        SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
+    )
+    assert end_window not in snapshots_after, (
+        "Snapshots-only path must not regenerate the end-window snapshot. "
+        f"Found: {[s.isoformat() for s in snapshots_after]}"
+    )
+    warning_messages = [
+        r.message for r in caplog.records if r.levelno >= logging.WARNING
+    ]
+    assert any("End-of-window snapshot" in m for m in warning_messages)
+
+
+def test_train_patchtst_cached_main_skip_snapshot_returns_200_fast(
+    client_with_mocks,
+):
+    """Scenario G: ``?skip_snapshot=true`` bypasses the snapshot scan."""
+    response1 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response1.status_code == 202
+
+    response2 = client_with_mocks.post(TRAIN_URL, json={})
+    assert response2.status_code == 200, response2.text
+    data = response2.json()
+    assert data["signals_used"] == ["ohlcv"]
+
+
+def test_train_patchtst_cached_main_hf_first_no_repo_returns_503(
+    client_with_backfill_mocks, monkeypatch
+):
+    """Scenario J: ``hf_first`` policy + no HF repo -> 503."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    from brain_api.storage.policy import StoragePolicy
+
+    monkeypatch.setattr(
+        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
+        lambda: StoragePolicy.HF_FIRST,
+    )
+
+    response = client_with_backfill_mocks.post("/train/patchtst", json={})
+    assert response.status_code == 503, response.text
+    assert "hf_first" in response.text
+
+
+def test_train_patchtst_cached_main_local_first_no_repo_with_missing_returns_202(
+    client_with_backfill_mocks,
+):
+    """Scenario K: ``local_first`` + no HF repo + missing -> 202."""
+    _seed_main_version(client_with_backfill_mocks)
+
+    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
+    snapshots = sorted(snapshot_storage.list_snapshots())
+    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
+        import shutil
+
+        shutil.rmtree(snap_dir)
+
+    response = client_with_backfill_mocks.post("/train/patchtst", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    assert job_id.startswith("patchtst_halal_new_snapshots:")
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
