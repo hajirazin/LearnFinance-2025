@@ -30,6 +30,10 @@ from brain_api.core.alpaca_client import (
 from brain_api.core.alpaca_client import (
     get_alpaca_credentials as _core_get_alpaca_credentials,
 )
+from brain_api.core.config import (
+    get_alpaca_api_key,
+    get_alpaca_api_secret,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +135,30 @@ class OrderHistoryItem(BaseModel):
     status: str = Field(..., description="Order status (filled, canceled, etc.)")
     filled_qty: str | None = Field(None, description="Filled quantity")
     filled_avg_price: str | None = Field(None, description="Average fill price")
+
+
+class MarketClockResponse(BaseModel):
+    """Alpaca market clock state.
+
+    Mirrors the Alpaca ``/v2/clock`` payload. ``next_open`` /
+    ``next_close`` are ISO-8601 strings (with timezone) so callers can
+    parse them with ``datetime.fromisoformat``. The clock is
+    market-data, not account-data: it is driven by NYSE hours and is
+    identical across paper / live and across every per-account
+    credential pair, which is why this route authenticates with the
+    generic ``ALPACA_API_KEY`` / ``ALPACA_API_SECRET`` env vars (the
+    same ones the universe scraper and news backfill already use)
+    rather than the per-account trading creds.
+    """
+
+    timestamp: str = Field(
+        ..., description="Current Alpaca server timestamp (ISO 8601)"
+    )
+    is_open: bool = Field(
+        ..., description="True if the US equity market is currently open"
+    )
+    next_open: str = Field(..., description="Next market open timestamp (ISO 8601)")
+    next_close: str = Field(..., description="Next market close timestamp (ISO 8601)")
 
 
 # ============================================================================
@@ -460,3 +488,80 @@ def get_order_history(
 
     logger.info(f"Fetched {len(orders)} orders from history")
     return orders
+
+
+@router.get("/clock", response_model=MarketClockResponse)
+def get_clock() -> MarketClockResponse:
+    """Get the current Alpaca market clock.
+
+    Proxies Alpaca's ``GET /v2/clock`` and returns ``is_open`` plus the
+    next open / close timestamps (ISO 8601). Used by Temporal's
+    ``sell_wait_buy`` helper to sleep until the next market open before
+    polling sell-order status at a 1-min cadence -- replacing the
+    previous flat 15-min poll cadence.
+
+    Authentication: uses the generic non-account-scoped
+    ``ALPACA_API_KEY`` / ``ALPACA_API_SECRET`` env pair (the same pair
+    the universe scraper and news backfill already require) rather
+    than per-account trading creds. The clock is account-agnostic
+    market data, so coupling it to a trading account would be
+    spurious. Always hits the paper host -- the clock payload is
+    identical across paper / live.
+
+    Raises:
+        HTTPException 500: if ``ALPACA_API_KEY`` / ``ALPACA_API_SECRET``
+            are missing (per AGENTS.md rule #1, no silent fallback).
+        HTTPException 503: if the upstream Alpaca call fails or times
+            out.
+    """
+    api_key = get_alpaca_api_key()
+    api_secret = get_alpaca_api_secret()
+    if not api_key or not api_secret:
+        logger.error("Missing generic Alpaca credentials for /v2/clock")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Alpaca credentials not configured for /v2/clock. "
+                "Set ALPACA_API_KEY and ALPACA_API_SECRET environment variables."
+            ),
+        )
+
+    headers = {
+        "APCA-API-KEY-ID": api_key,
+        "APCA-API-SECRET-KEY": api_secret,
+    }
+
+    try:
+        with httpx.Client(
+            base_url=PAPER_BASE_URL,
+            headers=headers,
+            timeout=ALPACA_TIMEOUT,
+        ) as client:
+            response = client.get("/v2/clock")
+            response.raise_for_status()
+            clock_data = response.json()
+    except httpx.TimeoutException as e:
+        logger.error(f"Alpaca clock timeout: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Alpaca API timeout fetching market clock",
+        ) from e
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Alpaca clock HTTP error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Alpaca API error: {e.response.status_code}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Unexpected error fetching Alpaca clock: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to fetch Alpaca clock: {e!s}",
+        ) from e
+
+    return MarketClockResponse(
+        timestamp=clock_data["timestamp"],
+        is_open=clock_data["is_open"],
+        next_open=clock_data["next_open"],
+        next_close=clock_data["next_close"],
+    )

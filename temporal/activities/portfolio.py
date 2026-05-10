@@ -10,6 +10,7 @@ from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
+    MarketClockResponse,
     OrderHistoryItem,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
@@ -376,6 +377,29 @@ def get_order_history_ibkr_sac_halal(after_date: str) -> list[OrderHistoryItem]:
         response.raise_for_status()
     result = [OrderHistoryItem(**o) for o in response.json()]
     logger.info(f"Got {len(result)} SAC halal IBKR orders from history")
+    return result
+
+
+@activity.defn
+def get_alpaca_clock() -> MarketClockResponse:
+    """Fetch the current Alpaca market clock.
+
+    Wraps brain_api's ``GET /alpaca/clock`` endpoint, which authenticates
+    with the generic ``ALPACA_API_KEY`` / ``ALPACA_API_SECRET`` env pair
+    (not per-account trading creds -- the clock is account-agnostic
+    market data). Used by :func:`workflows._order_execution.sell_wait_buy`
+    to sleep until the next NYSE open before polling sell-order status
+    at a 1-min cadence.
+    """
+    logger.info("Fetching Alpaca market clock...")
+    with get_client() as client:
+        response = client.get("/alpaca/clock")
+        response.raise_for_status()
+    result = MarketClockResponse(**response.json())
+    logger.info(
+        f"Alpaca clock: is_open={result.is_open}, "
+        f"next_open={result.next_open}, next_close={result.next_close}"
+    )
     return result
 
 

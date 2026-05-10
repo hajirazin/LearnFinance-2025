@@ -41,6 +41,7 @@ from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
+    MarketClockResponse,
     OrderModel,
     OrderSummary,
     PositionModel,
@@ -53,6 +54,13 @@ from models import (
 )
 from tests.harness import worker_with_activities
 from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
+
+_DEFAULT_CLOCK_OPEN = MarketClockResponse(
+    timestamp="2026-05-11T13:30:00+00:00",
+    is_open=True,
+    next_open="2026-05-12T13:30:00+00:00",
+    next_close="2026-05-11T20:00:00+00:00",
+)
 
 
 def _make_active_symbols(n: int) -> ActiveSymbolsResponse:
@@ -246,6 +254,12 @@ def _make_sac_halal_activities(
             {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
         ]
 
+    @activity.defn(name="get_alpaca_clock")
+    def mock_get_alpaca_clock() -> MarketClockResponse:
+        # The IBKR-routed halal workflow still uses Alpaca's clock for
+        # the US session timing -- US market hours are broker-agnostic.
+        return _DEFAULT_CLOCK_OPEN
+
     @activity.defn(name="get_order_history_ibkr_sac_halal")
     def mock_get_order_history_ibkr_sac_halal(after_date):
         captured_calls.setdefault("history_calls", []).append("ibkr_sac_halal")
@@ -319,6 +333,7 @@ def _make_sac_halal_activities(
         mock_submit_orders_sac,
         mock_check_order_statuses_ibkr,
         mock_check_order_statuses,
+        mock_get_alpaca_clock,
         mock_get_order_history_ibkr_sac_halal,
         mock_get_order_history_sac_halal,
         mock_update_execution_sac,

@@ -14,8 +14,21 @@ from temporalio import activity
 from activities.reporting import send_us_alpha_hrp_email
 from models import (
     AlpacaPortfolioResponse,
+    MarketClockResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
+)
+
+# Default clock payload: market is open. The US Alpha-HRP harness
+# does not currently exercise pre-open behaviour; the dedicated
+# ``test_sell_wait_buy_clock.py`` suite covers that on the SAC-only
+# workflow. Tests that need a different payload pass
+# ``get_alpaca_clock_fn=...``.
+_DEFAULT_CLOCK_OPEN = MarketClockResponse(
+    timestamp="2026-05-11T13:30:00+00:00",
+    is_open=True,
+    next_open="2026-05-12T13:30:00+00:00",
+    next_close="2026-05-11T20:00:00+00:00",
 )
 
 
@@ -56,6 +69,7 @@ def make_us_alpha_hrp_activities(
     submit_calls=None,
     check_order_statuses_fn=None,
     email_calls=None,
+    get_alpaca_clock_fn=None,
 ):
     """Build mock activity functions for ``USAlphaHRPWorkflow``."""
 
@@ -151,6 +165,12 @@ def make_us_alpha_hrp_activities(
             {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
         ]
 
+    @activity.defn(name="get_alpaca_clock")
+    def mock_get_alpaca_clock() -> MarketClockResponse:
+        if get_alpaca_clock_fn is not None:
+            return get_alpaca_clock_fn()
+        return _DEFAULT_CLOCK_OPEN
+
     @activity.defn(name="generate_us_alpha_hrp_summary")
     def mock_generate_summary(*args, **kwargs):
         return summary
@@ -172,6 +192,7 @@ def make_us_alpha_hrp_activities(
         mock_generate_orders_alpha_hrp,
         mock_submit_orders_hrp,
         mock_check_order_statuses,
+        mock_get_alpaca_clock,
         mock_generate_summary,
         mock_send_email,
     ]

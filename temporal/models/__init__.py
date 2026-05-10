@@ -30,6 +30,7 @@ from models.forecast_email import (
     WeeklySummaryResponse,
 )
 from models.llm import TrainingSummaryResponse
+from models.market_clock import MarketClockResponse
 from models.sticky import (
     PreviousFinalAllocationResponse,
     RankBandTopNResponse,
@@ -80,4 +81,6 @@ __all__ = [
     "RankBandTopNResponse",
     "PreviousFinalAllocationResponse",
     "PatchTSTBatchScores",
+    # Market clock
+    "MarketClockResponse",
 ]

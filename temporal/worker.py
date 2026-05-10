@@ -39,6 +39,7 @@ from activities.portfolio import (
     check_order_statuses,
     check_order_statuses_ibkr,
     get_active_symbols,
+    get_alpaca_clock,
     get_dhrp_portfolio,
     get_hrp_portfolio,
     get_ibkr_sac_halal_portfolio,
@@ -142,6 +143,7 @@ ALL_ACTIVITIES = [
     get_order_history_ibkr_sac_halal,
     check_order_statuses,
     check_order_statuses_ibkr,
+    get_alpaca_clock,
     resolve_next_attempt,
     resolve_next_attempt_ibkr,
     # Execution / experience

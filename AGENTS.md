@@ -152,6 +152,7 @@ temporal/                         # Temporal workflow orchestration
 | `GET /alpaca/portfolio` | Get account positions, cash, open orders count |
 | `POST /alpaca/submit-orders` | Submit orders to Alpaca (paper by default, live when `ALPACA_{ACCOUNT}_URL` overrides the host) |
 | `GET /alpaca/order-history` | Get order execution history |
+| `GET /alpaca/clock` | Get the Alpaca market clock (`is_open`, `next_open`, `next_close`). Authenticates with the generic `ALPACA_API_KEY` / `ALPACA_API_SECRET` env pair (NOT per-account trading creds) and always hits the paper host -- the clock payload is account-agnostic and identical paper vs live. Consumed by Temporal's `sell_wait_buy` helper to sleep until the next NYSE open. |
 
 **LLM & Email** (called by Monday run via Temporal for reporting):
 
@@ -524,7 +525,7 @@ Key configuration:
 - **Durable sleep**: `workflow.sleep()` survives worker crashes, laptop shutdowns, and restarts
 - **Parallel execution**: `asyncio.gather()` for concurrent activity execution within workflows
 - **Pydantic data converter**: `pydantic_data_converter` used for correct Pydantic v2 serialization
-- **Sell-wait-buy**: Single workflow with `while True: check -> sleep 15 min` durable polling loop
+- **Sell-wait-buy**: Single workflow with a market-aware durable polling loop. After submitting sells, the helper fetches the Alpaca market clock once (`GET /alpaca/clock`); if the market is closed it sleeps until exactly the advertised `next_open` (no lead-time fudge), then polls `check_order_statuses` every `POLL_INTERVAL = 1 min` until all sells reach a terminal status or the 48h `SELL_DEADLINE` is hit. Replaces the legacy flat 15-min poll cadence.
 - **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL-ish activities inside training workflows (e.g. `refresh_training_data`) automatically land on the training worker.
 - **Activity concurrency cap** (per worker): `TEMPORAL_MAX_CONCURRENT_ACTIVITIES` env (default `10`) drives BOTH `Worker(max_concurrent_activities=N)` and the `ThreadPoolExecutor(max_workers=N)`. The Mac training worker sets this to `1` so heavy training activities are serialized; Pi inference keeps the default `10` so fast allocation activities run in parallel.
 

@@ -13,14 +13,24 @@ Key invariants preserved during extraction:
 - The 48h sell-deadline fallback that proceeds to buys even if some
   sells never reach terminal.
 - ``SkippedOrdersResponse``/``SkippedSubmitResponse`` short-circuits.
+
+Polling cadence (replaces the legacy flat 15-min loop):
+- After the sells are submitted, the helper fetches the Alpaca market
+  clock once. If the market is currently closed AND ``next_open`` is
+  still in the future, the workflow sleeps until exactly ``next_open``
+  (one durable big sleep, not a tight loop).
+- Once the market is open, the helper polls every ``POLL_INTERVAL``
+  (1 min) until all sells reach a terminal status or the 48h
+  ``SELL_DEADLINE`` is hit. The deadline loop's else-branch (proceed
+  to buys on timeout) is preserved.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
-    from activities.portfolio import check_order_statuses
+    from activities.portfolio import check_order_statuses, get_alpaca_clock
     from models import (
         GenerateOrdersResponse,
         OrderModel,
@@ -30,7 +40,7 @@ with workflow.unsafe.imports_passed_through():
 
 # Reused constants (single source of truth).
 SHORT_TIMEOUT = timedelta(minutes=5)
-SELL_POLL_INTERVAL = timedelta(minutes=15)
+POLL_INTERVAL = timedelta(minutes=1)
 SELL_DEADLINE = timedelta(hours=48)
 
 TERMINAL_STATUSES = {"filled", "canceled", "expired", "rejected", "replaced"}
@@ -135,6 +145,26 @@ async def sell_wait_buy(
         workflow.logger.info(
             f"[{account.upper()}] Waiting for {len(sell_order_ids)} sell orders..."
         )
+
+        # One-shot clock check: sleep until exactly the next NYSE open
+        # if the market is currently closed. Mathematically this is
+        # ``max(0, next_open - now)`` -- a strict equality with the
+        # advertised open time, no lead-time fudge -- so the first
+        # status poll fires the moment the market opens.
+        clock = await workflow.execute_activity(
+            get_alpaca_clock,
+            start_to_close_timeout=SHORT_TIMEOUT,
+        )
+        if not clock.is_open:
+            next_open = datetime.fromisoformat(clock.next_open)
+            wait = next_open - workflow.now()
+            if wait > timedelta(0):
+                workflow.logger.info(
+                    f"[{account.upper()}] Sleeping {wait} until market open "
+                    f"({next_open.isoformat()})"
+                )
+                await workflow.sleep(wait)
+
         deadline = workflow.now() + SELL_DEADLINE
 
         while workflow.now() < deadline:
@@ -152,9 +182,9 @@ async def sell_wait_buy(
                 break
 
             workflow.logger.info(
-                f"[{account.upper()}] Sells still pending, sleeping 15 min..."
+                f"[{account.upper()}] Sells still pending, sleeping {POLL_INTERVAL}..."
             )
-            await workflow.sleep(SELL_POLL_INTERVAL)
+            await workflow.sleep(POLL_INTERVAL)
         else:
             workflow.logger.warning(
                 f"[{account.upper()}] Sell deadline reached (48h), proceeding to buys."

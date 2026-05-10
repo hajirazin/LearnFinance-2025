@@ -21,6 +21,7 @@ from models import (
     AlpacaPortfolioResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
+    MarketClockResponse,
     OrderModel,
     OrderSummary,
     PositionModel,
@@ -33,6 +34,13 @@ from models import (
     WeeklySummaryResponse,
 )
 from workflows.us_double_hrp import USDoubleHRPWorkflow
+
+_DEFAULT_CLOCK_OPEN = MarketClockResponse(
+    timestamp="2026-05-11T13:30:00+00:00",
+    is_open=True,
+    next_open="2026-05-12T13:30:00+00:00",
+    next_close="2026-05-11T20:00:00+00:00",
+)
 
 
 @pytest.fixture
@@ -308,6 +316,10 @@ def _make_us_double_hrp_activities(
             {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
         ]
 
+    @activity.defn(name="get_alpaca_clock")
+    def mock_get_alpaca_clock() -> MarketClockResponse:
+        return _DEFAULT_CLOCK_OPEN
+
     @activity.defn(name="generate_us_double_hrp_summary")
     def mock_generate_us_double_hrp_summary(*args, **kwargs):
         return summary
@@ -333,6 +345,7 @@ def _make_us_double_hrp_activities(
         mock_generate_orders_dhrp,
         mock_submit_orders_dhrp,
         mock_check_order_statuses,
+        mock_get_alpaca_clock,
         mock_generate_us_double_hrp_summary,
         mock_send_us_double_hrp_email,
     ]

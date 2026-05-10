@@ -14,9 +14,22 @@ from activities.reporting import send_weekly_email
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
+    MarketClockResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
     WeeklySummaryResponse,
+)
+
+# Default clock payload: market is open. Tests that need a closed
+# market or a specific ``next_open`` override via the
+# ``get_alpaca_clock_fn`` factory hook below. The non-zero
+# next_open / next_close strings are placeholders -- the helper
+# only inspects ``is_open`` when the market is reported open.
+_DEFAULT_CLOCK_OPEN = MarketClockResponse(
+    timestamp="2026-05-11T13:30:00+00:00",
+    is_open=True,
+    next_open="2026-05-12T13:30:00+00:00",
+    next_close="2026-05-11T20:00:00+00:00",
 )
 
 
@@ -47,6 +60,8 @@ def make_sac_only_activities(
     email_calls: list[dict] | None = None,
     store_experience_calls: list[dict] | None = None,
     update_execution_calls: list[dict] | None = None,
+    get_alpaca_clock_fn=None,
+    get_alpaca_clock_calls: list[None] | None = None,
 ):
     """Build mock activities for the SAC-only ``USWeeklyAllocationWorkflow``."""
 
@@ -136,6 +151,14 @@ def make_sac_only_activities(
             {"client_order_id": cid, "status": "filled"} for cid in client_order_ids
         ]
 
+    @activity.defn(name="get_alpaca_clock")
+    def mock_get_alpaca_clock() -> MarketClockResponse:
+        if get_alpaca_clock_calls is not None:
+            get_alpaca_clock_calls.append(None)
+        if get_alpaca_clock_fn is not None:
+            return get_alpaca_clock_fn()
+        return _DEFAULT_CLOCK_OPEN
+
     @activity.defn(name="get_order_history_sac")
     def mock_get_order_history_sac(after_date):
         return []
@@ -207,6 +230,7 @@ def make_sac_only_activities(
         mock_store_experience_sac,
         mock_submit_orders_sac,
         mock_check_order_statuses,
+        mock_get_alpaca_clock,
         mock_get_order_history_sac,
         mock_update_execution_sac,
         mock_generate_summary,
