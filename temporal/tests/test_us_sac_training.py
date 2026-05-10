@@ -101,13 +101,19 @@ def _make_sac_activities(filtered, refresh, training, summary, email):
         return training
 
     @activity.defn(name="generate_sac_training_summary")
-    def mock_summ(sac):
+    def mock_summ(sac, universe: str):
         call_log.append("generate_sac_training_summary")
+        assert universe == "halal_filtered", (
+            f"expected summary universe=halal_filtered, got {universe!r}"
+        )
         return summary
 
     @activity.defn(name="send_sac_training_email")
-    def mock_em(sac, summary_arg):
+    def mock_em(sac, summary_arg, universe: str):
         call_log.append("send_sac_training_email")
+        assert universe == "halal_filtered", (
+            f"expected email universe=halal_filtered, got {universe!r}"
+        )
         return email
 
     return [mock_filt, mock_ref, mock_sac, mock_summ, mock_em], call_log

@@ -336,7 +336,7 @@ def send_forecasters_training_email(
 @activity.defn
 def generate_sac_training_summary(
     sac: TrainingResponse,
-    universe: str = "halal_filtered",
+    universe: str,
 ) -> TrainingSummaryResponse:
     """Generate LLM summary for a US SAC training run.
 
@@ -349,6 +349,12 @@ def generate_sac_training_summary(
 
     The ``universe`` argument is forwarded to brain_api so the
     resulting summary identifies which bucket the metrics describe.
+    It is required (no default) so every workflow call site sends a
+    matching arg count -- Temporal's activity decoder silently drops
+    Pydantic type hints when the workflow's positional-arg count
+    differs from the activity signature, which would turn
+    ``sac: TrainingResponse`` into a plain ``dict`` and break
+    ``_sac_payload``.
     """
     logger.info(f"Generating SAC training summary via LLM (universe={universe})...")
     payload = {"sac": _sac_payload(sac), "universe": universe}
@@ -367,14 +373,17 @@ def generate_sac_training_summary(
 def send_sac_training_email(
     sac: TrainingResponse,
     summary: TrainingSummaryResponse,
-    universe: str = "halal_filtered",
+    universe: str,
 ) -> TrainingSummaryEmailResponse:
     """Send the US SAC training summary email.
 
     Shared by both SAC workflows. ``universe`` is forwarded to
     brain_api so the email subject is bucket-specific (e.g.
     "US SAC (halal) Training: ..."), letting a human inbox reader
-    distinguish the two parallel reports without opening them.
+    distinguish the two parallel reports without opening them. It is
+    required (no default) for the same reason as
+    ``generate_sac_training_summary`` -- arg-count mismatch silently
+    strips Pydantic type hints from the activity decoder.
     """
     logger.info(f"Sending SAC training summary email (universe={universe})...")
     payload = {

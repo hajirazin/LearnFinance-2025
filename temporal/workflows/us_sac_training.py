@@ -61,14 +61,14 @@ class USSACTrainingWorkflow:
 
         summary_result = await workflow.execute_activity(
             generate_sac_training_summary,
-            args=[sac_result],
+            args=[sac_result, "halal_filtered"],
             start_to_close_timeout=SHORT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
 
         email_result = await workflow.execute_activity(
             send_sac_training_email,
-            args=[sac_result, summary_result],
+            args=[sac_result, summary_result, "halal_filtered"],
             start_to_close_timeout=SHORT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
