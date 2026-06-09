@@ -43,6 +43,8 @@ dependencies = [
     # ships its own protocol implementation. Connects to a local IB Gateway
     # (Java daemon) on TCP :4002 (paper) or :4001 (live).
     "ib_async>=2.0.0",
+    # Nifty 500 Shariah universe scraper (Finology, Chrome TLS impersonation).
+    "curl-cffi>=0.7.0",
 ]
 
 [project.optional-dependencies]

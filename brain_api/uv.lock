@@ -201,6 +201,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "curl-cffi" },
     { name = "datasets" },
     { name = "duckdb" },
     { name = "exchange-calendars" },
@@ -236,6 +237,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
+    { name = "curl-cffi", specifier = ">=0.7.0" },
     { name = "datasets", specifier = ">=2.16.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "exchange-calendars", specifier = ">=4.5.0" },

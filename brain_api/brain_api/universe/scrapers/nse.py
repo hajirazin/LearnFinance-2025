@@ -1,38 +1,28 @@
-"""Scrape Nifty 500 Shariah index constituents from NSE India JSON API.
+"""Scrape Nifty 500 Shariah index constituents from Finology.
 
-Uses the same API that powers the nseindia.com website frontend:
-    GET https://www.nseindia.com/api/equity-stockIndices?index=NIFTY500%20SHARIAH
+NSE India's equity-stockIndices API is protected by Akamai Bot Manager
+(requires JavaScript execution to validate the _abck cookie). As a result,
+the direct NSE approach is no longer viable without a headless browser.
 
-Requires session management: NSE blocks direct API calls without cookies.
-A browser-like session must first hit a page that sets the required cookies
-(nse_ak, bm_sv, etc.), then the API endpoint returns JSON.
+Finology (ticker.finology.in) exposes the same index constituent data via
+an internal AJAX endpoint. The endpoint requires:
+  1. An ASP.NET_SessionId cookie obtained by visiting the index page first.
+  2. The X-Requested-With: XMLHttpRequest header on the API call.
 
-NSE is aggressive about bot detection. The session may need multiple
-retries with fresh sessions if the first attempt gets a captcha/HTML page.
+curl-cffi with Chrome TLS impersonation is used so the session request
+looks like a real browser to the server.
 """
 
 import logging
 import time
 
-import requests
+from curl_cffi.requests import Session
 
 logger = logging.getLogger(__name__)
 
-NSE_BASE_URL = "https://www.nseindia.com"
-NSE_INDEX_API = f"{NSE_BASE_URL}/api/equity-stockIndices"
-NIFTY500_SHARIAH_INDEX = "NIFTY500 SHARIAH"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive",
-}
+FINOLOGY_INDEX_PAGE = "https://ticker.finology.in/market/index/nse/shariah500"
+FINOLOGY_API_URL = "https://ticker.finology.in/GetIndicesCompList.ashx"
+SHARIAH500_INDEX_CODE = 161
 
 SESSION_TIMEOUT = 15
 API_TIMEOUT = 30
@@ -41,27 +31,26 @@ RETRY_DELAY_S = 2.0
 
 
 class NseFetchError(Exception):
-    """Raised when fetching data from NSE India API fails."""
+    """Raised when fetching Nifty 500 Shariah constituent data fails."""
 
 
-def _create_nse_session() -> requests.Session:
-    """Create a requests session with NSE-compatible headers and cookies."""
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    session.get(NSE_BASE_URL, timeout=SESSION_TIMEOUT)
+def _create_finology_session() -> Session:
+    """Create a curl-cffi session with Chrome impersonation and warm it up."""
+    session = Session(impersonate="chrome")
+    session.get(FINOLOGY_INDEX_PAGE, timeout=SESSION_TIMEOUT)
     time.sleep(1)
-
     return session
 
 
-def _fetch_index_data(session: requests.Session) -> dict:
-    """Fetch index data from NSE API using an established session."""
+def _fetch_index_data(session: Session) -> list[dict]:
+    """Fetch Nifty 500 Shariah constituents from the Finology API."""
     resp = session.get(
-        NSE_INDEX_API,
-        params={"index": NIFTY500_SHARIAH_INDEX},
+        FINOLOGY_API_URL,
+        params={"indexcode": SHARIAH500_INDEX_CODE},
         headers={
-            "Referer": "https://www.nseindia.com/market-data/live-equity-market",
+            "Referer": FINOLOGY_INDEX_PAGE,
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
         },
         timeout=API_TIMEOUT,
     )
@@ -70,14 +59,15 @@ def _fetch_index_data(session: requests.Session) -> dict:
 
 
 def scrape_nifty500_shariah() -> list[dict]:
-    """Fetch Nifty 500 Shariah index constituents from NSE India.
+    """Fetch Nifty 500 Shariah index constituents from Finology.
 
-    Retries with fresh sessions up to MAX_SESSION_RETRIES times if NSE
-    returns non-JSON (HTML captcha/block pages).
+    Retries with fresh sessions up to MAX_SESSION_RETRIES times on
+    network errors or unexpected responses.
 
     Returns:
         List of dicts with keys: symbol, name, industry.
-        Typically ~100-150 stocks.
+        Typically ~199 stocks. industry is always empty string
+        (Finology does not expose industry classification).
 
     Raises:
         NseFetchError: On HTTP errors, empty response, or session failure.
@@ -86,52 +76,46 @@ def scrape_nifty500_shariah() -> list[dict]:
 
     for attempt in range(1, MAX_SESSION_RETRIES + 1):
         try:
-            session = _create_nse_session()
-        except requests.RequestException as e:
+            session = _create_finology_session()
+        except Exception as e:
             last_error = e
             logger.warning(
-                f"NSE session attempt {attempt}/{MAX_SESSION_RETRIES} failed: {e}"
+                f"Finology session attempt {attempt}/{MAX_SESSION_RETRIES} failed: {e}"
             )
             if attempt < MAX_SESSION_RETRIES:
                 time.sleep(RETRY_DELAY_S * attempt)
             continue
 
         try:
-            payload = _fetch_index_data(session)
-        except (requests.RequestException, ValueError) as e:
+            raw_data = _fetch_index_data(session)
+        except Exception as e:
             last_error = e
             logger.warning(
-                f"NSE API attempt {attempt}/{MAX_SESSION_RETRIES} failed: {e}"
+                f"Finology API attempt {attempt}/{MAX_SESSION_RETRIES} failed: {e}"
             )
             if attempt < MAX_SESSION_RETRIES:
                 time.sleep(RETRY_DELAY_S * attempt)
             continue
 
-        raw_data = payload.get("data", [])
         if not raw_data:
             raise NseFetchError(
-                f"NSE API returned empty data array for index '{NIFTY500_SHARIAH_INDEX}'"
+                f"Finology API returned empty data for Nifty 500 Shariah "
+                f"(indexcode={SHARIAH500_INDEX_CODE})"
             )
 
-        constituents: list[dict] = []
-        for entry in raw_data:
-            symbol = entry.get("symbol", "")
-            if not symbol or " " in symbol:
-                continue
-
-            constituents.append(
-                {
-                    "symbol": symbol,
-                    "name": entry.get("meta", {}).get("companyName", "")
-                    or entry.get("companyName", ""),
-                    "industry": entry.get("meta", {}).get("industry", "")
-                    or entry.get("industry", ""),
-                }
-            )
+        constituents = [
+            {
+                "symbol": entry["symbol"],
+                "name": entry.get("compname", ""),
+                "industry": "",
+            }
+            for entry in raw_data
+            if entry.get("symbol")
+        ]
 
         if not constituents:
             raise NseFetchError(
-                f"No valid constituents found after filtering for '{NIFTY500_SHARIAH_INDEX}'"
+                "No valid constituents found in Finology response for Nifty 500 Shariah"
             )
 
         sym_list = [c["symbol"] for c in constituents]
@@ -142,10 +126,11 @@ def scrape_nifty500_shariah() -> list[dict]:
         )
         logger.info(
             f"Nifty 500 Shariah: fetched {len(constituents)} constituents "
-            f"from NSE API (attempt {attempt}): {preview}"
+            f"from Finology (attempt {attempt}): {preview}"
         )
         return constituents
 
     raise NseFetchError(
-        f"All {MAX_SESSION_RETRIES} NSE session attempts failed. Last error: {last_error}"
+        f"All {MAX_SESSION_RETRIES} Finology session attempts failed. "
+        f"Last error: {last_error}"
     )

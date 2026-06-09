@@ -1808,7 +1808,7 @@ def test_halal_india_partition_isolated_from_weekly_alpha_hrp():
 
 
 def test_scrape_nifty500_shariah_parses_response(monkeypatch):
-    """Test that scrape_nifty500_shariah correctly parses NSE JSON API response.
+    """Test that scrape_nifty500_shariah correctly parses Finology JSON response.
 
     Mocks ``time.sleep`` on the scraper module so the unconditional 1s
     session-cookie warm-up sleep is a no-op; the retry loop's control
@@ -1819,36 +1819,14 @@ def test_scrape_nifty500_shariah_parses_response(monkeypatch):
     )
     from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
 
-    mock_nse_json = {
-        "data": [
-            {
-                "symbol": "Nifty 500 Shariah",
-                "open": 5000.0,
-                "dayHigh": 5100.0,
-            },
-            {
-                "symbol": "INFY",
-                "meta": {"companyName": "Infosys Ltd.", "industry": "IT - Software"},
-                "lastPrice": 1500.0,
-            },
-            {
-                "symbol": "TCS",
-                "meta": {
-                    "companyName": "Tata Consultancy",
-                    "industry": "IT - Software",
-                },
-                "lastPrice": 3500.0,
-            },
-        ]
-    }
+    mock_finology_json = [
+        {"symbol": "INFY", "compname": "Infosys Ltd.", "CLOSE_PRICE": 1500.0},
+        {"symbol": "TCS", "compname": "Tata Consultancy", "CLOSE_PRICE": 3500.0},
+    ]
 
-    mock_session = patch(
-        "brain_api.universe.scrapers.nse.requests.Session",
-    )
-
-    with mock_session as mock_sess_cls:
+    with patch("brain_api.universe.scrapers.nse.Session") as mock_sess_cls:
         session_instance = mock_sess_cls.return_value
-        homepage_resp = type(
+        page_resp = type(
             "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
         )()
         api_resp = type(
@@ -1857,43 +1835,36 @@ def test_scrape_nifty500_shariah_parses_response(monkeypatch):
             {
                 "status_code": 200,
                 "raise_for_status": lambda self: None,
-                "json": lambda self: mock_nse_json,
+                "json": lambda self: mock_finology_json,
             },
         )()
-        session_instance.get.side_effect = [homepage_resp, api_resp]
-        session_instance.headers = {}
+        session_instance.get.side_effect = [page_resp, api_resp]
 
         result = scrape_nifty500_shariah()
 
     assert len(result) == 2
     assert result[0]["symbol"] == "INFY"
     assert result[0]["name"] == "Infosys Ltd."
+    assert result[0]["industry"] == ""
     assert result[1]["symbol"] == "TCS"
 
 
-def test_scrape_nifty500_shariah_filters_index_row(monkeypatch):
-    """Test that the index summary row (with spaces in symbol) is filtered out.
-
-    Mocks ``time.sleep`` so the warm-up cookie sleep is a no-op.
-    """
+def test_scrape_nifty500_shariah_skips_entries_without_symbol(monkeypatch):
+    """Test that entries missing a symbol key are skipped."""
     monkeypatch.setattr(
         "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
     )
     from brain_api.universe.scrapers.nse import scrape_nifty500_shariah
 
-    mock_nse_json = {
-        "data": [
-            {"symbol": "Nifty 500 Shariah", "open": 5000.0},
-            {
-                "symbol": "RELIANCE",
-                "meta": {"companyName": "Reliance", "industry": "Oil"},
-            },
-        ]
-    }
+    mock_finology_json = [
+        {"symbol": "RELIANCE", "compname": "Reliance Industries"},
+        {"symbol": "", "compname": "Should be skipped"},
+        {"compname": "No symbol key at all"},
+    ]
 
-    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+    with patch("brain_api.universe.scrapers.nse.Session") as mock_sess_cls:
         session_instance = mock_sess_cls.return_value
-        homepage_resp = type(
+        page_resp = type(
             "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
         )()
         api_resp = type(
@@ -1902,11 +1873,10 @@ def test_scrape_nifty500_shariah_filters_index_row(monkeypatch):
             {
                 "status_code": 200,
                 "raise_for_status": lambda self: None,
-                "json": lambda self: mock_nse_json,
+                "json": lambda self: mock_finology_json,
             },
         )()
-        session_instance.get.side_effect = [homepage_resp, api_resp]
-        session_instance.headers = {}
+        session_instance.get.side_effect = [page_resp, api_resp]
 
         result = scrape_nifty500_shariah()
 
@@ -1915,7 +1885,7 @@ def test_scrape_nifty500_shariah_filters_index_row(monkeypatch):
 
 
 def test_scrape_nifty500_shariah_raises_on_empty_data(monkeypatch):
-    """Test that NseFetchError is raised when data array is empty.
+    """Test that NseFetchError is raised when Finology returns an empty list.
 
     Mocks ``time.sleep`` so the warm-up cookie sleep is a no-op.
     """
@@ -1924,11 +1894,9 @@ def test_scrape_nifty500_shariah_raises_on_empty_data(monkeypatch):
     )
     from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah
 
-    mock_nse_json = {"data": []}
-
-    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+    with patch("brain_api.universe.scrapers.nse.Session") as mock_sess_cls:
         session_instance = mock_sess_cls.return_value
-        homepage_resp = type(
+        page_resp = type(
             "Resp", (), {"status_code": 200, "raise_for_status": lambda self: None}
         )()
         api_resp = type(
@@ -1937,18 +1905,17 @@ def test_scrape_nifty500_shariah_raises_on_empty_data(monkeypatch):
             {
                 "status_code": 200,
                 "raise_for_status": lambda self: None,
-                "json": lambda self: mock_nse_json,
+                "json": lambda self: [],
             },
         )()
-        session_instance.get.side_effect = [homepage_resp, api_resp]
-        session_instance.headers = {}
+        session_instance.get.side_effect = [page_resp, api_resp]
 
         with pytest.raises(NseFetchError, match="empty data"):
             scrape_nifty500_shariah()
 
 
 def test_scrape_nifty500_shariah_raises_on_http_error(monkeypatch):
-    """Test that NseFetchError is raised on HTTP errors.
+    """Test that NseFetchError is raised on network/HTTP errors.
 
     Mocks ``time.sleep`` so the per-attempt 2s/4s retry backoffs are
     no-ops; the retry loop still iterates ``MAX_SESSION_RETRIES``
@@ -1957,16 +1924,15 @@ def test_scrape_nifty500_shariah_raises_on_http_error(monkeypatch):
     monkeypatch.setattr(
         "brain_api.universe.scrapers.nse.time.sleep", lambda *_a, **_k: None
     )
-    import requests as req
+    from curl_cffi.requests import RequestsError
 
     from brain_api.universe.scrapers.nse import NseFetchError, scrape_nifty500_shariah
 
-    with patch("brain_api.universe.scrapers.nse.requests.Session") as mock_sess_cls:
+    with patch("brain_api.universe.scrapers.nse.Session") as mock_sess_cls:
         session_instance = mock_sess_cls.return_value
-        session_instance.get.side_effect = req.RequestException("Connection refused")
-        session_instance.headers = {}
+        session_instance.get.side_effect = RequestsError("Connection refused")
 
-        with pytest.raises(NseFetchError, match="NSE session attempts failed"):
+        with pytest.raises(NseFetchError, match="Finology session attempts failed"):
             scrape_nifty500_shariah()
 
 
@@ -2028,15 +1994,15 @@ def test_get_nifty_shariah_500_returns_all_constituents():
     assert data["total_stocks"] == len(MOCK_NSE_CONSTITUENTS)
 
 
-def test_get_nifty_shariah_500_returns_503_on_nse_failure():
-    """Test that /universe/nifty_shariah_500 returns 503 when NSE scraper fails."""
+def test_get_nifty_shariah_500_returns_503_on_scraper_failure():
+    """Test that /universe/nifty_shariah_500 returns 503 when the scraper fails."""
     from brain_api.universe.scrapers.nse import NseFetchError
 
     with patch(
         "brain_api.universe.nifty_shariah_500.scrape_nifty500_shariah",
-        side_effect=NseFetchError("NSE API returned empty data"),
+        side_effect=NseFetchError("Finology API returned empty data"),
     ):
         response = client.get("/universe/nifty_shariah_500")
 
     assert response.status_code == 503
-    assert "NSE API" in response.json()["detail"]
+    assert "Finology API" in response.json()["detail"]
