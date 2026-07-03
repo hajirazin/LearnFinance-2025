@@ -39,6 +39,7 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import build_prior_allocation_from_db
+    from activities.execution import generate_paper_allocation
     from activities.inference import (
         allocate_hrp,
         get_previous_final_allocation,
@@ -65,6 +66,7 @@ STAGE1_LOOKBACK = 756  # ~3 years (full universe screening)
 STAGE2_LOOKBACK = 252  # ~1 year (final allocation on chosen 15)
 TOP_N = 15
 STICKINESS_THRESHOLD_PP = 1.0
+PAPER_NAV_INR = 1_000_000.0
 
 
 @workflow.defn
@@ -152,6 +154,14 @@ class IndiaDoubleHRPWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Phase 2.6: Paper-only whole-share conversion for the email table.
+        paper_allocation = await workflow.execute_activity(
+            generate_paper_allocation,
+            args=[stage2.percentage_weights, PAPER_NAV_INR],
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
+        )
+
         # Phase 3: AI summary (with sticky context so the prompt can
         # describe weight-band stability vs prior week).
         summary = await workflow.execute_activity(
@@ -206,6 +216,7 @@ class IndiaDoubleHRPWorkflow:
                 sticky.previous_year_week_used,
                 STICKINESS_THRESHOLD_PP,
                 prior_allocation,
+                paper_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

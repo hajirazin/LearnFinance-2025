@@ -113,6 +113,20 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(autouse=True)
+def isolate_health_data_dir(tmp_path, monkeypatch):
+    """Create a data dir so the health readiness check passes.
+
+    The health route checks ``Path(DEFAULT_DATA_PATH).exists()`` and
+    returns 503 if absent. Tests run in a temporary directory without a
+    ``data/`` folder, so we patch the constant to point at an existing
+    tmpdir.
+    """
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setattr("brain_api.routes.health.DEFAULT_DATA_PATH", data_dir)
+
+
+@pytest.fixture(autouse=True)
 def isolate_universe_cache(tmp_path, monkeypatch):
     """Route universe cache to a temp directory so tests never read/write production cache."""
     monkeypatch.setattr(

@@ -152,10 +152,12 @@ def _double_hrp_email_context(request: DoubleHRPEmailRequest) -> dict:
         if request.prior_allocation is not None
         else None
     )
+    paper_allocation = getattr(request, "paper_allocation", None)
     return {
         "summary": request.summary,
         "stage1": request.stage1.model_dump(),
         "stage2": request.stage2.model_dump(),
+        "paper_allocation": paper_allocation,
         "universe": request.universe,
         "top_n": request.top_n,
         "target_week_start": request.target_week_start,
@@ -193,6 +195,7 @@ def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
         if request.prior_allocation is not None
         else None
     )
+    paper_allocation = getattr(request, "paper_allocation", None)
     return {
         "summary": request.summary,
         "stage1_top_scores": [item.model_dump() for item in request.stage1_top_scores],
@@ -205,6 +208,7 @@ def _alpha_hrp_email_context(request: AlphaHRPEmailRequest) -> dict:
         "evicted_from_previous": request.evicted_from_previous,
         "previous_year_week_used": request.previous_year_week_used,
         "stage2": request.stage2.model_dump(),
+        "paper_allocation": paper_allocation,
         "universe": request.universe,
         "top_n": request.top_n,
         "hold_threshold": request.hold_threshold,

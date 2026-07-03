@@ -50,6 +50,7 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import build_prior_allocation_from_db
+    from activities.execution import generate_paper_allocation
     from activities.inference import (
         allocate_hrp,
         get_previous_final_allocation,
@@ -85,6 +86,7 @@ class IndiaAlphaHrpStrategyParams:
     stage2_lookback_days: int = 252
     top_n: int = 15  # K_in (entry threshold)
     hold_threshold: int = 30  # K_hold (sticky retention threshold)
+    paper_nav_inr: float = 1_000_000.0  # Notional NAV for paper share conversion
 
 
 DEFAULT_STRATEGY_PARAMS = IndiaAlphaHrpStrategyParams()
@@ -175,6 +177,16 @@ class IndiaWeeklyAllocationWorkflow:
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
 
+        # Phase 2.6: Paper-only whole-share conversion for the email table.
+        # India has no broker, so this is a theoretical display showing
+        # what a 1M INR portfolio would look like in whole shares.
+        paper_allocation = await workflow.execute_activity(
+            generate_paper_allocation,
+            args=[stage2.percentage_weights, params.paper_nav_inr],
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
+        )
+
         # Phase 3: LLM summary across alpha screen + Stage 2 HRP.
         summary = await workflow.execute_activity(
             generate_india_alpha_hrp_summary,
@@ -210,6 +222,8 @@ class IndiaWeeklyAllocationWorkflow:
         )
 
         # Phase 4: Email report. India does not trade -- no order_results.
+        # Paper allocation details are included so the email table has
+        # whole-share quantities alongside the theoretical HRP weights.
         email = await workflow.execute_activity(
             send_india_alpha_hrp_email,
             args=[
@@ -224,6 +238,7 @@ class IndiaWeeklyAllocationWorkflow:
                 target_week_end,
                 as_of_date,
                 prior_allocation,
+                paper_allocation,
             ],
             start_to_close_timeout=ACTIVITY_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),

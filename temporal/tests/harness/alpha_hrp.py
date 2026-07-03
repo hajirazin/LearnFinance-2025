@@ -309,6 +309,30 @@ def make_india_alpha_hrp_activities(
     def mock_send_email(*args, **kwargs):
         return email
 
+    @activity.defn(name="generate_paper_allocation")
+    def mock_paper_allocation(percentage_weights, total_nav):
+        from models import AllocationDetailModel, PaperAllocationResponse
+
+        return PaperAllocationResponse(
+            details=[
+                AllocationDetailModel(
+                    symbol=sym,
+                    weight_pct=wt,
+                    price=100.0,
+                    whole_shares=int((wt / 100.0 * total_nav) / 100.0),
+                    trade_value=float(int((wt / 100.0 * total_nav) / 100.0) * 100),
+                )
+                for sym, wt in sorted(
+                    percentage_weights.items(),
+                    key=lambda kv: kv[1],
+                    reverse=True,
+                )
+            ],
+            total_nav=total_nav,
+            prices_used={sym: 100.0 for sym in percentage_weights},
+            total_allocated_pct=sum(percentage_weights.values()),
+        )
+
     return [
         mock_fetch_universe,
         mock_score,
@@ -318,4 +342,5 @@ def make_india_alpha_hrp_activities(
         mock_generate_summary,
         mock_get_previous_final_allocation,
         mock_send_email,
+        mock_paper_allocation,
     ]

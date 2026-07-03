@@ -12,7 +12,11 @@ from brain_api.core.orders import (
     GenerateOrdersResult,
     PortfolioInput,
     PositionInput,
+    convert_weights_to_whole_shares,
     generate_orders,
+)
+from brain_api.core.orders import (
+    PaperAllocationResult as CorePaperAllocationResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -325,4 +329,110 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         summary=summary,
         prices_used=result.prices_used,
         atr_used=result.atr_used,
+    )
+
+
+# ============================================================================
+# Paper Allocation Models (whole shares, no order submission)
+# ============================================================================
+
+
+class AllocationDetailModel(BaseModel):
+    """A single row in the paper-allocation table."""
+
+    symbol: str = Field(..., description="Stock symbol")
+    weight_pct: float = Field(..., description="Target weight percentage (0..100)")
+    price: float = Field(..., gt=0, description="Current market price")
+    whole_shares: int = Field(
+        ..., ge=0, description="Whole shares (floored to integer)"
+    )
+    trade_value: float = Field(..., ge=0, description="Notional value of shares held")
+
+
+class PaperAllocationRequest(BaseModel):
+    """Request model for the paper-only weight-to-shares endpoint.
+
+    India is paper-only with no broker, so it has no portfolio to
+    reference. The caller supplies the target weights and a notional
+    NAV; the endpoint looks up current prices via yfinance and converts
+    each weight to a whole-share quantity (floored, no fractions).
+    """
+
+    percentage_weights: dict[str, float] = Field(
+        ...,
+        description="Target allocation weights (symbol -> pct, where 100 = 100%)",
+    )
+    total_nav: float = Field(
+        ..., gt=0, description="Notional portfolio NAV in local currency (e.g. INR)"
+    )
+
+
+class PaperAllocationResponse(BaseModel):
+    """Response model for POST /orders/paper-allocation."""
+
+    details: list[AllocationDetailModel] = Field(
+        ..., description="Per-symbol allocation details sorted by weight descending"
+    )
+    total_nav: float = Field(..., description="Notional NAV used for conversion")
+    prices_used: dict[str, float] = Field(
+        ..., description="Prices used for conversion (symbol -> price)"
+    )
+    total_allocated_pct: float = Field(
+        ..., description="Sum of allocated weights (should round to ~100%)"
+    )
+
+
+# ============================================================================
+# Paper Allocation Endpoint
+# ============================================================================
+
+
+@router.post("/paper-allocation", response_model=PaperAllocationResponse)
+def paper_allocation_endpoint(
+    request: PaperAllocationRequest,
+) -> PaperAllocationResponse:
+    """Convert percentage weights to whole shares (paper-only, no order submission).
+
+    India uses this endpoint to show what a theoretical portfolio would
+    look like in whole shares at current market prices. There is no
+    portfolio input, no broker interaction, and no order generation —
+    just a lookup of current prices and integer-floor share math.
+
+    The response is purely informational and is rendered in the India
+    email report alongside the Stage 2 HRP allocation table.
+    """
+    if not request.percentage_weights:
+        raise HTTPException(
+            status_code=400,
+            detail="percentage_weights cannot be empty",
+        )
+
+    try:
+        result: CorePaperAllocationResult = convert_weights_to_whole_shares(
+            percentage_weights=request.percentage_weights,
+            total_nav=request.total_nav,
+        )
+    except Exception as e:
+        logger.error(f"[PaperAllocation] Conversion failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Weight-to-shares conversion failed: {e!s}",
+        ) from None
+
+    details = [
+        AllocationDetailModel(
+            symbol=d.symbol,
+            weight_pct=d.weight_pct,
+            price=d.price,
+            whole_shares=d.whole_shares,
+            trade_value=d.trade_value,
+        )
+        for d in result.details
+    ]
+
+    return PaperAllocationResponse(
+        details=details,
+        total_nav=result.total_nav,
+        prices_used=result.prices_used,
+        total_allocated_pct=result.total_allocated_pct,
     )

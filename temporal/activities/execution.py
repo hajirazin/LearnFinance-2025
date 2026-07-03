@@ -13,6 +13,7 @@ from models import (
     LSTMInferenceResponse,
     NewsSignalResponse,
     OrderHistoryItem,
+    PaperAllocationResponse,
     PatchTSTInferenceResponse,
     PortfolioResponse,
     SACInferenceResponse,
@@ -350,5 +351,44 @@ def update_execution_sac(
     logger.info(
         f"Updated SAC execution: filled={result.orders_filled}, "
         f"partial={result.orders_partial}, expired={result.orders_expired}"
+    )
+    return result
+
+
+@activity.defn
+def generate_paper_allocation(
+    percentage_weights: dict[str, float],
+    total_nav: float,
+) -> PaperAllocationResponse:
+    """Convert HRP percentage weights to whole shares (paper-only, no broker).
+
+    India workflows call this to see what a theoretical portfolio would
+    look like in whole shares at current market prices. There is no
+    portfolio input or Alpaca interaction — just a price lookup and
+    integer-floor share math.
+
+    Args:
+        percentage_weights: ``{symbol: weight_pct}`` from Stage 2 HRP
+            (e.g. ``{"RELIANCE.NS": 14.32, ...}``).
+        total_nav: Notional NAV to size positions against (e.g. 1 000 000
+            for 1M INR).
+
+    Returns:
+        PaperAllocationResponse with per-symbol whole-share details.
+    """
+    logger.info(f"Generating paper allocation (nav={total_nav})...")
+    with get_client() as client:
+        response = client.post(
+            "/orders/paper-allocation",
+            json={
+                "percentage_weights": percentage_weights,
+                "total_nav": total_nav,
+            },
+        )
+        response.raise_for_status()
+    result = PaperAllocationResponse(**response.json())
+    logger.info(
+        f"Paper allocation: {len(result.details)} symbols, "
+        f"total_allocated={result.total_allocated_pct}%"
     )
     return result

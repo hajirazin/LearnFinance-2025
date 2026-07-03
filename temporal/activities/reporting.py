@@ -11,6 +11,7 @@ from models import (
     LSTMInferenceResponse,
     NewsSignalResponse,
     OrderDetail,
+    PaperAllocationResponse,
     PatchTSTBatchScores,
     PatchTSTInferenceResponse,
     PriorAllocation,
@@ -202,6 +203,7 @@ def send_india_alpha_hrp_email(
     target_week_end: str,
     as_of_date: str,
     prior_allocation: PriorAllocation | None = None,
+    paper_allocation: PaperAllocationResponse | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send the India Alpha-HRP weekly report email.
 
@@ -212,6 +214,9 @@ def send_india_alpha_hrp_email(
 
     ``prior_allocation`` is sourced from the prior-week DB row
     (paper-only, so DB == reality) by the workflow.
+
+    ``paper_allocation`` contains the whole-share conversion of the
+    Stage 2 weights for display in the email table.
     """
     logger.info("Sending India Alpha-HRP report email...")
     payload: dict = {
@@ -224,6 +229,9 @@ def send_india_alpha_hrp_email(
         "as_of_date": as_of_date,
         "prior_allocation": (
             prior_allocation.model_dump() if prior_allocation is not None else None
+        ),
+        "paper_allocation": (
+            paper_allocation.model_dump() if paper_allocation is not None else None
         ),
     }
     with get_client() as client:
@@ -296,6 +304,7 @@ def send_double_hrp_email(
     previous_year_week_used: str | None = None,
     stickiness_threshold_pp: float = 1.0,
     prior_allocation: PriorAllocation | None = None,
+    paper_allocation: PaperAllocationResponse | None = None,
 ) -> WeeklyReportEmailResponse:
     """Send India Double HRP report email (both stages + sticky + AI summary).
 
@@ -306,6 +315,9 @@ def send_double_hrp_email(
 
     ``prior_allocation`` is sourced from the prior-week DB row
     (paper-only, so DB == reality) by the workflow.
+
+    ``paper_allocation`` contains the whole-share conversion of the
+    Stage 2 weights for display in the email table.
     """
     logger.info("Sending India Double HRP report email...")
     with get_client() as client:
@@ -324,11 +336,12 @@ def send_double_hrp_email(
                 "fillers_count": fillers_count,
                 "previous_year_week_used": previous_year_week_used,
                 "stickiness_threshold_pp": stickiness_threshold_pp,
-                "prior_allocation": (
-                    prior_allocation.model_dump()
-                    if prior_allocation is not None
-                    else None
-                ),
+                "prior_allocation": prior_allocation.model_dump()
+                if prior_allocation is not None
+                else None,
+                "paper_allocation": paper_allocation.model_dump()
+                if paper_allocation is not None
+                else None,
             },
         )
         response.raise_for_status()

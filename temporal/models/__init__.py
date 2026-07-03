@@ -4,6 +4,7 @@ from models.alpha_screen import PatchTSTBatchScores
 from models.email import TrainingSummaryEmailResponse
 from models.etl import RefreshTrainingDataRequest, RefreshTrainingDataResponse
 from models.forecast_email import (
+    AllocationDetailModel,
     AlpacaPortfolioResponse,
     FundamentalsResponse,
     GenerateOrdersResponse,
@@ -15,6 +16,7 @@ from models.forecast_email import (
     OrderModel,
     OrderSubmitResult,
     OrderSummary,
+    PaperAllocationResponse,
     PatchTSTInferenceResponse,
     PortfolioResponse,
     PositionModel,
@@ -52,6 +54,7 @@ __all__ = [
     "TrainingSummaryResponse",
     # Forecast Email Flow
     "AlpacaPortfolioResponse",
+    "AllocationDetailModel",
     "FundamentalsResponse",
     "GenerateOrdersResponse",
     "HRPAllocationResponse",
@@ -62,6 +65,7 @@ __all__ = [
     "OrderModel",
     "OrderSummary",
     "OrderSubmitResult",
+    "PaperAllocationResponse",
     "PatchTSTInferenceResponse",
     "PortfolioResponse",
     "PositionModel",

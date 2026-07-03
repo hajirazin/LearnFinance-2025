@@ -152,7 +152,9 @@ def mock_config() -> SACConfig:
 
 
 def create_mock_training_result(
-    config: SACConfig, eval_cagr: float = 0.13
+    config: SACConfig,
+    eval_cagr: float = 0.13,
+    symbol_order_override: list[str] | None = None,
 ) -> SACTrainingResult:
     """Create a mock training result for testing.
 
@@ -160,6 +162,14 @@ def create_mock_training_result(
     the always-promote-with-guardrails policy promotes by default.
     Tests that need to exercise the rejection path pass an explicit
     sub-floor value (e.g. ``eval_cagr=0.10``).
+
+    Args:
+        config: SAC config (``n_stocks`` determines network dims).
+        eval_cagr: CAGR to include in the result metadata.
+        symbol_order_override: If provided, use this instead of the
+            default ``mock_symbols()[:n_stocks]`` so a test can exercise
+            the finetune symbol-order guardrail without changing the
+            number of stocks or the available price data.
     """
     n_stocks = config.n_stocks
     # State dim: signals (7 per stock) + forecasts (2 per stock) + weights
@@ -197,6 +207,12 @@ def create_mock_training_result(
     dummy_states = np.random.randn(10, state_dim)
     scaler.fit(dummy_states)
 
+    symbol_order = (
+        symbol_order_override
+        if symbol_order_override is not None
+        else mock_symbols()[:n_stocks]
+    )
+
     return SACTrainingResult(
         actor=actor,
         critic=critic,
@@ -204,7 +220,7 @@ def create_mock_training_result(
         log_alpha=log_alpha,
         scaler=scaler,
         config=config,
-        symbol_order=mock_symbols()[:n_stocks],
+        symbol_order=symbol_order,
         final_actor_loss=0.1,
         final_critic_loss=0.05,
         avg_episode_return=0.02,
@@ -610,6 +626,7 @@ class TestSACLSTMFinetune:
         )
 
         app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
 
         client = TestClient(app)
@@ -664,6 +681,7 @@ class TestSACLSTMFinetune:
         )
 
         app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
 
         client = TestClient(app)
@@ -700,18 +718,9 @@ class TestSACLSTMFinetune:
             sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
         )
 
-        # Return a healthy result, but make the available symbols
-        # appear permuted by patching mock_price_loader to drop the
-        # last symbol (forcing available_symbols != prior_symbol_order).
-        def _drop_last_symbol_loader(symbols, start_date, end_date):
-            # Drop the LAST prior symbol so available_symbols is a
-            # strict subset of prior_symbol_order -- order/length differs.
-            kept = list(symbols)[:-1]
-            return mock_price_loader(kept, start_date, end_date)
-
-        monkeypatch.setattr(
-            sac_ft_route, "load_prices_yfinance", _drop_last_symbol_loader
-        )
+        # Return a healthy result with the same symbols but reversed
+        # order so that evaluate_sac_finetune_artifact_health detects
+        # the mismatch and refuses to promote.
         monkeypatch.setattr(
             sac_ft_route,
             "finetune_sac",
@@ -723,10 +732,16 @@ class TestSACLSTMFinetune:
             scaler,
             prior_config,
             finetune_config,
-            shutdown_event=None: create_mock_training_result(prior_config),
+            shutdown_event=None: create_mock_training_result(
+                prior_config,
+                symbol_order_override=list(
+                    reversed(mock_symbols()[: prior_config.n_stocks])
+                ),
+            ),
         )
 
         app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
         app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
 
         client = TestClient(app)

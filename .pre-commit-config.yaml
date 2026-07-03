@@ -13,7 +13,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: bash -c 'cd brain_api && uv sync --extra dev && uv run pytest'
+        entry: bash -c 'devbox run brain:setup && devbox run brain:test'
         language: system
         pass_filenames: false
         types: [python]

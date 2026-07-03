@@ -282,7 +282,12 @@ class IndiaAlphaHRPEmailRequest(AlphaHRPEmailRequest):
     Same fields as the shared :class:`AlphaHRPEmailRequest` base. India
     has no Alpaca paper account, so no ``order_results`` / ``skipped``
     fields are added.
+
+    ``paper_allocation`` carries the whole-share conversion of Stage 2
+    weights for display in the email table (India-only, no broker).
     """
+
+    paper_allocation: dict | None = None
 
 
 # =============================================================================
@@ -338,7 +343,12 @@ class IndiaDoubleHRPEmailRequest(DoubleHRPEmailRequest):
     Same fields as the shared :class:`DoubleHRPEmailRequest` base. India
     has no Alpaca paper account, so no ``order_results`` / ``skipped``
     fields are added.
+
+    ``paper_allocation`` carries the whole-share conversion of Stage 2
+    weights for display in the email table (India-only, no broker).
     """
+
+    paper_allocation: dict | None = None
 
 
 class USDoubleHRPEmailRequest(DoubleHRPEmailRequest):

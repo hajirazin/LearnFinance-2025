@@ -527,7 +527,7 @@
     },
     "python311@latest": {
       "last_modified": "2025-11-23T21:50:36Z",
-      "plugin_version": "0.0.4",
+      "plugin_version": "0.0.5",
       "resolved": "github:NixOS/nixpkgs/ee09932cedcef15aaf476f9343d1dea2cb77e261#python311",
       "source": "devbox-search",
       "version": "3.11.14",

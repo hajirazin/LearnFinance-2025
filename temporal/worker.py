@@ -18,6 +18,7 @@ from activities.execution import (
     generate_orders_alpha_hrp,
     generate_orders_dhrp,
     generate_orders_sac,
+    generate_paper_allocation,
     store_experience_sac,
     update_execution_sac,
 )
@@ -150,6 +151,7 @@ ALL_ACTIVITIES = [
     generate_orders_sac,
     generate_orders_dhrp,
     generate_orders_alpha_hrp,
+    generate_paper_allocation,
     store_experience_sac,
     update_execution_sac,
     # Reporting

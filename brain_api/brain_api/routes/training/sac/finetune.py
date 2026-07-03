@@ -342,7 +342,7 @@ def _run_sac_finetune(
             eval_sharpe=result.eval_sharpe,
             eval_max_drawdown=result.eval_max_drawdown,
             prior_symbol_order=list(prior_artifacts.symbol_order),
-            actual_symbol_order=available_symbols,
+            actual_symbol_order=list(result.symbol_order),
             artifact_dir=version_dir,
         )
         promoted = health.is_healthy

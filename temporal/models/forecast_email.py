@@ -276,6 +276,25 @@ class GenerateOrdersResponse(BaseModel):
     atr_used: dict[str, float] = {}
 
 
+class AllocationDetailModel(BaseModel):
+    """A single row in the paper-allocation table (whole shares, no fractions)."""
+
+    symbol: str
+    weight_pct: float
+    price: float
+    whole_shares: int
+    trade_value: float
+
+
+class PaperAllocationResponse(BaseModel):
+    """Response from POST /orders/paper-allocation."""
+
+    details: list[AllocationDetailModel]
+    total_nav: float
+    prices_used: dict[str, float]
+    total_allocated_pct: float
+
+
 class OrderDetail(BaseModel):
     """Per-order row threaded into the email payload (US-only).
 

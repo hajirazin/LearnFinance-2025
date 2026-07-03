@@ -580,3 +580,98 @@ def generate_orders(
         prices_used=prices,
         atr_used=atr_map,
     )
+
+
+# ============================================================================
+# Paper allocation (whole shares only, no order submission)
+# ============================================================================
+
+
+@dataclass
+class AllocationDetail:
+    """A single row in the paper-allocation table.
+
+    Shows the theoretical whole-share quantity for a given weight
+    target and NAV, using the current market price. No order is
+    generated or submitted.
+    """
+
+    symbol: str
+    weight_pct: float
+    price: float
+    whole_shares: int
+    trade_value: float
+
+
+@dataclass
+class PaperAllocationResult:
+    """Result of converting weights to whole shares (paper-only).
+
+    The ``details`` list is sorted by weight descending so the email
+    table renders the largest allocation first.
+    """
+
+    details: list[AllocationDetail]
+    total_nav: float
+    prices_used: dict[str, float]
+    total_allocated_pct: float
+
+
+def convert_weights_to_whole_shares(
+    percentage_weights: dict[str, float],
+    total_nav: float,
+    prices: dict[str, float] | None = None,
+) -> PaperAllocationResult:
+    """Convert percentage weights to whole shares at current prices.
+
+    This is a paper-only computation with no order submission. It
+    reuses the same price-fetching logic as :func:`generate_orders`
+    but uses floor-to-integer (``int()``) instead of fractional shares.
+
+    Args:
+        percentage_weights: ``{symbol: weight_pct}`` where 100 = 100%.
+        total_nav: Notional portfolio value in the local currency
+            (e.g. 1 000 000 INR).
+        prices: Optional pre-fetched prices. If ``None``, fetches via
+            yfinance.
+
+    Returns:
+        PaperAllocationResult with whole-share quantities.
+    """
+    symbols = [s for s in percentage_weights if s and percentage_weights[s] > 0]
+
+    if prices is None:
+        prices = fetch_current_prices(symbols)
+
+    details: list[AllocationDetail] = []
+    total_allocated_pct = 0.0
+
+    for symbol in sorted(symbols, key=lambda s: percentage_weights[s], reverse=True):
+        wt = percentage_weights[symbol]
+        if wt <= 0:
+            continue
+        total_allocated_pct += wt
+        price = prices.get(symbol, 0.0)
+        if price <= 0:
+            print(f"[PaperAllocation] Skipping {symbol}: no valid price ({price})")
+            continue
+        trade_value = (wt / 100.0) * total_nav
+        if trade_value < MIN_TRADE_VALUE:
+            continue
+        whole_shares = int(trade_value / price)
+        details.append(
+            AllocationDetail(
+                symbol=symbol,
+                weight_pct=wt,
+                price=price,
+                whole_shares=whole_shares,
+                trade_value=round(whole_shares * price, 2),
+            )
+        )
+
+    return PaperAllocationResult(
+        details=details,
+        total_nav=total_nav,
+        prices_used=prices,
+        total_allocated_pct=round(total_allocated_pct, 2),
+    )

@@ -176,18 +176,27 @@ universe-agnostic. #}
   <div style="margin-bottom: 24px;">
     <h3 style="color: #374151; border-bottom: 2px solid {{ self.stage2_primary() }}; padding-bottom: 8px;">Stage 2: Final Allocation ({{ stage2.symbols_used }} stocks)</h3>
     <p style="color: #6b7280; font-size: 14px;">Lookback: {{ stage2.lookback_days }} trading days (~{{ (stage2.lookback_days / 252) | round(1) }}yr) | As-of: {{ stage2.as_of_date }}</p>
+    {% set pa_details = paper_allocation.details if paper_allocation else [] %}
+    {% set pa_lookup = {} %}
+    {% for d in pa_details %}
+      {% if pa_lookup.update({d.symbol: d}) %}{% endif %}
+    {% endfor %}
     <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
       <thead>
         <tr style="background-color: {{ self.stage2_primary_bg() }};">
           <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }}; width: 40px;">#</th>
           <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }};">Symbol</th>
           <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }};">Weight</th>
+          {% if paper_allocation %}<th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Price</th>
+          <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Whole Shares</th>
+          <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Notional</th>{% endif %}
         </tr>
       </thead>
       <tbody>
         {% set ns = namespace(total=0.0) %}
         {% for sym, wt in stage2.percentage_weights.items() | sort(attribute='1', reverse=true) %}{% if wt > 0 %}
         {% set ns.total = ns.total + wt %}
+        {% set pad = pa_lookup.get(sym) %}
         <tr>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb;">{{ loop.index }}</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">{{ sym }}</td>
@@ -197,16 +206,29 @@ universe-agnostic. #}
               <span>{{ "%.2f" | format(wt) }}%</span>
             </div>
           </td>
+          {% if paper_allocation and pad %}
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">{{ "%.2f" | format(pad.price) }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">{{ pad.whole_shares }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">{{ "%.2f" | format(pad.trade_value) }}</td>
+          {% elif paper_allocation %}
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
+          {% endif %}
         </tr>
         {% endif %}{% endfor %}
         <tr style="background-color: {{ self.stage2_primary_bg() }};">
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">&Sigma;</td>
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">Total</td>
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">{{ "%.2f" | format(ns.total) }}%</td>
+          {% if paper_allocation %}<td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }};" colspan="3"></td>{% endif %}
         </tr>
       </tbody>
     </table>
     <p style="color: #6b7280; font-size: 12px; margin-top: 6px;"><em>Weights are HRP fractions &times; 100; the row sum should round to 100%. Tiny deviations reflect display rounding only.</em></p>
+    {% if paper_allocation %}
+    <p style="color: #6b7280; font-size: 12px; margin-top: 2px;"><em>Paper-only display: shares are floored to whole integers at a notional NAV of {{ "%.0f" | format(paper_allocation.total_nav) }}. The notional column may not exactly match the target weight due to integer rounding.</em></p>
+    {% endif %}
   </div>
 {% endblock %}
 

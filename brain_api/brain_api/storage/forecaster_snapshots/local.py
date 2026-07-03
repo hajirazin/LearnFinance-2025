@@ -454,6 +454,25 @@ class SnapshotLocalStorage:
             ),
         )
 
+        # Clean up any stale branches for this cutoff date on HF
+        try:
+            stale_prefix = f"snapshot-{cutoff_date.isoformat()}-"
+            for branch in self._list_hf_hashed_snapshot_branch_names():
+                if branch.startswith(stale_prefix) and branch != branch_name:
+                    logger.info(f"Deleting stale HF branch: {branch}")
+                    try:
+                        api.delete_branch(
+                            repo_id=repo_id, repo_type="model", branch=branch
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to delete stale HF branch {branch}: {e}"
+                        )
+        except Exception as e:
+            logger.warning(
+                f"Failed to clean up stale HF branches for {cutoff_date}: {e}"
+            )
+
         return repo_id
 
     def download_snapshot_from_hf(
