@@ -20,6 +20,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Query
 
+from brain_api.core.filters.filter_by_max_price import filter_symbols_by_max_price
 from brain_api.core.inference_utils import compute_week_from_cutoff
 from brain_api.core.model_buckets import (
     BucketConfig,
@@ -295,6 +296,18 @@ def patchtst_score_batch(
         f"as_of={cutoff_date})"
     )
 
+    excluded_by_price: list[tuple[str, float]] = []
+
+    if request.market == "india":
+        symbols, excluded_by_price = filter_symbols_by_max_price(symbols)
+
+        if excluded_by_price:
+            for sym, price in excluded_by_price:
+                logger.warning(
+                    f"Halal_India: excluded {sym} — price {price:.2f} exceeds "
+                    f"max price threshold"
+                )
+
     try:
         batch_result = run_batch_inference(
             symbols, cutoff_date, storage=storage, artifacts=artifacts
@@ -308,6 +321,13 @@ def patchtst_score_batch(
             requested_count=len(symbols),
             min_predictions=request.min_predictions,
         )
+
+        # Create excluded list of symboles with both excluded by price and excluded by non-finite scores
+        if request.market == "india" and excluded_by_price:
+            for sym, _ in excluded_by_price:
+                if sym not in excluded:
+                    excluded.append(sym)  # Price exclusion, no score available
+
     except RuntimeError as e:
         # Non-finite scores or below-floor count: math-invariant
         # violation of the rank-band selector. Return 422 (caller input
@@ -326,7 +346,7 @@ def patchtst_score_batch(
         as_of_date=cutoff_date.isoformat(),
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
-        requested_count=len(symbols),
+        requested_count=len(request.symbols),
         predicted_count=len(scores),
         excluded_symbols=excluded,
     )

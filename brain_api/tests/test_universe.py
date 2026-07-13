@@ -2006,3 +2006,45 @@ def test_get_nifty_shariah_500_returns_503_on_scraper_failure():
 
     assert response.status_code == 503
     assert "Finology API" in response.json()["detail"]
+
+
+def test_get_halal_india_applies_max_price_filter():
+    """Test that /universe/halal_india filters out symbols exceeding max price."""
+    mock_nifty = {
+        "stocks": [
+            {"symbol": "GOOD.NS", "name": "Good"},
+            {"symbol": "OVERPRICED.NS", "name": "Overpriced"},
+        ],
+        "total_stocks": 2,
+    }
+
+    mock_result = _make_mock_batch_inference_result(["GOOD.NS"])
+
+    def mock_filter(symbols):
+        return ["GOOD.NS"], [("OVERPRICED.NS", 6000.0)]
+
+    with (
+        patch(
+            "brain_api.universe.halal_india.get_nifty_shariah_500_universe",
+            return_value=mock_nifty,
+        ),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_min_history",
+            side_effect=_mock_history_filter_pass_all(["GOOD.NS", "OVERPRICED.NS"]),
+        ),
+        patch(
+            "brain_api.universe.halal_india.filter_symbols_by_max_price",
+            side_effect=mock_filter,
+        ),
+        patch(
+            "brain_api.universe.halal_india.run_batch_inference",
+            return_value=mock_result,
+        ),
+    ):
+        response = client.get("/universe/halal_india")
+
+    assert response.status_code == 200
+    data = response.json()
+    symbols = [s["symbol"] for s in data["stocks"]]
+    assert "GOOD.NS" in symbols
+    assert "OVERPRICED.NS" not in symbols

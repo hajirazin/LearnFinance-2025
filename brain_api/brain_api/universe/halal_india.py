@@ -109,6 +109,7 @@ import threading
 from datetime import UTC, datetime
 
 from brain_api.core.config import resolve_cutoff_date
+from brain_api.core.filters.filter_by_max_price import filter_symbols_by_max_price
 from brain_api.core.patchtst.inference import run_batch_inference
 from brain_api.core.prices import (
     compute_min_walkforward_days,
@@ -187,11 +188,22 @@ def get_halal_india_universe(
         symbols, min_trading_days, cutoff_date
     )
 
+    qualifying_symbols, excluded_by_price = filter_symbols_by_max_price(
+        qualifying_symbols
+    )
+
     if excluded:
         for sym, days in excluded:
             logger.warning(
                 f"Halal_India: excluded {sym} — only {days} trading days "
                 f"(need {min_trading_days})"
+            )
+
+    if excluded_by_price:
+        for sym, price in excluded_by_price:
+            logger.warning(
+                f"Halal_India: excluded {sym} — price {price:.2f} exceeds "
+                f"max price threshold INR"
             )
 
     logger.info(

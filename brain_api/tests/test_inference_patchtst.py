@@ -656,3 +656,56 @@ def test_score_batch_no_india_model_returns_400(monkeypatch):
             )
             assert response.status_code == 503
             assert "PatchTST" in response.json()["detail"]
+
+
+def test_score_batch_india_filters_max_price(score_batch_client, monkeypatch):
+    """market='india' filters out symbols that exceed the max price threshold."""
+    from brain_api.routes.inference import patchtst as inference_module
+
+    # Mock filter_symbols_by_max_price
+    def mock_filter(symbols):
+        return ["RELIANCE.NS"], [("TCS.NS", 6000.0)]
+
+    monkeypatch.setattr(inference_module, "filter_symbols_by_max_price", mock_filter)
+
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={
+            "market": "india",
+            "symbols": ["RELIANCE.NS", "TCS.NS"],
+            "min_predictions": 1,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data["scores"].keys()) == {"RELIANCE.NS"}
+    assert data["predicted_count"] == 1
+    assert data["requested_count"] == 2
+    assert "TCS.NS" in data["excluded_symbols"]
+
+
+def test_score_batch_us_skips_filter(score_batch_client, monkeypatch):
+    """market='us' bypasses the max price filter."""
+    from brain_api.routes.inference import patchtst as inference_module
+
+    filter_called = False
+
+    def mock_filter(symbols):
+        nonlocal filter_called
+        filter_called = True
+        return symbols, []
+
+    monkeypatch.setattr(inference_module, "filter_symbols_by_max_price", mock_filter)
+
+    response = score_batch_client.post(
+        "/inference/patchtst/score-batch",
+        json={
+            "market": "us",
+            "symbols": ["AAPL", "MSFT"],
+            "min_predictions": 1,
+        },
+    )
+    assert response.status_code == 200
+    assert not filter_called
+    data = response.json()
+    assert set(data["scores"].keys()) == {"AAPL", "MSFT"}
