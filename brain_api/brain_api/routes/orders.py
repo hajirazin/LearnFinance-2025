@@ -92,6 +92,7 @@ class OrderModel(BaseModel):
         default=None, gt=0, description="Limit price (only for limit orders)"
     )
     time_in_force: str = Field(..., description="Time in force ('day')")
+    currency: str = Field(default="USD", description="Currency of the order")
     # Display-only stop-loss reference. Computed in core/orders.py via
     # core/stop_loss.compute_stop_loss using ATR(14)*2 clamped to
     # [5%, 10%] of entry. Sells carry "sell_no_stop"; buys without ATR
@@ -307,6 +308,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             type=o.order_type,
             limit_price=o.limit_price,
             time_in_force=o.time_in_force,
+            currency="USD",
             stop_loss_price=o.stop_loss_price,
             stop_loss_distance_pct=o.stop_loss_distance_pct,
             stop_loss_reason=o.stop_loss_reason,

@@ -37,12 +37,8 @@ dependencies = [
     # LLM integration (OpenAI/OLLAMA)
     "openai>=1.0.0",
     "jinja2>=3.1.0",
-    # Interactive Brokers TWS API client (sac_halal trades through IB Gateway).
-    # ib_async is the actively-maintained successor to ib_insync (which was
-    # archived in 2024); do NOT pull in the legacy ``ibapi`` package -- ib_async
-    # ships its own protocol implementation. Connects to a local IB Gateway
-    # (Java daemon) on TCP :4002 (paper) or :4001 (live).
-    "ib_async>=2.0.0",
+    # HTTP client for Client Portal REST API
+    "httpx>=0.27.0",
     # Nifty 500 Shariah universe scraper (Finology, Chrome TLS impersonation).
     "curl-cffi>=0.7.0",
 ]
@@ -50,7 +46,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "httpx>=0.27.0",
     "ruff>=0.12.0",
 ]
 

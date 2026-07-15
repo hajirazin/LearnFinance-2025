@@ -73,6 +73,7 @@ class TestGetPortfolio:
         assert response.status_code == 200
         data = response.json()
         assert data["cash"] == 5000.00
+        assert data["cash_balances"] == {}
         assert len(data["positions"]) == 1
         assert data["open_orders_count"] == 1
 
@@ -175,6 +176,7 @@ class TestSubmitOrders:
                             "time_in_force": "day",
                             "limit_price": 175.50,
                             "client_order_id": "paper:2026-02-05:attempt-1:AAPL:BUY",
+                            "currency": "USD",
                         }
                     ],
                 },

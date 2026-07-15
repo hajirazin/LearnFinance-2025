@@ -25,7 +25,7 @@ Coverage targets:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -84,6 +84,7 @@ class TestIBKRGetPortfolio:
         """Happy path: cash + positions + open_orders_count from gateway."""
         fake_portfolio = IBKRPortfolio(
             cash=12_345.67,
+            cash_balances={"USD": 12_345.67},
             positions=[
                 IBKRPosition(symbol="AAPL", qty=10.0, market_value=1750.0),
                 IBKRPosition(symbol="MSFT", qty=2.0, market_value=815.50),
@@ -158,8 +159,8 @@ class TestIBKRSubmitOrders:
         coid = "paper:halal:2026-05-04:attempt-1:AAPL:BUY"
         with (
             patch(
-                "brain_api.routes.ibkr.get_ib_connection",
-                return_value=MagicMock(),
+                "brain_api.routes.ibkr.get_session_status",
+                return_value=True,
             ),
             patch("brain_api.routes.ibkr.list_open_order_refs", return_value=set()),
             patch(
@@ -210,8 +211,8 @@ class TestIBKRSubmitOrders:
         )
         with (
             patch(
-                "brain_api.routes.ibkr.get_ib_connection",
-                return_value=MagicMock(),
+                "brain_api.routes.ibkr.get_session_status",
+                return_value=True,
             ),
             patch("brain_api.routes.ibkr.list_open_order_refs", return_value=set()),
             patch("brain_api.routes.ibkr.submit_order") as mock_submit,
@@ -242,8 +243,8 @@ class TestIBKRSubmitOrders:
         coid = "paper:halal:2026-05-04:attempt-1:AAPL:BUY"
         with (
             patch(
-                "brain_api.routes.ibkr.get_ib_connection",
-                return_value=MagicMock(),
+                "brain_api.routes.ibkr.get_session_status",
+                return_value=True,
             ),
             patch(
                 "brain_api.routes.ibkr.list_open_order_refs",
@@ -284,8 +285,8 @@ class TestIBKRSubmitOrders:
 
         with (
             patch(
-                "brain_api.routes.ibkr.get_ib_connection",
-                return_value=MagicMock(),
+                "brain_api.routes.ibkr.get_session_status",
+                return_value=True,
             ),
             patch("brain_api.routes.ibkr.list_open_order_refs", return_value=set()),
             patch(
@@ -313,12 +314,12 @@ class TestIBKRSubmitOrders:
 
     def test_submit_empty_orders_is_a_noop(self, client, temp_ledger):
         """An empty orders list returns 0/0 without touching the gateway."""
-        with patch("brain_api.routes.ibkr.get_ib_connection") as mock_get_connection:
+        with patch("brain_api.routes.ibkr.get_session_status") as mock_get_status:
             response = client.post(
                 "/ibkr/submit-orders",
                 json={"account": "sac_halal", "orders": []},
             )
-        mock_get_connection.assert_not_called()
+        mock_get_status.assert_not_called()
         assert response.status_code == 200
         assert response.json()["orders_submitted"] == 0
 

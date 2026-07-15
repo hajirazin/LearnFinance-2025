@@ -249,6 +249,7 @@ class OrderModel(BaseModel):
     type: str
     limit_price: float | None = None
     time_in_force: str
+    currency: str = "USD"
     stop_loss_price: float | None = None
     stop_loss_distance_pct: float | None = None
     stop_loss_reason: str = "atr_unavailable"

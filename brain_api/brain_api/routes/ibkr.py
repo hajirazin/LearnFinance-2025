@@ -51,8 +51,9 @@ from brain_api.core.ibkr_client import (
     IBKROrderSpec,
     IBKRSubmitResult,
     get_connection_config,
-    get_ib_connection,
+    get_order_status,
     get_portfolio,
+    get_session_status,
     list_open_order_refs,
     submit_order,
 )
@@ -106,6 +107,9 @@ def get_portfolio_route(
     account: Annotated[
         IBKRAccount, Query(..., description="IBKR account (currently sac_halal)")
     ],
+    target_currency: Annotated[
+        str, Query(description="Currency to calculate cash equivalent in")
+    ] = "USD",
 ) -> PortfolioResponse:
     """Get cash + positions + open orders count for an IBKR account.
 
@@ -128,7 +132,7 @@ def get_portfolio_route(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     try:
-        portfolio = get_portfolio(config)
+        portfolio = get_portfolio(config, target_currency=target_currency)
     except ConnectionError as e:
         logger.error(f"[IBKR] Gateway connection failed: {e}")
         raise HTTPException(
@@ -144,6 +148,7 @@ def get_portfolio_route(
 
     return PortfolioResponse(
         cash=portfolio.cash,
+        cash_balances=portfolio.cash_balances,
         positions=[
             PositionResponse(
                 symbol=p.symbol,
@@ -202,7 +207,8 @@ def submit_orders(
     # roundtrip (raises 503 if gateway unreachable -- catch and convert
     # at the boundary for parity with the Alpaca route).
     try:
-        get_ib_connection(config)
+        if not get_session_status(config):
+            raise ConnectionError("Gateway session is not authenticated")
         open_refs = list_open_order_refs(config)
     except ConnectionError as e:
         logger.error(f"[IBKR] Gateway connection failed: {e}")
@@ -246,6 +252,7 @@ def submit_orders(
             time_in_force=order.time_in_force,
             limit_price=order.limit_price,
             client_order_id=order.client_order_id,
+            currency=order.currency,
         )
         try:
             outcome: IBKRSubmitResult = submit_order(config, spec)
@@ -353,6 +360,12 @@ def get_order_history(
         str,
         Query(..., description="ISO date to fetch orders submitted on/after"),
     ],
+    sync_broker: Annotated[
+        bool,
+        Query(
+            description="If True, poll the live broker API for latest statuses before returning"
+        ),
+    ] = False,
 ) -> list[OrderHistoryItem]:
     """Read order history from the local IBKR ledger (NOT the gateway).
 
@@ -363,13 +376,58 @@ def get_order_history(
     so we serve this endpoint from the local ledger that mirrored
     every submission as it happened.
 
+    If `sync_broker` is True, it will reach out to the broker API to
+    get the live status for each non-terminal order before returning,
+    updating the local ledger in the process.
+
     Mirrors the Alpaca ``/alpaca/order-history`` shape so the
     workflow's regex on ``client_order_id`` is unchanged.
     """
     logger.info(
-        f"[IBKR] Fetching order history for account {account.value} after {after}"
+        f"[IBKR] Fetching order history for account {account.value} after {after} (sync={sync_broker})"
     )
     rows = ledger.list_after(account.value, after)
+
+    if sync_broker and rows:
+        try:
+            config = get_connection_config(account.value)
+            # Pre-warm connection for polling
+            if not get_session_status(config):
+                logger.warning(
+                    f"[IBKR] Gateway session not authenticated for {account.value}"
+                )
+
+            updates = []
+            for row in rows:
+                if row.ibkr_perm_id and row.status not in (
+                    "Filled",
+                    "Cancelled",
+                    "Inactive",
+                    "ApiCancelled",
+                ):
+                    try:
+                        live_status = get_order_status(config, row.ibkr_perm_id)
+                        if live_status:
+                            updates.append(
+                                (
+                                    row.order_ref,
+                                    live_status.status,
+                                    live_status.filled_qty,
+                                    live_status.filled_avg_price,
+                                )
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"[IBKR] Failed to sync status for {row.ibkr_perm_id}: {e}"
+                        )
+
+            if updates:
+                ledger.update_status_batch(updates)
+                # Re-fetch after updates to get the latest state
+                rows = ledger.list_after(account.value, after)
+        except Exception as e:
+            logger.error(f"[IBKR] Failed to sync broker statuses: {e}")
+
     return [
         OrderHistoryItem(
             id=str(r.ibkr_perm_id) if r.ibkr_perm_id else r.order_ref,

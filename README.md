@@ -406,6 +406,14 @@ On submit:
 - If an order with the same `client_order_id` was already submitted, reruns **do not** submit again.
 - We also query Alpaca by `client_order_id` as a secondary guardrail.
 
+### Broker and Currency Mappings
+
+The system orchestrates trading across multiple markets and brokers. Each broker has a defined base currency:
+
+- **Alpaca**: US market only. Base currency is **USD**.
+- **IBKR**: Multi-currency account, primarily used for the US market in this system. Base currency is **USD**. (The system dynamically detects cash balances via account tags and asks IBKR for Forex conversion rates if needed).
+- **AngelOne** (Upcoming): Indian market. Base currency will be **INR**.
+
 ### Universe types
 
 The system maintains five universe tiers — two base universes (raw scrapes), two PatchTST top-15 universes derived from them, and the original yfinance halal universe kept for backwards compatibility:

@@ -46,59 +46,26 @@ services:
       retries: 10
       start_period: 30s
 
-  # Interactive Brokers Gateway (paper) for the sac_halal SAC workflow.
-  # gnzsnz/ib-gateway is multi-arch (amd64 + arm64 since 10.37.1l); IBC is
-  # bundled so headless auto-login works once 2FA has been confirmed once
-  # via VNC. Memory-leak protection uses the JVM's built-in soft restart
-  # (preserves the security token, no nightly 2FA push).
-  #
-  # Weekly reauth: IBKR invalidates the session during the Saturday
-  # maintenance window (~13:00 SGT). Exactly one IBKR Mobile push fires
-  # per week; tap to confirm. If missed, the gateway auto-restarts and
-  # retries every TWOFA_EXIT_INTERVAL seconds until accepted.
-  #
-  # network_mode: host so IB Gateway listens on the Pi (same namespace as
-  # brain-api and temporal-worker when those use host networking).
-  ibkr-gateway:
-    image: ghcr.io/gnzsnz/ib-gateway:stable
-    container_name: learnfinance-ibkr-gateway
-    restart: unless-stopped
-    network_mode: host
+  # Interactive Brokers Client Portal API Gateway (voyz/ibeam)
+  # Replaces the legacy ib-gateway for REST-based order execution on the live account.
+  # Handles headless login and 2FA via Time-based OTP (PYOTP).
+  ibeam:
+    image: voyz/ibeam
+    container_name: learnfinance-ibeam
+    restart: "no"
+    network_mode: bridge
+    ports:
+      - "5000:5000"
     environment:
-      # Soft restart cycles the JVM in-place; keeps the 2FA-blessed
-      # session token alive so no daily push fires.
-      AUTO_RESTART_TIME: "11:59 PM"
-      # On weekend reauth: don't exit, just restart and re-prompt 2FA.
-      TWOFA_TIMEOUT_ACTION: restart
-      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
-      # 1 hour between reauth retries -- avoids spamming the phone with a
-      # fresh push every minute. Headroom: weekend reauth Sat ~13:00 SGT
-      # vs Monday 20:30 SGT trade slot = ~31 hours = ~30 retry attempts.
-      TWOFA_EXIT_INTERVAL: "3600"
-      TIME_ZONE: Asia/Singapore
-      # Auto-approve incoming API connections from brain_api (default
-      # 'manual' would pop a GUI dialog that nobody can click in
-      # headless mode).
-      TWS_ACCEPT_INCOMING: accept
-      # Force write-enabled API so /ibkr/submit-orders works even if a
-      # prior session toggled the read-only checkbox in jts.ini.
-      READ_ONLY_API: "no"
-      # Suppress the API "Precautions" warning dialogs that would
-      # otherwise block automated order submission until acknowledged.
-      BYPASS_WARNING: "yes"
-      # Pin 2FA to IBKR Mobile so IBC does not stall on a 'select 2FA
-      # device' prompt during first login or weekend reauth.
-      TWOFA_DEVICE: "IBKR Mobile"
-      # Credentials must be provided via .env (see brain_api/.env.example).
-      # TWS_USERID / TWS_PASSWORD are the gnzsnz image's documented vars.
+      - IBEAM_MAINTENANCE_INTERVAL=60
+      - IBEAM_TWO_FA_HANDLER=PYOTP
+      - IBEAM_PAGE_LOAD_TIMEOUT=60
+      - IBEAM_ERROR_SCREENSHOTS=True
+      - IBEAM_TWO_FA_INPUT_EL_ID=ID@@xyz-field-silver-response
+      - IBEAM_TWO_FA_EL_ID=ID@@xyz-field-silver-response
+      - IBEAM_AUTHENTICATION_STRATEGY=B
     env_file:
       - ./brain_api/.env
-    healthcheck:
-      test: ["CMD-SHELL", "netstat -an | grep -q ':4002 .*LISTEN' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   temporal-worker:
     build: ./temporal

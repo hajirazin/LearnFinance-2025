@@ -453,7 +453,7 @@ def check_order_statuses_ibkr(account: str, client_order_ids: list[str]) -> list
     with get_client() as client:
         response = client.get(
             "/ibkr/order-history",
-            params={"account": account, "after": today},
+            params={"account": account, "after": today, "sync_broker": "true"},
         )
         response.raise_for_status()
     all_orders = response.json()
