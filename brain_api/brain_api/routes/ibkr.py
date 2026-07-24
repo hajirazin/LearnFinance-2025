@@ -148,6 +148,7 @@ def get_portfolio_route(
 
     return PortfolioResponse(
         cash=portfolio.cash,
+        currency=portfolio.currency,
         cash_balances=portfolio.cash_balances,
         positions=[
             PositionResponse(
@@ -253,6 +254,7 @@ def submit_orders(
             limit_price=order.limit_price,
             client_order_id=order.client_order_id,
             currency=order.currency,
+            cash_qty=order.cash_qty,
         )
         try:
             outcome: IBKRSubmitResult = submit_order(config, spec)

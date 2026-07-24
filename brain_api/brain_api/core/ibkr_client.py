@@ -105,6 +105,7 @@ class IBKRPosition:
 @dataclass(frozen=True)
 class IBKRPortfolio:
     cash: float
+    currency: str
     cash_balances: dict[str, float]
     positions: list[IBKRPosition]
     open_orders_count: int
@@ -126,18 +127,26 @@ def get_portfolio(
         # 2. Get Ledger for cash
         cash_balances = {}
         cash = 0.0
+        currency = target_currency
         try:
             resp = client.get(
                 f"{config.base_url}/portfolio/{config.account_code}/ledger"
             )
             resp.raise_for_status()
             ledger_data = resp.json()
-            if "BASE" in ledger_data:
-                cash = float(ledger_data["BASE"].get("cashbalance", 0.0))
+
+            # Fetch target currency balance if available, otherwise fallback to BASE
             if target_currency in ledger_data:
-                cash_balances[target_currency] = float(
-                    ledger_data[target_currency].get("cashbalance", 0.0)
-                )
+                cash = float(ledger_data[target_currency].get("cashbalance", 0.0))
+                currency = target_currency
+            elif "BASE" in ledger_data:
+                cash = float(ledger_data["BASE"].get("cashbalance", 0.0))
+                currency = ledger_data["BASE"].get("currency", "BASE")
+
+            # Populate cash balances dict
+            for curr, data in ledger_data.items():
+                if isinstance(data, dict) and "cashbalance" in data:
+                    cash_balances[curr] = float(data.get("cashbalance", 0.0))
         except Exception as e:
             logger.error(f"[IBKR] Failed to fetch ledger: {e}")
 
@@ -186,6 +195,7 @@ def get_portfolio(
 
         return IBKRPortfolio(
             cash=cash,
+            currency=currency,
             cash_balances=cash_balances,
             positions=positions,
             open_orders_count=open_count,
@@ -202,6 +212,7 @@ class IBKROrderSpec:
     limit_price: float | None
     client_order_id: str
     currency: str
+    cash_qty: float | None = None
 
 
 @dataclass(frozen=True)
@@ -233,17 +244,25 @@ def submit_order(config: IBKRConnectionConfig, spec: IBKROrderSpec) -> IBKRSubmi
 
             # 2. Prepare Order
             order_payload = {
-                "conid": conid,
+                "conid": int(conid),
                 "orderType": "LMT" if spec.order_type.upper() == "LIMIT" else "MKT",
                 "side": spec.side.upper(),
-                "quantity": spec.qty,
                 "tif": spec.time_in_force.upper(),
                 "cOID": spec.client_order_id,
             }
+            is_fractional = not float(spec.qty).is_integer()
+            if is_fractional and spec.cash_qty is not None:
+                order_payload["cashQty"] = spec.cash_qty
+            else:
+                order_payload["quantity"] = (
+                    int(spec.qty) if float(spec.qty).is_integer() else spec.qty
+                )
+
             if spec.limit_price is not None:
                 order_payload["price"] = spec.limit_price
 
             # 3. Submit with Reply Loop
+            logger.info(f"[IBKR] order_payload before submit: {order_payload}")
             resp = client.post(
                 f"{config.base_url}/iserver/account/{config.account_code}/orders",
                 json={"orders": [order_payload]},

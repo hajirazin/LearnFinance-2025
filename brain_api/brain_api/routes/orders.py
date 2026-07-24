@@ -44,6 +44,7 @@ class PortfolioModel(BaseModel):
 
     # Note: Cash can be slightly negative due to pending settlements
     cash: float = Field(..., description="Cash balance in dollars")
+    currency: str = Field(default="USD", description="Currency of the cash balance")
     positions: list[PositionModel] = Field(
         default_factory=list, description="List of current positions"
     )
@@ -109,6 +110,10 @@ class OrderModel(BaseModel):
     stop_loss_reason: str = Field(
         default="atr_unavailable",
         description="'atr14' / 'atr_unavailable' / 'sell_no_stop'",
+    )
+    cash_qty: float | None = Field(
+        default=None,
+        description="Monetary value for fractional execution",
     )
 
 
@@ -253,6 +258,13 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             detail="target_weights cannot be empty",
         )
 
+    # Validate portfolio currency
+    if request.portfolio.currency != "USD":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Portfolio currency must be USD for order generation, got {request.portfolio.currency}",
+        )
+
     # Convert request models to core types
     positions = [
         PositionInput(
@@ -312,6 +324,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             stop_loss_price=o.stop_loss_price,
             stop_loss_distance_pct=o.stop_loss_distance_pct,
             stop_loss_reason=o.stop_loss_reason,
+            cash_qty=o.cash_qty,
         )
         for o in result.orders
     ]

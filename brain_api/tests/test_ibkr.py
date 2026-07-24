@@ -84,6 +84,7 @@ class TestIBKRGetPortfolio:
         """Happy path: cash + positions + open_orders_count from gateway."""
         fake_portfolio = IBKRPortfolio(
             cash=12_345.67,
+            currency="USD",
             cash_balances={"USD": 12_345.67},
             positions=[
                 IBKRPosition(symbol="AAPL", qty=10.0, market_value=1750.0),
@@ -99,6 +100,7 @@ class TestIBKRGetPortfolio:
         assert response.status_code == 200
         data = response.json()
         assert data["cash"] == pytest.approx(12_345.67)
+        assert data.get("currency") == "USD"
         assert data["open_orders_count"] == 1
         assert {p["symbol"] for p in data["positions"]} == {"AAPL", "MSFT"}
 
@@ -109,6 +111,7 @@ class TestIBKRGetPortfolio:
         assert config.account == "sac_halal"
         assert config.port == 4002
         assert config.account_code == "DU1234567"
+        assert mock_portfolio.call_args.kwargs.get("target_currency") == "USD"
 
     def test_portfolio_invalid_account_returns_422(self, client):
         """Unknown account value is rejected by the IBKRAccount enum."""

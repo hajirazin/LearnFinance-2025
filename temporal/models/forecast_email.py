@@ -30,6 +30,7 @@ class AlpacaPortfolioResponse(BaseModel):
     """
 
     cash: float
+    currency: str = "USD"
     positions: list[PositionModel]
     open_orders_count: int
 

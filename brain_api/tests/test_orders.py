@@ -9,6 +9,7 @@ This module tests:
 from unittest.mock import patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from brain_api.core.orders import (
     PortfolioInput,
@@ -17,6 +18,26 @@ from brain_api.core.orders import (
     generate_client_order_id,
     generate_orders,
 )
+from brain_api.main import app
+
+client = TestClient(app)
+
+
+class TestGenerateOrdersEndpoint:
+    """Tests for POST /orders/generate endpoint."""
+
+    def test_rejects_non_usd_portfolio_currency(self):
+        """A portfolio with currency != USD returns 400."""
+        payload = {
+            "target_weights": {"AAPL": 0.5, "MSFT": 0.5},
+            "portfolio": {"cash": 1000.0, "currency": "SGD", "positions": []},
+            "run_id": "test",
+            "attempt": 1,
+            "algorithm": "test",
+        }
+        response = client.post("/orders/generate", json=payload)
+        assert response.status_code == 400
+        assert "Portfolio currency must be USD" in response.json()["detail"]
 
 
 class TestOrderGeneration:

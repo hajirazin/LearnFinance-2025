@@ -72,6 +72,7 @@ class PortfolioResponse(BaseModel):
     """Portfolio data from Alpaca account."""
 
     cash: float = Field(..., description="Cash balance in dollars")
+    currency: str = Field(default="USD", description="Currency of the cash balance")
     cash_balances: dict[str, float] = Field(
         default_factory=dict, description="Cash held per currency"
     )
@@ -96,6 +97,9 @@ class OrderToSubmit(BaseModel):
     )
     client_order_id: str = Field(..., description="Idempotent order ID")
     currency: str = Field(default="USD", description="Currency of the asset")
+    cash_qty: float | None = Field(
+        default=None, description="Monetary value for fractional execution"
+    )
 
 
 class SubmitOrdersRequest(BaseModel):

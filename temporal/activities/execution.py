@@ -58,6 +58,7 @@ def generate_orders_sac(
                 "target_weights": allocation.target_weights,
                 "portfolio": {
                     "cash": portfolio.cash,
+                    "currency": getattr(portfolio, "currency", "USD"),
                     "positions": [p.model_dump() for p in portfolio.positions],
                 },
                 "run_id": run_id,
@@ -155,6 +156,7 @@ def _generate_orders_from_hrp(
                 "target_weights": target_weights,
                 "portfolio": {
                     "cash": portfolio.cash,
+                    "currency": getattr(portfolio, "currency", "USD"),
                     "positions": [p.model_dump() for p in portfolio.positions],
                 },
                 "run_id": run_id,

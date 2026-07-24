@@ -83,6 +83,7 @@ class Order:
     stop_loss_price: float | None = None
     stop_loss_distance_pct: float | None = None
     stop_loss_reason: str = "atr_unavailable"
+    cash_qty: float | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -532,6 +533,7 @@ def generate_orders(
             stop_loss_price=stop.price,
             stop_loss_distance_pct=stop.distance_pct,
             stop_loss_reason=stop.reason,
+            cash_qty=round(qty * current_price, 2),
         )
         orders.append(order)
 
@@ -545,6 +547,8 @@ def generate_orders(
         for o in orders:
             if o.side == "buy":
                 o.qty = round(o.qty * scale, 4)
+                if o.cash_qty is not None and o.symbol in prices:
+                    o.cash_qty = round(o.qty * prices[o.symbol], 2)
         orders = [o for o in orders if o.side == "sell" or o.qty > 0]
         total_buy_value = sum(
             o.qty * prices[o.symbol]

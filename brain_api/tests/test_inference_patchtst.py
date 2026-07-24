@@ -539,8 +539,16 @@ def test_score_batch_us_happy_path(score_batch_client):
     assert data["excluded_symbols"] == []
 
 
-def test_score_batch_india_happy_path(score_batch_client):
+def test_score_batch_india_happy_path(score_batch_client, monkeypatch):
     """market='india' uses the India storage path and returns the same shape."""
+    from brain_api.routes.inference import patchtst as inference_module
+
+    def mock_filter(symbols):
+        # Return all symbols, no exclusions
+        return symbols, []
+
+    monkeypatch.setattr(inference_module, "filter_symbols_by_max_price", mock_filter)
+
     response = score_batch_client.post(
         "/inference/patchtst/score-batch",
         json={
