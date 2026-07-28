@@ -83,11 +83,6 @@ class DifferentialSharpe:
 
         return dsr
 
-    def reset(self) -> None:
-        """Reset EMAs for new episode."""
-        self.A = 0.0
-        self.B = 0.0
-
 
 def compute_blended_reward(
     portfolio_log_return: float,
@@ -95,6 +90,7 @@ def compute_blended_reward(
     transaction_cost_fraction: float,
     differential_sharpe: DifferentialSharpe,
     config: RLBaseConfig,
+    target_weights: np.ndarray | None = None,
 ) -> float:
     """Compute blended reward: return + differential Sharpe.
 
@@ -115,6 +111,7 @@ def compute_blended_reward(
             cost-free episodes (e.g. initial reset).
         differential_sharpe: DifferentialSharpe instance (stateful, updates EMAs).
         config: Config with reward_scale + sharpe_weight (cost_bps no longer read).
+        target_weights: Optional weights array (n_stocks + 1) to apply HHI penalty.
 
     Returns:
         Blended reward for RL training.
@@ -133,9 +130,25 @@ def compute_blended_reward(
     dsr = differential_sharpe.update(net_simple_return)
     dsr_reward = dsr * config.reward_scale
 
-    return (
+    blended_reward = (
         config.sharpe_weight * dsr_reward + (1 - config.sharpe_weight) * return_reward
     )
+
+    # HHI Concentration Penalty
+    # We penalize concentration that exceeds HHI=0.20 (equivalent to 5 equally-weighted stocks).
+    if target_weights is not None and getattr(config, "hhi_penalty_scale", 0.0) > 0:
+        # Calculate HHI of just the risky assets (exclude cash)
+        n_stocks = config.n_stocks
+        stock_weights = target_weights[:n_stocks]
+        hhi = float(np.sum(stock_weights**2))
+
+        # Only penalize if more concentrated than 5 equally-weighted stocks
+        if hhi > 0.20:
+            # Scale penalty by reward_scale so it meaningfully impacts the blended_reward
+            hhi_penalty = (hhi - 0.20) * config.hhi_penalty_scale * config.reward_scale
+            blended_reward -= hhi_penalty
+
+    return blended_reward
 
 
 def compute_portfolio_return(

@@ -214,7 +214,6 @@ class PortfolioEnv:
         self.current_weights = self._initial_weights()
         self.episode_returns = []
         self.episode_turnovers = []
-        self.differential_sharpe.reset()
 
         return self._build_state(self.current_week_idx)
 
@@ -234,7 +233,6 @@ class PortfolioEnv:
         target_weights = enforce_constraints(
             target_weights,
             cash_buffer=self.config.cash_buffer,
-            max_position_weight=self.config.max_position_weight,
         )
 
         # Compute turnover (kept for episode statistics + info dict; no
@@ -269,13 +267,14 @@ class PortfolioEnv:
         )
         tc_fraction = rebalance_cost.total_fraction
 
-        # Compute blended reward (return + differential Sharpe)
+        # Compute blended reward (return + differential Sharpe + HHI penalty)
         reward = compute_blended_reward(
             portfolio_log_return=portfolio_log_return,
             portfolio_simple_return=portfolio_return,
             transaction_cost_fraction=tc_fraction,
             differential_sharpe=self.differential_sharpe,
             config=self.config,
+            target_weights=target_weights,
         )
 
         # Track for episode statistics
@@ -410,10 +409,10 @@ def create_env_from_data(
         # Weekly returns
         returns = (price_series[1:] - price_series[:-1]) / price_series[:-1]
         symbol_returns[:, stock_idx] = returns[:n_weeks]
-        # Use the end-of-week close (price at index t+1) so the price
-        # available at the rebalance lines up with the return realised
-        # over week t.
-        weekly_prices[:, stock_idx] = price_series[1 : n_weeks + 1]
+        # Use the start-of-week close (price at index t) so the price
+        # available at the rebalance aligns with when the trade is executed
+        # (at the start of week t).
+        weekly_prices[:, stock_idx] = price_series[:n_weeks]
 
     # Build signals array
     signal_names = [

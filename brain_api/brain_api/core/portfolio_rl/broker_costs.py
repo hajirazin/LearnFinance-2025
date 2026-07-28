@@ -330,7 +330,7 @@ def compute_ibkr_rebalance_cost(
     prices: np.ndarray,
     cfg: IBKRSingaporeCostConfig,
     *,
-    weight_epsilon: float = 1e-9,
+    weight_epsilon: float = 0.005,
 ) -> RebalanceCost:
     """Compute IBKR-SG cost for one weekly rebalance.
 

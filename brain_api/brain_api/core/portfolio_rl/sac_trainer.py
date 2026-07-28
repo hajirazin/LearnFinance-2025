@@ -438,7 +438,6 @@ def action_to_weights(
     weights = enforce_constraints(
         weights,
         cash_buffer=cash_buffer,
-        max_position_weight=max_position_weight,
     )
 
     return weights

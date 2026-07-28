@@ -81,7 +81,6 @@ def run_sac_inference(
     weights = enforce_constraints(
         raw_weights,
         cash_buffer=config.cash_buffer,
-        max_position_weight=config.max_position_weight,
     )
 
     # Compute turnover

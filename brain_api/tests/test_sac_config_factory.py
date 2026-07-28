@@ -48,7 +48,7 @@ class TestMakeSACBaseConfigForNStocks:
     def test_target_entropy_equals_negative_action_dim(
         self, n_stocks: int, expected_target_entropy: float
     ) -> None:
-        """target_entropy must be -(n_stocks + 1) for the squashed action."""
+        """target_entropy must be -float(n_stocks + 1) for tanh-squashed Gaussian."""
         cfg = make_sac_base_config_for_n_stocks(DEFAULT_SAC_BASE_CONFIG, n_stocks)
         assert cfg.n_stocks == n_stocks
         assert cfg.target_entropy == expected_target_entropy

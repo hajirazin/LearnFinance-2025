@@ -25,6 +25,10 @@ def apply_softmax_to_weights(logits: np.ndarray) -> np.ndarray:
     Returns:
         Weights on the simplex, same shape as input.
     """
+    # Raw logits are bounded to [-1, 1] by tanh in the actor.
+    # This naturally limits the maximum softmax concentration to ~33% for 16 dims,
+    # preventing pathological concentration exploits mathematically.
+
     # Numerical stability: subtract max
     if logits.ndim == 1:
         shifted = logits - np.max(logits)
@@ -40,7 +44,6 @@ def apply_softmax_to_weights(logits: np.ndarray) -> np.ndarray:
 def enforce_constraints(
     weights: np.ndarray,
     cash_buffer: float = 0.02,
-    max_position_weight: float = 0.20,
 ) -> np.ndarray:
     """Enforce portfolio constraints via post-processing.
 
@@ -48,7 +51,6 @@ def enforce_constraints(
     1. All weights >= 0 (already guaranteed by softmax)
     2. Weights sum to 1.0 (already guaranteed by softmax)
     3. Cash weight >= cash_buffer
-    4. Each stock weight <= max_position_weight
 
     The enforcement is done via clipping and renormalization.
 
@@ -56,7 +58,6 @@ def enforce_constraints(
         weights: Portfolio weights with CASH as last element.
                  Shape (n_assets,) where n_assets = n_stocks + 1.
         cash_buffer: Minimum cash weight (default 0.02 = 2%).
-        max_position_weight: Maximum weight per stock (default 0.20 = 20%).
 
     Returns:
         Constrained weights that sum to 1.0.
@@ -65,15 +66,7 @@ def enforce_constraints(
     n_assets = len(weights)
     cash_idx = n_assets - 1  # CASH is last
 
-    # Step 1: Clip stock weights to max_position_weight
-    for i in range(cash_idx):
-        if weights[i] > max_position_weight:
-            excess = weights[i] - max_position_weight
-            weights[i] = max_position_weight
-            # Add excess to cash
-            weights[cash_idx] += excess
-
-    # Step 2: Ensure cash buffer
+    # Step 1: Ensure cash buffer
     if weights[cash_idx] < cash_buffer:
         deficit = cash_buffer - weights[cash_idx]
         weights[cash_idx] = cash_buffer
@@ -87,7 +80,7 @@ def enforce_constraints(
             reduction_factor = max(0, reduction_factor)  # Don't go negative
             weights[:cash_idx] = stock_weights * reduction_factor
 
-    # Step 3: Renormalize to ensure sum = 1.0 (handle numerical drift)
+    # Step 2: Renormalize to ensure sum = 1.0 (handle numerical drift)
     total = np.sum(weights)
     if total > 0:
         weights = weights / total

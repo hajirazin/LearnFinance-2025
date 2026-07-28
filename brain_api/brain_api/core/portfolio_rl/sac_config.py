@@ -26,11 +26,11 @@ class SACBaseConfig:
     gamma: float = 0.97  # Weekly steps: 1/(1-0.97) ≈ 33 weeks (~8-month horizon)
 
     # === Entropy tuning ===
-    # Standard tanh squashing bounds actions to [-1, 1].
-    # target_entropy = -dim(action) is the textbook default for continuous SAC.
-    # For 16 dims (15 stocks + cash), -16 encourages moderate exploration.
+    # For a tanh-squashed Gaussian policy, the standard SAC heuristic is
+    # target_entropy = -dim(action).
+    # For 16 dims (15 stocks + cash), -16.0 encourages moderate exploration.
     auto_entropy_tuning: bool = True
-    target_entropy: float | None = -16.0  # Standard: -dim(action) for squashed actions
+    target_entropy: float | None = -16.0  # target_entropy = -dim(action)
     init_alpha: float = 0.2  # Moderate initial entropy coefficient
 
     # === Training ===
@@ -45,6 +45,7 @@ class SACBaseConfig:
     max_grad_norm: float = 1.0  # Gradient clipping
     q_value_clip: float = 100.0  # Clip Q-targets to prevent divergence
     normalize_rewards: bool = True  # Use running reward normalization
+    hhi_penalty_scale: float = 0.4  # Soft penalty for portfolio concentration
 
     # === Environment (shared RL environment defaults) ===
     # ``cost_bps`` is **deprecated** -- the live cost source is the
@@ -110,6 +111,7 @@ class SACBaseConfig:
             "max_grad_norm": self.max_grad_norm,
             "q_value_clip": self.q_value_clip,
             "normalize_rewards": self.normalize_rewards,
+            "hhi_penalty_scale": self.hhi_penalty_scale,
             "cost_bps": self.cost_bps,
             "cash_buffer": self.cash_buffer,
             "max_position_weight": self.max_position_weight,
@@ -142,8 +144,8 @@ def make_sac_base_config_for_n_stocks(
     """Return a copy of ``base`` with action-dim-sensitive fields rewritten.
 
     The SAC paper sets ``target_entropy = -dim(action)`` as the textbook
-    default for continuous control with squashed Gaussian actions; the
-    ``-(n_stocks + 1)`` accounts for the CASH slot (`SACBaseConfig.action_dim`
+    default for continuous control with squashed Gaussian actions.
+    The ``-(n_stocks + 1)`` accounts for the CASH slot (`SACBaseConfig.action_dim`
     is ``n_stocks + 1``). Two parallel A/B buckets (``halal_filtered``
     fixed at 15, ``halal`` variable size from yfinance ETF top-holdings)
     therefore need different ``target_entropy`` values, and we cannot
