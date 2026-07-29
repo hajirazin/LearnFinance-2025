@@ -34,11 +34,11 @@ class SACBaseConfig:
     init_alpha: float = 0.2  # Moderate initial entropy coefficient
 
     # === Training ===
-    buffer_size: int = 10_000  # More than enough for weekly data
+    buffer_size: int = 50_000  # More than enough for weekly data
     batch_size: int = 64  # Smaller batch for limited data
     gradient_steps_per_env_step: int = 1
     warmup_steps: int = 100  # Random actions before training starts
-    total_timesteps: int = 10_000
+    total_timesteps: int = 50_000
 
     # === Regularization (for limited data) ===
     weight_decay: float = 1e-4  # L2 regularization
