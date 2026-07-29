@@ -156,7 +156,7 @@ def train_sac_endpoint(
     existing_metadata = try_load_existing_train_metadata(
         bucket=bucket, version=version, local_storage=storage
     )
-    if existing_metadata:
+    if not request.force and existing_metadata:
         return SACTrainResponse(
             **build_common_train_response_kwargs(version, existing_metadata),
             symbols_used=existing_metadata["symbols"],

@@ -288,6 +288,61 @@ def test_sac_full_endpoint_hf_cold_start_short_circuits_via_helper(
             app.dependency_overrides.clear()
 
 
+@pytest.mark.parametrize("universe", ["halal_filtered", "halal"])
+def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: str):
+    """SAC full: force=True bypasses the HF short-circuit helper and returns 202."""
+    from datetime import datetime
+
+    from brain_api.core import model_buckets
+    from brain_api.routes.training.job_registry import TrainingJob
+    from brain_api.storage.sac import (
+        SACHalalFilteredModelStorage,
+        SACHalalModelStorage,
+    )
+
+    storage_cls = (
+        SACHalalFilteredModelStorage
+        if universe == "halal_filtered"
+        else SACHalalModelStorage
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        storage = storage_cls(base_path=tmpdir)
+        original = get_bucket(ModelType.SAC, universe)
+        patched = replace(
+            original,
+            local_storage_class=lambda: storage,
+            symbols_resolver=lambda: [f"S{i}" for i in range(15)],
+        )
+        monkeypatch.setitem(model_buckets._BUCKETS, (ModelType.SAC, universe), patched)
+
+        sac_metadata = _fake_metadata_with(symbols=[f"S{i}" for i in range(15)])
+
+        mock_job = TrainingJob(
+            job_id="test", model_type="sac", status="running", started_at=datetime.now()
+        )
+
+        try:
+            with (
+                patch(
+                    "brain_api.routes.training.sac.full.try_load_existing_train_metadata",
+                    return_value=sac_metadata,
+                ),
+                patch(
+                    "brain_api.routes.training.sac.full.get_or_create_job",
+                    return_value=(mock_job, True),
+                ),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/train/sac/full", json={"universe": universe, "force": True}
+                )
+
+            assert response.status_code == 202, response.text
+        finally:
+            app.dependency_overrides.clear()
+
+
 # ---------------------------------------------------------------------------
 # SAC finetune
 # ---------------------------------------------------------------------------
