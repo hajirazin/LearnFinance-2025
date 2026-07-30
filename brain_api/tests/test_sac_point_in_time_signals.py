@@ -6,9 +6,13 @@ from datetime import date
 
 import pytest
 
-from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
+from brain_api.core.fundamentals.fetcher import (
+    FundamentalsFetcher,
+    FundamentalsProviderError,
+)
 from brain_api.core.fundamentals.sec_filings import (
     SECFilingAvailability,
+    SECFilingAvailabilityClient,
     enrich_statement_periods_with_filing_availability,
 )
 from brain_api.core.fundamentals.storage import load_raw_response, save_raw_response
@@ -172,3 +176,65 @@ def test_unresolved_cached_periods_fail_without_sec_provider(tmp_path, monkeypat
             fetcher.fetch_symbol("AAPL")
     finally:
         fetcher.close()
+
+
+def test_fundamentals_fetch_rejects_empty_alpha_vantage_response(tmp_path):
+    class EmptyAlphaVantageClient:
+        daily_limit = 25
+
+        def fetch_income_statement(self, symbol):
+            return {}
+
+        def fetch_balance_sheet(self, symbol):
+            return {}
+
+    fetcher = FundamentalsFetcher(
+        api_key="unused",
+        base_path=tmp_path,
+        filing_provider=object(),
+    )
+    fetcher.client = EmptyAlphaVantageClient()
+    try:
+        with pytest.raises(
+            FundamentalsProviderError,
+            match="no usable quarterly income statement",
+        ):
+            fetcher.fetch_symbol("AAPL")
+    finally:
+        fetcher.close()
+
+
+def test_sec_client_loads_older_submission_files(monkeypatch):
+    client = SECFilingAvailabilityClient("LearnFinance test@example.com")
+    submissions_url = client._SUBMISSIONS_URL.format(cik="0000320193")
+    older_url = "https://data.sec.gov/submissions/CIK0000320193-submissions-001.json"
+    payloads = {
+        client._TICKERS_URL: {
+            "0": {"ticker": "AAPL", "cik_str": 320193},
+        },
+        submissions_url: {
+            "filings": {
+                "recent": {
+                    "reportDate": ["2025-09-27"],
+                    "filingDate": ["2025-10-31"],
+                    "accessionNumber": ["0000320193-25-000079"],
+                    "form": ["10-K"],
+                },
+                "files": [{"name": "CIK0000320193-submissions-001.json"}],
+            }
+        },
+        older_url: {
+            "reportDate": ["2016-09-24"],
+            "filingDate": ["2016-10-26"],
+            "accessionNumber": ["0000320193-16-000089"],
+            "form": ["10-K"],
+        },
+    }
+    monkeypatch.setattr(client, "_get_json", lambda url: payloads[url])
+
+    filings = client.fetch_symbol_filings("AAPL")
+
+    assert [filing.report_date for filing in filings] == [
+        "2025-09-27",
+        "2016-09-24",
+    ]

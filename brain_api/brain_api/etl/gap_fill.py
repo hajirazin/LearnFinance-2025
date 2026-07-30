@@ -10,7 +10,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +82,7 @@ def _group_gaps_by_date(
 
 
 def _aggregate_daily_sentiment(
-    articles_with_scores: list[tuple[datetime, str, SentimentScore]],
+    articles_with_scores: list[tuple[date | datetime, str, SentimentScore]],
 ) -> list[dict]:
     """Aggregate article scores into daily sentiment per symbol.
 
@@ -133,6 +133,16 @@ def _aggregate_daily_sentiment(
         )
 
     return results
+
+
+def _is_article_on_observation_date(
+    article_created_at: datetime,
+    observation_date: date,
+) -> bool:
+    """Return whether an article was created on the requested UTC date."""
+    if article_created_at.tzinfo is None:
+        article_created_at = article_created_at.replace(tzinfo=UTC)
+    return article_created_at.astimezone(UTC).date() == observation_date
 
 
 def _create_zero_article_rows(
@@ -327,9 +337,9 @@ def fill_sentiment_gaps(
                 f"Processing dates from {sorted_dates[0]} to {sorted_dates[-1]}"
             )
 
-        articles_with_scores: list[tuple[datetime, str, SentimentScore]] = []
+        articles_with_scores: list[tuple[date | datetime, str, SentimentScore]] = []
         checked_gaps_no_articles: list[tuple[date, str]] = []
-        today = date.today()
+        today = datetime.now(UTC).date()
         last_checkpoint_calls = 0
 
         for gap_date in sorted_dates:
@@ -352,7 +362,13 @@ def fill_sentiment_gaps(
 
             update_progress()
 
-            if not articles:
+            qualifying_articles = [
+                article
+                for article in articles
+                if _is_article_on_observation_date(article.created_at, gap_date)
+            ]
+
+            if not qualifying_articles:
                 # Record gaps we checked but found no articles (except today)
                 if gap_date != today:
                     for symbol in gap_symbols:
@@ -361,7 +377,7 @@ def fill_sentiment_gaps(
                 # Score articles with FinBERT
                 texts = [
                     f"{a.headline} {a.summary}".strip() if a.summary else a.headline
-                    for a in articles
+                    for a in qualifying_articles
                 ]
                 scores = scorer.score_batch(texts)
                 progress.articles_scored += len(scores)
@@ -370,13 +386,11 @@ def fill_sentiment_gaps(
                 matched_symbols: set[str] = set()
 
                 # Map articles to their symbols and dates
-                for article, score in zip(articles, scores, strict=False):
+                for article, score in zip(qualifying_articles, scores, strict=False):
                     # Each article may be relevant to multiple symbols
                     for symbol in article.symbols:
                         if symbol in gap_symbols:
-                            articles_with_scores.append(
-                                (article.created_at, symbol, score)
-                            )
+                            articles_with_scores.append((gap_date, symbol, score))
                             matched_symbols.add(symbol)
 
                 # Record unmatched gap symbols as zero-article (except today)

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from brain_api.core.fundamentals import FundamentalsCacheError
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
 from brain_api.main import app
+from brain_api.routes.training.sac import full as full_module
 from brain_api.routes.training.sac import preflight as preflight_module
 
 client = TestClient(app)
@@ -17,6 +18,7 @@ client = TestClient(app)
 def strict_preflight_dependencies(monkeypatch):
     """Provide complete inputs so each test can break one readiness contract."""
     symbols = ["AAA"]
+    monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
     monkeypatch.setattr(
         preflight_module,
         "get_bucket",
@@ -237,3 +239,99 @@ def test_sac_preflight_reports_corrupt_fundamentals_cache_as_non_retryable_error
             "retryable": False,
         }
     ]
+
+
+def test_sac_preflight_reports_missing_sec_user_agent_before_training(
+    monkeypatch,
+    strict_preflight_dependencies,
+):
+    monkeypatch.delenv("SEC_USER_AGENT")
+
+    response = client.post(
+        "/train/sac/preflight",
+        json={"universe": "halal_filtered", "force": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ready"] is False
+    assert {
+        "source": "sec_filing_enrichment",
+        "detail": (
+            "SEC_USER_AGENT is required for point-in-time fundamentals "
+            "enrichment; set it to an application name and contact email"
+        ),
+        "symbol": None,
+        "retryable": False,
+    } in payload["errors"]
+
+
+@pytest.mark.parametrize(
+    ("issue_field", "expected_status"),
+    [("missing", 409), ("errors", 503)],
+)
+def test_sac_full_rejects_unready_inputs_before_creating_job(
+    monkeypatch,
+    issue_field,
+    expected_status,
+):
+    symbols = ["AAA"]
+    bucket = SimpleNamespace(
+        bucket_name="sac_halal_filtered",
+        symbols_resolver=lambda: symbols,
+        symbol_validator=None,
+        local_storage_class=object,
+    )
+    issue = SACReadinessIssue(
+        source="fundamentals",
+        detail="filing availability unresolved",
+        symbol="AAA",
+        retryable=issue_field == "missing",
+    )
+    readiness = SACTrainingReadiness.from_issues(
+        universe="halal_filtered",
+        symbols=symbols,
+        missing=[issue] if issue_field == "missing" else [],
+        errors=[issue] if issue_field == "errors" else [],
+    )
+    monkeypatch.setattr(full_module, "get_bucket", lambda model_type, universe: bucket)
+    monkeypatch.setattr(
+        full_module, "get_prior_metadata_for_bucket", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        full_module,
+        "resolve_training_window",
+        lambda: (date(2024, 1, 1), date(2024, 2, 1)),
+    )
+    monkeypatch.setattr(full_module, "sac_compute_version", lambda *args: "v-test")
+    monkeypatch.setattr(
+        full_module, "try_load_existing_train_metadata", lambda **kwargs: None
+    )
+    monkeypatch.setattr(
+        full_module,
+        "assess_sac_training_readiness",
+        lambda universe, *, force=False: readiness,
+    )
+    job_called = False
+
+    def fail_if_job_created(*args, **kwargs):
+        nonlocal job_called
+        job_called = True
+        raise AssertionError("training job must not be created")
+
+    monkeypatch.setattr(full_module, "get_or_create_job", fail_if_job_created)
+
+    response = client.post(
+        "/train/sac/full",
+        json={"universe": "halal_filtered", "force": True},
+    )
+
+    assert response.status_code == expected_status
+    assert response.json()["detail"] == {
+        "message": "SAC training inputs are not ready",
+        "universe": "halal_filtered",
+        "symbols": ["AAA"],
+        "missing": [issue.to_dict()] if issue_field == "missing" else [],
+        "errors": [issue.to_dict()] if issue_field == "errors" else [],
+    }
+    assert job_called is False

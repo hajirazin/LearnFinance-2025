@@ -451,18 +451,18 @@ class TestRefreshTrainingDataEndpoint:
     """Tests for /etl/refresh-training-data endpoint.
 
     Symbols are resolved via the ETL universe registry, so we mock
-    ``brain_api.routes.etl.get_etl_symbols`` to avoid real API calls.
+    ``brain_api.routes.etl_training_refresh.get_etl_symbols`` to avoid real API calls.
     """
 
     def test_refresh_training_data_returns_200(self):
         """POST /etl/refresh-training-data should return 200."""
         with (
             patch(
-                "brain_api.routes.etl.get_etl_symbols",
+                "brain_api.routes.etl_training_refresh.get_etl_symbols",
                 return_value=["AAPL", "MSFT"],
             ),
             patch(
-                "brain_api.core.data_freshness.ensure_fresh_training_data"
+                "brain_api.routes.etl_training_refresh.ensure_fresh_training_data"
             ) as mock_refresh,
         ):
             from brain_api.core.data_freshness import DataFreshnessResult
@@ -502,11 +502,11 @@ class TestRefreshTrainingDataEndpoint:
 
         with (
             patch(
-                "brain_api.routes.etl.get_etl_symbols",
+                "brain_api.routes.etl_training_refresh.get_etl_symbols",
                 return_value=["AAPL"],
             ),
             patch(
-                "brain_api.core.data_freshness.ensure_fresh_training_data"
+                "brain_api.routes.etl_training_refresh.ensure_fresh_training_data"
             ) as mock_refresh,
         ):
             from brain_api.core.data_freshness import DataFreshnessResult
@@ -550,7 +550,7 @@ class TestRefreshTrainingDataEndpoint:
     def test_refresh_training_data_invalid_start_date(self):
         """POST with invalid start_date should return 400."""
         with patch(
-            "brain_api.routes.etl.get_etl_symbols",
+            "brain_api.routes.etl_training_refresh.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(
@@ -565,7 +565,7 @@ class TestRefreshTrainingDataEndpoint:
     def test_refresh_training_data_invalid_end_date(self):
         """POST with invalid end_date should return 400."""
         with patch(
-            "brain_api.routes.etl.get_etl_symbols",
+            "brain_api.routes.etl_training_refresh.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(
@@ -580,7 +580,7 @@ class TestRefreshTrainingDataEndpoint:
     def test_refresh_training_data_start_after_end(self):
         """POST with start_date after end_date should return 400."""
         with patch(
-            "brain_api.routes.etl.get_etl_symbols",
+            "brain_api.routes.etl_training_refresh.get_etl_symbols",
             return_value=["AAPL"],
         ):
             response = client.post(

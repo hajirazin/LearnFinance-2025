@@ -184,7 +184,13 @@ class TestEnsureFreshTrainingData:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher_class.return_value = mock_fetcher
@@ -200,7 +206,9 @@ class TestEnsureFreshTrainingData:
             )
 
             # Should have called fetch_symbol for MSFT
-            mock_fetcher.fetch_symbol.assert_called_once_with("MSFT")
+            mock_fetcher.fetch_symbol.assert_called_once_with(
+                "MSFT", force_refresh=True
+            )
             assert "MSFT" in result.fundamentals_refreshed
             assert "AAPL" not in result.fundamentals_refreshed
             assert mock_fetcher.close.called
@@ -214,7 +222,7 @@ class TestEnsureFreshTrainingData:
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
 
-        def mock_fetch(symbol: str) -> None:
+        def mock_fetch(symbol: str, *, force_refresh: bool) -> None:
             if symbol == "MSFT":
                 raise Exception("API rate limit exceeded")
             # Other symbols succeed
@@ -228,7 +236,13 @@ class TestEnsureFreshTrainingData:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher.fetch_symbol.side_effect = mock_fetch
@@ -267,7 +281,13 @@ class TestEnsureFreshTrainingData:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher_class.return_value = mock_fetcher
@@ -376,7 +396,13 @@ class TestRefreshStaleFundamentals:
             patch(
                 "brain_api.core.data_freshness.FundamentalsIndex"
             ) as mock_index_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_index = MagicMock()
             mock_index.get_api_calls_today.return_value = 5
@@ -404,7 +430,13 @@ class TestRefreshStaleFundamentals:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher.get_api_status.return_value = {
@@ -418,8 +450,8 @@ class TestRefreshStaleFundamentals:
 
             # Should have called fetch_symbol for MSFT and GOOGL
             assert mock_fetcher.fetch_symbol.call_count == 2
-            mock_fetcher.fetch_symbol.assert_any_call("MSFT")
-            mock_fetcher.fetch_symbol.assert_any_call("GOOGL")
+            mock_fetcher.fetch_symbol.assert_any_call("MSFT", force_refresh=True)
+            mock_fetcher.fetch_symbol.assert_any_call("GOOGL", force_refresh=True)
             assert "MSFT" in result.refreshed
             assert "GOOGL" in result.refreshed
             assert "AAPL" in result.skipped
@@ -439,7 +471,13 @@ class TestRefreshStaleFundamentals:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher.get_api_status.return_value = {
@@ -461,7 +499,7 @@ class TestRefreshStaleFundamentals:
 
         symbols = ["AAPL", "MSFT", "GOOGL"]
 
-        def mock_fetch(symbol: str) -> None:
+        def mock_fetch(symbol: str, *, force_refresh: bool) -> None:
             if symbol == "MSFT":
                 raise Exception("API rate limit exceeded")
             # Other symbols succeed
@@ -474,7 +512,13 @@ class TestRefreshStaleFundamentals:
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": "test_key"}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+            ),
         ):
             mock_fetcher = MagicMock()
             mock_fetcher.fetch_symbol.side_effect = mock_fetch

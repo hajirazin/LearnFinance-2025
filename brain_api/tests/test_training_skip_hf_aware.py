@@ -39,6 +39,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from brain_api.core.model_buckets import ModelType, get_bucket
+from brain_api.core.sac.readiness import SACTrainingReadiness
 from brain_api.main import app
 
 _FAKE_METADATA: dict = {
@@ -331,6 +332,15 @@ def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: 
                 patch(
                     "brain_api.routes.training.sac.full.get_or_create_job",
                     return_value=(mock_job, True),
+                ),
+                patch(
+                    "brain_api.routes.training.sac.full.assess_sac_training_readiness",
+                    return_value=SACTrainingReadiness.from_issues(
+                        universe=universe,
+                        symbols=[f"S{i}" for i in range(15)],
+                        missing=[],
+                        errors=[],
+                    ),
                 ),
             ):
                 client = TestClient(app)

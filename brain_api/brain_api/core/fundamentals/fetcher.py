@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from brain_api.core.fundamentals.client import RealAlphaVantageClient
+from brain_api.core.fundamentals.client import (
+    AlphaVantageProviderError,
+    RealAlphaVantageClient,
+)
 from brain_api.core.fundamentals.index import FundamentalsIndex
 from brain_api.core.fundamentals.models import FundamentalRatios, FundamentalsResult
 from brain_api.core.fundamentals.parser import (
@@ -46,6 +49,52 @@ def _has_unresolved_quarterly_filings(payload: dict[str, Any]) -> bool:
         )
         for report in reports
     )
+
+
+def _has_quarterly_reports(payload: dict[str, Any] | None) -> bool:
+    """Return whether a provider payload has at least one quarterly report."""
+    return bool(
+        payload is not None
+        and isinstance(payload.get("quarterlyReports"), list)
+        and payload["quarterlyReports"]
+    )
+
+
+def _has_resolved_quarterly_filing(payload: dict[str, Any]) -> bool:
+    """Return whether at least one quarterly period has exact SEC provenance."""
+    return any(
+        isinstance(report, dict)
+        and all(
+            report.get(field)
+            for field in (
+                "filingDate",
+                "accessionNumber",
+                "filingForm",
+                "filingSource",
+            )
+        )
+        for report in payload.get("quarterlyReports", [])
+    )
+
+
+class FundamentalsConfigurationError(RuntimeError):
+    """Raised when point-in-time fundamentals configuration is incomplete."""
+
+
+class FundamentalsProviderError(RuntimeError):
+    """Raised when AV or SEC cannot provide usable fundamentals evidence."""
+
+
+def cached_fundamentals_require_sec_enrichment(
+    base_path: Path,
+    symbol: str,
+) -> bool:
+    """Return whether a cached statement has unresolved quarterly periods."""
+    for endpoint in ("income_statement", "balance_sheet"):
+        payload = _response_payload(load_raw_response(base_path, symbol, endpoint))
+        if payload is not None and _has_unresolved_quarterly_filings(payload):
+            return True
+    return False
 
 
 class FundamentalsFetcher:
@@ -117,21 +166,39 @@ class FundamentalsFetcher:
             # here would bypass the on-disk migration path and waste AV quota.
             income_data = load_raw_response(self.base_path, symbol, "income_statement")
             balance_data = load_raw_response(self.base_path, symbol, "balance_sheet")
+            if not _has_quarterly_reports(_response_payload(income_data)):
+                income_data = None
+            if not _has_quarterly_reports(_response_payload(balance_data)):
+                balance_data = None
 
         # Fetch missing data from API
         if income_data is None:
-            raw_income = self.client.fetch_income_statement(symbol)
-            if raw_income:
-                api_calls_made += 1
-                from_cache = False
-                income_data = {"response": raw_income}
+            try:
+                raw_income = self.client.fetch_income_statement(symbol)
+            except AlphaVantageProviderError as exc:
+                raise FundamentalsProviderError(str(exc)) from exc
+            if not _has_quarterly_reports(raw_income):
+                raise FundamentalsProviderError(
+                    "Alpha Vantage returned no usable quarterly income statement "
+                    f"for {symbol}"
+                )
+            api_calls_made += 1
+            from_cache = False
+            income_data = {"response": raw_income}
 
         if balance_data is None:
-            raw_balance = self.client.fetch_balance_sheet(symbol)
-            if raw_balance:
-                api_calls_made += 1
-                from_cache = False
-                balance_data = {"response": raw_balance}
+            try:
+                raw_balance = self.client.fetch_balance_sheet(symbol)
+            except AlphaVantageProviderError as exc:
+                raise FundamentalsProviderError(str(exc)) from exc
+            if not _has_quarterly_reports(raw_balance):
+                raise FundamentalsProviderError(
+                    "Alpha Vantage returned no usable quarterly balance sheet "
+                    f"for {symbol}"
+                )
+            api_calls_made += 1
+            from_cache = False
+            balance_data = {"response": raw_balance}
 
         payloads = {
             "income_statement": _response_payload(income_data),
@@ -144,15 +211,25 @@ class FundamentalsFetcher:
         }
         if unresolved:
             if self.filing_provider is None:
-                raise RuntimeError(
+                raise FundamentalsConfigurationError(
                     "SEC filing availability is required for fundamentals; "
                     "set SEC_USER_AGENT or inject a filing_provider"
                 )
-            filings = self.filing_provider.fetch_symbol_filings(symbol)
+            try:
+                filings = self.filing_provider.fetch_symbol_filings(symbol)
+            except Exception as exc:
+                raise FundamentalsProviderError(
+                    f"SEC filing availability request failed for {symbol}: {exc}"
+                ) from exc
             for endpoint in unresolved:
                 payload = payloads[endpoint]
                 if payload is not None:
                     enrich_statement_periods_with_filing_availability(payload, filings)
+                    if not _has_resolved_quarterly_filing(payload):
+                        raise FundamentalsProviderError(
+                            "SEC enrichment produced no exact quarterly filing "
+                            f"matches for {symbol} {endpoint}"
+                        )
 
         endpoints_to_save = set(unresolved)
         if raw_income is not None:

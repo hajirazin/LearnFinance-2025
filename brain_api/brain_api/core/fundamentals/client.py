@@ -9,14 +9,18 @@ if TYPE_CHECKING:
     from brain_api.core.fundamentals.index import FundamentalsIndex
 
 
+class AlphaVantageProviderError(RuntimeError):
+    """Raised when Alpha Vantage cannot provide a checked statement response."""
+
+
 class AlphaVantageClient(Protocol):
     """Protocol for Alpha Vantage API client."""
 
-    def fetch_income_statement(self, symbol: str) -> dict[str, Any] | None:
+    def fetch_income_statement(self, symbol: str) -> dict[str, Any]:
         """Fetch income statement data for a symbol."""
         ...
 
-    def fetch_balance_sheet(self, symbol: str) -> dict[str, Any] | None:
+    def fetch_balance_sheet(self, symbol: str) -> dict[str, Any]:
         """Fetch balance sheet data for a symbol."""
         ...
 
@@ -61,7 +65,7 @@ class RealAlphaVantageClient:
         calls_today = self.index.get_api_calls_today()
         return calls_today < self.daily_limit
 
-    def _fetch_endpoint(self, function: str, symbol: str) -> dict[str, Any] | None:
+    def _fetch_endpoint(self, function: str, symbol: str) -> dict[str, Any]:
         """Fetch data from Alpha Vantage API.
 
         Args:
@@ -69,12 +73,14 @@ class RealAlphaVantageClient:
             symbol: Stock ticker
 
         Returns:
-            API response as dict, or None if rate limited/error
+            Provider-checked API response.
         """
         import requests
 
         if not self._check_daily_limit():
-            return None
+            raise AlphaVantageProviderError(
+                f"Alpha Vantage daily call limit reached before {function} for {symbol}"
+            )
 
         self._rate_limit()
 
@@ -89,22 +95,39 @@ class RealAlphaVantageClient:
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
+        except requests.RequestException as exc:
+            raise AlphaVantageProviderError(
+                f"Alpha Vantage request failed for {function} {symbol}: {exc}"
+            ) from exc
+        except ValueError as exc:
+            raise AlphaVantageProviderError(
+                f"Alpha Vantage returned invalid JSON for {function} {symbol}"
+            ) from exc
 
-            # Check for error responses
-            if "Error Message" in data or "Note" in data:
-                # "Note" typically means rate limit hit
-                return None
+        if not isinstance(data, dict):
+            raise AlphaVantageProviderError(
+                f"Alpha Vantage returned a non-object payload for {function} {symbol}"
+            )
+        provider_error = next(
+            (
+                str(data[key])
+                for key in ("Error Message", "Note", "Information")
+                if data.get(key)
+            ),
+            None,
+        )
+        if provider_error is not None:
+            raise AlphaVantageProviderError(
+                f"Alpha Vantage rejected {function} for {symbol}: {provider_error}"
+            )
 
-            self.index.increment_api_calls()
-            return data
+        self.index.increment_api_calls()
+        return data
 
-        except Exception:
-            return None
-
-    def fetch_income_statement(self, symbol: str) -> dict[str, Any] | None:
+    def fetch_income_statement(self, symbol: str) -> dict[str, Any]:
         """Fetch income statement data for a symbol."""
         return self._fetch_endpoint("INCOME_STATEMENT", symbol)
 
-    def fetch_balance_sheet(self, symbol: str) -> dict[str, Any] | None:
+    def fetch_balance_sheet(self, symbol: str) -> dict[str, Any]:
         """Fetch balance sheet data for a symbol."""
         return self._fetch_endpoint("BALANCE_SHEET", symbol)

@@ -13,7 +13,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
+from brain_api.core.fundamentals.fetcher import (
+    FundamentalsFetcher,
+    cached_fundamentals_require_sec_enrichment,
+)
 from brain_api.core.fundamentals.index import FundamentalsIndex
 from brain_api.etl.gap_fill import GapFillResult, fill_sentiment_gaps
 
@@ -37,6 +40,7 @@ class FundamentalsRefreshResult:
     refreshed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)  # Already fetched today
     failed: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
     api_status: dict[str, Any] = field(default_factory=dict)
 
 
@@ -49,6 +53,7 @@ class DataFreshnessResult:
     fundamentals_refreshed: list[str] = field(default_factory=list)
     fundamentals_skipped_today: list[str] = field(default_factory=list)
     fundamentals_failed: list[str] = field(default_factory=list)
+    fundamentals_errors: dict[str, str] = field(default_factory=dict)
     duration_seconds: float = 0.0
 
 
@@ -114,9 +119,23 @@ def refresh_stale_fundamentals(
     cache_dir = base_path / "cache"
     result = FundamentalsRefreshResult()
 
-    # Find symbols that need to be refreshed
-    symbols_to_fetch = get_symbols_not_fetched_today(symbols, cache_dir)
-    result.skipped = [s for s in symbols if s not in symbols_to_fetch]
+    # A legacy cache with unresolved filing provenance must be enriched even
+    # when its Alpha Vantage index row says it was fetched today.
+    stale_symbols = get_symbols_not_fetched_today(symbols, cache_dir)
+    enrichment_symbols = []
+    for symbol in symbols:
+        try:
+            if cached_fundamentals_require_sec_enrichment(base_path, symbol):
+                enrichment_symbols.append(symbol)
+        except Exception as exc:
+            result.failed.append(symbol)
+            result.errors[symbol] = f"Fundamentals cache inspection failed: {exc}"
+    symbols_to_fetch = [
+        symbol
+        for symbol in symbols
+        if symbol in set(stale_symbols) | set(enrichment_symbols)
+    ]
+    result.skipped = [symbol for symbol in symbols if symbol not in symbols_to_fetch]
 
     if not symbols_to_fetch:
         logger.info(
@@ -141,17 +160,42 @@ def refresh_stale_fundamentals(
         f"[RefreshFundamentals] Refreshing {len(symbols_to_fetch)} symbols: {symbols_to_fetch}"
     )
 
-    # Get Alpha Vantage API key
-    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
-    if not api_key:
-        logger.warning(
-            "[RefreshFundamentals] ALPHA_VANTAGE_API_KEY not set, skipping refresh"
+    sec_user_agent = os.environ.get("SEC_USER_AGENT", "").strip()
+    if not sec_user_agent:
+        logger.error(
+            "[RefreshFundamentals] SEC_USER_AGENT not set; refusing unchecked "
+            "fundamentals refresh"
         )
-        result.failed = symbols_to_fetch
+        for symbol in symbols_to_fetch:
+            if symbol not in result.failed:
+                result.failed.append(symbol)
+            result.errors.setdefault(
+                symbol, "SEC_USER_AGENT is required for point-in-time filing enrichment"
+            )
+        return result
+
+    # Get Alpha Vantage API key. Cache-only SEC enrichment does not consume AV
+    # quota, but every stale symbol requires a fresh AV response.
+    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+    stale_without_key = [symbol for symbol in stale_symbols if not api_key]
+    if stale_without_key:
+        logger.warning(
+            "[RefreshFundamentals] ALPHA_VANTAGE_API_KEY not set; stale symbols "
+            f"cannot refresh: {stale_without_key}"
+        )
+        for symbol in stale_without_key:
+            if symbol not in result.failed:
+                result.failed.append(symbol)
+            result.errors.setdefault(
+                symbol,
+                "ALPHA_VANTAGE_API_KEY is required to refresh stale fundamentals",
+            )
+
+    if all(symbol in result.failed for symbol in symbols_to_fetch):
         return result
 
     fetcher = FundamentalsFetcher(
-        api_key=api_key,
+        api_key=api_key or "cache-enrichment-only",
         base_path=base_path,
         cache_dir=cache_dir,
     )
@@ -159,13 +203,19 @@ def refresh_stale_fundamentals(
     try:
         # Fetch each symbol, continue on failure
         for symbol in symbols_to_fetch:
+            if symbol in result.failed:
+                continue
             try:
-                fetcher.fetch_symbol(symbol)
+                fetcher.fetch_symbol(
+                    symbol,
+                    force_refresh=symbol in stale_symbols,
+                )
                 result.refreshed.append(symbol)
                 logger.info(f"[RefreshFundamentals] Refreshed {symbol}")
             except Exception as e:
                 logger.warning(f"[RefreshFundamentals] Failed to fetch {symbol}: {e}")
                 result.failed.append(symbol)
+                result.errors[symbol] = str(e)
 
         # Get API status
         result.api_status = fetcher.get_api_status()
@@ -267,8 +317,11 @@ def ensure_fresh_training_data(
         result.fundamentals_refreshed = fund_result.refreshed
         result.fundamentals_skipped_today = fund_result.skipped
         result.fundamentals_failed = fund_result.failed
+        result.fundamentals_errors = fund_result.errors
     except Exception as e:
         logger.warning(f"[DataFreshness] Fundamentals refresh failed: {e}")
+        result.fundamentals_failed = list(symbols)
+        result.fundamentals_errors = {symbol: str(e) for symbol in symbols}
 
     # ==========================================================================
     # Done

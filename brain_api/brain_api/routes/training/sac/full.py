@@ -57,6 +57,7 @@ from ..job_registry import (
 )
 from ..models import SACTrainResponse, TrainingJobResponse
 from ._shared import SACTrainRequest, sac_us_allowed_universes
+from .preflight import assess_sac_training_readiness
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -166,6 +167,24 @@ def train_sac_endpoint(
         return SACTrainResponse(
             **build_common_train_response_kwargs(version, existing_metadata),
             symbols_used=existing_metadata["symbols"],
+        )
+
+    # The endpoint's idempotency gates above intentionally remain cheap. Once
+    # a real training run is required, enforce the same strict input contract
+    # exposed by /sac/preflight before creating a durable background job.
+    # ``force=True`` here means "perform the complete assessment"; it does not
+    # alter the caller's retraining choice, which was already handled above.
+    readiness = assess_sac_training_readiness(request.universe, force=True)
+    if not readiness.ready:
+        raise HTTPException(
+            status_code=503 if readiness.errors else 409,
+            detail={
+                "message": "SAC training inputs are not ready",
+                "universe": readiness.universe,
+                "symbols": list(readiness.symbols),
+                "missing": [issue.to_dict() for issue in readiness.missing],
+                "errors": [issue.to_dict() for issue in readiness.errors],
+            },
         )
 
     job, is_new = get_or_create_job(f"sac_{request.universe}", version)

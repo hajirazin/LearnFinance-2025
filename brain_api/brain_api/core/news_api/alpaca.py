@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 ALPACA_EARLIEST_DATE = datetime(2015, 1, 1).date()
 
 
+class AlpacaNewsProviderError(RuntimeError):
+    """Raised when Alpaca cannot confirm a usable news response."""
+
+
 @dataclass
 class AlpacaNewsArticle:
     """A news article from Alpaca."""
@@ -86,6 +90,57 @@ class AlpacaNewsClient:
             "APCA-API-SECRET-KEY": self.api_secret,
         }
 
+    def _require_credentials(self) -> None:
+        if not self.api_key or not self.api_secret:
+            raise AlpacaNewsProviderError("Alpaca API credentials not configured")
+
+    @staticmethod
+    def _parse_response(response: requests.Response) -> tuple[list[dict], str | None]:
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise AlpacaNewsProviderError("Alpaca returned invalid JSON") from exc
+
+        if not isinstance(data, dict):
+            raise AlpacaNewsProviderError("Alpaca returned a non-object response")
+        if "news" not in data or not isinstance(data["news"], list):
+            raise AlpacaNewsProviderError(
+                "Alpaca response did not contain a usable news collection"
+            )
+        if not all(isinstance(item, dict) for item in data["news"]):
+            raise AlpacaNewsProviderError(
+                "Alpaca news collection contained an unusable article"
+            )
+        return data["news"], data.get("next_page_token")
+
+    @staticmethod
+    def _parse_articles(news_items: list[dict]) -> list[AlpacaNewsArticle]:
+        articles = []
+        try:
+            for item in news_items:
+                articles.append(
+                    AlpacaNewsArticle(
+                        id=item.get("id", ""),
+                        headline=item.get("headline", ""),
+                        summary=item.get("summary", ""),
+                        author=item.get("author"),
+                        created_at=datetime.fromisoformat(
+                            item["created_at"].replace("Z", "+00:00")
+                        ),
+                        updated_at=datetime.fromisoformat(
+                            item["updated_at"].replace("Z", "+00:00")
+                        ),
+                        url=item.get("url", ""),
+                        symbols=item.get("symbols", []),
+                        source=item.get("source", ""),
+                    )
+                )
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise AlpacaNewsProviderError(
+                "Alpaca returned an unusable news article"
+            ) from exc
+        return articles
+
     def _rate_limit(self) -> None:
         """Enforce rate limiting between requests."""
         elapsed = time.time() - self._last_request_time
@@ -111,9 +166,7 @@ class AlpacaNewsClient:
         Returns:
             List of AlpacaNewsArticle objects
         """
-        if not self.api_key or not self.api_secret:
-            logger.warning("Alpaca API credentials not configured")
-            return []
+        self._require_credentials()
 
         self._rate_limit()
         self._call_count += 1
@@ -142,38 +195,17 @@ class AlpacaNewsClient:
                 timeout=30,
             )
             response.raise_for_status()
-            data = response.json()
-            logger.info(
-                f"Alpaca API call #{self._call_count}: returned {len(data.get('news', []))} articles"
-            )
+            news_items, _ = self._parse_response(response)
         except requests.RequestException as e:
             logger.error(f"Alpaca API call #{self._call_count} FAILED: {e}")
-            return []
+            raise AlpacaNewsProviderError("Alpaca news request failed") from e
 
-        articles = []
-        for item in data.get("news", []):
-            try:
-                article = AlpacaNewsArticle(
-                    id=item.get("id", ""),
-                    headline=item.get("headline", ""),
-                    summary=item.get("summary", ""),
-                    author=item.get("author"),
-                    created_at=datetime.fromisoformat(
-                        item["created_at"].replace("Z", "+00:00")
-                    ),
-                    updated_at=datetime.fromisoformat(
-                        item["updated_at"].replace("Z", "+00:00")
-                    ),
-                    url=item.get("url", ""),
-                    symbols=item.get("symbols", []),
-                    source=item.get("source", ""),
-                )
-                articles.append(article)
-            except (KeyError, ValueError) as e:
-                logger.warning(f"Failed to parse article: {e}")
-                continue
-
-        return articles
+        logger.info(
+            "Alpaca API call #%d: returned %d articles",
+            self._call_count,
+            len(news_items),
+        )
+        return self._parse_articles(news_items)
 
     def fetch_news_for_date(
         self,
@@ -222,11 +254,9 @@ class AlpacaNewsClient:
         all_articles = []
         page_token = None
         limit_per_call = min(50, max_articles)
+        self._require_credentials()
 
         while len(all_articles) < max_articles:
-            if not self.api_key or not self.api_secret:
-                break
-
             self._rate_limit()
             self._call_count += 1
 
@@ -256,42 +286,23 @@ class AlpacaNewsClient:
                     timeout=30,
                 )
                 response.raise_for_status()
-                data = response.json()
-                logger.info(
-                    f"Alpaca API batch call #{self._call_count}: returned {len(data.get('news', []))} articles"
-                )
+                news_items, next_page_token = self._parse_response(response)
             except requests.RequestException as e:
                 logger.error(f"Alpaca API batch call #{self._call_count} FAILED: {e}")
-                break
+                raise AlpacaNewsProviderError("Alpaca batch news request failed") from e
 
-            news_items = data.get("news", [])
+            logger.info(
+                "Alpaca API batch call #%d: returned %d articles",
+                self._call_count,
+                len(news_items),
+            )
             if not news_items:
                 break
 
-            for item in news_items:
-                try:
-                    article = AlpacaNewsArticle(
-                        id=item.get("id", ""),
-                        headline=item.get("headline", ""),
-                        summary=item.get("summary", ""),
-                        author=item.get("author"),
-                        created_at=datetime.fromisoformat(
-                            item["created_at"].replace("Z", "+00:00")
-                        ),
-                        updated_at=datetime.fromisoformat(
-                            item["updated_at"].replace("Z", "+00:00")
-                        ),
-                        url=item.get("url", ""),
-                        symbols=item.get("symbols", []),
-                        source=item.get("source", ""),
-                    )
-                    all_articles.append(article)
-                except (KeyError, ValueError) as e:
-                    logger.warning(f"Failed to parse article: {e}")
-                    continue
+            all_articles.extend(self._parse_articles(news_items))
 
             # Check for next page
-            page_token = data.get("next_page_token")
+            page_token = next_page_token
             if not page_token:
                 break
 

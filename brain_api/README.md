@@ -68,6 +68,7 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
 | `ALPACA_API_SECRET` | Alpaca News API secret | None |
 | `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key (for historical fundamentals) | None |
+| `SEC_USER_AGENT` | Required SEC fair-access identity used to enrich Alpha Vantage periods with exact filing availability. Set an application name and contact email, such as `LearnFinance you@example.com`. | None |
 | `LSTM_TRAIN_LOOKBACK_YEARS` | Years of historical data for training | `15` |
 | `LSTM_TRAIN_WINDOW_END_DATE` | Override training window end date (YYYY-MM-DD) | Today |
 
@@ -79,6 +80,13 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `/signals/news/historical` | `data/output/daily_sentiment.parquet` | None | N/A (reads from file) |
 | `/signals/fundamentals` | yfinance | None | Not needed |
 | `/signals/fundamentals/historical` | Alpha Vantage | 25/day (free tier) | Yes (SQLite + JSON) |
+
+Historical fundamentals are not SAC-ready until Alpha Vantage fiscal periods
+have exact SEC filing provenance. Legacy cache files are enriched in place on
+the next refresh. `/train/sac/preflight` reports a non-retryable configuration
+error when enrichment is required but `SEC_USER_AGENT` is unset, and
+`/etl/refresh-training-data` returns HTTP 503 when a provider returns no usable
+enriched statements.
 
 The fundamentals historical endpoint response includes `api_status`:
 ```json
@@ -97,6 +105,5 @@ Once running, visit:
 ```bash
 uv run pytest
 ```
-
 
 

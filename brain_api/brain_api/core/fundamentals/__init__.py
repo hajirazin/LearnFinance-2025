@@ -20,11 +20,17 @@ This approach ensures:
 # Client
 from brain_api.core.fundamentals.client import (
     AlphaVantageClient,
+    AlphaVantageProviderError,
     RealAlphaVantageClient,
 )
 
 # Fetcher
-from brain_api.core.fundamentals.fetcher import FundamentalsFetcher
+from brain_api.core.fundamentals.fetcher import (
+    FundamentalsConfigurationError,
+    FundamentalsFetcher,
+    FundamentalsProviderError,
+    cached_fundamentals_require_sec_enrichment,
+)
 
 # Index
 from brain_api.core.fundamentals.index import FundamentalsIndex
@@ -61,18 +67,22 @@ from brain_api.core.fundamentals.storage import (
 __all__ = [
     # Client
     "AlphaVantageClient",
+    "AlphaVantageProviderError",
     "FetchRecord",
     "FundamentalRatios",
     "FundamentalsCacheError",
     # Fetcher
+    "FundamentalsConfigurationError",
     "FundamentalsFetcher",
     # Index
     "FundamentalsIndex",
+    "FundamentalsProviderError",
     "FundamentalsResult",
     "PointInTimeFundamental",
     # Models
     "QuarterlyStatement",
     "RealAlphaVantageClient",
+    "cached_fundamentals_require_sec_enrichment",
     "compute_ratios",
     # Loader (shared by all consumers)
     "get_default_data_path",

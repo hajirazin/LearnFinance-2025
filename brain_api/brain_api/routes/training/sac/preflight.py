@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
@@ -81,6 +82,17 @@ def assess_sac_training_readiness(
     start_date, end_date = resolve_training_window()
     missing: list[SACReadinessIssue] = []
     errors: list[SACReadinessIssue] = []
+    if not os.environ.get("SEC_USER_AGENT", "").strip():
+        errors.append(
+            SACReadinessIssue(
+                "sec_filing_enrichment",
+                (
+                    "SEC_USER_AGENT is required for point-in-time fundamentals "
+                    "enrichment; set it to an application name and contact email"
+                ),
+                retryable=False,
+            )
+        )
     trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
     weekly_cutoffs = trade_clock.transition_actor_cutoffs
 

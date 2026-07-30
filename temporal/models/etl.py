@@ -29,4 +29,5 @@ class RefreshTrainingDataResponse(BaseModel):
     fundamentals_refreshed: list[str]
     fundamentals_skipped: list[str]
     fundamentals_failed: list[str]
+    fundamentals_errors: dict[str, str] = Field(default_factory=dict)
     duration_seconds: float

@@ -574,9 +574,20 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Per AGENTS.md rule: side effects mocked, never skipped.
     """
+    from brain_api.core.sac.readiness import SACTrainingReadiness
     from brain_api.routes.training.sac import full as sac_full_route
 
     monkeypatch.setattr(sac_full_route, "load_prices_yfinance", mock_price_loader)
+    monkeypatch.setattr(
+        sac_full_route,
+        "assess_sac_training_readiness",
+        lambda universe, *, force=False: SACTrainingReadiness.from_issues(
+            universe=universe,
+            symbols=mock_symbols(),
+            missing=[],
+            errors=[],
+        ),
+    )
     monkeypatch.setattr(sac_full_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
     monkeypatch.setattr(
         sac_full_route, "build_dual_forecast_features", _mock_dual_forecasts

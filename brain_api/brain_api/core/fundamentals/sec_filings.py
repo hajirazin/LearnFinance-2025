@@ -32,6 +32,7 @@ class SECFilingAvailabilityClient:
 
     _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
     _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
+    _SUBMISSIONS_FILE_URL = "https://data.sec.gov/submissions/{name}"
 
     def __init__(self, user_agent: str, timeout_seconds: float = 30.0):
         if not user_agent.strip():
@@ -73,14 +74,42 @@ class SECFilingAvailabilityClient:
             raise ValueError(f"No SEC CIK mapping found for {symbol}")
 
         payload = self._get_json(self._SUBMISSIONS_URL.format(cik=cik))
-        recent = payload.get("filings", {}).get("recent", {})
+        filing_payload = payload.get("filings", {})
+        if not isinstance(filing_payload, dict):
+            raise ValueError(f"SEC submissions payload has no filings for {symbol}")
+        recent = filing_payload.get("recent", {})
         if not isinstance(recent, dict):
             raise ValueError(
                 f"SEC submissions payload has no recent filings for {symbol}"
             )
 
+        filings = self._parse_filing_columns(recent, cik=cik, symbol=symbol)
+        historical_files = filing_payload.get("files", [])
+        if not isinstance(historical_files, list):
+            raise ValueError(f"SEC submissions file index is malformed for {symbol}")
+        for file_record in historical_files:
+            if not isinstance(file_record, dict) or not file_record.get("name"):
+                raise ValueError(
+                    f"SEC submissions file index contains an invalid record for {symbol}"
+                )
+            historical = self._get_json(
+                self._SUBMISSIONS_FILE_URL.format(name=file_record["name"])
+            )
+            filings.extend(
+                self._parse_filing_columns(historical, cik=cik, symbol=symbol)
+            )
+        return filings
+
+    @staticmethod
+    def _parse_filing_columns(
+        columns_payload: dict[str, Any],
+        *,
+        cik: str,
+        symbol: str,
+    ) -> list[SECFilingAvailability]:
+        """Parse one recent or historical SEC submissions column bundle."""
         keys = ("reportDate", "filingDate", "accessionNumber", "form")
-        columns = [recent.get(key, []) for key in keys]
+        columns = [columns_payload.get(key, []) for key in keys]
         if not all(isinstance(column, list) for column in columns):
             raise ValueError(f"SEC submissions columns are malformed for {symbol}")
 
