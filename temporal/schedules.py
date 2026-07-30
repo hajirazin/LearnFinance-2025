@@ -1,4 +1,4 @@
-"""Register cron schedules with Temporal.
+"""Register timezone-aware schedules with Temporal.
 
 Schedule routing is role-based via two task queues:
 
@@ -21,14 +21,9 @@ string. Calendar specs AND all fields, so
 Sunday.
 
 Idempotent: safe to run repeatedly (e.g. as a docker compose init
-service). If a schedule already exists, the run logs a loud SKIP and
-moves on -- it does NOT update or delete. To change a schedule
-(cron / calendar / queue), manually delete it on the server first:
-
-    docker compose exec temporal-server \\
-      temporal schedule delete --schedule-id <id> --address 127.0.0.1:7233
-
-then redeploy so this script recreates it with the new config.
+service). Existing schedules are updated in place so timezone, calendar,
+workflow, and task-queue changes take effect without a manual delete.
+The existing paused/unpaused state is preserved during an update.
 
 Usage:
     cd temporal && uv run python -m schedules
@@ -36,6 +31,7 @@ Usage:
 
 import asyncio
 import os
+from dataclasses import replace
 
 from temporalio.client import (
     Client,
@@ -45,6 +41,7 @@ from temporalio.client import (
     ScheduleCalendarSpec,
     ScheduleRange,
     ScheduleSpec,
+    ScheduleUpdate,
 )
 from temporalio.contrib.pydantic import pydantic_data_converter
 
@@ -75,20 +72,33 @@ def first_sunday_of_month_at(hour: int, minute: int) -> ScheduleCalendarSpec:
     )
 
 
+def monday_at(hour: int, minute: int) -> ScheduleCalendarSpec:
+    """Calendar spec firing every Monday at HH:MM in the spec timezone."""
+    return ScheduleCalendarSpec(
+        day_of_week=(ScheduleRange(1),),
+        hour=(ScheduleRange(hour),),
+        minute=(ScheduleRange(minute),),
+    )
+
+
 SCHEDULES = [
     {
         "id": "us-weekly-allocate",
         "workflow": USWeeklyAllocationWorkflow,
         "workflow_id": "us-weekly-allocate",
-        "cron": "0 11 * * 1",  # Monday 11:00 UTC (18:00 IST)
+        "calendar": monday_at(8, 0),
+        "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
-        "description": "US weekly allocation + orders + email (Monday 6 PM IST)",
+        "description": (
+            "US SAC (halal_filtered) weekly allocation Monday 08:00 America/New_York"
+        ),
     },
     {
         "id": "india-weekly-allocate",
         "workflow": IndiaWeeklyAllocationWorkflow,
         "workflow_id": "india-weekly-allocate",
-        "cron": "30 3 * * 1",  # Monday 03:30 UTC (09:00 IST)
+        "calendar": monday_at(9, 0),
+        "time_zone_name": "Asia/Kolkata",
         "task_queue": QUEUE_INFERENCE,
         "description": "India weekly HRP allocation + email (Monday 9 AM IST)",
     },
@@ -96,7 +106,8 @@ SCHEDULES = [
         "id": "india-double-hrp",
         "workflow": IndiaDoubleHRPWorkflow,
         "workflow_id": "india-double-hrp",
-        "cron": "0 4 * * 1",  # Monday 04:00 UTC (09:30 IST)
+        "calendar": monday_at(9, 30),
+        "time_zone_name": "Asia/Kolkata",
         "task_queue": QUEUE_INFERENCE,
         "description": "India Double HRP (Shariah500 -> top 15) Monday 9:30 AM IST",
     },
@@ -104,40 +115,40 @@ SCHEDULES = [
         "id": "us-double-hrp",
         "workflow": USDoubleHRPWorkflow,
         "workflow_id": "us-double-hrp",
-        # 30 minutes after us-weekly-allocate so the two US strategies do
-        # not race for brain_api time slots; both still hit Monday close.
-        "cron": "30 11 * * 1",  # Monday 11:30 UTC (17:00 IST)
+        "calendar": monday_at(7, 0),
+        "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
-        "description": "US Double HRP (halal_new -> sticky top 15) Monday 5 PM IST",
+        "description": (
+            "US Double HRP (halal_new -> sticky top 15) Monday 07:00 America/New_York"
+        ),
     },
     {
         "id": "us-alpha-hrp",
         "workflow": USAlphaHRPWorkflow,
         "workflow_id": "us-alpha-hrp",
-        # 30 minutes after us-double-hrp so the three US Monday strategies
-        # do not contend for brain_api time slots while still hitting the
-        # post-close evidence window.
-        "cron": "0 12 * * 1",  # Monday 12:00 UTC (17:30 IST)
+        "calendar": monday_at(7, 30),
+        "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
-        "description": "US Alpha-HRP (PatchTST -> top 15 -> HRP) Monday 17:30 IST",
+        "description": (
+            "US Alpha-HRP (PatchTST -> top 15 -> HRP) Monday 07:30 America/New_York"
+        ),
     },
     {
         "id": "us-sac-halal-allocate",
         "workflow": USSACHalalAllocationWorkflow,
         "workflow_id": "us-sac-halal-allocate",
-        # 30 minutes after us-alpha-hrp keeps the established Monday
-        # cadence on the inference queue. Parallel A/B sibling of
-        # us-weekly-allocate (sac_halal_filtered at 11:00 UTC); trades
-        # on the dedicated `sac_halal` IBKR account (env
+        # Parallel A/B sibling of us-weekly-allocate; trades on the
+        # dedicated `sac_halal` IBKR account (env
         # IBKR_SAC_HALAL_*, IB Gateway on TCP 4002 paper / 4001 live)
         # via brain_api's /ibkr/* routes -- different broker entirely
         # so client_order_id collisions across the two SAC variants are
         # impossible.
-        "cron": "30 12 * * 1",  # Monday 12:30 UTC (18:00 IST)
+        "calendar": monday_at(8, 30),
+        "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
         "description": (
             "US SAC (halal) weekly allocation (IBKR sac_halal account, "
-            "universe=halal) Monday 18:00 IST"
+            "universe=halal) Monday 08:30 America/New_York"
         ),
     },
     # Training schedules -- first Sunday of month, staggered 6h apart
@@ -150,6 +161,7 @@ SCHEDULES = [
         "workflow": USForecastersTrainingWorkflow,
         "workflow_id": "us-forecasters-training",
         "calendar": first_sunday_of_month_at(0, 1),
+        "time_zone_name": "UTC",
         "task_queue": QUEUE_TRAINING,
         "description": (
             "US forecasters training (LSTM + PatchTST) first Sunday of month 00:01 UTC"
@@ -160,6 +172,7 @@ SCHEDULES = [
         "workflow": USSACTrainingWorkflow,
         "workflow_id": "us-sac-training",
         "calendar": first_sunday_of_month_at(6, 1),
+        "time_zone_name": "UTC",
         "task_queue": QUEUE_TRAINING,
         "description": (
             "US SAC training (halal_filtered) first Sunday of month 06:01 UTC"
@@ -170,6 +183,7 @@ SCHEDULES = [
         "workflow": USSACHalalTrainingWorkflow,
         "workflow_id": "us-sac-halal-training",
         "calendar": first_sunday_of_month_at(12, 1),
+        "time_zone_name": "UTC",
         "task_queue": QUEUE_TRAINING,
         "description": (
             "US SAC training (halal, legacy yfinance universe) "
@@ -182,6 +196,7 @@ SCHEDULES = [
         "workflow": IndiaWeeklyTrainingWorkflow,
         "workflow_id": "india-monthly-training",
         "calendar": first_sunday_of_month_at(18, 1),
+        "time_zone_name": "UTC",
         "task_queue": QUEUE_TRAINING,
         "description": "India PatchTST training first Sunday of month 18:01 UTC",
     },
@@ -189,9 +204,34 @@ SCHEDULES = [
 
 
 def _build_spec(sched: dict) -> ScheduleSpec:
-    if "cron" in sched:
-        return ScheduleSpec(cron_expressions=[sched["cron"]])
-    return ScheduleSpec(calendars=[sched["calendar"]])
+    return ScheduleSpec(
+        calendars=[sched["calendar"]],
+        time_zone_name=sched["time_zone_name"],
+    )
+
+
+def _build_schedule(sched: dict) -> Schedule:
+    """Build the complete desired Temporal schedule definition."""
+    return Schedule(
+        action=ScheduleActionStartWorkflow(
+            sched["workflow"].run,
+            id=sched["workflow_id"],
+            task_queue=sched["task_queue"],
+        ),
+        spec=_build_spec(sched),
+    )
+
+
+async def _update_existing_schedule(client: Client, sched: dict) -> None:
+    """Update a schedule definition while preserving its operational state."""
+    desired = _build_schedule(sched)
+    handle = client.get_schedule_handle(sched["id"])
+
+    def build_update(update_input) -> ScheduleUpdate:
+        current_state = update_input.description.schedule.state
+        return ScheduleUpdate(schedule=replace(desired, state=current_state))
+
+    await handle.update(build_update)
 
 
 async def main():
@@ -201,24 +241,19 @@ async def main():
 
     for sched in SCHEDULES:
         schedule_id = sched["id"]
+        desired = _build_schedule(sched)
         try:
-            await client.create_schedule(
-                schedule_id,
-                Schedule(
-                    action=ScheduleActionStartWorkflow(
-                        sched["workflow"].run,
-                        id=sched["workflow_id"],
-                        task_queue=sched["task_queue"],
-                    ),
-                    spec=_build_spec(sched),
-                ),
-            )
+            await client.create_schedule(schedule_id, desired)
             print(
                 f"  Created: {schedule_id} "
                 f"(queue={sched['task_queue']}) - {sched['description']}"
             )
         except ScheduleAlreadyRunningError:
-            print(f"  SKIP (already exists, not updating): {schedule_id}")
+            await _update_existing_schedule(client, sched)
+            print(
+                f"  Updated: {schedule_id} "
+                f"(queue={sched['task_queue']}) - {sched['description']}"
+            )
 
     print(f"\nProcessed {len(SCHEDULES)} schedule(s).")
 

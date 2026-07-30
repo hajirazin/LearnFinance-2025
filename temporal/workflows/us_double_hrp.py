@@ -37,6 +37,7 @@ from workflows._order_execution import (
     sell_wait_buy,
     split_orders_by_side,
 )
+from workflows._run_identity import in_ist
 
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import (
@@ -76,8 +77,8 @@ STICKINESS_THRESHOLD_PP = 1.0
 class USDoubleHRPWorkflow:
     @workflow.run
     async def run(self) -> dict:
-        now_ist = workflow.now().astimezone()
-        as_of_date = now_ist.strftime("%Y-%m-%d")
+        now_ist = in_ist(workflow.now())
+        as_of_date = now_ist.date().isoformat()
         # ISO year-week ('YYYYWW'), e.g. '202609'. %G%V is correct across
         # year boundaries (week 1 of 2026 -> '202601' even if calendar is
         # Dec 2025).

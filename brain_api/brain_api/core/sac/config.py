@@ -40,6 +40,10 @@ class SACConfig(SACBaseConfig):
         from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
 
         data = data.copy()
+        # Tolerate retired SAC-v1 configuration keys.
+        data.pop("max_position_weight", None)
+        data.pop("sharpe_weight", None)
+        data.pop("sharpe_eta", None)
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
         # Round-trip IBKR cost sub-config (legacy serialised configs without

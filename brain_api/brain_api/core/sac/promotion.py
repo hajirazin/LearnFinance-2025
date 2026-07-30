@@ -1,4 +1,4 @@
-"""SAC promotion guardrails (always-promote-with-guardrails policy).
+"""SAC promotion policy.
 
 SAC keeps an absolute CAGR floor on the new model's own backtest
 (``SAC_PROMOTION_CAGR_FLOOR = 0.12``); unlike the forecaster gate,
@@ -21,7 +21,7 @@ SAC_PROMOTION_CAGR_FLOOR: float = 0.12
 Renamed from ``MIN_PROMOTION_CAGR`` (kept the same numeric value) so
 the new name reflects the policy: this is a guardrail floor, not a
 prior-comparison gate. SAC is allowed to ship a model worse than the
-prior as long as its own backtest clears 12% CAGR.
+prior as long as its own backtest reaches 12% CAGR.
 """
 
 # All artifact files SACLocalStorage.write_artifacts persists. Drifting
@@ -64,54 +64,30 @@ def evaluate_sac_artifact_health(
     actual_symbol_count: int,
     artifact_dir: Path,
 ) -> ArtifactHealthCheck:
-    """Run SAC full-training guardrails.
+    """Apply the sole full-training promotion rule: net eval CAGR >= 12%.
 
-    Replaces the prior ``promoted = prior_version is None or
-    result.eval_cagr > MIN_PROMOTION_CAGR`` gate. The new policy
-    drops the inaugural special-case (an inaugural that fails
-    guardrails should NOT be promoted just to populate HF main --
-    that was a silent fallback per AGENTS.md rule #1) and adds
-    finite-metric + artifact-existence + symbol-count guardrails.
-
-    Guardrails (each failure appends a stable, human-readable string):
-
-    1. ``eval_cagr`` finite AND ``> SAC_PROMOTION_CAGR_FLOOR``
-    2. ``eval_sharpe`` finite
-    3. ``eval_max_drawdown`` finite
-    4. ``actor_loss`` finite
-    5. ``critic_loss`` finite
-    6. ``actual_symbol_count == expected_symbol_count`` (action-space
-       dimension must match the bucket's symbol resolver)
-    7-14. Each of the eight SAC artifact files
-       (actor.pt, critic.pt, critic_target.pt, log_alpha.pt, scaler.pkl,
-       config.json, symbol_order.json, metadata.json) exists with
-       non-zero size
-
-    Returns:
-        :class:`ArtifactHealthCheck` whose ``is_healthy`` is the new
-        promotion decision.
+    Losses, Sharpe, drawdown, prior-model performance, baseline performance,
+    symbol count, and artifact presence do not participate in the product
+    promotion decision. They remain available for reporting and operational
+    diagnostics. Non-finite CAGR is rejected because it cannot establish that
+    the absolute floor was met.
     """
-    failure_reasons: list[str] = []
-
+    del (
+        actor_loss,
+        critic_loss,
+        eval_sharpe,
+        eval_max_drawdown,
+        expected_symbol_count,
+        actual_symbol_count,
+        artifact_dir,
+    )
+    failure_reasons = []
     if not math.isfinite(eval_cagr):
         failure_reasons.append("eval_cagr is not finite")
-    elif eval_cagr <= SAC_PROMOTION_CAGR_FLOOR:
+    elif eval_cagr < SAC_PROMOTION_CAGR_FLOOR:
         failure_reasons.append(
             f"eval_cagr {eval_cagr:.4f} below floor {SAC_PROMOTION_CAGR_FLOOR}"
         )
-
-    _check_finite_metric(eval_sharpe, "eval_sharpe", failure_reasons)
-    _check_finite_metric(eval_max_drawdown, "eval_max_drawdown", failure_reasons)
-    _check_finite_metric(actor_loss, "actor_loss", failure_reasons)
-    _check_finite_metric(critic_loss, "critic_loss", failure_reasons)
-
-    if actual_symbol_count != expected_symbol_count:
-        failure_reasons.append(
-            f"actual_symbol_count {actual_symbol_count} does not match "
-            f"expected_symbol_count {expected_symbol_count}"
-        )
-
-    _check_artifact_files(artifact_dir, failure_reasons)
 
     return ArtifactHealthCheck(
         is_healthy=not failure_reasons,

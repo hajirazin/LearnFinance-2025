@@ -77,7 +77,9 @@ def aggregate_symbol_sentiment(
     weighted_sum = 0.0
 
     for sa in scored_articles:
-        weight = compute_recency_weight(sa.article.published, as_of, tau_days)
+        weight = sa.sentiment.confidence * compute_recency_weight(
+            sa.article.published, as_of, tau_days
+        )
         weighted_sum += weight * sa.sentiment.score
         total_weight += weight
 

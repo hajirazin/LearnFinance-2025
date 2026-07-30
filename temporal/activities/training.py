@@ -14,12 +14,30 @@ from activities.client import get_training_client
 from models import (
     RefreshTrainingDataRequest,
     RefreshTrainingDataResponse,
+    SACTrainingReadiness,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@activity.defn
+def preflight_sac_training(universe: str, force: bool = False) -> SACTrainingReadiness:
+    """Validate all point-in-time evidence before starting SAC training."""
+    logger.info(
+        "Checking SAC training readiness for universe=%s (force=%s)...",
+        universe,
+        force,
+    )
+    with get_training_client() as client:
+        response = client.post(
+            "/train/sac/preflight",
+            json={"universe": universe, "force": force},
+        )
+        response.raise_for_status()
+    return SACTrainingReadiness(**response.json())
 
 
 @activity.defn
@@ -198,7 +216,7 @@ def train_patchtst(universe: str) -> TrainingResponse:
 
 
 @activity.defn
-def train_sac(universe: str) -> TrainingResponse:
+def train_sac(universe: str, force: bool = False) -> TrainingResponse:
     """Train the SAC reinforcement-learning allocator on the given universe.
 
     Two registered SAC buckets accept this call:
@@ -208,8 +226,11 @@ def train_sac(universe: str) -> TrainingResponse:
     factory in brain_api). The API enforces per-bucket symbol-count
     invariants and returns 422 if violated.
     """
-    logger.info(f"Starting SAC training on universe={universe}...")
-    return _poll_training_job("/train/sac/full", json_body={"universe": universe})
+    logger.info("Starting SAC training on universe=%s (force=%s)...", universe, force)
+    return _poll_training_job(
+        "/train/sac/full",
+        json_body={"universe": universe, "force": force},
+    )
 
 
 @activity.defn

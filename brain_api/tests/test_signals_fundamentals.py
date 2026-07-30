@@ -101,6 +101,25 @@ SAMPLE_BALANCE_SHEET = {
     ],
 }
 
+_FILING_PROVENANCE = {
+    "2024-09-30": ("2024-11-01", "0001-24-000003", "q3"),
+    "2024-06-30": ("2024-08-01", "0001-24-000002", "q2"),
+    "2024-03-31": ("2024-05-01", "0001-24-000001", "q1"),
+}
+for _statement in (SAMPLE_INCOME_STATEMENT, SAMPLE_BALANCE_SHEET):
+    for _report in _statement["quarterlyReports"]:
+        _filing_date, _accession, _slug = _FILING_PROVENANCE[
+            _report["fiscalDateEnding"]
+        ]
+        _report.update(
+            {
+                "filingDate": _filing_date,
+                "accessionNumber": _accession,
+                "filingForm": "10-Q",
+                "filingSource": f"https://www.sec.gov/test/{_slug}",
+            }
+        )
+
 # Sample yfinance info response (real fields from yfinance)
 SAMPLE_YFINANCE_INFO = {
     "grossMargins": 0.45,
@@ -273,10 +292,28 @@ def mock_yfinance_ticker():
 
 
 @pytest.fixture
-def client_with_yfinance_mock(mock_yfinance_ticker):
-    """Create test client with mocked yfinance."""
+def client_with_yfinance_mock(mock_yfinance_ticker, temp_data_path):
+    """Create a client with point-in-time filing cache evidence."""
+    del mock_yfinance_ticker
+    for symbol in ["AAPL", "MSFT", "GOOGL"]:
+        _write_cache_file(
+            temp_data_path,
+            symbol,
+            "income_statement",
+            {"response": SAMPLE_INCOME_STATEMENT},
+        )
+        _write_cache_file(
+            temp_data_path,
+            symbol,
+            "balance_sheet",
+            {"response": SAMPLE_BALANCE_SHEET},
+        )
+    app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
     client = TestClient(app)
-    yield client
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _write_cache_file(base_path: Path, symbol: str, endpoint: str, data: dict) -> None:

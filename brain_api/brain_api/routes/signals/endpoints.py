@@ -7,7 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from brain_api.core.data_freshness import refresh_stale_fundamentals
-from brain_api.core.fundamentals import load_historical_fundamentals_from_cache
+from brain_api.core.fundamentals import (
+    load_historical_fundamentals_from_cache,
+    load_point_in_time_fundamentals,
+)
 from brain_api.core.news_sentiment import (
     NewsFetcher,
     SentimentScorer,
@@ -20,7 +23,6 @@ from brain_api.routes.signals.dependencies import (
     get_sentiment_scorer,
 )
 from brain_api.routes.signals.helpers import (
-    get_yfinance_ratios,
     load_historical_sentiment,
     result_to_response,
 )
@@ -130,35 +132,47 @@ def get_historical_news_sentiment(
 @router.post("/fundamentals", response_model=FundamentalsResponse)
 def get_fundamentals(
     request: FundamentalsRequest,
+    base_path: Annotated[Path, Depends(get_data_base_path)],
 ) -> FundamentalsResponse:
-    """Get CURRENT fundamental ratios for inference.
+    """Get filing-date-correct fundamental ratios for inference.
 
-    This endpoint fetches the most recent available fundamentals for each symbol
-    using yfinance. No rate limits, no caching needed.
-
-    Data source: yfinance (ticker.info)
+    Only complete Alpha Vantage periods enriched with exact SEC filing
+    availability are eligible. Unresolved or incomplete periods are errors,
+    never zero-filled.
     """
-    as_of = date.today().isoformat()
+    as_of_date = (
+        date.fromisoformat(request.as_of_date)
+        if request.as_of_date is not None
+        else date.today()
+    )
+    as_of = as_of_date.isoformat()
+    fundamentals = load_point_in_time_fundamentals(
+        symbols=request.symbols,
+        as_of_date=as_of_date,
+        base_path=base_path,
+    )
     results: list[CurrentRatiosResponse] = []
 
     for symbol in request.symbols:
-        try:
-            ratios = get_yfinance_ratios(symbol, as_of)
-            results.append(
-                CurrentRatiosResponse(
-                    symbol=symbol,
-                    ratios=ratios,
-                    error=None if ratios else "No data available",
-                )
-            )
-        except Exception as e:
+        fundamental = fundamentals.get(symbol)
+        if fundamental is None:
             results.append(
                 CurrentRatiosResponse(
                     symbol=symbol,
                     ratios=None,
-                    error=str(e),
+                    error=(f"No complete SEC-enriched filing was available by {as_of}"),
                 )
             )
+            continue
+        results.append(
+            CurrentRatiosResponse(
+                symbol=symbol,
+                ratios=RatiosResponse(
+                    **fundamental.to_dict(),
+                    as_of_date=fundamental.filing_available_date,
+                ),
+            )
+        )
 
     return FundamentalsResponse(
         as_of_date=as_of,
@@ -212,6 +226,11 @@ def get_historical_fundamentals(
                     net_margin=safe_float(row.get("net_margin")),
                     current_ratio=safe_float(row.get("current_ratio")),
                     debt_to_equity=safe_float(row.get("debt_to_equity")),
+                    fiscal_period_end=row.get("fiscal_period_end"),
+                    filing_available_date=row.get("filing_available_date"),
+                    filing_accession_number=row.get("filing_accession_number"),
+                    filing_form=row.get("filing_form"),
+                    filing_source=row.get("filing_source"),
                 )
             )
 

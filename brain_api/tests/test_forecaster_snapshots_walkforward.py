@@ -192,3 +192,56 @@ class TestSnapshotInferenceHelpers:
                 weekly_dates=None,
                 symbol="TEST",
             )
+
+    def test_lstm_next_week_snapshot_includes_cutoff_friday(self, monkeypatch):
+        """Friday close is known before the following Monday-open action."""
+        import numpy as np
+        import pandas as pd
+        import torch
+
+        from brain_api.core.portfolio_rl.walkforward import (
+            _predict_single_week_lstm,
+        )
+
+        friday = pd.Timestamp("2026-01-09")
+        daily = pd.DataFrame(
+            {
+                "open": [1.0, 2.0, 3.0],
+                "high": [1.0, 2.0, 3.0],
+                "low": [1.0, 2.0, 3.0],
+                "close": [1.0, 2.0, 3.0],
+                "volume": [1.0, 2.0, 3.0],
+            },
+            index=pd.DatetimeIndex(["2026-01-07", "2026-01-08", friday]),
+        )
+        captured: dict[str, torch.Tensor] = {}
+
+        class Model:
+            def __call__(self, values):
+                captured["values"] = values
+                return torch.zeros((1, 5))
+
+        def identity_features(frame, use_returns):
+            del use_returns
+            return frame
+
+        monkeypatch.setattr(
+            "brain_api.core.features.compute_ohlcv_log_returns",
+            identity_features,
+        )
+        result = _predict_single_week_lstm(
+            model=Model(),
+            scaler=None,
+            config=type(
+                "Config",
+                (),
+                {"sequence_length": 2, "use_returns": True},
+            )(),
+            weekly_idx=0,
+            weekly_dates=pd.DatetimeIndex([friday]),
+            daily_ohlcv=daily,
+            symbol="AAA",
+        )
+
+        assert result == pytest.approx(0.0)
+        assert np.asarray(captured["values"])[0, -1, 3] == pytest.approx(3.0)

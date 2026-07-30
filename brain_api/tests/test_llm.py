@@ -1176,8 +1176,14 @@ class TestSACWeeklySummaryEndpoint:
         """Universe is mandatory: 422 when omitted (AGENTS.md no-default)."""
         payload = dict(mock_weekly_summary_request)
         payload.pop("universe")
-
-        response = client.post("/llm/sac-weekly-summary", json=payload)
+        app.dependency_overrides[get_llm_provider] = lambda: MockLLMProvider(
+            name="openai",
+            response=LLMResponse(content="{}", model="test", tokens_used=0),
+        )
+        try:
+            response = client.post("/llm/sac-weekly-summary", json=payload)
+        finally:
+            app.dependency_overrides.pop(get_llm_provider, None)
 
         assert response.status_code == 422
         # Pydantic surfaces the missing-field error against the body.

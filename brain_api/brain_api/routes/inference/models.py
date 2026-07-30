@@ -184,6 +184,16 @@ class WeightChange(BaseModel):
 # ============================================================================
 
 
+class SACFeatureBundleRequest(BaseModel):
+    """Exact point-in-time features used to build the SAC actor state."""
+
+    symbols: list[str] = Field(..., min_length=1)
+    signals: dict[str, dict[str, float]]
+    lstm_forecasts: dict[str, float]
+    patchtst_forecasts: dict[str, float]
+    provenance: dict[str, object] = Field(default_factory=dict)
+
+
 class SACInferenceRequest(BaseModel):
     """Request model for SAC inference endpoint (dual forecasts)."""
 
@@ -195,6 +205,21 @@ class SACInferenceRequest(BaseModel):
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
     )
+    feature_bundle: SACFeatureBundleRequest | None = Field(
+        None,
+        description=(
+            "Exact signals and forecasts fetched by the orchestrator. Required for "
+            "state-schema v2 models; omitted only for legacy v1 artifacts."
+        ),
+    )
+
+
+class ForcedLiquidationAudit(BaseModel):
+    """Position outside the model slate that order generation must liquidate."""
+
+    symbol: str
+    market_value: float
+    reason: str = "outside_active_sac_symbol_set"
 
 
 class SACInferenceResponse(BaseModel):
@@ -206,3 +231,6 @@ class SACInferenceResponse(BaseModel):
     target_week_end: str  # YYYY-MM-DD
     model_version: str
     weight_changes: list[WeightChange]
+    decision_state: dict[str, object] | None = None
+    state_digest: str | None = None
+    forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)

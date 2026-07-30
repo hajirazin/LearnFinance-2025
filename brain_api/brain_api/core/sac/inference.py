@@ -13,7 +13,7 @@ from brain_api.core.portfolio_rl.constraints import (
     compute_turnover,
     enforce_constraints,
 )
-from brain_api.core.portfolio_rl.state import build_state_vector
+from brain_api.core.portfolio_rl.state import StateSchema, build_state_vector
 
 if TYPE_CHECKING:
     from brain_api.core.portfolio_rl.sac_networks import GaussianActor
@@ -29,6 +29,8 @@ class SACInferenceResult:
     turnover: float
     model_version: str
     raw_action: np.ndarray
+    state_vector: np.ndarray
+    state_schema_version: int
 
 
 def run_sac_inference(
@@ -41,6 +43,7 @@ def run_sac_inference(
     lstm_forecasts: dict[str, float],
     patchtst_forecasts: dict[str, float],
     model_version: str,
+    state_schema_version: int = 1,
 ) -> SACInferenceResult:
     """Run SAC inference to get portfolio allocation.
 
@@ -59,12 +62,16 @@ def run_sac_inference(
         Inference result with allocation weights.
     """
     # Build state vector with dual forecasts
+    schema = StateSchema(
+        n_stocks=len(symbol_order), schema_version=state_schema_version
+    )
     state = build_state_vector(
         signals=signals,
         lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         portfolio_weights=current_weights,
         symbol_order=symbol_order,
+        schema=schema,
     )
 
     # Normalize state
@@ -97,4 +104,6 @@ def run_sac_inference(
         turnover=turnover,
         model_version=model_version,
         raw_action=action,
+        state_vector=state,
+        state_schema_version=state_schema_version,
     )

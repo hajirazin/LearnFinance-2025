@@ -8,8 +8,11 @@ per-leg cost model calibrated to Interactive Brokers Singapore's
 The cost model is broker-specific by name on purpose: SAC trains under
 IBKR economics so that the policy learns to respect IBKR's per-order
 minimum, sell-side regulatory schedule, and per-share clearing fees.
-The order-submission code path (Alpaca client / routes/ibkr.py) is
-untouched -- this module only feeds the **reward** computation.
+The execution broker is intentionally independent of this hypothetical
+economics model. In particular, the ``halal_filtered`` paper workflow may
+submit through Alpaca while SAC is still trained and evaluated with IBKR
+Singapore costs. This is a deliberate research assumption, not a routing
+error; this module only feeds reward and evaluation accounting.
 
 In scope (modelled per leg, summed across symbols):
 
@@ -31,11 +34,11 @@ Out of scope (intentionally not modelled):
 Math invariant
 --------------
 The dollar cost is converted to a return fraction so the existing
-log-space reward formula in
-:func:`compute_blended_reward` is unchanged in shape::
+exact net-wealth reward formula in
+:func:`compute_net_log_reward`::
 
     tc_fraction = total_dollar_cost / nav_usd
-    reward = reward_scale * (log(1 + r) - log(1 + tc_fraction)) + DSR
+    reward = reward_scale * log(1 + gross_return - tc_fraction) - hhi_penalty
 
 The min/max-per-order caps make realised bps a function of NAV and
 per-symbol notional, which is the whole point of moving away from a

@@ -104,13 +104,10 @@ class TestMakeSACBaseConfigForNStocks:
             "normalize_rewards",
             "cost_bps",
             "cash_buffer",
-            "max_position_weight",
             "reward_scale",
             "seed",
             "validation_years",
             "min_cagr_improvement",
-            "sharpe_weight",
-            "sharpe_eta",
             "cost_config",
         ):
             assert getattr(cfg, field) == getattr(DEFAULT_SAC_BASE_CONFIG, field), (

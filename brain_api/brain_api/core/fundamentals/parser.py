@@ -38,6 +38,10 @@ def parse_quarterly_statements(
                     fiscal_date_ending=fiscal_date,
                     reported_currency=currency,
                     raw_data=report,
+                    filing_available_date=report.get("filingDate"),
+                    filing_accession_number=report.get("accessionNumber"),
+                    filing_form=report.get("filingForm"),
+                    filing_source=report.get("filingSource"),
                 )
             )
 
@@ -62,9 +66,20 @@ def get_statement_as_of(
     Returns:
         Most recent statement with fiscal_date_ending <= as_of_date
     """
-    for stmt in statements:
-        if stmt.fiscal_date_ending <= as_of_date:
-            return stmt
+    available = [
+        stmt
+        for stmt in statements
+        if stmt.filing_available_date is not None
+        and stmt.filing_available_date <= as_of_date
+    ]
+    if available:
+        return max(
+            available,
+            key=lambda stmt: (
+                stmt.filing_available_date or "",
+                stmt.fiscal_date_ending,
+            ),
+        )
     return None
 
 

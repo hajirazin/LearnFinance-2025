@@ -53,7 +53,6 @@ class SACBaseConfig:
     # round-trip compatibility with previously serialised configs.
     cost_bps: int = 10  # DEPRECATED; see cost_config
     cash_buffer: float = 0.02  # Minimum cash weight (2%)
-    max_position_weight: float = 0.20  # Max weight per stock (20%)
     reward_scale: float = 1.0  # Let normalize_rewards handle magnitude.
     # SAC paper: alpha ≡ 1/reward_scale. Having reward_scale=100
     # AND normalize_rewards AND auto_entropy_tuning creates 3 competing
@@ -65,12 +64,6 @@ class SACBaseConfig:
     cost_config: IBKRSingaporeCostConfig = field(
         default_factory=IBKRSingaporeCostConfig.default
     )
-
-    # === Reward shaping ===
-    sharpe_weight: float = (
-        0.5  # Blend: sharpe_weight * DSR + (1-sharpe_weight) * return_reward
-    )
-    sharpe_eta: float = 0.01  # EMA decay for differential Sharpe (~100-week window)
 
     # === Reproducibility ===
     seed: int = 42
@@ -114,14 +107,11 @@ class SACBaseConfig:
             "hhi_penalty_scale": self.hhi_penalty_scale,
             "cost_bps": self.cost_bps,
             "cash_buffer": self.cash_buffer,
-            "max_position_weight": self.max_position_weight,
             "reward_scale": self.reward_scale,
             "n_stocks": self.n_stocks,
             "seed": self.seed,
             "validation_years": self.validation_years,
             "min_cagr_improvement": self.min_cagr_improvement,
-            "sharpe_weight": self.sharpe_weight,
-            "sharpe_eta": self.sharpe_eta,
             "cost_config": self.cost_config.to_dict(),
         }
 
@@ -129,6 +119,10 @@ class SACBaseConfig:
     def from_dict(cls, data: dict[str, Any]) -> "SACBaseConfig":
         """Create config from dictionary."""
         data = data.copy()
+        # Tolerate retired hard-cap and DSR fields in legacy artifact JSON.
+        data.pop("max_position_weight", None)
+        data.pop("sharpe_weight", None)
+        data.pop("sharpe_eta", None)
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
             data["hidden_sizes"] = tuple(data["hidden_sizes"])
         # Round-trip the IBKR cost sub-config; legacy serialised configs

@@ -25,6 +25,8 @@ from temporalio.worker import Worker
 
 from models import (
     RefreshTrainingDataResponse,
+    SACReadinessIssue,
+    SACTrainingReadiness,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -96,6 +98,7 @@ def _make_sac_activities(halal, refresh, training, summary, email):
     bucket buckets clobber each other on disk.
     """
     call_log: list[str] = []
+    preflight_calls = 0
 
     @activity.defn(name="fetch_halal_universe")
     def mock_halal_fetch():
@@ -110,12 +113,39 @@ def _make_sac_activities(halal, refresh, training, summary, email):
         )
         return refresh
 
+    @activity.defn(name="preflight_sac_training")
+    def mock_preflight(universe: str, force: bool = False):
+        nonlocal preflight_calls
+        call_log.append("preflight_sac_training")
+        assert universe == "halal"
+        assert force is False
+        preflight_calls += 1
+        if preflight_calls == 1:
+            return SACTrainingReadiness(
+                universe=universe,
+                symbols=[stock["symbol"] for stock in halal["stocks"]],
+                ready=False,
+                missing=[
+                    SACReadinessIssue(
+                        source="news",
+                        detail="quota refresh required",
+                        retryable=True,
+                    )
+                ],
+            )
+        return SACTrainingReadiness(
+            universe=universe,
+            symbols=[stock["symbol"] for stock in halal["stocks"]],
+            ready=True,
+        )
+
     @activity.defn(name="train_sac")
-    def mock_sac(universe: str):
+    def mock_sac(universe: str, force: bool = False):
         call_log.append("train_sac")
         assert universe == "halal", (
             f"expected train_sac universe=halal, got {universe!r}"
         )
+        assert force is False
         return training
 
     @activity.defn(name="generate_sac_training_summary")
@@ -130,7 +160,14 @@ def _make_sac_activities(halal, refresh, training, summary, email):
         assert universe == "halal", f"expected email universe=halal, got {universe!r}"
         return email
 
-    return [mock_halal_fetch, mock_ref, mock_sac, mock_summ, mock_em], call_log
+    return [
+        mock_halal_fetch,
+        mock_preflight,
+        mock_ref,
+        mock_sac,
+        mock_summ,
+        mock_em,
+    ], call_log
 
 
 class TestUSSACHalalTrainingWorkflow:
@@ -174,6 +211,7 @@ class TestUSSACHalalTrainingWorkflow:
             assert result["sac"]["version"] == "v2026-03-01-sac-halal"
             assert result["sac"]["promoted"] is True
             assert result["sac"]["failure_reasons"] == []
+            assert result["readiness"] == {"ready": True, "attempts": 2}
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
             assert "US SAC (halal) Training" in result["email"]["subject"]
@@ -189,6 +227,7 @@ class TestUSSACHalalTrainingWorkflow:
 
             # halal-fetch must precede refresh + SAC train.
             halal_idx = call_log.index("fetch_halal_universe")
+            preflight_idx = call_log.index("preflight_sac_training")
             ref_idx = call_log.index("refresh_training_data")
             sac_idx = call_log.index("train_sac")
-            assert halal_idx < ref_idx < sac_idx
+            assert halal_idx < preflight_idx < ref_idx < sac_idx

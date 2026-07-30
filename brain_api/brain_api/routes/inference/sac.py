@@ -14,11 +14,22 @@ from brain_api.core.model_buckets import (
     list_universes_for,
 )
 from brain_api.core.sac import run_sac_inference
+from brain_api.core.sac.decision_context import (
+    SACDecisionContext,
+    SACDecisionContextError,
+    SACDecisionState,
+    SACFeatureBundle,
+)
 from brain_api.core.training_utils import get_device
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 from .dependencies import get_sac_as_of_date
-from .models import SACInferenceRequest, SACInferenceResponse, WeightChange
+from .models import (
+    ForcedLiquidationAudit,
+    SACInferenceRequest,
+    SACInferenceResponse,
+    WeightChange,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -104,33 +115,81 @@ def infer_sac(
         pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
 
-    # Compute total portfolio value
-    total_value = cash_value + sum(position_values.values())
+    forced_liquidations = [
+        ForcedLiquidationAudit(symbol=symbol, market_value=market_value)
+        for symbol, market_value in sorted(position_values.items())
+        if symbol not in artifacts.symbol_order and market_value > 0
+    ]
 
-    # Build current weights vector (including CASH)
+    # The actor has no slot for positions outside its active symbol order.
+    # Because order generation force-liquidates them before rebalancing, model
+    # their proceeds as cash rather than dropping them from NAV and
+    # renormalizing the remaining active positions.
+    forced_liquidation_value = sum(audit.market_value for audit in forced_liquidations)
+    effective_cash_value = cash_value + forced_liquidation_value
+    allocatable_value = effective_cash_value + sum(
+        position_values.get(symbol, 0.0) for symbol in artifacts.symbol_order
+    )
     n_stocks = len(artifacts.symbol_order)
     current_weights = np.zeros(n_stocks + 1)
     for i, symbol in enumerate(artifacts.symbol_order):
-        if symbol in position_values and total_value > 0:
-            current_weights[i] = position_values[symbol] / total_value
-    current_weights[-1] = cash_value / total_value if total_value > 0 else 1.0
-
-    # Build real-time signals (news sentiment + fundamentals)
-    logger.info("[SAC] Fetching real-time signals...")
-    from .helpers import build_current_forecasts, build_current_signals
-
-    signals = build_current_signals(artifacts.symbol_order, cutoff_date)
-
-    # Build dual forecast features (LSTM + PatchTST)
-    logger.info("[SAC] Generating LSTM forecasts...")
-    lstm_forecasts = build_current_forecasts(
-        artifacts.symbol_order, forecaster_type="lstm", as_of_date=cutoff_date
+        if allocatable_value > 0:
+            current_weights[i] = position_values.get(symbol, 0.0) / allocatable_value
+    current_weights[-1] = (
+        effective_cash_value / allocatable_value if allocatable_value > 0 else 1.0
     )
 
-    logger.info("[SAC] Generating PatchTST forecasts...")
-    patchtst_forecasts = build_current_forecasts(
-        artifacts.symbol_order, forecaster_type="patchtst", as_of_date=cutoff_date
-    )
+    decision_context: SACDecisionContext | None = None
+    if request.feature_bundle is not None:
+        try:
+            feature_bundle = SACFeatureBundle.create(
+                symbols=request.feature_bundle.symbols,
+                signals=request.feature_bundle.signals,
+                lstm_forecasts=request.feature_bundle.lstm_forecasts,
+                patchtst_forecasts=request.feature_bundle.patchtst_forecasts,
+                provenance=request.feature_bundle.provenance,
+            )
+            if feature_bundle.symbols != tuple(artifacts.symbol_order):
+                raise SACDecisionContextError(
+                    "feature_bundle symbols must exactly match active model symbol order"
+                )
+            decision_context = SACDecisionContext.create(
+                as_of_date=cutoff_date,
+                feature_bundle=feature_bundle,
+                current_weights={
+                    **{
+                        symbol: float(current_weights[index])
+                        for index, symbol in enumerate(artifacts.symbol_order)
+                    },
+                    "CASH": float(current_weights[-1]),
+                },
+            )
+        except SACDecisionContextError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        signals = feature_bundle.signals
+        lstm_forecasts = feature_bundle.lstm_forecasts
+        patchtst_forecasts = feature_bundle.patchtst_forecasts
+    elif artifacts.state_schema_version >= 2:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "feature_bundle is required for SAC state-schema v2; Brain will "
+                "not refetch or zero-fill actor inputs"
+            ),
+        )
+    else:
+        # Metadata-absent artifacts are legacy state-schema v1. Keep their
+        # historical refetch path solely for migration compatibility.
+        from .helpers import build_current_forecasts, build_current_signals
+
+        logger.warning("[SAC] Using legacy v1 refetch compatibility path")
+        signals = build_current_signals(artifacts.symbol_order, cutoff_date)
+        lstm_forecasts = build_current_forecasts(
+            artifacts.symbol_order, forecaster_type="lstm", as_of_date=cutoff_date
+        )
+        patchtst_forecasts = build_current_forecasts(
+            artifacts.symbol_order, forecaster_type="patchtst", as_of_date=cutoff_date
+        )
 
     # Run inference
     logger.info("[SAC] Running inference...")
@@ -144,6 +203,16 @@ def infer_sac(
         lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         model_version=artifacts.version,
+        state_schema_version=artifacts.state_schema_version,
+    )
+    decision_state = (
+        SACDecisionState.create(
+            schema_version=result.state_schema_version,
+            vector=result.state_vector,
+            context=decision_context,
+        )
+        if decision_context is not None
+        else None
     )
 
     # Build weight changes list
@@ -181,4 +250,7 @@ def infer_sac(
         target_week_end=week_boundaries.target_week_end.isoformat(),
         model_version=result.model_version,
         weight_changes=weight_changes,
+        decision_state=decision_state.to_dict() if decision_state else None,
+        state_digest=decision_state.digest if decision_state else None,
+        forced_liquidations=forced_liquidations,
     )

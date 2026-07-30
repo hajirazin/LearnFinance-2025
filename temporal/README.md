@@ -24,19 +24,20 @@ devbox run temporal:run:us-double-hrp
 
 ## Workflows
 
-Nine schedules are registered: 5 weekly inference (cron) + 4 monthly first-Sunday
-training (calendar spec). Inference schedules land on the `learnfinance-inference`
+Ten schedules are registered: 6 weekly inference + 4 monthly first-Sunday
+training schedules. Inference schedules land on the `learnfinance-inference`
 queue (Pi worker, optional Mac inference backup); training schedules land on the
 `learnfinance-training` queue (Mac trainer, `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`
 to serialise heavy GPU activities).
 
 | Workflow | Schedule | Queue | Description |
 |----------|----------|-------|-------------|
-| USWeeklyAllocation | Monday 11:00 UTC | inference | SAC-only allocation + sell-wait-buy + email (naive HRP retired; `hrp` account now driven by USAlphaHRP) |
-| IndiaWeeklyAllocation | Monday 03:30 UTC | inference | India Alpha-HRP (PatchTST screen → rank-band sticky → HRP) + email (paper-only, no broker) |
-| IndiaDoubleHRP | Monday 04:00 UTC | inference | Two-stage HRP (Nifty Shariah 500 → top 15) + email (paper-only, no broker) |
-| USDoubleHRP | Monday 11:30 UTC | inference | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
-| USAlphaHRP | Monday 12:00 UTC | inference | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
+| USDoubleHRP | Monday 07:00 America/New_York | inference | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
+| USAlphaHRP | Monday 07:30 America/New_York | inference | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
+| USWeeklyAllocation | Monday 08:00 America/New_York | inference | `halal_filtered` SAC allocation + sell-wait-buy + email |
+| USSACHalalAllocation | Monday 08:30 America/New_York | inference | `halal` SAC allocation through the dedicated IBKR account + email |
+| IndiaWeeklyAllocation | Monday 09:00 Asia/Kolkata | inference | India Alpha-HRP (PatchTST screen → rank-band sticky → HRP) + email (paper-only, no broker) |
+| IndiaDoubleHRP | Monday 09:30 Asia/Kolkata | inference | Two-stage HRP (Nifty Shariah 500 → top 15) + email (paper-only, no broker) |
 | USForecastersTraining | First Sunday of month, 00:01 UTC | training | LSTM + PatchTST training (strictly serial) + email |
 | USSACTraining | First Sunday of month, 06:01 UTC | training | SAC training on `halal_filtered` bucket + email |
 | USSACHalalTraining | First Sunday of month, 12:01 UTC | training | SAC training on `halal` legacy yfinance bucket (parallel A/B sibling) + email |
@@ -44,13 +45,12 @@ to serialise heavy GPU activities).
 
 ## Schedule registration is idempotent
 
-`schedules.py` uses a **create-if-not-exists** pattern. On first run it creates
-the schedules; on every subsequent run it logs `SKIP (already exists, not
-updating)` and exits 0. This means the docker-compose `temporal-schedules-init`
-one-shot service can safely run on every `docker compose up -d --build` without
-side effects.
+`schedules.py` creates missing schedules and updates existing definitions in
+place while preserving their paused state. The docker-compose
+`temporal-schedules-init` one-shot service can therefore safely run on every
+`docker compose up -d --build`, including after a calendar or timezone change.
 
-All nine schedules above live in a single `SCHEDULES` list in `schedules.py`.
+All ten schedules above live in a single `SCHEDULES` list in `schedules.py`.
 Training cadence cannot be expressed as a single cron string ("first Sunday of
 month" requires AND-ing day-of-month and day-of-week, which Vixie cron OR's), so
 training entries use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0],

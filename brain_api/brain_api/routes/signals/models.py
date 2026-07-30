@@ -140,13 +140,17 @@ class HistoricalNewsSentimentResponse(BaseModel):
 
 
 class FundamentalsRequest(BaseModel):
-    """Request model for current fundamentals endpoint (inference via yfinance)."""
+    """Request model for point-in-time fundamentals."""
 
     symbols: list[str] = Field(
         ...,
         min_length=1,
         max_length=MAX_FUNDAMENTALS_SYMBOLS,
         description=f"List of ticker symbols (1-{MAX_FUNDAMENTALS_SYMBOLS})",
+    )
+    as_of_date: str | None = Field(
+        default=None,
+        description="Decision date (YYYY-MM-DD). Defaults to today.",
     )
 
 
@@ -196,10 +200,15 @@ class RatiosResponse(BaseModel):
     net_margin: float | None
     current_ratio: float | None
     debt_to_equity: float | None
+    fiscal_period_end: str | None = None
+    filing_available_date: str | None = None
+    filing_accession_number: str | None = None
+    filing_form: str | None = None
+    filing_source: str | None = None
 
 
 class CurrentRatiosResponse(BaseModel):
-    """Per-symbol current fundamentals response (from yfinance)."""
+    """Per-symbol point-in-time fundamentals response."""
 
     symbol: str
     ratios: RatiosResponse | None
@@ -215,7 +224,7 @@ class ApiStatusResponse(BaseModel):
 
 
 class FundamentalsResponse(BaseModel):
-    """Response model for current fundamentals endpoint (yfinance)."""
+    """Response model for point-in-time fundamentals endpoint."""
 
     as_of_date: str
     per_symbol: list[CurrentRatiosResponse]

@@ -9,6 +9,11 @@ from brain_api.core.sac.config import (
     SACConfig,
     make_sac_config_for_n_stocks,
 )
+from brain_api.core.sac.experiment import (
+    SAC_EXPERIMENT_SEEDS,
+    SACCandidate,
+    SACTrainingExperiment,
+)
 from brain_api.core.sac.inference import run_sac_inference
 from brain_api.core.sac.training import (
     SACTrainingResult,
@@ -21,8 +26,11 @@ from brain_api.core.sac.version import compute_version
 
 __all__ = [
     "DEFAULT_SAC_CONFIG",
+    "SAC_EXPERIMENT_SEEDS",
+    "SACCandidate",
     # Config
     "SACConfig",
+    "SACTrainingExperiment",
     "SACTrainingResult",
     "TrainingData",
     "build_training_data",

@@ -153,6 +153,8 @@ class SACTrainer:
         self.total_steps = 0
         self.episode_returns: list[float] = []
         self.episode_sharpes: list[float] = []
+        self.final_actor_loss: float | None = None
+        self.final_critic_loss: float | None = None
 
         # Reward normalization (running mean/std)
         self.reward_mean = 0.0
@@ -284,6 +286,8 @@ class SACTrainer:
         # === Soft update target networks ===
         soft_update(self.critic_target, self.critic, self.config.tau)
 
+        self.final_critic_loss = critic_loss.item()
+        self.final_actor_loss = actor_loss.item()
         return critic_loss.item(), actor_loss.item(), alpha_loss
 
     def train(
@@ -404,9 +408,15 @@ class SACTrainer:
             critic_target=self.critic_target,
             log_alpha=self.log_alpha.detach().clone(),
             final_actor_loss=(
-                sum(self.episode_returns[-10:]) / 10 if self.episode_returns else 0.0
+                self.final_actor_loss
+                if self.final_actor_loss is not None
+                else float("nan")
             ),
-            final_critic_loss=0.0,  # Not tracked per-episode
+            final_critic_loss=(
+                self.final_critic_loss
+                if self.final_critic_loss is not None
+                else float("nan")
+            ),
             avg_episode_return=(
                 np.mean(self.episode_returns) if self.episode_returns else 0.0
             ),
@@ -419,15 +429,12 @@ class SACTrainer:
 def action_to_weights(
     action: np.ndarray,
     cash_buffer: float = 0.02,
-    max_position_weight: float = 0.20,
 ) -> np.ndarray:
     """Convert raw action logits to constrained portfolio weights.
 
     Args:
         action: Raw action logits from policy.
         cash_buffer: Minimum cash weight.
-        max_position_weight: Maximum weight per position.
-
     Returns:
         Constrained portfolio weights that sum to 1.
     """

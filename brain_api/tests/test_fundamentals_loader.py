@@ -25,6 +25,10 @@ SAMPLE_INCOME_STATEMENT = {
         "quarterlyReports": [
             {
                 "fiscalDateEnding": "2024-09-30",
+                "filingDate": "2024-11-01",
+                "accessionNumber": "0001-24-000003",
+                "filingForm": "10-Q",
+                "filingSource": "https://www.sec.gov/test/q3",
                 "reportedCurrency": "USD",
                 "grossProfit": "9591000000",
                 "totalRevenue": "16331000000",
@@ -33,6 +37,10 @@ SAMPLE_INCOME_STATEMENT = {
             },
             {
                 "fiscalDateEnding": "2024-06-30",
+                "filingDate": "2024-08-01",
+                "accessionNumber": "0001-24-000002",
+                "filingForm": "10-Q",
+                "filingSource": "https://www.sec.gov/test/q2",
                 "reportedCurrency": "USD",
                 "grossProfit": "8500000000",
                 "totalRevenue": "15000000000",
@@ -41,6 +49,10 @@ SAMPLE_INCOME_STATEMENT = {
             },
             {
                 "fiscalDateEnding": "2024-03-31",
+                "filingDate": "2024-05-01",
+                "accessionNumber": "0001-24-000001",
+                "filingForm": "10-Q",
+                "filingSource": "https://www.sec.gov/test/q1",
                 "reportedCurrency": "USD",
                 "grossProfit": "8000000000",
                 "totalRevenue": "14500000000",
@@ -57,6 +69,10 @@ SAMPLE_BALANCE_SHEET = {
         "quarterlyReports": [
             {
                 "fiscalDateEnding": "2024-09-30",
+                "filingDate": "2024-11-01",
+                "accessionNumber": "0001-24-000003",
+                "filingForm": "10-Q",
+                "filingSource": "https://www.sec.gov/test/q3",
                 "reportedCurrency": "USD",
                 "totalCurrentAssets": "32740000000",
                 "totalCurrentLiabilities": "35142000000",
@@ -65,6 +81,10 @@ SAMPLE_BALANCE_SHEET = {
             },
             {
                 "fiscalDateEnding": "2024-06-30",
+                "filingDate": "2024-08-01",
+                "accessionNumber": "0001-24-000002",
+                "filingForm": "10-Q",
+                "filingSource": "https://www.sec.gov/test/q2",
                 "reportedCurrency": "USD",
                 "totalCurrentAssets": "31000000000",
                 "totalCurrentLiabilities": "32000000000",
@@ -177,21 +197,21 @@ class TestLoadHistoricalFundamentalsFromCache:
         )
         _write_cache_file(temp_data_path, "AAPL", "balance_sheet", SAMPLE_BALANCE_SHEET)
 
-        # Request only Q2 2024 data
+        # Request only the window containing Q2's public filing date.
         result = load_historical_fundamentals_from_cache(
             symbols=["AAPL"],
             start_date=date(2024, 4, 1),
-            end_date=date(2024, 7, 31),
+            end_date=date(2024, 8, 31),
             base_path=temp_data_path,
         )
 
         assert "AAPL" in result
         df = result["AAPL"]
 
-        # Should only have Q2 (June 30) data
+        # Index is availability date, not the earlier fiscal period end.
         for idx in df.index:
             assert idx >= pd.Timestamp("2024-04-01")
-            assert idx <= pd.Timestamp("2024-07-31")
+            assert idx <= pd.Timestamp("2024-08-31")
 
     def test_skips_symbols_not_in_cache(self, temp_data_path: Path) -> None:
         """Symbols not in cache are silently skipped."""
@@ -212,8 +232,8 @@ class TestLoadHistoricalFundamentalsFromCache:
         assert "NOTCACHED" not in result
         assert len(result) == 1
 
-    def test_handles_partial_data(self, temp_data_path: Path) -> None:
-        """Handles symbols with only income statement or only balance sheet."""
+    def test_excludes_partial_periods(self, temp_data_path: Path) -> None:
+        """A period missing required statement ratios is not SAC-ready."""
         # Only write income statement
         _write_cache_file(
             temp_data_path, "AAPL", "income_statement", SAMPLE_INCOME_STATEMENT
@@ -226,9 +246,7 @@ class TestLoadHistoricalFundamentalsFromCache:
             base_path=temp_data_path,
         )
 
-        # Should still return data (with some ratios as None)
-        assert "AAPL" in result
-        assert len(result["AAPL"]) > 0
+        assert "AAPL" not in result
 
     def test_empty_date_range_returns_empty(self, temp_data_path: Path) -> None:
         """Returns empty dict for date range outside cached data."""

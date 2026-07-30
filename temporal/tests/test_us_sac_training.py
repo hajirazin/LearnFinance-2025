@@ -16,6 +16,9 @@ from temporalio.worker import Worker
 
 from models import (
     RefreshTrainingDataResponse,
+    SACReadinessIssue,
+    SACTrainingReadiness,
+    SACTrainingWorkflowInput,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -78,9 +81,18 @@ def mock_email():
     )
 
 
-def _make_sac_activities(filtered, refresh, training, summary, email):
+def _make_sac_activities(
+    filtered,
+    refresh,
+    training,
+    summary,
+    email,
+    *,
+    expected_force: bool = False,
+):
     """Build mocked activities matching the registered names exactly."""
     call_log: list[str] = []
+    preflight_calls = 0
 
     @activity.defn(name="fetch_halal_filtered_universe")
     def mock_filt():
@@ -94,10 +106,37 @@ def _make_sac_activities(filtered, refresh, training, summary, email):
         assert universe == "halal_filtered"
         return refresh
 
+    @activity.defn(name="preflight_sac_training")
+    def mock_preflight(universe: str, force: bool = False):
+        nonlocal preflight_calls
+        call_log.append("preflight_sac_training")
+        assert universe == "halal_filtered"
+        assert force is expected_force
+        preflight_calls += 1
+        if preflight_calls == 1:
+            return SACTrainingReadiness(
+                universe=universe,
+                symbols=[stock["symbol"] for stock in filtered["stocks"]],
+                ready=False,
+                missing=[
+                    SACReadinessIssue(
+                        source="fundamentals",
+                        detail="quota refresh required",
+                        retryable=True,
+                    )
+                ],
+            )
+        return SACTrainingReadiness(
+            universe=universe,
+            symbols=[stock["symbol"] for stock in filtered["stocks"]],
+            ready=True,
+        )
+
     @activity.defn(name="train_sac")
-    def mock_sac(universe: str):
+    def mock_sac(universe: str, force: bool = False):
         call_log.append("train_sac")
         assert universe == "halal_filtered"
+        assert force is expected_force
         return training
 
     @activity.defn(name="generate_sac_training_summary")
@@ -116,7 +155,14 @@ def _make_sac_activities(filtered, refresh, training, summary, email):
         )
         return email
 
-    return [mock_filt, mock_ref, mock_sac, mock_summ, mock_em], call_log
+    return [
+        mock_filt,
+        mock_preflight,
+        mock_ref,
+        mock_sac,
+        mock_summ,
+        mock_em,
+    ], call_log
 
 
 class TestUSSACTrainingWorkflow:
@@ -162,6 +208,7 @@ class TestUSSACTrainingWorkflow:
             assert result["sac"]["version"] == "v2026-03-01-sac001"
             assert result["sac"]["promoted"] is True
             assert result["sac"]["failure_reasons"] == []
+            assert result["readiness"] == {"ready": True, "attempts": 2}
             assert result["summary"]["provider"] == "openai"
             assert result["email"]["is_success"] is True
             assert "US SAC Training" in result["email"]["subject"]
@@ -173,6 +220,46 @@ class TestUSSACTrainingWorkflow:
 
             # filtered-fetch must precede refresh + SAC train.
             filt_idx = call_log.index("fetch_halal_filtered_universe")
+            preflight_idx = call_log.index("preflight_sac_training")
             ref_idx = call_log.index("refresh_training_data")
             sac_idx = call_log.index("train_sac")
-            assert filt_idx < ref_idx < sac_idx
+            assert filt_idx < preflight_idx < ref_idx < sac_idx
+
+    @pytest.mark.asyncio
+    async def test_manual_force_is_forwarded_to_training_activity(
+        self,
+        mock_filtered,
+        mock_refresh,
+        mock_sac_training,
+        mock_summary,
+        mock_email,
+    ):
+        activities, _ = _make_sac_activities(
+            mock_filtered,
+            mock_refresh,
+            mock_sac_training,
+            mock_summary,
+            mock_email,
+            expected_force=True,
+        )
+
+        async with (
+            await WorkflowEnvironment.start_time_skipping(
+                data_converter=pydantic_data_converter
+            ) as env,
+            Worker(
+                env.client,
+                task_queue="test-queue",
+                workflows=[USSACTrainingWorkflow],
+                activities=activities,
+                activity_executor=ThreadPoolExecutor(),
+            ),
+        ):
+            result = await env.client.execute_workflow(
+                USSACTrainingWorkflow.run,
+                SACTrainingWorkflowInput(force=True),
+                id="test-us-sac-training-force",
+                task_queue="test-queue",
+            )
+
+        assert result["sac"]["force"] is True

@@ -331,12 +331,20 @@ def fundamentals_resp():
 
 @pytest.fixture
 def sac_alloc():
+    decision_state = {
+        "schema_version": 2,
+        "vector": [0.1, 0.2],
+        "context": {"as_of_date": "2026-02-05"},
+        "digest": "fixture-state-digest",
+    }
     return SACInferenceResponse(
         target_weights={"AAPL": 0.25, "CASH": 0.75},
         turnover=0.12,
         model_version="v1.0.0",
         target_week_start="2026-02-10",
         target_week_end="2026-02-14",
+        decision_state=decision_state,
+        state_digest="fixture-state-digest",
     )
 
 

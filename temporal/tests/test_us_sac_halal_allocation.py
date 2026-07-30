@@ -174,7 +174,7 @@ def _make_sac_halal_activities(
         return AlpacaPortfolioResponse(cash=0.0, positions=[], open_orders_count=0)
 
     @activity.defn(name="get_fundamentals")
-    def mock_get_fundamentals(symbols):
+    def mock_get_fundamentals(symbols, as_of_date):
         captured_calls["fundamentals_symbols_count"] = len(symbols)
         return fundamentals_resp
 
@@ -191,7 +191,16 @@ def _make_sac_halal_activities(
         return patchtst_resp
 
     @activity.defn(name="infer_sac")
-    def mock_infer_sac(portfolio, as_of_date, universe):
+    def mock_infer_sac(
+        portfolio,
+        as_of_date,
+        universe,
+        symbols,
+        news,
+        fundamentals,
+        lstm,
+        patchtst,
+    ):
         captured_calls["infer_sac_universe"] = universe
         return sac_alloc
 
@@ -204,10 +213,10 @@ def _make_sac_halal_activities(
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
         captured_calls["store_experience_run_id"] = args[0]
-        # ``universe`` is the trailing positional arg (10th); capture it
+        # ``universe`` is the trailing positional arg (5th); capture it
         # so we can assert the labeller will route this record to the
         # ``sac_halal`` Alpaca account (not the legacy ``sac`` account).
-        captured_calls["store_experience_universe"] = args[9] if len(args) > 9 else None
+        captured_calls["store_experience_universe"] = args[4] if len(args) > 4 else None
         return None
 
     @activity.defn(name="submit_orders_ibkr_sac_halal")

@@ -74,14 +74,13 @@ class TestSACFullHealth:
             "eval_cagr" in r and "below floor" in r for r in health.failure_reasons
         )
 
-    def test_eval_cagr_exactly_at_floor_rejects(self, tmp_path: Path):
-        """Floor is strict (`> floor`, not `>=`). The 0.12 line is NOT
-        passing -- this matches the legacy `> MIN_PROMOTION_CAGR` semantic."""
+    def test_eval_cagr_exactly_at_floor_promotes(self, tmp_path: Path):
+        """The locked policy rejects only CAGR strictly below 12%."""
         artifact_dir = _materialize_sac_files(tmp_path)
         args = _healthy_full_args(artifact_dir)
         args["eval_cagr"] = SAC_PROMOTION_CAGR_FLOOR
         health = evaluate_sac_artifact_health(**args)
-        assert health.is_healthy is False
+        assert health.is_healthy is True
 
     def test_nan_eval_cagr_rejects(self, tmp_path: Path):
         artifact_dir = _materialize_sac_files(tmp_path)
@@ -94,54 +93,45 @@ class TestSACFullHealth:
         "metric_name",
         ["eval_sharpe", "eval_max_drawdown", "actor_loss", "critic_loss"],
     )
-    def test_nan_other_metric_rejects(self, tmp_path: Path, metric_name: str):
+    def test_other_metrics_do_not_gate_full_promotion(
+        self, tmp_path: Path, metric_name: str
+    ):
         artifact_dir = _materialize_sac_files(tmp_path)
         args = _healthy_full_args(artifact_dir)
         args[metric_name] = math.nan
         health = evaluate_sac_artifact_health(**args)
-        assert f"{metric_name} is not finite" in health.failure_reasons
+        assert health.is_healthy is True
+        assert health.failure_reasons == []
 
-    def test_symbol_count_mismatch_rejects(self, tmp_path: Path):
-        """Bucket validator says 15, trainer wrote 14 -> action space
-        mismatch -> reject."""
+    def test_symbol_count_does_not_gate_full_promotion(self, tmp_path: Path):
         artifact_dir = _materialize_sac_files(tmp_path)
         args = _healthy_full_args(artifact_dir)
         args["actual_symbol_count"] = 14
         health = evaluate_sac_artifact_health(**args)
-        assert any(
-            "actual_symbol_count" in r and "expected_symbol_count" in r
-            for r in health.failure_reasons
-        )
+        assert health.is_healthy is True
 
     @pytest.mark.parametrize("missing_file", _SAC_REQUIRED_FILES)
-    def test_missing_artifact_file_rejects(self, tmp_path: Path, missing_file: str):
+    def test_artifact_presence_does_not_gate_full_promotion(
+        self, tmp_path: Path, missing_file: str
+    ):
         for filename in _SAC_REQUIRED_FILES:
             if filename == missing_file:
                 continue
             (tmp_path / filename).write_bytes(b"x")
         health = evaluate_sac_artifact_health(**_healthy_full_args(tmp_path))
-        assert f"{missing_file} missing or zero bytes" in health.failure_reasons
+        assert health.is_healthy is True
 
-    def test_combined_failures_accumulate(self, tmp_path: Path):
-        """Multiple failures must be reported together so the operator
-        sees everything to fix in one email."""
-        # Only some files exist
+    def test_only_cagr_failure_is_reported(self, tmp_path: Path):
         (tmp_path / "actor.pt").write_bytes(b"x")
         args = _healthy_full_args(tmp_path)
-        args["eval_cagr"] = SAC_PROMOTION_CAGR_FLOOR - 0.05  # below floor
+        args["eval_cagr"] = SAC_PROMOTION_CAGR_FLOOR - 0.05
         args["actor_loss"] = math.nan
-        args["actual_symbol_count"] = 10  # mismatch
+        args["actual_symbol_count"] = 10
         health = evaluate_sac_artifact_health(**args)
         assert health.is_healthy is False
         reasons = health.failure_reasons
-        assert any("eval_cagr" in r and "below floor" in r for r in reasons)
-        assert "actor_loss is not finite" in reasons
-        assert any(
-            "actual_symbol_count" in r and "expected_symbol_count" in r for r in reasons
-        )
-        # Multiple missing files
-        assert "critic.pt missing or zero bytes" in reasons
-        assert "metadata.json missing or zero bytes" in reasons
+        assert len(reasons) == 1
+        assert "eval_cagr" in reasons[0] and "below floor" in reasons[0]
 
 
 # ---------------------------------------------------------------------------

@@ -7,14 +7,10 @@ from temporalio import activity
 from activities.client import get_client
 from models import (
     AlpacaPortfolioResponse,
-    FundamentalsResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
-    LSTMInferenceResponse,
-    NewsSignalResponse,
     OrderHistoryItem,
     PaperAllocationResponse,
-    PatchTSTInferenceResponse,
     PortfolioResponse,
     SACInferenceResponse,
     SkippedAllocation,
@@ -173,55 +169,12 @@ def _generate_orders_from_hrp(
     return result
 
 
-def _build_state_dict(
-    portfolio: AlpacaPortfolioResponse,
-    news: NewsSignalResponse,
-    fundamentals: FundamentalsResponse,
-    lstm: LSTMInferenceResponse,
-    patchtst: PatchTSTInferenceResponse,
-) -> dict:
-    """Build state dict for experience storage."""
-    total_value = portfolio.cash + sum(p.market_value for p in portfolio.positions)
-    current_weights = {
-        p.symbol: p.market_value / total_value for p in portfolio.positions
-    }
-    current_weights["CASH"] = portfolio.cash / total_value
-
-    signals = {}
-    for ns in news.per_symbol:
-        signals[ns.symbol] = {"news_sentiment": ns.sentiment_score}
-    for fs in fundamentals.per_symbol:
-        if fs.ratios:
-            if fs.symbol not in signals:
-                signals[fs.symbol] = {}
-            signals[fs.symbol].update(fs.ratios.model_dump())
-
-    lstm_forecasts = {
-        p.symbol: p.predicted_weekly_return_pct / 100.0 for p in lstm.predictions
-    }
-    patchtst_forecasts = {
-        p.symbol: p.predicted_weekly_return_pct / 100.0 for p in patchtst.predictions
-    }
-
-    return {
-        "signals": signals,
-        "lstm_forecasts": lstm_forecasts,
-        "patchtst_forecasts": patchtst_forecasts,
-        "current_weights": current_weights,
-    }
-
-
 @activity.defn
 def store_experience_sac(
     run_id: str,
     week_start: str,
     week_end: str,
     allocation: SACInferenceResponse | SkippedAllocation,
-    portfolio: AlpacaPortfolioResponse,
-    news: NewsSignalResponse,
-    fundamentals: FundamentalsResponse,
-    lstm: LSTMInferenceResponse,
-    patchtst: PatchTSTInferenceResponse,
     universe: str,
 ) -> StoreExperienceResponse | None:
     """Store SAC experience for future reward labeling.
@@ -241,7 +194,10 @@ def store_experience_sac(
         return None
 
     logger.info(f"Storing SAC experience (universe={universe})...")
-    state = _build_state_dict(portfolio, news, fundamentals, lstm, patchtst)
+    if allocation.decision_state is None or allocation.state_digest is None:
+        raise ValueError("SAC allocation is missing its canonical decision state")
+    if allocation.decision_state.get("digest") != allocation.state_digest:
+        raise ValueError("SAC decision-state digest does not match response digest")
     with get_client() as client:
         response = client.post(
             "/experience/store",
@@ -252,7 +208,8 @@ def store_experience_sac(
                 "model_type": "sac",
                 "model_version": allocation.model_version,
                 "universe": universe,
-                "state": state,
+                "state": allocation.decision_state,
+                "state_digest": allocation.state_digest,
                 "intended_action": allocation.target_weights,
                 "intended_turnover": allocation.turnover,
             },

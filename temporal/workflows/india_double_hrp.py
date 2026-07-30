@@ -37,6 +37,8 @@ from datetime import timedelta
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from workflows._run_identity import in_ist
+
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import build_prior_allocation_from_db
     from activities.execution import generate_paper_allocation
@@ -73,8 +75,8 @@ PAPER_NAV_INR = 1_000_000.0
 class IndiaDoubleHRPWorkflow:
     @workflow.run
     async def run(self) -> dict:
-        now_ist = workflow.now().astimezone()
-        as_of_date = now_ist.strftime("%Y-%m-%d")
+        now_ist = in_ist(workflow.now())
+        as_of_date = now_ist.date().isoformat()
         # ISO year-week 'YYYYWW'; %G%V is correct across year boundaries.
         year_week = now_ist.strftime("%G%V")
         # India is paper-only with no broker, so there is no Alpaca

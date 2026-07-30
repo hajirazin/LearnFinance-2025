@@ -152,7 +152,7 @@ def refresh_stale_fundamentals(
 
     fetcher = FundamentalsFetcher(
         api_key=api_key,
-        base_path=base_path / "raw" / "fundamentals",
+        base_path=base_path,
         cache_dir=cache_dir,
     )
 

@@ -14,6 +14,10 @@ class QuarterlyStatement:
     fiscal_date_ending: str  # YYYY-MM-DD
     reported_currency: str
     raw_data: dict[str, Any]  # All fields from API
+    filing_available_date: str | None = None
+    filing_accession_number: str | None = None
+    filing_form: str | None = None
+    filing_source: str | None = None
 
     def get_value(self, field: str) -> Decimal | None:
         """Get a numeric value from the statement, handling 'None' strings."""
@@ -32,6 +36,10 @@ class QuarterlyStatement:
             "statement_type": self.statement_type,
             "fiscal_date_ending": self.fiscal_date_ending,
             "reported_currency": self.reported_currency,
+            "filing_available_date": self.filing_available_date,
+            "filing_accession_number": self.filing_accession_number,
+            "filing_form": self.filing_form,
+            "filing_source": self.filing_source,
             "raw_data": self.raw_data,
         }
 
@@ -65,6 +73,39 @@ class FundamentalRatios:
         return {
             "symbol": self.symbol,
             "as_of_date": self.as_of_date,
+            "gross_margin": self.gross_margin,
+            "operating_margin": self.operating_margin,
+            "net_margin": self.net_margin,
+            "current_ratio": self.current_ratio,
+            "debt_to_equity": self.debt_to_equity,
+        }
+
+
+@dataclass(frozen=True)
+class PointInTimeFundamental:
+    """Ratios from a filing that was publicly available by a decision date."""
+
+    symbol: str
+    fiscal_period_end: str
+    filing_available_date: str
+    filing_accession_number: str
+    filing_form: str
+    filing_source: str
+    gross_margin: float
+    operating_margin: float
+    net_margin: float
+    current_ratio: float
+    debt_to_equity: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return an audit-friendly JSON representation."""
+        return {
+            "symbol": self.symbol,
+            "fiscal_period_end": self.fiscal_period_end,
+            "filing_available_date": self.filing_available_date,
+            "filing_accession_number": self.filing_accession_number,
+            "filing_form": self.filing_form,
+            "filing_source": self.filing_source,
             "gross_margin": self.gross_margin,
             "operating_margin": self.operating_margin,
             "net_margin": self.net_margin,

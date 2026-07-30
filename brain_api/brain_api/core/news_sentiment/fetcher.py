@@ -8,6 +8,10 @@ import yfinance as yf
 from brain_api.core.news_sentiment.models import Article
 
 
+class NewsProviderError(RuntimeError):
+    """Raised when the provider could not confirm the requested news window."""
+
+
 class YFinanceNewsFetcher:
     """Fetch news articles from yfinance."""
 
@@ -24,8 +28,10 @@ class YFinanceNewsFetcher:
         try:
             ticker = yf.Ticker(symbol)
             news_data = ticker.news or []
-        except Exception:
-            return []
+        except Exception as exc:
+            raise NewsProviderError(
+                f"yfinance news request failed for {symbol}: {exc}"
+            ) from exc
 
         articles = []
         for item in news_data[:max_articles]:

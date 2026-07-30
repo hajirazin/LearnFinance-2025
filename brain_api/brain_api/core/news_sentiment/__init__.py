@@ -14,7 +14,7 @@ from brain_api.core.news_sentiment.aggregation import (
 )
 
 # Fetcher
-from brain_api.core.news_sentiment.fetcher import YFinanceNewsFetcher
+from brain_api.core.news_sentiment.fetcher import NewsProviderError, YFinanceNewsFetcher
 from brain_api.core.news_sentiment.models import (
     Article,
     NewsSentimentResult,
@@ -40,19 +40,30 @@ from brain_api.core.news_sentiment.processor import (
 
 # Protocols
 from brain_api.core.news_sentiment.protocols import NewsFetcher, SentimentScorer
+from brain_api.core.news_sentiment.weekly import (
+    DailyNewsObservation,
+    NewsObservationError,
+    WeeklyNewsObservation,
+    aggregate_weekly_news_observation,
+)
 
 __all__ = [
     # Models
     "Article",
+    "DailyNewsObservation",
     # Protocols
     "NewsFetcher",
+    "NewsObservationError",
+    "NewsProviderError",
     "NewsSentimentResult",
     "ScoredArticle",
     "SentimentScorer",
     "SymbolSentiment",
+    "WeeklyNewsObservation",
     # Fetcher
     "YFinanceNewsFetcher",
     "aggregate_symbol_sentiment",
+    "aggregate_weekly_news_observation",
     # Aggregation
     "compute_recency_weight",
     "get_features_path",

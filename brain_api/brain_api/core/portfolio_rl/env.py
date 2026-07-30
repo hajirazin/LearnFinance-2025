@@ -3,7 +3,7 @@
 This environment simulates weekly portfolio rebalancing with:
 - Long-only simplex weights + CASH
 - Transaction costs
-- Constraint enforcement (cash buffer, max position)
+- Constraint enforcement (long-only simplex and cash buffer)
 """
 
 from __future__ import annotations
@@ -24,9 +24,8 @@ from brain_api.core.portfolio_rl.constraints import (
     enforce_constraints,
 )
 from brain_api.core.portfolio_rl.rewards import (
-    DifferentialSharpe,
-    compute_blended_reward,
-    compute_portfolio_log_return,
+    RebalanceTransition,
+    compute_net_log_reward,
 )
 from brain_api.core.portfolio_rl.state import (
     StateSchema,
@@ -69,6 +68,8 @@ class PortfolioEnv:
         symbol_order: list[str],
         config: RLBaseConfig | None = None,
         cost_config: IBKRSingaporeCostConfig | None = None,
+        schema_version: int = 2,
+        max_episode_weeks: int | None = 52,
     ):
         """Initialize environment.
 
@@ -100,6 +101,7 @@ class PortfolioEnv:
         self.symbol_order = symbol_order
         self.config = config or DEFAULT_RL_BASE_CONFIG
         self.cost_config = cost_config or IBKRSingaporeCostConfig.default()
+        self.max_episode_weeks = max_episode_weeks
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
@@ -109,12 +111,28 @@ class PortfolioEnv:
                 f"prices shape {prices.shape} does not match "
                 f"(n_weeks, n_stocks) = ({self.n_weeks}, {self.n_stocks})"
             )
+        if not np.all(np.isfinite(prices)) or np.any(prices <= 0):
+            raise ValueError("prices must be complete, finite, and positive")
 
-        # State schema
-        self.schema = StateSchema(n_stocks=self.n_stocks)
+        # New training uses strict v2. Artifact inference selects its schema
+        # explicitly; v1 remains available for already-persisted models.
+        self.schema = StateSchema(n_stocks=self.n_stocks, schema_version=schema_version)
 
-        # Differential Sharpe ratio for reward shaping
-        self.differential_sharpe = DifferentialSharpe(eta=self.config.sharpe_eta)
+        expected_signals = self.schema.n_signals_per_stock
+        expected_shapes = {
+            "symbol_returns": (self.n_weeks, self.n_stocks),
+            "signals": (self.n_weeks, self.n_stocks, expected_signals),
+            "lstm_forecasts": (self.n_weeks, self.n_stocks),
+            "patchtst_forecasts": (self.n_weeks, self.n_stocks),
+        }
+        for name, expected in expected_shapes.items():
+            value = getattr(self, name)
+            if value.shape != expected:
+                raise ValueError(
+                    f"{name} shape {value.shape} does not match {expected}"
+                )
+            if not np.all(np.isfinite(value)):
+                raise ValueError(f"{name} must be complete and finite")
 
         # Episode state
         self.current_week_idx: int = 0
@@ -245,13 +263,6 @@ class PortfolioEnv:
         asset_returns[: self.n_stocks] = stock_returns
         # CASH return is 0 (could add risk-free rate if desired)
 
-        # Compute portfolio LOG return using target weights
-        # Log returns are additive across time, which is better for RL
-        # (assumes rebalance happens at week start)
-        portfolio_log_return = compute_portfolio_log_return(
-            target_weights, asset_returns
-        )
-        # For tracking, also compute simple return
         portfolio_return = float(np.dot(target_weights, asset_returns))
 
         # IBKR Singapore Tiered transaction cost (per-symbol, per-leg).
@@ -267,31 +278,33 @@ class PortfolioEnv:
         )
         tc_fraction = rebalance_cost.total_fraction
 
-        # Compute blended reward (return + differential Sharpe + HHI penalty)
-        reward = compute_blended_reward(
-            portfolio_log_return=portfolio_log_return,
-            portfolio_simple_return=portfolio_return,
+        transition = RebalanceTransition.calculate(
+            target_weights=target_weights,
+            stock_returns=stock_returns,
+            cost_fraction=tc_fraction,
+        )
+        reward = compute_net_log_reward(
+            gross_return=transition.gross_return,
             transaction_cost_fraction=tc_fraction,
-            differential_sharpe=self.differential_sharpe,
             config=self.config,
             target_weights=target_weights,
         )
 
         # Track for episode statistics
-        self.episode_returns.append(portfolio_return)
+        net_portfolio_return = transition.net_growth - 1.0
+        self.episode_returns.append(net_portfolio_return)
         self.episode_turnovers.append(turnover)
 
         # Update state
-        self.current_weights = target_weights
+        self.current_weights = transition.post_weights
         self.current_week_idx += 1
 
         # Check if episode is done
         # Done if: (1) 52 weeks passed, or (2) end of data
         weeks_in_episode = self.current_week_idx - self.episode_start_week
-        done = (
-            weeks_in_episode >= 52  # ~1 year
-            or self.current_week_idx >= self.n_weeks
-        )
+        done = self.current_week_idx >= self.n_weeks
+        if self.max_episode_weeks is not None:
+            done = done or weeks_in_episode >= self.max_episode_weeks
 
         # Build next state (if not done)
         if done:
@@ -301,6 +314,9 @@ class PortfolioEnv:
 
         info = {
             "portfolio_return": portfolio_return,
+            "net_portfolio_return": net_portfolio_return,
+            "net_log_return": transition.net_log_return,
+            "post_weights": transition.post_weights.tolist(),
             "turnover": turnover,
             "target_weights": target_weights.tolist(),
             "week_idx": self.current_week_idx - 1,
@@ -398,7 +414,8 @@ def create_env_from_data(
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because we compute returns
     n_stocks = len(symbol_order)
-    n_signals = 7  # news + 5 fundamentals + fundamental_age
+    schema = StateSchema(n_stocks=n_stocks, schema_version=2)
+    n_signals = schema.n_signals_per_stock
 
     # Build returns array + parallel prices array (close at the end of each
     # week, used by the IBKR-SG cost model to size shares per leg).
@@ -415,32 +432,42 @@ def create_env_from_data(
         weekly_prices[:, stock_idx] = price_series[:n_weeks]
 
     # Build signals array
-    signal_names = [
-        "news_sentiment",
-        "gross_margin",
-        "operating_margin",
-        "net_margin",
-        "current_ratio",
-        "debt_to_equity",
-        "fundamental_age",
-    ]
+    signal_names = schema.signal_names
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
     for stock_idx, symbol in enumerate(symbol_order):
-        symbol_signals = signals.get(symbol, {})
+        if symbol not in signals:
+            raise ValueError(f"Missing required SAC signals for {symbol}")
+        symbol_signals = signals[symbol]
         for signal_idx, signal_name in enumerate(signal_names):
-            signal_values = symbol_signals.get(signal_name, np.zeros(n_weeks))
+            if signal_name not in symbol_signals:
+                raise ValueError(
+                    f"Missing required SAC signal {signal_name!r} for {symbol}"
+                )
+            signal_values = symbol_signals[signal_name]
+            if len(signal_values) < n_weeks:
+                raise ValueError(
+                    f"SAC signal {signal_name!r} for {symbol} has "
+                    f"{len(signal_values)} values; expected at least {n_weeks}"
+                )
             signals_array[:, stock_idx, signal_idx] = signal_values[:n_weeks]
 
     # Build LSTM forecasts array
     lstm_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        forecast_values = lstm_forecasts.get(symbol, np.zeros(n_weeks))
+        if symbol not in lstm_forecasts or len(lstm_forecasts[symbol]) < n_weeks:
+            raise ValueError(f"Missing or short LSTM forecasts for {symbol}")
+        forecast_values = lstm_forecasts[symbol]
         lstm_array[:, stock_idx] = forecast_values[:n_weeks]
 
     # Build PatchTST forecasts array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        forecast_values = patchtst_forecasts.get(symbol, np.zeros(n_weeks))
+        if (
+            symbol not in patchtst_forecasts
+            or len(patchtst_forecasts[symbol]) < n_weeks
+        ):
+            raise ValueError(f"Missing or short PatchTST forecasts for {symbol}")
+        forecast_values = patchtst_forecasts[symbol]
         patchtst_array[:, stock_idx] = forecast_values[:n_weeks]
 
     return PortfolioEnv(

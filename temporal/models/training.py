@@ -37,3 +37,28 @@ class TrainingJobResponse(BaseModel):
     job_id: str
     status: str
     message: str
+
+
+class SACTrainingWorkflowInput(BaseModel):
+    """Operator inputs for a scheduled or manually started SAC training run."""
+
+    force: bool = False
+
+
+class SACReadinessIssue(BaseModel):
+    """Exact condition preventing SAC training from starting."""
+
+    source: str
+    detail: str
+    symbol: str | None = None
+    retryable: bool
+
+
+class SACTrainingReadiness(BaseModel):
+    """Result of the Brain-owned SAC training preflight."""
+
+    universe: str
+    symbols: list[str]
+    ready: bool
+    missing: list[SACReadinessIssue] = []
+    errors: list[SACReadinessIssue] = []

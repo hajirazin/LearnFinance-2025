@@ -2,7 +2,7 @@
 
 Tests focus on:
 - Endpoint contract (status codes, response structure)
-- Constraint enforcement (cash buffer, max position weight)
+- Constraint enforcement (long-only simplex and cash buffer)
 - Promotion gate behavior (Sharpe-first)
 """
 
@@ -80,6 +80,7 @@ def mock_symbols() -> list[str]:
 # tests assert on actor outputs (weight bounds), not on signal values.
 _MOCK_SIGNAL_KEYS: tuple[str, ...] = (
     "news_sentiment",
+    "news_coverage",
     "gross_margin",
     "operating_margin",
     "net_margin",
@@ -100,6 +101,7 @@ def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
     return {
         symbol: {
             "news_sentiment": 0.1,
+            "news_coverage": 1.0,
             "gross_margin": 0.4,
             "operating_margin": 0.2,
             "net_margin": 0.15,
@@ -367,6 +369,44 @@ class TestSACLSTMInference:
             f"CASH weight {weights.get('CASH')} < 2%"
         )
 
+    def test_off_slate_liquidation_value_is_cash_in_exact_actor_state(
+        self, inference_client
+    ):
+        response = inference_client.post(
+            "/inference/sac",
+            json={
+                "portfolio": {
+                    "cash": 0.0,
+                    "positions": [
+                        {"symbol": "AAPL", "market_value": 5000.0},
+                        {"symbol": "TSLA", "market_value": 5000.0},
+                    ],
+                },
+                "feature_bundle": {
+                    "symbols": mock_symbols(),
+                    "signals": _mock_signals(mock_symbols(), None),
+                    "lstm_forecasts": _mock_forecasts(mock_symbols(), "lstm", None),
+                    "patchtst_forecasts": _mock_forecasts(
+                        mock_symbols(), "patchtst", None
+                    ),
+                    "provenance": {"test": True},
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        weights = data["decision_state"]["context"]["current_weights"]
+        assert weights["AAPL"] == pytest.approx(0.5)
+        assert weights["CASH"] == pytest.approx(0.5)
+        assert data["forced_liquidations"] == [
+            {
+                "symbol": "TSLA",
+                "market_value": 5000.0,
+                "reason": "outside_active_sac_symbol_set",
+            }
+        ]
+
     def test_inference_without_model_returns_503(self, temp_storage, monkeypatch):
         """Test that inference without a trained model returns 503.
 
@@ -410,9 +450,10 @@ def mock_price_loader(symbols, start_date, end_date):
     """Return mock price data for testing."""
     import pandas as pd
 
-    # Create fake weekly price data
-    # Need at least 156 weeks (104 train + 52 eval) for SAC training
-    dates = pd.date_range(start=start_date, end=end_date, freq="W-FRI")[:200]
+    # Daily rows are required because SAC trades at the first XNYS session
+    # open of each week. Business-day fixtures contain every requested XNYS
+    # session, including holiday-shifted Tuesdays.
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")
     prices = {}
     for i, symbol in enumerate(symbols):
         base = 100 + i * 10
@@ -445,7 +486,13 @@ _TINY_SAC_BASE_CONFIG = SACConfig(
 )
 
 
-def _mock_dual_forecasts(weekly_prices, weekly_dates, symbols, shutdown_event=None):
+def _mock_dual_forecasts(
+    weekly_prices,
+    weekly_dates,
+    symbols,
+    shutdown_event=None,
+    target_dates=None,
+):
     """Stand-in for :func:`build_dual_forecast_features` used by the
     full-training tests so they don't run real walk-forward LSTM +
     PatchTST fits on top of mock prices.
@@ -453,13 +500,14 @@ def _mock_dual_forecasts(weekly_prices, weekly_dates, symbols, shutdown_event=No
     Mirrors the pattern already used by
     :func:`TestSACLSTMFinetune.test_finetune_end_date_is_always_friday`.
     """
-    n = len(weekly_dates) - 1
+    n = len(weekly_dates)
     zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
     return zeros, zeros
 
 
 _RL_SIGNAL_KEYS: tuple[str, ...] = (
     "news_sentiment",
+    "news_coverage",
     "gross_margin",
     "operating_margin",
     "net_margin",
@@ -470,7 +518,12 @@ _RL_SIGNAL_KEYS: tuple[str, ...] = (
 
 
 def _mock_rl_training_signals(
-    prices_dict, symbols, start_date, end_date
+    prices_dict,
+    symbols,
+    start_date,
+    end_date,
+    *,
+    weekly_cutoffs=None,
 ) -> dict[str, dict[str, np.ndarray]]:
     """Stand-in for :func:`build_rl_training_signals` used by the SAC
     full-training and finetune tests so the route does not hit real
@@ -492,7 +545,11 @@ def _mock_rl_training_signals(
         df = prices_dict.get(symbol)
         if df is None or len(df) == 0:
             continue
-        weekly_len = len(df["close"].resample("W-FRI").last().dropna())
+        weekly_len = (
+            len(weekly_cutoffs)
+            if weekly_cutoffs is not None
+            else len(df["close"].resample("W-FRI").last().dropna())
+        )
         n = max(weekly_len, 1)
         signals[symbol] = {key: np.zeros(n) for key in _RL_SIGNAL_KEYS}
     return signals
@@ -933,9 +990,10 @@ class TestSACFullTraining:
         try:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
-            r2 = client.post("/train/sac/full")
-            assert r2.status_code == 200
-            data = r2.json()
+            status = client.get(f"/train/status/{r1.json()['job_id']}")
+            assert status.status_code == 200
+            assert status.json()["status"] == "completed"
+            data = status.json()["result"]
             assert data["promoted"] is False
             assert any(
                 "eval_cagr" in r and "below floor" in r for r in data["failure_reasons"]
@@ -944,16 +1002,57 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
-    def test_full_training_symbol_count_mismatch_rejects(
+    def test_force_retrain_rejection_preserves_same_version_active_artifact(
         self, temp_storage, monkeypatch
     ):
-        """Bucket resolver and post-train slate diverge -> guardrail rejects.
+        """A rejected force run may write candidates but not canonical files."""
+        from brain_api.routes.training.sac import full as sac_full_route
 
-        The bucket resolver is the source of truth for the SAC
-        action-space dimension. Here the resolver returns 6 symbols
-        but the price loader only has prices for 5 of them, so
-        ``available_symbols`` collapses to 5 and the guardrail catches
-        the mismatch (expected 6, actual 5) and refuses to promote.
+        app.dependency_overrides.clear()
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+        _patch_sac_full_training_internals(monkeypatch)
+        client = TestClient(app)
+        try:
+            initial = client.post("/train/sac/full")
+            assert initial.status_code == 202
+            version = temp_storage.read_current_version()
+            assert version is not None
+            actor_path = (
+                temp_storage.base_path
+                / "models"
+                / temp_storage.bucket_name
+                / version
+                / "actor.pt"
+            )
+            active_actor = actor_path.read_bytes()
+
+            def _rejected_result(training_data, config, shutdown_event=None):
+                del training_data, shutdown_event
+                result = create_mock_training_result(config, eval_cagr=0.10)
+                with torch.no_grad():
+                    for parameter in result.actor.parameters():
+                        parameter.fill_(9.0)
+                return result
+
+            monkeypatch.setattr(sac_full_route, "train_sac", _rejected_result)
+            rejected = client.post("/train/sac/full", json={"force": True})
+            assert rejected.status_code == 202
+            status = client.get(f"/train/status/{rejected.json()['job_id']}")
+            assert status.json()["status"] == "completed"
+            assert status.json()["result"]["promoted"] is False
+
+            assert temp_storage.read_current_version() == version
+            assert actor_path.read_bytes() == active_actor
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_full_training_missing_symbol_returns_fails_readiness(
+        self, temp_storage, monkeypatch
+    ):
+        """A missing slate member's returns fail instead of becoming zeros.
+
+        Halal membership overrides money, so training cannot silently shrink
+        the slate when a required symbol has no price history.
         """
         from brain_api.routes.training.sac import full as sac_full_route
 
@@ -980,14 +1079,10 @@ class TestSACFullTraining:
         try:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
-            r2 = client.post("/train/sac/full")
-            assert r2.status_code == 200
-            data = r2.json()
-            assert data["promoted"] is False
-            assert any(
-                "actual_symbol_count" in r and "expected_symbol_count" in r
-                for r in data["failure_reasons"]
-            )
+            status = client.get(f"/train/status/{r1.json()['job_id']}")
+            assert status.status_code == 200
+            assert status.json()["status"] == "failed"
+            assert "missing price histories: ['EXTRA1']" in status.json()["error"]
             assert temp_storage.read_current_version() is None
         finally:
             app.dependency_overrides.clear()

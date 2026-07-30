@@ -33,11 +33,13 @@ from brain_api.core.fundamentals.index import FundamentalsIndex
 from brain_api.core.fundamentals.loader import (
     get_default_data_path,
     load_historical_fundamentals_from_cache,
+    load_point_in_time_fundamentals,
 )
 from brain_api.core.fundamentals.models import (
     FetchRecord,
     FundamentalRatios,
     FundamentalsResult,
+    PointInTimeFundamental,
     QuarterlyStatement,
 )
 
@@ -65,6 +67,7 @@ __all__ = [
     # Index
     "FundamentalsIndex",
     "FundamentalsResult",
+    "PointInTimeFundamental",
     # Models
     "QuarterlyStatement",
     "RealAlphaVantageClient",
@@ -75,6 +78,7 @@ __all__ = [
     "get_fundamentals_dir",
     "get_statement_as_of",
     "load_historical_fundamentals_from_cache",
+    "load_point_in_time_fundamentals",
     "load_raw_response",
     # Parser
     "parse_quarterly_statements",

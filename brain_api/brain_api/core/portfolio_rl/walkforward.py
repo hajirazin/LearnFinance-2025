@@ -12,6 +12,8 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from brain_api.core.portfolio_rl.walkforward_data import load_daily_ohlcv
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +31,7 @@ def generate_walkforward_forecasts(
     symbols: list[str],
     forecaster_type: Literal["lstm", "patchtst"],
     shutdown_event: threading.Event | None = None,
+    target_dates: pd.DatetimeIndex | None = None,
 ) -> dict[str, np.ndarray]:
     """Generate walk-forward forecasts using trained LSTM/PatchTST snapshots.
 
@@ -61,12 +64,15 @@ def generate_walkforward_forecasts(
     if len(weekly_dates) == 0:
         return forecasts
 
-    start_year = weekly_dates[0].year
-    end_year = weekly_dates[-1].year
+    grouping_dates = target_dates if target_dates is not None else weekly_dates
+    if len(grouping_dates) != len(weekly_dates):
+        raise ValueError("target_dates must align one-to-one with weekly_dates")
+    start_year = grouping_dates[0].year
+    end_year = grouping_dates[-1].year
 
     # Group weeks by year
     year_groups = {}
-    for i, dt in enumerate(weekly_dates):
+    for i, dt in enumerate(grouping_dates):
         year = dt.year
         if year not in year_groups:
             year_groups[year] = []
@@ -227,7 +233,7 @@ def _run_lstm_snapshot_inference(
     start_date = weekly_dates[max(0, min_idx - 10)].date() - timedelta(days=buffer_days)
     end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
 
-    daily_ohlcv = _load_daily_ohlcv(symbol, start_date, end_date)
+    daily_ohlcv = load_daily_ohlcv(symbol, start_date, end_date)
     if daily_ohlcv is None:
         raise SnapshotInferenceError(
             f"Failed to load daily OHLCV for {symbol} ({start_date} to {end_date})"
@@ -293,7 +299,8 @@ def _predict_single_week_lstm(
     else:
         cutoff_ts = pd.Timestamp(cutoff)
 
-    ohlcv_subset = daily_ohlcv[daily_ohlcv.index < cutoff_ts].copy()
+    # A Friday close is known at the next week's Monday-open decision.
+    ohlcv_subset = daily_ohlcv[daily_ohlcv.index <= cutoff_ts].copy()
 
     if len(ohlcv_subset) < seq_len + 1:
         raise SnapshotInferenceError(
@@ -379,7 +386,7 @@ def _run_patchtst_snapshot_inference(
     start_date = weekly_dates[max(0, min_idx - 10)].date() - timedelta(days=buffer_days)
     end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
 
-    daily_ohlcv = _load_daily_ohlcv(symbol, start_date, end_date)
+    daily_ohlcv = load_daily_ohlcv(symbol, start_date, end_date)
     if daily_ohlcv is None:
         raise SnapshotInferenceError(
             f"Failed to load daily OHLCV for {symbol} ({start_date} to {end_date})"
@@ -444,7 +451,8 @@ def _predict_single_week_patchtst(
     else:
         cutoff_ts = pd.Timestamp(cutoff)
 
-    ohlcv_subset = daily_ohlcv[daily_ohlcv.index < cutoff_ts].copy()
+    # A Friday close is known at the next week's Monday-open decision.
+    ohlcv_subset = daily_ohlcv[daily_ohlcv.index <= cutoff_ts].copy()
 
     if len(ohlcv_subset) < context_length:
         raise SnapshotInferenceError(
@@ -486,30 +494,6 @@ def _predict_single_week_patchtst(
     return weekly_return
 
 
-def _load_daily_ohlcv(
-    symbol: str, start_date: date, end_date: date
-) -> pd.DataFrame | None:
-    """Load daily OHLCV data for a symbol."""
-    try:
-        import yfinance as yf
-
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(
-            start=start_date.isoformat(),
-            end=(end_date + timedelta(days=1)).isoformat(),
-            interval="1d",
-        )
-        if df.empty:
-            return None
-
-        # Normalize column names
-        df.columns = df.columns.str.lower()
-        return df[["open", "high", "low", "close", "volume"]]
-    except Exception as e:
-        logger.debug(f"[WalkForward] Failed to load OHLCV for {symbol}: {e}")
-        return None
-
-
 # Type hints for snapshot artifacts
 from typing import TYPE_CHECKING
 
@@ -526,6 +510,7 @@ def build_forecast_features(
     symbols: list[str],
     forecaster_type: Literal["lstm", "patchtst"] = "lstm",
     shutdown_event: threading.Event | None = None,
+    target_dates: pd.DatetimeIndex | None = None,
 ) -> dict[str, np.ndarray]:
     """Build forecast features for RL training.
 
@@ -554,6 +539,7 @@ def build_forecast_features(
         symbols,
         forecaster_type,
         shutdown_event=shutdown_event,
+        target_dates=target_dates,
     )
 
     print(f"[PortfolioRL] Generated forecasts for {len(forecasts)} symbols")
@@ -565,6 +551,7 @@ def build_dual_forecast_features(
     weekly_dates: pd.DatetimeIndex,
     symbols: list[str],
     shutdown_event: threading.Event | None = None,
+    target_dates: pd.DatetimeIndex | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Build both LSTM and PatchTST forecast features for RL training.
 
@@ -591,6 +578,7 @@ def build_dual_forecast_features(
         symbols,
         forecaster_type="lstm",
         shutdown_event=shutdown_event,
+        target_dates=target_dates,
     )
 
     patchtst_forecasts = build_forecast_features(
@@ -599,6 +587,7 @@ def build_dual_forecast_features(
         symbols,
         forecaster_type="patchtst",
         shutdown_event=shutdown_event,
+        target_dates=target_dates,
     )
 
     print(f"[PortfolioRL] Generated dual forecasts for {len(lstm_forecasts)} symbols")

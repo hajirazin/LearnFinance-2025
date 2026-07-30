@@ -5,11 +5,11 @@ counterpart for inference. Both workflows fire on Monday but for
 different SAC buckets AND different brokers:
 
 * ``USWeeklyAllocationWorkflow``      -- universe ``halal_filtered``
-  (sticky-15 from PatchTST), Mon 11:00 UTC, **Alpaca** account
+  (sticky-15 from PatchTST), Mon 08:00 America/New_York, **Alpaca** account
   ``sac``, algorithm tag ``sac``, run_id ``paper:YYYY-MM-DD``.
 * ``USSACHalalAllocationWorkflow``    -- universe ``halal``
   (legacy yfinance ETF top-holdings, variable size 10-15),
-  Mon 12:30 UTC, **IBKR** account ``sac_halal`` (env
+  Mon 08:30 America/New_York, **IBKR** account ``sac_halal`` (env
   ``IBKR_SAC_HALAL_*``, IB Gateway on TCP 4002 paper / 4001 live),
   algorithm tag ``sac_halal``, run_id ``paper:halal:YYYY-MM-DD``.
 
@@ -83,6 +83,7 @@ from workflows._order_execution import (
     sell_wait_buy,
     split_orders_by_side,
 )
+from workflows._run_identity import ist_calendar_date
 
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import (
@@ -134,8 +135,7 @@ class USSACHalalAllocationWorkflow:
 
     @workflow.run
     async def run(self) -> dict:
-        now_ist = workflow.now().astimezone()
-        as_of_date = now_ist.strftime("%Y-%m-%d")
+        as_of_date = ist_calendar_date(workflow.now())
         # Variant run_id form per AGENTS.md "Run identity & rerun
         # semantics" -- safe because we use a dedicated Alpaca account
         # so client_order_id collisions across A/B paths are impossible.
@@ -172,14 +172,12 @@ class USSACHalalAllocationWorkflow:
             skipped_algorithms.append("SAC")
 
         # Phase 1: Get signals + forecasts (parallel) on the halal slate.
-        # LSTM and PatchTST are halal_new-trained but are called per-symbol;
-        # any halal symbol not in the forecaster metadata gets a zero-filled
-        # state-vector slot at inference time (drift caveat documented in
-        # the module docstring).
+        # LSTM and PatchTST are halal_new-trained but are called per-symbol.
+        # Any missing forecast now fails canonical SAC context construction.
         fundamentals, news, lstm, patchtst = await asyncio.gather(
             workflow.execute_activity(
                 get_fundamentals,
-                args=[symbols],
+                args=[symbols, as_of_date],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
@@ -210,7 +208,16 @@ class USSACHalalAllocationWorkflow:
         if run_sac:
             sac_alloc = await workflow.execute_activity(
                 infer_sac,
-                args=[sac_portfolio, as_of_date, UNIVERSE],
+                args=[
+                    sac_portfolio,
+                    as_of_date,
+                    UNIVERSE,
+                    symbols,
+                    news,
+                    fundamentals,
+                    lstm,
+                    patchtst,
+                ],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
             )
         else:
@@ -237,11 +244,6 @@ class USSACHalalAllocationWorkflow:
                     target_week_start,
                     target_week_end,
                     sac_alloc,
-                    sac_portfolio,
-                    news,
-                    fundamentals,
-                    lstm,
-                    patchtst,
                     UNIVERSE,
                 ],
                 start_to_close_timeout=SHORT_TIMEOUT,

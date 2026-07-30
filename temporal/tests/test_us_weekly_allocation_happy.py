@@ -93,6 +93,8 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         # for any halal record sharing model_type='sac'.
         assert store_experience_calls
         assert store_experience_calls[0]["universe"] == "halal_filtered"
+        assert store_experience_calls[0]["decision_state"] == sac_alloc.decision_state
+        assert store_experience_calls[0]["state_digest"] == sac_alloc.state_digest
 
         # Post-trade portfolio MUST flow into update_execution_sac so
         # the labeller never falls back to a live Alpaca query for

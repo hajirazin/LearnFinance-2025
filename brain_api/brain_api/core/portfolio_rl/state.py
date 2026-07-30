@@ -70,8 +70,34 @@ class StateSchema:
     """
 
     n_stocks: int = 15
-    n_signals_per_stock: int = 7  # news + 5 fundamentals + fundamental_age
+    schema_version: int = 1
     n_forecasts_per_stock: int = 2  # LSTM return + PatchTST return (no volatility)
+
+    def __post_init__(self) -> None:
+        if self.schema_version not in (1, 2):
+            raise ValueError(
+                f"Unsupported SAC state schema version: {self.schema_version}"
+            )
+
+    @classmethod
+    def v1(cls, n_stocks: int) -> StateSchema:
+        """Construct the 151-at-15 schema used by legacy artifacts."""
+        return cls(n_stocks=n_stocks, schema_version=1)
+
+    @classmethod
+    def v2(cls, n_stocks: int) -> StateSchema:
+        """Construct the strict 166-at-15 schema used by new artifacts."""
+        return cls(n_stocks=n_stocks, schema_version=2)
+
+    @property
+    def version(self) -> int:
+        """Public artifact schema version."""
+        return self.schema_version
+
+    @property
+    def n_signals_per_stock(self) -> int:
+        """Number of signals in the selected artifact-compatible schema."""
+        return len(self.signal_names)
 
     @property
     def n_forecast_features(self) -> int:
@@ -95,6 +121,10 @@ class StateSchema:
     @property
     def signal_names(self) -> list[str]:
         """Names of per-stock signals."""
+        if self.schema_version >= 2:
+            from brain_api.core.sac.decision_context import SAC_V2_SIGNAL_NAMES
+
+            return list(SAC_V2_SIGNAL_NAMES)
         return [
             "news_sentiment",
             "gross_margin",
@@ -163,32 +193,93 @@ def build_state_vector(
     if schema is None:
         schema = StateSchema(n_stocks=len(symbol_order))
 
+    if len(symbol_order) != schema.n_stocks:
+        raise ValueError(
+            f"symbol_order has {len(symbol_order)} stocks, schema expects "
+            f"{schema.n_stocks}"
+        )
+    if portfolio_weights.shape != (schema.n_portfolio_weights,):
+        raise ValueError(
+            f"portfolio_weights shape {portfolio_weights.shape} does not match "
+            f"({schema.n_portfolio_weights},)"
+        )
+
+    strict = schema.schema_version >= 2
     state = np.zeros(schema.state_dim)
 
     # 1. Fill per-stock signals
     signal_names = schema.signal_names
     for stock_idx, symbol in enumerate(symbol_order):
         start, _end = schema.get_signal_indices(stock_idx)
+        if strict and symbol not in signals:
+            raise ValueError(f"Missing required SAC signals for {symbol}")
         symbol_signals = signals.get(symbol, {})
 
         for signal_idx, signal_name in enumerate(signal_names):
-            state[start + signal_idx] = symbol_signals.get(signal_name, 0.0)
+            if strict and signal_name not in symbol_signals:
+                raise ValueError(
+                    f"Missing required SAC signal {signal_name!r} for {symbol}"
+                )
+            value = symbol_signals.get(signal_name, 0.0)
+            if strict and not np.isfinite(value):
+                raise ValueError(
+                    f"Non-finite SAC signal {signal_name!r} for {symbol}: {value}"
+                )
+            state[start + signal_idx] = value
 
     # 2. Fill LSTM forecast return features
     lstm_start, _lstm_end = schema.get_lstm_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
-        state[lstm_start + stock_idx] = lstm_forecasts.get(symbol, 0.0)
+        if strict and symbol not in lstm_forecasts:
+            raise ValueError(f"Missing required LSTM forecast for {symbol}")
+        value = lstm_forecasts.get(symbol, 0.0)
+        if strict and not np.isfinite(value):
+            raise ValueError(f"Non-finite LSTM forecast for {symbol}: {value}")
+        state[lstm_start + stock_idx] = value
 
     # 3. Fill PatchTST forecast return features
     patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
     for stock_idx, symbol in enumerate(symbol_order):
-        state[patchtst_start + stock_idx] = patchtst_forecasts.get(symbol, 0.0)
+        if strict and symbol not in patchtst_forecasts:
+            raise ValueError(f"Missing required PatchTST forecast for {symbol}")
+        value = patchtst_forecasts.get(symbol, 0.0)
+        if strict and not np.isfinite(value):
+            raise ValueError(f"Non-finite PatchTST forecast for {symbol}: {value}")
+        state[patchtst_start + stock_idx] = value
+
+    if strict:
+        if not np.all(np.isfinite(portfolio_weights)):
+            raise ValueError("Portfolio weights must all be finite")
+        if np.any(portfolio_weights < 0):
+            raise ValueError("Portfolio weights must all be nonnegative")
+        if not np.isclose(float(portfolio_weights.sum()), 1.0, atol=1e-8):
+            raise ValueError(
+                f"Portfolio weights must sum to 1.0, got {portfolio_weights.sum()}"
+            )
 
     # 4. Fill portfolio weights
     portfolio_start, portfolio_end = schema.get_portfolio_indices()
     state[portfolio_start:portfolio_end] = portfolio_weights
 
     return state
+
+
+def build_state_vector_strict_v2(
+    signals: dict[str, dict[str, float]],
+    lstm_forecasts: dict[str, float],
+    patchtst_forecasts: dict[str, float],
+    portfolio_weights: np.ndarray,
+    symbol_order: list[str],
+) -> np.ndarray:
+    """Build a strict state-v2 vector, failing on incomplete actor inputs."""
+    return build_state_vector(
+        signals=signals,
+        lstm_forecasts=lstm_forecasts,
+        patchtst_forecasts=patchtst_forecasts,
+        portfolio_weights=portfolio_weights,
+        symbol_order=symbol_order,
+        schema=StateSchema.v2(len(symbol_order)),
+    )
 
 
 def extract_portfolio_weights_from_state(

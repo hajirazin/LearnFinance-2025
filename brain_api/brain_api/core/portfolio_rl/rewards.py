@@ -1,8 +1,8 @@
 """Reward computation for portfolio RL.
 
-Reward = scaled(portfolio_log_return - log(1 + transaction_cost_fraction))
+Reward = scaled(log(1 + gross_return - transaction_cost_fraction)).
 
-Both terms are in log space for mathematical consistency.
+Transaction costs are deducted from wealth before the logarithm is taken.
 All rewards are scaled by reward_scale (default 100) so that
 a 1% weekly return becomes a reward of 1.0.
 
@@ -28,12 +28,114 @@ shim so any existing callers / experience records that still pass
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
     from brain_api.core.portfolio_rl.config import RLBaseConfig
+
+
+@dataclass(frozen=True)
+class RebalanceTransition:
+    """Exact after-cost wealth and post-return portfolio accounting."""
+
+    gross_return: float
+    cost_fraction: float
+    net_growth: float
+    net_log_return: float
+    post_weights: np.ndarray
+
+    @classmethod
+    def calculate(
+        cls,
+        target_weights: np.ndarray,
+        stock_returns: np.ndarray,
+        cost_fraction: float,
+    ) -> RebalanceTransition:
+        """Calculate one rebalance-to-next-open transition without approximations."""
+        target_weights = np.asarray(target_weights, dtype=float)
+        stock_returns = np.asarray(stock_returns, dtype=float)
+        if target_weights.shape != (len(stock_returns) + 1,):
+            raise ValueError(
+                "target_weights must contain one weight per stock plus CASH"
+            )
+        if not np.all(np.isfinite(target_weights)):
+            raise ValueError("target_weights must all be finite")
+        if np.any(target_weights < 0) or not np.isclose(
+            float(target_weights.sum()), 1.0, atol=1e-8
+        ):
+            raise ValueError("target_weights must be a nonnegative simplex")
+        if not np.all(np.isfinite(stock_returns)):
+            raise ValueError("stock_returns must be complete and finite")
+        if not np.isfinite(cost_fraction) or cost_fraction < 0:
+            raise ValueError("cost_fraction must be finite and nonnegative")
+
+        gross_return = float(np.dot(target_weights[:-1], stock_returns))
+        net_growth = 1.0 + gross_return - cost_fraction
+        if not np.isfinite(net_growth) or net_growth <= 0:
+            raise ValueError(
+                f"Rebalance transition has invalid net growth {net_growth}"
+            )
+
+        post_weights = np.empty_like(target_weights)
+        post_weights[:-1] = target_weights[:-1] * (1.0 + stock_returns) / net_growth
+        post_weights[-1] = (target_weights[-1] - cost_fraction) / net_growth
+        if not np.all(np.isfinite(post_weights)) or np.any(post_weights < -1e-12):
+            raise ValueError(
+                "Rebalance transition produced invalid post-return weights"
+            )
+        post_weights = np.maximum(post_weights, 0.0)
+        if not np.isclose(float(post_weights.sum()), 1.0, atol=1e-8):
+            raise ValueError(
+                f"Post-return weights must sum to 1.0, got {post_weights.sum()}"
+            )
+
+        return cls(
+            gross_return=gross_return,
+            cost_fraction=float(cost_fraction),
+            net_growth=net_growth,
+            net_log_return=float(np.log(net_growth)),
+            post_weights=post_weights,
+        )
+
+
+def compute_net_log_reward(
+    gross_return: float,
+    transaction_cost_fraction: float,
+    config: RLBaseConfig,
+    target_weights: np.ndarray | None = None,
+) -> float:
+    """Compute exact net-log-wealth reward plus the existing HHI penalty."""
+    reward = (
+        compute_exact_net_log_return(gross_return, transaction_cost_fraction)
+        * config.reward_scale
+    )
+
+    if target_weights is not None and getattr(config, "hhi_penalty_scale", 0.0) > 0:
+        stock_weights = target_weights[: config.n_stocks]
+        hhi = float(np.sum(stock_weights**2))
+        if hhi > 0.20:
+            reward -= (hhi - 0.20) * config.hhi_penalty_scale * config.reward_scale
+    return reward
+
+
+def compute_exact_net_log_return(
+    gross_return: float, transaction_cost_fraction: float
+) -> float:
+    """Return ``log(1 + gross_return - cost_fraction)`` exactly."""
+    if not np.isfinite(gross_return):
+        raise ValueError(f"Gross return must be finite, got {gross_return}")
+    if not np.isfinite(transaction_cost_fraction) or transaction_cost_fraction < 0:
+        raise ValueError(
+            "Transaction cost fraction must be finite and nonnegative, "
+            f"got {transaction_cost_fraction}"
+        )
+    net_growth = 1.0 + gross_return - transaction_cost_fraction
+    if not np.isfinite(net_growth) or net_growth <= 0:
+        raise ValueError(f"Net growth must be finite and positive, got {net_growth}")
+    return float(np.log(net_growth))
 
 
 class DifferentialSharpe:
@@ -121,34 +223,15 @@ def compute_blended_reward(
             f"transaction_cost_fraction must be >= 0, got {transaction_cost_fraction}"
         )
 
-    return_reward = (
-        portfolio_log_return - np.log(1 + transaction_cost_fraction)
-    ) * config.reward_scale
-
-    # Differential Sharpe component (uses simple return net of costs)
-    net_simple_return = portfolio_simple_return - transaction_cost_fraction
-    dsr = differential_sharpe.update(net_simple_return)
-    dsr_reward = dsr * config.reward_scale
-
-    blended_reward = (
-        config.sharpe_weight * dsr_reward + (1 - config.sharpe_weight) * return_reward
+    # Kept as a compatibility wrapper for old callers. DSR is intentionally
+    # ignored: Sharpe belongs in evaluation/reporting, not the training reward.
+    del portfolio_log_return, differential_sharpe
+    return compute_net_log_reward(
+        portfolio_simple_return,
+        transaction_cost_fraction,
+        config,
+        target_weights,
     )
-
-    # HHI Concentration Penalty
-    # We penalize concentration that exceeds HHI=0.20 (equivalent to 5 equally-weighted stocks).
-    if target_weights is not None and getattr(config, "hhi_penalty_scale", 0.0) > 0:
-        # Calculate HHI of just the risky assets (exclude cash)
-        n_stocks = config.n_stocks
-        stock_weights = target_weights[:n_stocks]
-        hhi = float(np.sum(stock_weights**2))
-
-        # Only penalize if more concentrated than 5 equally-weighted stocks
-        if hhi > 0.20:
-            # Scale penalty by reward_scale so it meaningfully impacts the blended_reward
-            hhi_penalty = (hhi - 0.20) * config.hhi_penalty_scale * config.reward_scale
-            blended_reward -= hhi_penalty
-
-    return blended_reward
 
 
 def compute_portfolio_return(
@@ -259,11 +342,9 @@ def compute_reward_from_log_return(
 ) -> float:
     """Compute scaled reward using log return.
 
-    Both the portfolio return and transaction cost are in log space:
-      net_return = log(1 + r) - log(1 + tc) = log((1 + r) / (1 + tc))
-
-    This ensures mathematical consistency -- subtracting a linear cost
-    from a log return would mix units.
+    Converts the gross log return back to its simple-return equivalent,
+    deducts cost from wealth, then takes the exact net logarithm:
+    ``log(1 + expm1(portfolio_log_return) - cost_fraction)``.
 
     Args:
         portfolio_log_return: Log portfolio return, i.e. log(1 + r).
@@ -278,5 +359,5 @@ def compute_reward_from_log_return(
         raise ValueError(
             f"transaction_cost_fraction must be >= 0, got {transaction_cost_fraction}"
         )
-    net_return = portfolio_log_return - np.log(1 + transaction_cost_fraction)
-    return net_return * config.reward_scale
+    gross_return = float(np.expm1(portfolio_log_return))
+    return compute_net_log_reward(gross_return, transaction_cost_fraction, config)

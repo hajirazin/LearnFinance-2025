@@ -1,6 +1,6 @@
 """US weekly allocation workflow (SAC-only) with durable sell-wait-buy.
 
-Runs every Monday at 18:00 IST (11:00 UTC).
+Runs every Monday at 08:00 America/New_York.
 
 History note (post-refactor): this workflow used to run a "naive HRP"
 allocator side-by-side with SAC on SAC's 15-stock universe. That naive
@@ -35,6 +35,7 @@ from workflows._order_execution import (
     sell_wait_buy,
     split_orders_by_side,
 )
+from workflows._run_identity import ist_calendar_date
 
 with workflow.unsafe.imports_passed_through():
     from activities.email_enrichment import (
@@ -80,8 +81,7 @@ class USWeeklyAllocationWorkflow:
 
     @workflow.run
     async def run(self) -> dict:
-        now_ist = workflow.now().astimezone()
-        as_of_date = now_ist.strftime("%Y-%m-%d")
+        as_of_date = ist_calendar_date(workflow.now())
         run_id = f"paper:{as_of_date}"
 
         attempt = await workflow.execute_activity(
@@ -117,7 +117,7 @@ class USWeeklyAllocationWorkflow:
         fundamentals, news, lstm, patchtst = await asyncio.gather(
             workflow.execute_activity(
                 get_fundamentals,
-                args=[symbols],
+                args=[symbols, as_of_date],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
@@ -148,7 +148,16 @@ class USWeeklyAllocationWorkflow:
         if run_sac:
             sac_alloc = await workflow.execute_activity(
                 infer_sac,
-                args=[sac_portfolio, as_of_date, "halal_filtered"],
+                args=[
+                    sac_portfolio,
+                    as_of_date,
+                    "halal_filtered",
+                    symbols,
+                    news,
+                    fundamentals,
+                    lstm,
+                    patchtst,
+                ],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
             )
         else:
@@ -170,11 +179,6 @@ class USWeeklyAllocationWorkflow:
                     target_week_start,
                     target_week_end,
                     sac_alloc,
-                    sac_portfolio,
-                    news,
-                    fundamentals,
-                    lstm,
-                    patchtst,
                     "halal_filtered",
                 ],
                 start_to_close_timeout=SHORT_TIMEOUT,

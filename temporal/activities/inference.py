@@ -5,6 +5,7 @@ import logging
 from temporalio import activity
 
 from activities.client import get_client
+from activities.sac_context import build_sac_feature_bundle
 from models import (
     AlpacaPortfolioResponse,
     FundamentalsResponse,
@@ -24,11 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 @activity.defn
-def get_fundamentals(symbols: list[str]) -> FundamentalsResponse:
+def get_fundamentals(symbols: list[str], as_of_date: str) -> FundamentalsResponse:
     """Fetch fundamental data for symbols."""
     logger.info(f"Fetching fundamentals for {len(symbols)} symbols...")
     with get_client() as client:
-        response = client.post("/signals/fundamentals", json={"symbols": symbols})
+        response = client.post(
+            "/signals/fundamentals",
+            json={"symbols": symbols, "as_of_date": as_of_date},
+        )
         response.raise_for_status()
     result = FundamentalsResponse(**response.json())
     logger.info(f"Got fundamentals for {len(result.per_symbol)} symbols")
@@ -222,6 +226,11 @@ def infer_sac(
     portfolio: AlpacaPortfolioResponse,
     as_of_date: str,
     universe: str,
+    symbols: list[str],
+    news: NewsSignalResponse,
+    fundamentals: FundamentalsResponse,
+    lstm: LSTMInferenceResponse,
+    patchtst: PatchTSTInferenceResponse,
 ) -> SACInferenceResponse:
     """Get SAC allocation for the requested SAC bucket.
 
@@ -230,6 +239,14 @@ def infer_sac(
     the bucket via ``get_bucket(ModelType.SAC, universe)`` and loads
     that bucket's frozen ``symbol_order``. Per AGENTS.md rule #1.
     """
+    feature_bundle = build_sac_feature_bundle(
+        symbols=symbols,
+        as_of_date=as_of_date,
+        news=news,
+        fundamentals=fundamentals,
+        lstm=lstm,
+        patchtst=patchtst,
+    )
     logger.info(f"Getting SAC allocation (universe={universe})...")
     with get_client() as client:
         response = client.post(
@@ -241,6 +258,7 @@ def infer_sac(
                     "positions": [p.model_dump() for p in portfolio.positions],
                 },
                 "as_of_date": as_of_date,
+                "feature_bundle": feature_bundle,
             },
         )
         response.raise_for_status()

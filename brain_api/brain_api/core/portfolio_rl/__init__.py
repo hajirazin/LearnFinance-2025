@@ -3,7 +3,7 @@
 This module provides the shared components for RL-based portfolio allocation:
 - Weekly portfolio environment (long-only, simplex weights)
 - Transaction cost modeling
-- Constraint enforcement (cash buffer, max position size)
+- Constraint enforcement (long-only simplex and cash buffer)
 - State/feature building with dual forecast features (LSTM + PatchTST)
 - Evaluation helpers (walk-forward, metrics)
 - Data loading (news sentiment, fundamentals)
@@ -52,6 +52,7 @@ from brain_api.core.portfolio_rl.state import (
     PortfolioState,
     StateSchema,
     build_state_vector,
+    build_state_vector_strict_v2,
 )
 from brain_api.core.portfolio_rl.walkforward import (
     SnapshotInferenceError,
@@ -79,6 +80,7 @@ __all__ = [
     "build_forecast_features",
     "build_rl_training_signals",
     "build_state_vector",
+    "build_state_vector_strict_v2",
     "compute_baseline_metrics",
     "compute_cagr",
     "compute_hit_rate",

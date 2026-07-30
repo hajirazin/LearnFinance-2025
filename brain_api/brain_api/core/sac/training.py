@@ -23,6 +23,7 @@ from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
+from brain_api.core.portfolio_rl.state import StateSchema
 from brain_api.core.sac.config import SACConfig
 
 
@@ -59,7 +60,7 @@ class TrainingData:
     signals: np.ndarray  # (n_weeks, n_stocks, n_signals)
     lstm_forecasts: np.ndarray  # (n_weeks, n_stocks)
     patchtst_forecasts: np.ndarray  # (n_weeks, n_stocks)
-    # End-of-week close prices (NOT returns); required by the IBKR-SG
+    # Rebalance-time Monday open prices (NOT returns); required by the IBKR-SG
     # cost model in PortfolioEnv.step to convert weight deltas into
     # share counts. Shape (n_weeks, n_stocks).
     prices: np.ndarray
@@ -90,66 +91,85 @@ def build_training_data(
         TrainingData with aligned arrays.
     """
     n_stocks = len(symbol_order)
+    if n_stocks == 0:
+        raise ValueError("symbol_order must be non-empty")
+    if len(set(symbol_order)) != n_stocks:
+        raise ValueError("symbol_order must contain unique symbols")
 
     # Determine number of weeks from first symbol's prices
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because returns need two points
 
-    # Signal names (must match StateSchema)
-    signal_names = [
-        "news_sentiment",
-        "gross_margin",
-        "operating_margin",
-        "net_margin",
-        "current_ratio",
-        "debt_to_equity",
-        "fundamental_age",
-    ]
+    schema = StateSchema(n_stocks=n_stocks, schema_version=2)
+    signal_names = schema.signal_names
     n_signals = len(signal_names)
 
-    # Build returns array + parallel weekly-prices array (end-of-week
-    # close, lined up with the return realised over week t -- consumed
+    # Build returns array + parallel rebalance-time price array (price[t],
+    # lined up with the transition starting at t -- consumed
     # by the IBKR-SG cost model in PortfolioEnv.step).
     symbol_returns = np.zeros((n_weeks, n_stocks))
     weekly_prices = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        price_series = prices.get(symbol)
-        if price_series is not None and len(price_series) > 1:
-            # Weekly returns
-            returns = (price_series[1:] - price_series[:-1]) / np.maximum(
-                price_series[:-1], 1e-10
+        if symbol not in prices:
+            raise ValueError(f"Missing required prices for {symbol}")
+        price_series = np.asarray(prices[symbol], dtype=float)
+        if len(price_series) != n_weeks + 1:
+            raise ValueError(
+                f"Prices for {symbol} have {len(price_series)} values; "
+                f"expected {n_weeks + 1}"
             )
-            symbol_returns[: len(returns), stock_idx] = returns[:n_weeks]
-            # End-of-week close at index t+1 corresponds to the return
-            # realised over week t.
-            usable = min(len(price_series) - 1, n_weeks)
-            weekly_prices[:usable, stock_idx] = price_series[1 : usable + 1]
+        if not np.all(np.isfinite(price_series)) or np.any(price_series <= 0):
+            raise ValueError(f"Prices for {symbol} must be finite and positive")
+        returns = (price_series[1:] - price_series[:-1]) / price_series[:-1]
+        if not np.all(np.isfinite(returns)):
+            raise ValueError(f"Returns for {symbol} must be complete and finite")
+        symbol_returns[:, stock_idx] = returns
+        weekly_prices[:, stock_idx] = price_series[:-1]
 
     # Build signals array
     signals_array = np.zeros((n_weeks, n_stocks, n_signals))
     for stock_idx, symbol in enumerate(symbol_order):
-        symbol_signals = signals.get(symbol, {})
+        if symbol not in signals:
+            raise ValueError(f"Missing required SAC signals for {symbol}")
+        symbol_signals = signals[symbol]
         for signal_idx, signal_name in enumerate(signal_names):
-            signal_values = symbol_signals.get(signal_name)
-            if signal_values is not None:
-                # Assume signals are weekly-aligned
-                signals_array[: len(signal_values), stock_idx, signal_idx] = (
-                    signal_values[:n_weeks]
+            if signal_name not in symbol_signals:
+                raise ValueError(
+                    f"Missing required SAC signal {signal_name!r} for {symbol}"
                 )
+            signal_values = np.asarray(symbol_signals[signal_name], dtype=float)
+            if len(signal_values) != n_weeks or not np.all(np.isfinite(signal_values)):
+                raise ValueError(
+                    f"SAC signal {signal_name!r} for {symbol} must contain "
+                    f"exactly {n_weeks} finite values"
+                )
+            signals_array[:, stock_idx, signal_idx] = signal_values
 
     # Build LSTM forecast features array
     lstm_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        lstm_preds = lstm_predictions.get(symbol)
-        if lstm_preds is not None:
-            lstm_array[: len(lstm_preds), stock_idx] = lstm_preds[:n_weeks]
+        if symbol not in lstm_predictions:
+            raise ValueError(f"Missing required LSTM forecasts for {symbol}")
+        lstm_preds = np.asarray(lstm_predictions[symbol], dtype=float)
+        if len(lstm_preds) != n_weeks or not np.all(np.isfinite(lstm_preds)):
+            raise ValueError(
+                f"LSTM forecasts for {symbol} must contain exactly "
+                f"{n_weeks} finite values"
+            )
+        lstm_array[:, stock_idx] = lstm_preds
 
     # Build PatchTST forecast features array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
-        patchtst_preds = patchtst_predictions.get(symbol)
-        if patchtst_preds is not None:
-            patchtst_array[: len(patchtst_preds), stock_idx] = patchtst_preds[:n_weeks]
+        if symbol not in patchtst_predictions:
+            raise ValueError(f"Missing required PatchTST forecasts for {symbol}")
+        patchtst_preds = np.asarray(patchtst_predictions[symbol], dtype=float)
+        if len(patchtst_preds) != n_weeks or not np.all(np.isfinite(patchtst_preds)):
+            raise ValueError(
+                f"PatchTST forecasts for {symbol} must contain exactly "
+                f"{n_weeks} finite values"
+            )
+        patchtst_array[:, stock_idx] = patchtst_preds
 
     return TrainingData(
         symbol_returns=symbol_returns,
@@ -198,6 +218,7 @@ def create_env_from_training_data(
         prices=prices,
         symbol_order=training_data.symbol_order,
         config=config,
+        schema_version=2,
     )
 
 
@@ -215,10 +236,20 @@ def train_sac(
     Returns:
         Training result with trained models.
     """
-    # Split data: train on first portion, evaluate on last validation_years
-    weeks_per_year = 52
-    eval_weeks = config.validation_years * weeks_per_year
-    train_weeks = max(training_data.n_weeks - eval_weeks, weeks_per_year * 2)
+    # Seed before environment reset/scaler sampling. SACTrainer seeds again
+    # before network construction, but waiting until then makes each candidate's
+    # scaler depend on process-global RNG state and preceding candidates.
+    np.random.seed(config.seed)
+    torch.manual_seed(config.seed)
+
+    # Locked policy: deterministic chronological trailing 104-week net OOS eval.
+    eval_weeks = 104
+    train_weeks = training_data.n_weeks - eval_weeks
+    if train_weeks < 104:
+        raise ValueError(
+            "SAC training requires at least 208 weekly transitions: "
+            "104 train and 104 deterministic OOS evaluation"
+        )
 
     print(
         f"[SAC] Training on {train_weeks} weeks, evaluating on {training_data.n_weeks - train_weeks} weeks"
@@ -233,7 +264,7 @@ def train_sac(
     )
 
     # Create and fit scaler on training data
-    scaler = PortfolioScaler.create(n_stocks=training_data.n_stocks)
+    scaler = PortfolioScaler.create(n_stocks=training_data.n_stocks, schema_version=2)
     # Collect sample states for fitting
     sample_states = []
     state = train_env.reset()
@@ -263,12 +294,14 @@ def train_sac(
         start_week=train_weeks,
         end_week=training_data.n_weeks,
     )
+    eval_env.max_episode_weeks = None
     eval_env_normalized = NormalizedEnv(eval_env, scaler)
 
     eval_sharpe, eval_cagr, eval_max_drawdown = evaluate_policy(
         sac_result.actor,
         eval_env_normalized,
         config,
+        expected_periods=eval_weeks,
     )
 
     print(
@@ -376,6 +409,7 @@ def evaluate_policy(
     actor: GaussianActor,
     env: NormalizedEnv,
     config: SACConfig,
+    expected_periods: int | None = None,
 ) -> tuple[float, float, float]:
     """Evaluate policy on environment.
 
@@ -389,7 +423,7 @@ def evaluate_policy(
     """
     portfolio_returns = []
 
-    state = env.reset()
+    state = env.reset(start_week=0)
     done = False
 
     while not done:
@@ -401,10 +435,15 @@ def evaluate_policy(
         state = step_result.next_state
         done = step_result.done
 
-        # Collect portfolio return for this week
-        portfolio_returns.append(step_result.portfolio_return)
+        # Evaluation and promotion use exact after-cost returns.
+        portfolio_returns.append(step_result.info["net_portfolio_return"])
 
     portfolio_returns = np.array(portfolio_returns)
+    if expected_periods is not None and len(portfolio_returns) != expected_periods:
+        raise ValueError(
+            f"Deterministic SAC evaluation produced {len(portfolio_returns)} "
+            f"periods; expected {expected_periods}"
+        )
 
     # Compute metrics
     sharpe = compute_sharpe_ratio(portfolio_returns)
@@ -446,9 +485,9 @@ class NormalizedEnv:
     def action_dim(self) -> int:
         return self.env.action_dim
 
-    def reset(self) -> np.ndarray:
+    def reset(self, start_week: int | None = None) -> np.ndarray:
         """Reset and return normalized state."""
-        state = self.env.reset()
+        state = self.env.reset(start_week=start_week)
         return self.scaler.transform(state)
 
     def step(self, action: np.ndarray) -> StepResult:

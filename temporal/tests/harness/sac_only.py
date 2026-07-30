@@ -100,7 +100,7 @@ def make_sac_only_activities(
         return SkippedSubmitResponse(account="hrp")
 
     @activity.defn(name="get_fundamentals")
-    def mock_get_fundamentals(symbols):
+    def mock_get_fundamentals(symbols, as_of_date):
         return fundamentals_resp
 
     @activity.defn(name="get_news_sentiment")
@@ -116,7 +116,16 @@ def make_sac_only_activities(
         return patchtst_resp
 
     @activity.defn(name="infer_sac")
-    def mock_infer_sac(portfolio, as_of_date, universe):
+    def mock_infer_sac(
+        portfolio,
+        as_of_date,
+        universe,
+        symbols,
+        news,
+        fundamentals,
+        lstm,
+        patchtst,
+    ):
         return sac_alloc
 
     @activity.defn(name="generate_orders_sac")
@@ -126,11 +135,24 @@ def make_sac_only_activities(
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
         if store_experience_calls is not None:
-            # ``universe`` is the trailing positional arg (10th).
+            # ``universe`` is the trailing positional arg (5th).
+            allocation = args[3] if len(args) > 3 else None
+            decision_state = (
+                allocation.get("decision_state")
+                if isinstance(allocation, dict)
+                else getattr(allocation, "decision_state", None)
+            )
+            state_digest = (
+                allocation.get("state_digest")
+                if isinstance(allocation, dict)
+                else getattr(allocation, "state_digest", None)
+            )
             store_experience_calls.append(
                 {
                     "run_id": args[0] if args else None,
-                    "universe": args[9] if len(args) > 9 else None,
+                    "universe": args[4] if len(args) > 4 else None,
+                    "decision_state": decision_state,
+                    "state_digest": state_digest,
                 }
             )
         return None

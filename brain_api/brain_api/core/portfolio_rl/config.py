@@ -43,7 +43,6 @@ class RLBaseConfig:
     # round-trip without breaking; the env no longer reads it.
     cost_bps: int = 10  # DEPRECATED; see cost_config
     cash_buffer: float = 0.02  # minimum cash weight (2%)
-    max_position_weight: float = 0.20  # max weight per stock (20%)
     reward_scale: float = 100.0  # multiply returns by this (1% → 1.0)
     # IBKR Singapore Tiered transaction-cost schedule. See
     # brain_api/core/portfolio_rl/broker_costs.py for the per-leg math.
@@ -96,7 +95,6 @@ class RLBaseConfig:
             "total_timesteps": self.total_timesteps,
             "cost_bps": self.cost_bps,
             "cash_buffer": self.cash_buffer,
-            "max_position_weight": self.max_position_weight,
             "reward_scale": self.reward_scale,
             "n_stocks": self.n_stocks,
             "seed": self.seed,
@@ -111,6 +109,8 @@ class RLBaseConfig:
     def from_dict(cls, data: dict[str, Any]) -> "RLBaseConfig":
         """Create config from dictionary."""
         data = data.copy()
+        # Tolerate retired fields when loading legacy artifacts.
+        data.pop("max_position_weight", None)
         # Handle hidden_sizes conversion from list to tuple
         if "hidden_sizes" in data and isinstance(data["hidden_sizes"], list):
             data["hidden_sizes"] = tuple(data["hidden_sizes"])

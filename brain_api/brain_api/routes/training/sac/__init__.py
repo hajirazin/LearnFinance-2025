@@ -15,9 +15,11 @@ from fastapi import APIRouter
 
 from .finetune import router as _finetune_router
 from .full import router as _full_router
+from .preflight import router as _preflight_router
 
 router = APIRouter()
 router.include_router(_full_router)
 router.include_router(_finetune_router)
+router.include_router(_preflight_router)
 
 __all__ = ["router"]

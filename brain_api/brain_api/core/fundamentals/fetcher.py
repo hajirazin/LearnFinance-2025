@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,38 @@ from brain_api.core.fundamentals.parser import (
     get_statement_as_of,
     parse_quarterly_statements,
 )
+from brain_api.core.fundamentals.sec_filings import (
+    FilingAvailabilityProvider,
+    SECFilingAvailabilityClient,
+    enrich_statement_periods_with_filing_availability,
+)
 from brain_api.core.fundamentals.storage import load_raw_response, save_raw_response
+
+
+def _response_payload(wrapped: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return the raw provider object from one cached wrapper."""
+    if wrapped is None:
+        return None
+    response = wrapped.get("response")
+    return response if isinstance(response, dict) else None
+
+
+def _has_unresolved_quarterly_filings(payload: dict[str, Any]) -> bool:
+    """Return whether any quarterly period lacks exact filing provenance."""
+    reports = payload.get("quarterlyReports", [])
+    return any(
+        isinstance(report, dict)
+        and not all(
+            report.get(field)
+            for field in (
+                "filingDate",
+                "accessionNumber",
+                "filingForm",
+                "filingSource",
+            )
+        )
+        for report in reports
+    )
 
 
 class FundamentalsFetcher:
@@ -31,6 +63,7 @@ class FundamentalsFetcher:
         base_path: Path,
         cache_dir: Path | None = None,
         daily_limit: int = 25,
+        filing_provider: FilingAvailabilityProvider | None = None,
     ):
         """Initialize the fetcher.
 
@@ -42,6 +75,10 @@ class FundamentalsFetcher:
         """
         self.base_path = base_path
         self.cache_dir = cache_dir or (base_path / "cache")
+        sec_user_agent = os.environ.get("SEC_USER_AGENT", "")
+        self.filing_provider = filing_provider
+        if self.filing_provider is None and sec_user_agent:
+            self.filing_provider = SECFilingAvailabilityClient(sec_user_agent)
 
         self.index = FundamentalsIndex(self.cache_dir)
         self.client = RealAlphaVantageClient(
@@ -68,61 +105,78 @@ class FundamentalsFetcher:
         """
         api_calls_made = 0
         from_cache = True
+        raw_income = None
+        raw_balance = None
 
         # Try to load from cache
         income_data = None
         balance_data = None
 
         if not force_refresh:
-            income_record = self.index.get_fetch_record(symbol, "income_statement")
-            balance_record = self.index.get_fetch_record(symbol, "balance_sheet")
-
-            if income_record:
-                income_data = load_raw_response(
-                    self.base_path, symbol, "income_statement"
-                )
-            if balance_record:
-                balance_data = load_raw_response(
-                    self.base_path, symbol, "balance_sheet"
-                )
+            # Read the canonical/legacy cache directly. Requiring an index row
+            # here would bypass the on-disk migration path and waste AV quota.
+            income_data = load_raw_response(self.base_path, symbol, "income_statement")
+            balance_data = load_raw_response(self.base_path, symbol, "balance_sheet")
 
         # Fetch missing data from API
         if income_data is None:
             raw_income = self.client.fetch_income_statement(symbol)
             if raw_income:
-                file_path = save_raw_response(
-                    self.base_path, symbol, "income_statement", raw_income
-                )
-                # Get latest dates for index
-                quarterly = raw_income.get("quarterlyReports", [])
-                annual = raw_income.get("annualReports", [])
-                latest_q = quarterly[0].get("fiscalDateEnding") if quarterly else None
-                latest_a = annual[0].get("fiscalDateEnding") if annual else None
-
-                self.index.record_fetch(
-                    symbol, "income_statement", str(file_path), latest_a, latest_q
-                )
-                income_data = {"response": raw_income}
                 api_calls_made += 1
                 from_cache = False
+                income_data = {"response": raw_income}
 
         if balance_data is None:
             raw_balance = self.client.fetch_balance_sheet(symbol)
             if raw_balance:
-                file_path = save_raw_response(
-                    self.base_path, symbol, "balance_sheet", raw_balance
-                )
-                quarterly = raw_balance.get("quarterlyReports", [])
-                annual = raw_balance.get("annualReports", [])
-                latest_q = quarterly[0].get("fiscalDateEnding") if quarterly else None
-                latest_a = annual[0].get("fiscalDateEnding") if annual else None
-
-                self.index.record_fetch(
-                    symbol, "balance_sheet", str(file_path), latest_a, latest_q
-                )
-                balance_data = {"response": raw_balance}
                 api_calls_made += 1
                 from_cache = False
+                balance_data = {"response": raw_balance}
+
+        payloads = {
+            "income_statement": _response_payload(income_data),
+            "balance_sheet": _response_payload(balance_data),
+        }
+        unresolved = {
+            endpoint
+            for endpoint, payload in payloads.items()
+            if payload is not None and _has_unresolved_quarterly_filings(payload)
+        }
+        if unresolved:
+            if self.filing_provider is None:
+                raise RuntimeError(
+                    "SEC filing availability is required for fundamentals; "
+                    "set SEC_USER_AGENT or inject a filing_provider"
+                )
+            filings = self.filing_provider.fetch_symbol_filings(symbol)
+            for endpoint in unresolved:
+                payload = payloads[endpoint]
+                if payload is not None:
+                    enrich_statement_periods_with_filing_availability(payload, filings)
+
+        endpoints_to_save = set(unresolved)
+        if raw_income is not None:
+            endpoints_to_save.add("income_statement")
+        if raw_balance is not None:
+            endpoints_to_save.add("balance_sheet")
+        for endpoint in endpoints_to_save:
+            payload = payloads[endpoint]
+            if payload is None:
+                continue
+            # Exact SEC report-date misses remain unresolved and are excluded
+            # by the loader; persisting them records that enrichment was tried.
+            file_path = save_raw_response(self.base_path, symbol, endpoint, payload)
+            quarterly = payload.get("quarterlyReports", [])
+            annual = payload.get("annualReports", [])
+            latest_q = quarterly[0].get("fiscalDateEnding") if quarterly else None
+            latest_a = annual[0].get("fiscalDateEnding") if annual else None
+            self.index.record_fetch(
+                symbol, endpoint, str(file_path), latest_a, latest_q
+            )
+            if endpoint == "income_statement":
+                income_data = {"response": payload}
+            else:
+                balance_data = {"response": payload}
 
         # Parse statements
         income_statements = []

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from brain_api.core.fundamentals.models import PointInTimeFundamental
 from brain_api.core.fundamentals.parser import (
     compute_ratios,
     parse_quarterly_statements,
@@ -79,22 +80,14 @@ def load_historical_fundamentals_from_cache(
                     symbol, "balance_sheet", balance_data
                 )
 
-            # Collect ratios for each fiscal date within the date range
+            # Collect ratios for filings that were publicly available in-range.
             fiscal_dates: set[str] = set()
 
             for stmt in income_stmts:
-                if (
-                    start_date
-                    <= date.fromisoformat(stmt.fiscal_date_ending)
-                    <= end_date
-                ):
+                if stmt.filing_available_date is not None:
                     fiscal_dates.add(stmt.fiscal_date_ending)
             for stmt in balance_stmts:
-                if (
-                    start_date
-                    <= date.fromisoformat(stmt.fiscal_date_ending)
-                    <= end_date
-                ):
+                if stmt.filing_available_date is not None:
                     fiscal_dates.add(stmt.fiscal_date_ending)
 
             rows = []
@@ -108,11 +101,48 @@ def load_historical_fundamentals_from_cache(
                     None,
                 )
 
+                if (
+                    income_stmt is None
+                    or balance_stmt is None
+                    or income_stmt.filing_available_date is None
+                    or balance_stmt.filing_available_date is None
+                ):
+                    continue
+                available_date = max(
+                    income_stmt.filing_available_date,
+                    balance_stmt.filing_available_date,
+                )
+                if not (start_date <= date.fromisoformat(available_date) <= end_date):
+                    continue
                 ratios = compute_ratios(income_stmt, balance_stmt)
-                if ratios:
+                required_ratios = (
+                    (
+                        ratios.gross_margin,
+                        ratios.operating_margin,
+                        ratios.net_margin,
+                        ratios.current_ratio,
+                        ratios.debt_to_equity,
+                    )
+                    if ratios is not None
+                    else ()
+                )
+                if ratios is not None and all(
+                    value is not None for value in required_ratios
+                ):
+                    provenance_stmt = max(
+                        (income_stmt, balance_stmt),
+                        key=lambda stmt: stmt.filing_available_date or "",
+                    )
                     rows.append(
                         {
-                            "date": pd.to_datetime(fiscal_date),
+                            "date": pd.to_datetime(available_date),
+                            "fiscal_period_end": fiscal_date,
+                            "filing_available_date": available_date,
+                            "filing_accession_number": (
+                                provenance_stmt.filing_accession_number
+                            ),
+                            "filing_form": provenance_stmt.filing_form,
+                            "filing_source": provenance_stmt.filing_source,
                             "gross_margin": ratios.gross_margin,
                             "operating_margin": ratios.operating_margin,
                             "net_margin": ratios.net_margin,
@@ -130,3 +160,36 @@ def load_historical_fundamentals_from_cache(
             continue
 
     return fundamentals
+
+
+def load_point_in_time_fundamentals(
+    symbols: list[str],
+    as_of_date: date,
+    base_path: Path | None = None,
+) -> dict[str, PointInTimeFundamental]:
+    """Load each symbol's latest complete filing known by ``as_of_date``."""
+    frames = load_historical_fundamentals_from_cache(
+        symbols=symbols,
+        start_date=date.min,
+        end_date=as_of_date,
+        base_path=base_path,
+    )
+    result: dict[str, PointInTimeFundamental] = {}
+    for symbol, frame in frames.items():
+        if frame.empty:
+            continue
+        row = frame.iloc[-1]
+        result[symbol] = PointInTimeFundamental(
+            symbol=symbol,
+            fiscal_period_end=str(row["fiscal_period_end"]),
+            filing_available_date=str(row["filing_available_date"]),
+            filing_accession_number=str(row["filing_accession_number"]),
+            filing_form=str(row["filing_form"]),
+            filing_source=str(row["filing_source"]),
+            gross_margin=float(row["gross_margin"]),
+            operating_margin=float(row["operating_margin"]),
+            net_margin=float(row["net_margin"]),
+            current_ratio=float(row["current_ratio"]),
+            debt_to_equity=float(row["debt_to_equity"]),
+        )
+    return result

@@ -91,8 +91,7 @@ def build_current_forecasts(
     elif forecaster_type == "patchtst":
         forecaster = _get_patchtst_forecaster()
     else:
-        logger.warning(f"[Forecasts] Unknown forecaster type: {forecaster_type}")
-        return dict.fromkeys(symbols, 0.0)
+        raise ValueError(f"Unknown forecaster type: {forecaster_type}")
 
     return forecaster.build_forecasts(symbols, as_of_date)
 
