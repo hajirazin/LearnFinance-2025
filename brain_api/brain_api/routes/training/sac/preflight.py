@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from brain_api.core.config import resolve_training_window
-from brain_api.core.fundamentals import load_historical_fundamentals_from_cache
+from brain_api.core.fundamentals import (
+    FundamentalsCacheError,
+    load_historical_fundamentals_from_cache,
+)
+from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, UnknownBucketError, get_bucket
-from brain_api.core.portfolio_rl.data_loading import load_historical_news_sentiment
+from brain_api.core.news_sentiment import NewsObservationError
+from brain_api.core.portfolio_rl.data_loading import (
+    align_signals_to_weekly,
+    load_historical_news_sentiment,
+)
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
+from brain_api.core.sac.trade_clock import (
+    build_sac_weekly_trade_clock,
+    extract_session_open_prices,
+)
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.policy import (
     StoragePolicyError,
@@ -52,7 +64,7 @@ def _required_snapshot_cutoffs(start_date: date, end_date: date) -> list[date]:
 def assess_sac_training_readiness(
     universe: str, *, force: bool = False
 ) -> SACTrainingReadiness:
-    """Inspect local evidence and snapshot availability without training."""
+    """Validate the same strict price and signal inputs consumed by training."""
     bucket = get_bucket(ModelType.SAC, universe)
     symbols = bucket.symbols_resolver()
     if not force:
@@ -69,13 +81,57 @@ def assess_sac_training_readiness(
     start_date, end_date = resolve_training_window()
     missing: list[SACReadinessIssue] = []
     errors: list[SACReadinessIssue] = []
+    trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
+    weekly_cutoffs = trade_clock.transition_actor_cutoffs
+
+    try:
+        prices = load_prices_yfinance(symbols, start_date, end_date)
+    except Exception as exc:
+        prices = {}
+        errors.append(SACReadinessIssue("prices", str(exc), retryable=True))
 
     for symbol in symbols:
+        price_frame = prices.get(symbol)
+        price_ready = price_frame is not None and not price_frame.empty
+        if not price_ready:
+            missing.append(
+                SACReadinessIssue(
+                    "prices",
+                    f"Missing daily price history for {symbol}",
+                    symbol=symbol,
+                    retryable=True,
+                )
+            )
+        else:
+            try:
+                extract_session_open_prices(
+                    price_frame,
+                    trade_clock.rebalance_sessions,
+                    symbol=symbol,
+                )
+            except ValueError as exc:
+                missing.append(
+                    SACReadinessIssue(
+                        "prices",
+                        str(exc),
+                        symbol=symbol,
+                        retryable=True,
+                    )
+                )
+                price_ready = False
+
+        news = None
         try:
-            load_historical_news_sentiment(
-                [symbol], start_date=start_date, end_date=end_date
+            news = load_historical_news_sentiment(
+                [symbol],
+                start_date=weekly_cutoffs[0].date() - timedelta(days=6),
+                end_date=weekly_cutoffs[-1].date(),
             )
         except FileNotFoundError as exc:
+            missing.append(
+                SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
+            )
+        except NewsObservationError as exc:
             missing.append(
                 SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
             )
@@ -84,6 +140,7 @@ def assess_sac_training_readiness(
                 SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
             )
 
+        fundamentals = None
         try:
             fundamentals = load_historical_fundamentals_from_cache(
                 [symbol], start_date=date.min, end_date=end_date
@@ -97,12 +154,62 @@ def assess_sac_training_readiness(
                         retryable=True,
                     )
                 )
+                fundamentals = None
+        except FundamentalsCacheError as exc:
+            errors.append(
+                SACReadinessIssue(
+                    "fundamentals", str(exc), symbol=symbol, retryable=False
+                )
+            )
         except Exception as exc:
             errors.append(
                 SACReadinessIssue(
-                    "fundamentals", str(exc), symbol=symbol, retryable=True
+                    "fundamentals", str(exc), symbol=symbol, retryable=False
                 )
             )
+
+        if (
+            price_ready
+            and news is not None
+            and fundamentals is not None
+            and symbol in fundamentals
+        ):
+            fundamental_frame = fundamentals[symbol]
+            first_available = fundamental_frame.index.min()
+            first_cutoff = weekly_cutoffs.min()
+            if first_available > first_cutoff:
+                missing.append(
+                    SACReadinessIssue(
+                        "fundamentals",
+                        (
+                            "No filing was available before every SAC training "
+                            f"cutoff for {symbol}"
+                        ),
+                        symbol=symbol,
+                        retryable=True,
+                    )
+                )
+                continue
+            try:
+                align_signals_to_weekly(
+                    {symbol: price_frame},
+                    news,
+                    fundamentals,
+                    [symbol],
+                    weekly_cutoffs=weekly_cutoffs,
+                )
+            except NewsObservationError as exc:
+                missing.append(
+                    SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
+                )
+            except ValueError as exc:
+                issue = SACReadinessIssue(
+                    "fundamentals",
+                    str(exc),
+                    symbol=symbol,
+                    retryable="missing columns" not in str(exc).lower(),
+                )
+                (missing if issue.retryable else errors).append(issue)
 
     for forecaster_type in ("lstm", "patchtst"):
         storage = SnapshotLocalStorage(forecaster_type)

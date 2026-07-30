@@ -31,6 +31,7 @@ from brain_api.core.fundamentals.index import FundamentalsIndex
 
 # Loader (shared by all consumers)
 from brain_api.core.fundamentals.loader import (
+    FundamentalsCacheError,
     get_default_data_path,
     load_historical_fundamentals_from_cache,
     load_point_in_time_fundamentals,
@@ -62,6 +63,7 @@ __all__ = [
     "AlphaVantageClient",
     "FetchRecord",
     "FundamentalRatios",
+    "FundamentalsCacheError",
     # Fetcher
     "FundamentalsFetcher",
     # Index

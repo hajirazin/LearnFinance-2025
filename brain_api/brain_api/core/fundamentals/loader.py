@@ -21,6 +21,10 @@ from brain_api.core.fundamentals.parser import (
 from brain_api.core.fundamentals.storage import load_raw_response
 
 
+class FundamentalsCacheError(RuntimeError):
+    """Raised when cached fundamentals exist but cannot be parsed safely."""
+
+
 def get_default_data_path() -> Path:
     """Get the default data path for brain_api."""
     return Path(__file__).parent.parent.parent.parent / "data"
@@ -155,9 +159,10 @@ def load_historical_fundamentals_from_cache(
                 df = pd.DataFrame(rows).set_index("date").sort_index()
                 fundamentals[symbol] = df
 
-        except Exception as e:
-            print(f"[Fundamentals] Error loading fundamentals for {symbol}: {e}")
-            continue
+        except (AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
+            raise FundamentalsCacheError(
+                f"Malformed fundamentals cache for {symbol}: {exc}"
+            ) from exc
 
     return fundamentals
 

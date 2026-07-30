@@ -13,7 +13,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from brain_api.core.fundamentals.loader import load_historical_fundamentals_from_cache
+from brain_api.core.fundamentals.loader import (
+    FundamentalsCacheError,
+    load_historical_fundamentals_from_cache,
+)
 
 # ============================================================================
 # Sample data for tests
@@ -265,3 +268,20 @@ class TestLoadHistoricalFundamentalsFromCache:
 
         # AAPL should not be in result (no data in range)
         assert "AAPL" not in result
+
+    def test_corrupt_cache_raises_diagnostic_error(self, temp_data_path: Path) -> None:
+        """Malformed cached evidence must not look like absent fundamentals."""
+        cache_dir = temp_data_path / "raw" / "fundamentals" / "AAPL"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "income_statement.json").write_text("{invalid json")
+
+        with pytest.raises(
+            FundamentalsCacheError,
+            match="Malformed fundamentals cache for AAPL",
+        ):
+            load_historical_fundamentals_from_cache(
+                symbols=["AAPL"],
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 12, 31),
+                base_path=temp_data_path,
+            )

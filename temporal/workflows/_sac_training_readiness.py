@@ -32,6 +32,17 @@ async def await_sac_training_readiness(
         )
         if readiness.ready:
             return readiness, latest_refresh, attempt
+        non_retryable_issues = [
+            issue
+            for issue in [*readiness.missing, *readiness.errors]
+            if not issue.retryable
+        ]
+        if non_retryable_issues:
+            issues = [issue.model_dump(mode="json") for issue in non_retryable_issues]
+            raise ApplicationError(
+                f"SAC training readiness has non-retryable issues: {issues}",
+                non_retryable=True,
+            )
         if attempt == READINESS_RETRY_DAYS:
             issues = [
                 issue.model_dump(mode="json")

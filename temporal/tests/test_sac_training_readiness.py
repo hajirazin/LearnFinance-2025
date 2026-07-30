@@ -103,3 +103,59 @@ async def test_readiness_deadline_surfaces_exact_issues_after_seven_days():
 
     assert calls == {"preflight": 7, "refresh": 6}
     assert "SEC filing availability unresolved" in str(exc_info.value.cause)
+
+
+@workflow.defn(sandboxed=False)
+class _NonRetryableReadinessWorkflow:
+    @workflow.run
+    async def run(self):
+        return await await_sac_training_readiness("halal_filtered", force=True)
+
+
+@pytest.mark.asyncio
+async def test_non_retryable_readiness_error_fails_without_refresh_or_sleep():
+    calls = {"preflight": 0, "refresh": 0}
+
+    @activity.defn(name="preflight_sac_training")
+    def mock_preflight(universe: str, force: bool = False):
+        calls["preflight"] += 1
+        return SACTrainingReadiness(
+            universe=universe,
+            symbols=["AAPL"],
+            ready=False,
+            errors=[
+                SACReadinessIssue(
+                    source="fundamentals",
+                    symbol="AAPL",
+                    detail="Malformed fundamentals cache",
+                    retryable=False,
+                )
+            ],
+        )
+
+    @activity.defn(name="refresh_training_data")
+    def mock_refresh(universe: str):
+        calls["refresh"] += 1
+        raise AssertionError("non-retryable readiness must not refresh")
+
+    async with (
+        await WorkflowEnvironment.start_time_skipping(
+            data_converter=pydantic_data_converter
+        ) as env,
+        Worker(
+            env.client,
+            task_queue="test-non-retryable-readiness",
+            workflows=[_NonRetryableReadinessWorkflow],
+            activities=[mock_preflight, mock_refresh],
+            activity_executor=ThreadPoolExecutor(),
+        ),
+    ):
+        with pytest.raises(WorkflowFailureError) as exc_info:
+            await env.client.execute_workflow(
+                _NonRetryableReadinessWorkflow.run,
+                id="test-non-retryable-readiness",
+                task_queue="test-non-retryable-readiness",
+            )
+
+    assert calls == {"preflight": 1, "refresh": 0}
+    assert "Malformed fundamentals cache" in str(exc_info.value.cause)
