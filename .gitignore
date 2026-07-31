@@ -226,3 +226,7 @@ _bmad
 _bmad-output
 .cline
 .zencoder
+.bmad-loop/runs/
+.bmad-loop/cache/
+.bmad-loop/policy.toml
+.claude
