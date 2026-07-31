@@ -217,3 +217,12 @@ data/
 
 scripts/output
 .DS_Store
+
+.opencode
+.github
+.agent
+.agents
+_bmad
+_bmad-output
+.cline
+.zencoder
