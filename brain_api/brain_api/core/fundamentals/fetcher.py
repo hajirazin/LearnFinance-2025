@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -31,11 +32,129 @@ from brain_api.core.fundamentals.sec_filings import (
     enrich_statement_periods_with_filing_availability,
 )
 from brain_api.core.fundamentals.sec_statements import (
+    SAC_BALANCE_FIELDS,
+    SAC_INCOME_FIELDS,
     CompanyFactsClient,
     SECStatementError,
     build_statement_payloads_from_companyfacts,
 )
 from brain_api.core.fundamentals.storage import load_raw_response, save_raw_response
+
+logger = logging.getLogger(__name__)
+
+
+def _field_present(report: dict[str, Any], field: str) -> bool:
+    raw = report.get(field)
+    if raw is None:
+        return False
+    text = str(raw).strip()
+    return text not in ("", "None", "nan")
+
+
+def _stamp_av_field_sources(
+    payload: dict[str, Any], fields: tuple[str, ...]
+) -> dict[str, Any]:
+    """Copy payload marking every SAC field as alpha_vantage (named demotion)."""
+    out = dict(payload)
+    reports = []
+    for report in payload.get("quarterlyReports") or []:
+        if not isinstance(report, dict):
+            continue
+        row = dict(report)
+        sources = {f: "alpha_vantage" for f in fields if _field_present(row, f)}
+        row["fieldSource"] = sources
+        reports.append(row)
+    out["quarterlyReports"] = reports
+    out["provider"] = "sec_companyfacts+alpha_vantage"
+    return out
+
+
+def merge_sec_av_field_gaps(
+    sec_payload: dict[str, Any] | None,
+    av_payload: dict[str, Any],
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    """Merge AV into SEC quarterly rows: SEC wins per field; AV fills gaps only.
+
+    When SEC has no usable quarterly rows, the result is AV with fieldSource
+    stamps (named demotion). When SEC is complete for all fields on a period,
+    that period is unchanged and AV is not used for those fields.
+    """
+    if not _has_quarterly_reports(sec_payload):
+        return _stamp_av_field_sources(av_payload, fields)
+
+    assert sec_payload is not None
+    sec_by_end: dict[str, dict[str, Any]] = {}
+    for report in sec_payload.get("quarterlyReports") or []:
+        if isinstance(report, dict) and report.get("fiscalDateEnding"):
+            sec_by_end[str(report["fiscalDateEnding"])] = dict(report)
+
+    av_by_end: dict[str, dict[str, Any]] = {}
+    for report in av_payload.get("quarterlyReports") or []:
+        if isinstance(report, dict) and report.get("fiscalDateEnding"):
+            av_by_end[str(report["fiscalDateEnding"])] = report
+
+    used_av = False
+    merged_reports: list[dict[str, Any]] = []
+    for end in sorted(set(sec_by_end) | set(av_by_end), reverse=True):
+        sec_row = sec_by_end.get(end)
+        av_row = av_by_end.get(end)
+        if sec_row is None and av_row is not None:
+            row = dict(av_row)
+            row["fieldSource"] = {
+                f: "alpha_vantage" for f in fields if _field_present(row, f)
+            }
+            used_av = True
+            merged_reports.append(row)
+            continue
+        if sec_row is None:
+            continue
+        row = dict(sec_row)
+        sources = dict(row.get("fieldSource") or {})
+        for field in fields:
+            if _field_present(row, field):
+                sources.setdefault(field, "sec_companyfacts")
+                continue
+            if av_row is not None and _field_present(av_row, field):
+                row[field] = av_row[field]
+                sources[field] = "alpha_vantage"
+                used_av = True
+        # Only keep periods that have all required fields after merge
+        if all(_field_present(row, f) for f in fields):
+            row["fieldSource"] = sources
+            merged_reports.append(row)
+
+    if not merged_reports:
+        raise FundamentalsProviderError(
+            "Neither SEC nor Alpha Vantage could supply complete quarterly "
+            f"rows for fields {fields}"
+        )
+
+    out = dict(sec_payload)
+    out["quarterlyReports"] = merged_reports
+    if used_av:
+        out["provider"] = "sec_companyfacts+alpha_vantage"
+    return out
+
+
+def sec_payloads_need_av_fill(
+    income: dict[str, Any] | None, balance: dict[str, Any] | None
+) -> bool:
+    """True when SEC did not yield complete usable income+balance quarters."""
+    if not _has_quarterly_reports(income) or not _has_quarterly_reports(balance):
+        return True
+    assert income is not None and balance is not None
+    for report in income["quarterlyReports"]:
+        if not isinstance(report, dict):
+            return True
+        if not all(_field_present(report, f) for f in SAC_INCOME_FIELDS):
+            return True
+    for report in balance["quarterlyReports"]:
+        if not isinstance(report, dict):
+            return True
+        if not all(_field_present(report, f) for f in SAC_BALANCE_FIELDS):
+            return True
+    return False
 
 
 def _response_payload(wrapped: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -290,7 +409,11 @@ class FundamentalsFetcher:
 
     def _pull_sec(
         self, symbol: str, *, expected_head: FilingHead | None
-    ) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    ) -> tuple[dict[str, Any], dict[str, Any], bool, int]:
+        """Pull CompanyFacts; named AV field/period fill only when SEC gaps remain.
+
+        Returns (income, balance, pulled_newer, av_api_calls).
+        """
         if self.eligibility_client is None or self.companyfacts_client is None:
             raise FundamentalsConfigurationError(
                 "SEC_USER_AGENT is required for SEC CompanyFacts pulls"
@@ -301,13 +424,29 @@ class FundamentalsFetcher:
                 f"{symbol} is not SEC-eligible for CompanyFacts pull"
             )
         facts = self.companyfacts_client.fetch_companyfacts(eligibility.cik)
+        income: dict[str, Any] | None = None
+        balance: dict[str, Any] | None = None
         try:
             income, balance = build_statement_payloads_from_companyfacts(
                 facts, symbol=symbol, cik=eligibility.cik
             )
-        except SECStatementError as exc:
-            raise FundamentalsProviderError(str(exc)) from exc
+        except SECStatementError:
+            income, balance = None, None
 
+        av_api_calls = 0
+        if sec_payloads_need_av_fill(income, balance):
+            av_income, av_balance = self._pull_av_atomic(symbol)
+            av_api_calls = 2
+            income = merge_sec_av_field_gaps(income, av_income, SAC_INCOME_FIELDS)
+            balance = merge_sec_av_field_gaps(balance, av_balance, SAC_BALANCE_FIELDS)
+            logger.warning(
+                "SEC→AV named demotion for %s: provider=%s/%s",
+                symbol,
+                income.get("provider"),
+                balance.get("provider"),
+            )
+
+        assert income is not None and balance is not None
         pulled_newer = True
         if expected_head is not None:
             heads = _cache_provenance_heads(income) | _cache_provenance_heads(balance)
@@ -315,7 +454,7 @@ class FundamentalsFetcher:
                 expected_head.filing_date,
                 expected_head.accession_number,
             ) in heads or any(d > expected_head.filing_date for d, _a in heads)
-        return income, balance, pulled_newer
+        return income, balance, pulled_newer, av_api_calls
 
     def _pull_av_atomic(self, symbol: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """Fetch both AV statements; raise without writing if either fails."""
@@ -403,9 +542,10 @@ class FundamentalsFetcher:
         else:
             # PULL
             if sec_eligible:
-                income, balance, pulled_newer = self._pull_sec(
+                income, balance, pulled_newer, av_calls = self._pull_sec(
                     symbol, expected_head=expected_head
                 )
+                api_calls_made = av_calls
                 if expected_head is not None and not pulled_newer:
                     self._mark_pending(symbol)
                     # Keep prior cache; surface via pending set for refresh result

@@ -17,7 +17,6 @@ from brain_api.core.fundamentals.sec_rate_limit import (
     wait_for_sec_slot,
 )
 from brain_api.core.fundamentals.sec_statements import (
-    SECStatementError,
     resolve_debt_points,
 )
 from brain_api.core.fundamentals.storage import save_raw_response
@@ -77,7 +76,7 @@ def test_debt_composed_sum_when_combined_absent() -> None:
     assert resolved["2024-06-30"].value == 25.0
 
 
-def test_debt_fail_loud_when_current_without_noncurrent() -> None:
+def test_debt_fallthrough_to_d_when_c_absent() -> None:
     facts = _facts_for_tags(
         {
             "ShortTermBorrowings": 3.0,
@@ -85,12 +84,31 @@ def test_debt_fail_loud_when_current_without_noncurrent() -> None:
             "LongTermDebt": 40.0,
         }
     )
-    with pytest.raises(SECStatementError, match="LongTermDebtNoncurrent"):
-        resolve_debt_points(facts)
+    resolved = resolve_debt_points(facts)
+    assert resolved["2024-06-30"].value == 40.0
 
 
-def test_debt_fail_loud_mixed_period_does_not_suppress() -> None:
-    """One incomplete composed period must fail the whole debt resolve."""
+def test_debt_fallthrough_to_c_when_current_without_noncurrent() -> None:
+    facts = _facts_for_tags(
+        {
+            "ShortTermBorrowings": 3.0,
+            "LongTermDebtCurrent": 1.0,
+            "LongTermDebtAndCapitalLeaseObligations": 40.0,
+            "LongTermDebt": 99.0,
+        }
+    )
+    resolved = resolve_debt_points(facts)
+    assert resolved["2024-06-30"].value == 40.0
+
+
+def test_debt_noncurrent_only_uses_noncurrent() -> None:
+    facts = _facts_for_tags({"LongTermDebtNoncurrent": 20.0})
+    resolved = resolve_debt_points(facts)
+    assert resolved["2024-06-30"].value == 20.0
+
+
+def test_debt_period_skip_keeps_resolvable_ends() -> None:
+    """Incomplete composed period is skipped; resolvable peers remain."""
     facts = {
         "facts": {
             "us-gaap": {
@@ -130,15 +148,21 @@ def test_debt_fail_loud_mixed_period_does_not_suppress() -> None:
                                 "fy": 2024,
                                 "fp": "Q1",
                             }
-                            # Q2 missing noncurrent → fail loud, do not keep Q1 only
+                            # Q2 missing noncurrent and no C/D → skip Q2
                         ]
                     }
                 },
             }
         }
     }
-    with pytest.raises(SECStatementError, match="LongTermDebtNoncurrent"):
-        resolve_debt_points(facts)
+    resolved = resolve_debt_points(facts)
+    assert "2024-03-31" in resolved
+    assert resolved["2024-03-31"].value == 25.0
+    assert "2024-06-30" not in resolved
+
+
+def test_debt_zero_mode_empty_when_no_tags() -> None:
+    assert resolve_debt_points({"facts": {"us-gaap": {}}}) == {}
 
 
 def test_shared_throttle_blocks_second_client(monkeypatch) -> None:

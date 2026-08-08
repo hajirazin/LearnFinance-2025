@@ -41,12 +41,40 @@ TAG_CHAINS: dict[str, tuple[str, ...]] = {
         "DebtCurrent",
         "ShortTermBorrowings",
         "LongTermDebtCurrent",
+        "CommercialPaper",
+        "NotesPayableCurrent",
+        "ConvertibleDebtCurrent",
         "LongTermDebtNoncurrent",
+        "ConvertibleDebtNoncurrent",
+        "LongTermNotesPayable",
+        "OtherLongTermDebtNoncurrent",
         "LongTermDebtAndCapitalLeaseObligations",
         "LongTermDebt",
     ),
     "totalShareholderEquity": ("StockholdersEquity",),
 }
+
+DEBT_CURRENT_TAGS = (
+    "DebtCurrent",
+    "ShortTermBorrowings",
+    "LongTermDebtCurrent",
+    "CommercialPaper",
+    "NotesPayableCurrent",
+    "ConvertibleDebtCurrent",
+)
+DEBT_NONCURRENT_TAGS = (
+    "LongTermDebtNoncurrent",
+    "ConvertibleDebtNoncurrent",
+    "LongTermNotesPayable",
+    "OtherLongTermDebtNoncurrent",
+)
+GROSS_PROFIT_COST_TAGS = (
+    "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization",
+    "CostOfServicesExcludingDepreciationDepletionAndAmortization",
+    "CostOfGoodsAndServicesSold",
+    "CostOfRevenue",
+    "CostOfGoodsSold",
+)
 
 FLOW_FIELDS = frozenset(SAC_INCOME_FIELDS)
 INSTANT_FIELDS = frozenset(SAC_BALANCE_FIELDS)
@@ -254,45 +282,87 @@ def _pick_flow_quarterly(points: list[_FactPoint]) -> dict[str, _FactPoint]:
     return result
 
 
+def _sum_tag_values(
+    tags: dict[str, _FactPoint], names: tuple[str, ...]
+) -> tuple[float, _FactPoint] | None:
+    """Sum present tags from ``names``; return (total, provenance) or None."""
+    present = [tags[n] for n in names if n in tags]
+    if not present:
+        return None
+    total = sum(p.value for p in present)
+    provenance = max(present, key=lambda p: (p.filed, p.accession))
+    return total, provenance
+
+
+def _compose_current_leg(
+    tags: dict[str, _FactPoint],
+) -> tuple[float, _FactPoint] | None:
+    """Resolve current-leg debt value (first-match within expanded current set)."""
+    if "DebtCurrent" in tags:
+        return tags["DebtCurrent"].value, tags["DebtCurrent"]
+    has_st = "ShortTermBorrowings" in tags
+    has_ltd_current = "LongTermDebtCurrent" in tags
+    if has_st and has_ltd_current:
+        st = tags["ShortTermBorrowings"]
+        ltdc = tags["LongTermDebtCurrent"]
+        provenance = ltdc if ltdc.filed > st.filed else st
+        return st.value + ltdc.value, provenance
+    if has_ltd_current:
+        return tags["LongTermDebtCurrent"].value, tags["LongTermDebtCurrent"]
+    if has_st:
+        return tags["ShortTermBorrowings"].value, tags["ShortTermBorrowings"]
+    # Remaining expanded current tags (CommercialPaper, NotesPayable, Convertible)
+    extras = (
+        "CommercialPaper",
+        "NotesPayableCurrent",
+        "ConvertibleDebtCurrent",
+    )
+    return _sum_tag_values(tags, extras)
+
+
+def _compose_noncurrent_leg(
+    tags: dict[str, _FactPoint],
+) -> tuple[float, _FactPoint] | None:
+    """Resolve noncurrent-leg debt (prefer LongTermDebtNoncurrent, else expanded)."""
+    if "LongTermDebtNoncurrent" in tags:
+        return tags["LongTermDebtNoncurrent"].value, tags["LongTermDebtNoncurrent"]
+    return _sum_tag_values(
+        tags,
+        (
+            "ConvertibleDebtNoncurrent",
+            "LongTermNotesPayable",
+            "OtherLongTermDebtNoncurrent",
+        ),
+    )
+
+
 def _compose_debt_point(
     *,
     end: str,
     tags: dict[str, _FactPoint],
 ) -> _FactPoint:
-    """Resolve total debt for one period end (first-match, fail-loud)."""
+    """Resolve total debt for one period end (first-match).
+
+    B is entered only when both current and noncurrent legs resolve; incomplete B
+    falls through to C then D (does not hard-fail). Noncurrent-only uses noncurrent
+    as total. Unresolvable ends raise so the caller can period-skip.
+    """
     if "DebtLongtermAndShorttermCombinedAmount" in tags:
         return tags["DebtLongtermAndShorttermCombinedAmount"]
 
-    has_st = "ShortTermBorrowings" in tags
-    has_debt_current = "DebtCurrent" in tags
-    has_ltd_current = "LongTermDebtCurrent" in tags
-    has_noncurrent = "LongTermDebtNoncurrent" in tags
+    current = _compose_current_leg(tags)
+    noncurrent = _compose_noncurrent_leg(tags)
 
-    if has_debt_current or has_st or has_ltd_current:
-        if not has_noncurrent:
-            raise SECStatementError(
-                f"composed debt missing LongTermDebtNoncurrent for end {end}"
-            )
-        if has_debt_current:
-            current = tags["DebtCurrent"]
-            current_val = current.value
-        elif has_st and has_ltd_current:
-            current = tags["ShortTermBorrowings"]
-            ltdc = tags["LongTermDebtCurrent"]
-            current_val = current.value + ltdc.value
-            if ltdc.filed > current.filed:
-                current = ltdc
-        elif has_ltd_current and not has_st:
-            current = tags["LongTermDebtCurrent"]
-            current_val = current.value
-        else:
-            raise SECStatementError(f"composed debt missing current leg for end {end}")
-        noncurrent = tags["LongTermDebtNoncurrent"]
-        provenance = current if current.filed >= noncurrent.filed else noncurrent
+    if current is not None and noncurrent is not None:
+        current_val, current_pt = current
+        noncurrent_val, noncurrent_pt = noncurrent
+        provenance = (
+            current_pt if current_pt.filed >= noncurrent_pt.filed else noncurrent_pt
+        )
         return _FactPoint(
             end=end,
             start=None,
-            value=current_val + noncurrent.value,
+            value=current_val + noncurrent_val,
             filed=provenance.filed,
             form=provenance.form,
             accession=provenance.accession,
@@ -300,6 +370,21 @@ def _compose_debt_point(
             fp=provenance.fp,
         )
 
+    if current is None and noncurrent is not None:
+        # Implicit current = 0
+        _val, provenance = noncurrent
+        return _FactPoint(
+            end=end,
+            start=None,
+            value=_val,
+            filed=provenance.filed,
+            form=provenance.form,
+            accession=provenance.accession,
+            fy=provenance.fy,
+            fp=provenance.fp,
+        )
+
+    # Incomplete B (current without noncurrent) or no legs → try C then D
     if "LongTermDebtAndCapitalLeaseObligations" in tags:
         return tags["LongTermDebtAndCapitalLeaseObligations"]
     if "LongTermDebt" in tags:
@@ -308,13 +393,15 @@ def _compose_debt_point(
 
 
 def resolve_debt_points(facts: dict[str, Any]) -> dict[str, _FactPoint]:
-    """First-match total-debt mapping for shortLongTermDebtTotal (no merge-all)."""
+    """First-match total-debt mapping; skip unresolvable period ends.
+
+    Empty dict means zero-debt mode (no interest-bearing tags for the CIK) —
+    callers fill ``0`` on otherwise-complete balance rows.
+    """
     tag_names = (
         "DebtLongtermAndShorttermCombinedAmount",
-        "DebtCurrent",
-        "ShortTermBorrowings",
-        "LongTermDebtCurrent",
-        "LongTermDebtNoncurrent",
+        *DEBT_CURRENT_TAGS,
+        *DEBT_NONCURRENT_TAGS,
         "LongTermDebtAndCapitalLeaseObligations",
         "LongTermDebt",
     )
@@ -329,23 +416,86 @@ def resolve_debt_points(facts: dict[str, Any]) -> dict[str, _FactPoint]:
         ends |= set(by_end)
 
     if not ends:
-        raise SECStatementError(
-            "No CompanyFacts USD points for field shortLongTermDebtTotal"
-        )
+        return {}
 
     resolved: dict[str, _FactPoint] = {}
     for end in ends:
         tags_here = {
             tag: by_end[end] for tag, by_end in by_tag.items() if end in by_end
         }
-        # Fail loud on incomplete composed legs — do not skip the period
-        resolved[end] = _compose_debt_point(end=end, tags=tags_here)
+        try:
+            resolved[end] = _compose_debt_point(end=end, tags=tags_here)
+        except SECStatementError:
+            continue
     return resolved
+
+
+def _resolve_gross_profit_points(facts: dict[str, Any]) -> dict[str, _FactPoint]:
+    """GrossProfit tag first; else revenue - first-match cost tag (YTD->quarter)."""
+    direct: list[_FactPoint] = []
+    for tag in TAG_CHAINS["grossProfit"]:
+        direct.extend(_extract_tag_points(facts, tag))
+    if direct:
+        return _pick_flow_quarterly(direct)
+
+    rev_merged: list[_FactPoint] = []
+    for tag in TAG_CHAINS["totalRevenue"]:
+        rev_merged.extend(_extract_tag_points(facts, tag))
+    if not rev_merged:
+        raise SECStatementError("No CompanyFacts USD points for field grossProfit")
+    rev_by_end = _pick_flow_quarterly(rev_merged)
+
+    cost_by_end: dict[str, _FactPoint] | None = None
+    for cost_tag in GROSS_PROFIT_COST_TAGS:
+        cost_pts = _extract_tag_points(facts, cost_tag)
+        if not cost_pts:
+            continue
+        cost_by_end = _pick_flow_quarterly(cost_pts)
+        if cost_by_end:
+            break
+    if not cost_by_end:
+        raise SECStatementError("No CompanyFacts USD points for field grossProfit")
+
+    derived: dict[str, _FactPoint] = {}
+    for end, rev_pt in rev_by_end.items():
+        if end.startswith("annual:"):
+            cost_pt = cost_by_end.get(end)
+            if cost_pt is None:
+                continue
+            derived[end] = _FactPoint(
+                end=rev_pt.end,
+                start=rev_pt.start,
+                value=rev_pt.value - cost_pt.value,
+                filed=max(rev_pt.filed, cost_pt.filed),
+                form=rev_pt.form,
+                accession=rev_pt.accession,
+                fy=rev_pt.fy,
+                fp=rev_pt.fp,
+            )
+            continue
+        cost_pt = cost_by_end.get(end)
+        if cost_pt is None:
+            continue
+        derived[end] = _FactPoint(
+            end=end,
+            start=rev_pt.start,
+            value=rev_pt.value - cost_pt.value,
+            filed=max(rev_pt.filed, cost_pt.filed),
+            form=rev_pt.form,
+            accession=rev_pt.accession,
+            fy=rev_pt.fy,
+            fp=rev_pt.fp,
+        )
+    if not derived:
+        raise SECStatementError("No CompanyFacts USD points for field grossProfit")
+    return derived
 
 
 def _resolve_field_points(facts: dict[str, Any], field: str) -> dict[str, _FactPoint]:
     if field == "shortLongTermDebtTotal":
         return resolve_debt_points(facts)
+    if field == "grossProfit":
+        return _resolve_gross_profit_points(facts)
     merged: list[_FactPoint] = []
     for tag in TAG_CHAINS[field]:
         merged.extend(_extract_tag_points(facts, tag))
@@ -363,6 +513,7 @@ def _period_report(
     *,
     cik: str,
     currency: str = "USD",
+    field_source: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
         "fiscalDateEnding": end,
@@ -376,6 +527,8 @@ def _period_report(
         ),
     }
     report.update({k: str(v) for k, v in values.items()})
+    if field_source:
+        report["fieldSource"] = dict(field_source)
     return report
 
 
@@ -387,7 +540,14 @@ def build_statement_payloads_from_companyfacts(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return (income_statement, balance_sheet) AV-shaped provider payloads."""
     income_points = {f: _resolve_field_points(facts, f) for f in SAC_INCOME_FIELDS}
-    balance_points = {f: _resolve_field_points(facts, f) for f in SAC_BALANCE_FIELDS}
+    balance_points = {
+        f: _resolve_field_points(facts, f)
+        for f in SAC_BALANCE_FIELDS
+        if f != "shortLongTermDebtTotal"
+    }
+    debt_points = resolve_debt_points(facts)
+    zero_debt = not debt_points
+    balance_points["shortLongTermDebtTotal"] = debt_points
 
     # Quarterly income: intersection of ends that look like quarters (not annual:)
     income_ends = set()
@@ -397,9 +557,11 @@ def build_statement_payloads_from_companyfacts(
         raise SECStatementError(f"No quarterly income periods for {symbol}")
 
     quarterly_income: list[dict[str, Any]] = []
+    gross_profit_derived = not _extract_tag_points(facts, "GrossProfit")
     for end in sorted(income_ends, reverse=True):
         values: dict[str, float] = {}
         provenance: _FactPoint | None = None
+        field_source: dict[str, str] = {}
         missing = False
         for field in SAC_INCOME_FIELDS:
             point = income_points[field].get(end)
@@ -407,36 +569,56 @@ def build_statement_payloads_from_companyfacts(
                 missing = True
                 break
             values[field] = point.value
+            if field == "grossProfit" and gross_profit_derived:
+                field_source[field] = "sec_derived"
+            else:
+                field_source[field] = "sec_companyfacts"
             if provenance is None or point.filed > provenance.filed:
                 provenance = point
         if missing or provenance is None:
             continue
-        quarterly_income.append(_period_report(end, values, provenance, cik=cik))
+        quarterly_income.append(
+            _period_report(end, values, provenance, cik=cik, field_source=field_source)
+        )
 
     if not quarterly_income:
         raise SECStatementError(
             f"Could not build complete quarterly income rows for {symbol}"
         )
 
-    balance_ends = set()
-    for by_end in balance_points.values():
+    balance_ends: set[str] = set()
+    for field, by_end in balance_points.items():
+        if field == "shortLongTermDebtTotal" and zero_debt:
+            continue
         balance_ends |= set(by_end)
+
     quarterly_balance: list[dict[str, Any]] = []
     for end in sorted(balance_ends, reverse=True):
         values = {}
         provenance = None
+        field_source = {}
         missing = False
         for field in SAC_BALANCE_FIELDS:
+            if field == "shortLongTermDebtTotal" and zero_debt:
+                values[field] = 0.0
+                field_source[field] = "sec_zero_debt"
+                continue
             point = balance_points[field].get(end)
             if point is None:
                 missing = True
                 break
             values[field] = point.value
+            field_source[field] = "sec_companyfacts"
             if provenance is None or point.filed > provenance.filed:
                 provenance = point
         if missing or provenance is None:
             continue
-        quarterly_balance.append(_period_report(end, values, provenance, cik=cik))
+        if zero_debt:
+            # provenance from another balance field already set
+            pass
+        quarterly_balance.append(
+            _period_report(end, values, provenance, cik=cik, field_source=field_source)
+        )
 
     if not quarterly_balance:
         raise SECStatementError(
