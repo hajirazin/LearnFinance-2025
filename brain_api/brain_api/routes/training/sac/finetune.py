@@ -237,7 +237,6 @@ def _run_sac_finetune(
                     "news_sentiment": np.zeros(min_weeks - 1),
                     "gross_margin": np.zeros(min_weeks - 1),
                     "operating_margin": np.zeros(min_weeks - 1),
-                    "net_margin": np.zeros(min_weeks - 1),
                     "current_ratio": np.zeros(min_weeks - 1),
                     "debt_to_equity": np.zeros(min_weeks - 1),
                     "fundamental_age": np.ones(min_weeks - 1),

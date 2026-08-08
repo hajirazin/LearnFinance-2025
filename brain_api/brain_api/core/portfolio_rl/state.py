@@ -55,7 +55,7 @@ class StateSchema:
     2. Per-stock PatchTST forecast return (n_stocks * 1)
     3. Current portfolio weights (n_stocks + 1 for CASH)
 
-    For n_stocks=15: 15*8 + 15*1 + 16 = 151.
+    For n_stocks=15: 15*7 + 15*1 + 16 = 136.
     """
 
     n_stocks: int = 15

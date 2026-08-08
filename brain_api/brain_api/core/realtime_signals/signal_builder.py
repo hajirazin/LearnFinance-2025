@@ -23,7 +23,6 @@ class RealTimeSignalBuilder:
         "news_sentiment",
         "gross_margin",
         "operating_margin",
-        "net_margin",
         "current_ratio",
         "debt_to_equity",
         "fundamental_age",
@@ -129,7 +128,6 @@ class RealTimeSignalBuilder:
                 if ratios:
                     signals[symbol]["gross_margin"] = ratios.gross_margin or 0.0
                     signals[symbol]["operating_margin"] = ratios.operating_margin or 0.0
-                    signals[symbol]["net_margin"] = ratios.net_margin or 0.0
                     signals[symbol]["current_ratio"] = ratios.current_ratio or 0.0
                     signals[symbol]["debt_to_equity"] = ratios.debt_to_equity or 0.0
                     # fundamental_age stays 0 for current data

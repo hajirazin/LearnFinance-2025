@@ -77,6 +77,7 @@ def test_confirmed_zero_news_is_neutral_with_zero_coverage():
     assert bundle["signals"]["AAPL"]["news_sentiment"] == 0.0
     assert bundle["signals"]["AAPL"]["news_coverage"] == 0.0
     assert bundle["signals"]["AAPL"]["fundamental_age"] == 6.0
+    assert "net_margin" not in bundle["signals"]["AAPL"]
     assert "lstm_forecasts" not in bundle
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
 

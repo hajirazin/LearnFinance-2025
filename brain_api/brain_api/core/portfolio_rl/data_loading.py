@@ -200,7 +200,6 @@ def align_signals_to_weekly(
         ratio_columns = [
             "gross_margin",
             "operating_margin",
-            "net_margin",
             "current_ratio",
             "debt_to_equity",
         ]

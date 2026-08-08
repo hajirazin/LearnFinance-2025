@@ -36,7 +36,6 @@ def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
             "news_coverage": 0.5,
             "gross_margin": 0.4,
             "operating_margin": 0.3,
-            "net_margin": 0.2,
             "current_ratio": 1.5,
             "debt_to_equity": 0.4,
             "fundamental_age": 12.0,
@@ -50,8 +49,8 @@ def test_state_schema_dimension_and_strict_construction() -> None:
     state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
     assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
-    assert StateSchema(n_stocks=15).state_dim == 151
-    assert state.shape == (11,)
+    assert StateSchema(n_stocks=15).state_dim == 136
+    assert state.shape == (10,)
     assert state[1] == pytest.approx(0.5)
 
 

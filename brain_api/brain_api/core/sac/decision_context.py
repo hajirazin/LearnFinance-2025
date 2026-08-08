@@ -17,7 +17,6 @@ SAC_SIGNAL_NAMES = (
     "news_coverage",
     "gross_margin",
     "operating_margin",
-    "net_margin",
     "current_ratio",
     "debt_to_equity",
     "fundamental_age",

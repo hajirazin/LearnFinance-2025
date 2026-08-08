@@ -91,9 +91,6 @@ def build_sac_feature_bundle(
                 ratios.operating_margin,
                 field=f"fundamentals[{symbol}].operating_margin",
             ),
-            "net_margin": _required_finite(
-                ratios.net_margin, field=f"fundamentals[{symbol}].net_margin"
-            ),
             "current_ratio": _required_finite(
                 ratios.current_ratio, field=f"fundamentals[{symbol}].current_ratio"
             ),

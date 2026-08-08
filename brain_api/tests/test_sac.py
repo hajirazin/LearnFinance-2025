@@ -83,7 +83,6 @@ _MOCK_SIGNAL_KEYS: tuple[str, ...] = (
     "news_coverage",
     "gross_margin",
     "operating_margin",
-    "net_margin",
     "current_ratio",
     "debt_to_equity",
     "fundamental_age",
@@ -104,7 +103,6 @@ def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
             "news_coverage": 1.0,
             "gross_margin": 0.4,
             "operating_margin": 0.2,
-            "net_margin": 0.15,
             "current_ratio": 1.2,
             "debt_to_equity": 0.5,
             "fundamental_age": 7.0,
@@ -185,8 +183,8 @@ def create_mock_training_result(
             number of stocks or the available price data.
     """
     n_stocks = config.n_stocks
-    # State dim: signals (8 per stock, incl. news_coverage) + PatchTST (1) + weights
-    state_dim = n_stocks * 8 + n_stocks * 1 + (n_stocks + 1)
+    # State dim: signals (7 per stock) + PatchTST (1) + weights
+    state_dim = n_stocks * 7 + n_stocks * 1 + (n_stocks + 1)
     action_dim = n_stocks + 1
 
     actor = GaussianActor(
@@ -511,7 +509,6 @@ _RL_SIGNAL_KEYS: tuple[str, ...] = (
     "news_coverage",
     "gross_margin",
     "operating_margin",
-    "net_margin",
     "current_ratio",
     "debt_to_equity",
     "fundamental_age",

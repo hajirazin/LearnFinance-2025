@@ -252,7 +252,7 @@ Invariants:
 
 SAC consumes a flat state vector composed of **per-stock features** and **portfolio-level features**. Source of truth: `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
 
-**Per-stock features (9 per stock, x `n_stocks`):**
+**Per-stock features (8 per stock, x `n_stocks`):**
 
 | Feature | Source |
 |---------|--------|
@@ -260,7 +260,6 @@ SAC consumes a flat state vector composed of **per-stock features** and **portfo
 | News coverage | `/signals/news` (article count scaled to [0, 1]) |
 | Gross margin | `/signals/fundamentals` |
 | Operating margin | `/signals/fundamentals` |
-| Net margin | `/signals/fundamentals` |
 | Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
 | Fundamental data age | Days since last fundamentals update |
@@ -273,13 +272,13 @@ SAC consumes a flat state vector composed of **per-stock features** and **portfo
 | Current weight per stock | Portfolio state |
 | Current cash weight (CASH slot) | Portfolio state |
 
-For `n_stocks = 15` -> `state_dim = 15*8 + 15*1 + 16 = 151`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
+For `n_stocks = 15` -> `state_dim = 15*7 + 15*1 + 16 = 136`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
 - **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
 - **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
-- **SAC** = RL allocator that receives the 9-per-stock features (8 signals + PatchTST forecast) plus portfolio weights, US only
+- **SAC** = RL allocator that receives the 8-per-stock features (7 signals + PatchTST forecast) plus portfolio weights, US only
 
 ## Data storage rules
 
