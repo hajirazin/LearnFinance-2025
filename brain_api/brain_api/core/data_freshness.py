@@ -11,7 +11,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,10 +28,21 @@ from brain_api.etl.gap_fill import GapFillResult, fill_sentiment_gaps
 
 logger = logging.getLogger(__name__)
 
+PENDING_AGE_ESCALATE_DAYS = 14
+
 
 def get_default_data_path() -> Path:
     """Get the default data path for brain_api."""
     return Path(__file__).parent.parent.parent / "data"
+
+
+@dataclass(frozen=True)
+class PendingFilingInfo:
+    """Ops visibility for a symbol stuck waiting on a newer filing head."""
+
+    symbol: str
+    first_pending_at: str
+    age_days: int
 
 
 @dataclass
@@ -41,9 +52,30 @@ class FundamentalsRefreshResult:
     refreshed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
-    pending_new_filing: list[str] = field(default_factory=list)
+    pending_new_filing: list[PendingFilingInfo] = field(default_factory=list)
     errors: dict[str, str] = field(default_factory=dict)
     api_status: dict[str, Any] = field(default_factory=dict)
+
+
+def _pending_info(fetcher: FundamentalsFetcher, symbol: str) -> PendingFilingInfo:
+    first = fetcher.index.get_pending_new_filing(symbol)
+    if first is None:
+        first = datetime.now(UTC).isoformat()
+        fetcher.index.mark_pending_new_filing(symbol, first_pending_at=first)
+    age_days = (date.today() - date.fromisoformat(str(first)[:10])).days
+    if age_days >= PENDING_AGE_ESCALATE_DAYS:
+        logger.warning(
+            "[RefreshFundamentals] pending_new_filing age_days=%s for %s "
+            "(first_pending_at=%s)",
+            age_days,
+            symbol,
+            first,
+        )
+    return PendingFilingInfo(
+        symbol=symbol.upper(),
+        first_pending_at=str(first),
+        age_days=age_days,
+    )
 
 
 @dataclass
@@ -145,7 +177,7 @@ def refresh_stale_fundamentals(
             try:
                 fetcher.fetch_symbol(symbol, force_refresh=False)
                 if symbol.upper() in fetcher._pending_new_filing:
-                    result.pending_new_filing.append(symbol)
+                    result.pending_new_filing.append(_pending_info(fetcher, symbol))
                 else:
                     result.refreshed.append(symbol)
                 logger.info(f"[RefreshFundamentals] Enriched {symbol}")
@@ -160,7 +192,7 @@ def refresh_stale_fundamentals(
             try:
                 fetcher.fetch_symbol(symbol, force_refresh=force_refresh)
                 if symbol.upper() in fetcher._pending_new_filing:
-                    result.pending_new_filing.append(symbol)
+                    result.pending_new_filing.append(_pending_info(fetcher, symbol))
                     result.skipped.append(symbol)
                 else:
                     result.refreshed.append(symbol)
@@ -183,7 +215,7 @@ def refresh_stale_fundamentals(
             try:
                 fetcher.fetch_symbol(symbol, force_refresh=force_refresh)
                 if symbol.upper() in fetcher._pending_new_filing:
-                    result.pending_new_filing.append(symbol)
+                    result.pending_new_filing.append(_pending_info(fetcher, symbol))
                     if symbol not in result.skipped:
                         result.skipped.append(symbol)
                 else:

@@ -68,7 +68,7 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
 | `ALPACA_API_SECRET` | Alpaca News API secret | None |
 | `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key (for non-SEC-eligible historical fundamentals) | None |
-| `SEC_USER_AGENT` | Required SEC fair-access identity for eligibility, CompanyFacts pulls, filing-head freshness, and AV period enrichment. Set an application name and contact email, such as `LearnFinance you@example.com`. | None |
+| `SEC_USER_AGENT` | Required for **every** historical fundamentals refresh pass (eligibility, CompanyFacts, filing-head freshness, and AV period enrichment). Set an application name and contact email, such as `LearnFinance you@example.com`. | None |
 | `LSTM_TRAIN_LOOKBACK_YEARS` | Years of historical data for training | `15` |
 | `LSTM_TRAIN_WINDOW_END_DATE` | Override training window end date (YYYY-MM-DD) | Today |
 

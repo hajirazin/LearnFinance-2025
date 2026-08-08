@@ -37,6 +37,7 @@ from brain_api.routes.signals.models import (
     HistoricalNewsSentimentResponse,
     NewsSignalRequest,
     NewsSignalResponse,
+    PendingFilingResponse,
     RatiosResponse,
     RefreshFundamentalsRequest,
     RefreshFundamentalsResponse,
@@ -264,6 +265,14 @@ def refresh_fundamentals(
         refreshed=result.refreshed,
         skipped=result.skipped,
         failed=result.failed,
+        pending_new_filing=[
+            PendingFilingResponse(
+                symbol=p.symbol,
+                first_pending_at=p.first_pending_at,
+                age_days=p.age_days,
+            )
+            for p in result.pending_new_filing
+        ],
         api_status=ApiStatusResponse(
             calls_today=result.api_status.get("calls_today", 0),
             daily_limit=result.api_status.get("daily_limit", 25),

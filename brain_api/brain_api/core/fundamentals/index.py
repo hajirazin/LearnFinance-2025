@@ -55,6 +55,14 @@ class FundamentalsIndex:
             )
         """)
 
+        # Pending new filing: head newer than provider data
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_new_filing (
+                symbol TEXT NOT NULL PRIMARY KEY,
+                first_pending_at TEXT NOT NULL
+            )
+        """)
+
         self._conn.commit()
         return self._conn
 
@@ -166,6 +174,44 @@ class FundamentalsIndex:
         conn.commit()
 
         return self.get_api_calls_today()
+
+    def mark_pending_new_filing(
+        self, symbol: str, *, first_pending_at: str | None = None
+    ) -> str:
+        """Persist first_pending_at for a symbol (idempotent keep-earliest)."""
+        conn = self._ensure_connected()
+        now = first_pending_at or datetime.now(UTC).isoformat()
+        existing = self.get_pending_new_filing(symbol)
+        if existing is not None:
+            return existing
+        conn.execute(
+            """
+            INSERT INTO pending_new_filing (symbol, first_pending_at)
+            VALUES (?, ?)
+            """,
+            (symbol.upper(), now),
+        )
+        conn.commit()
+        return now
+
+    def clear_pending_new_filing(self, symbol: str) -> None:
+        """Clear pending state after a successful head-matching pull."""
+        conn = self._ensure_connected()
+        conn.execute(
+            "DELETE FROM pending_new_filing WHERE symbol = ?",
+            (symbol.upper(),),
+        )
+        conn.commit()
+
+    def get_pending_new_filing(self, symbol: str) -> str | None:
+        """Return first_pending_at ISO string or None."""
+        conn = self._ensure_connected()
+        cursor = conn.execute(
+            "SELECT first_pending_at FROM pending_new_filing WHERE symbol = ?",
+            (symbol.upper(),),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
 
     def get_all_fetched_symbols(self) -> list[str]:
         """Get all symbols that have been fetched.

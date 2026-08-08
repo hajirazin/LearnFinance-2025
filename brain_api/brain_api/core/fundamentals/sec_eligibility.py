@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any
 
 import requests
 
 from brain_api.core.fundamentals.sec_filings import SECFilingAvailability
+from brain_api.core.fundamentals.sec_rate_limit import wait_for_sec_slot
 
 PERIODIC_US = frozenset({"10-K", "10-Q", "10-K/A", "10-Q/A"})
 PERIODIC_FPI = frozenset({"20-F", "40-F", "20-F/A", "40-F/A"})
@@ -46,26 +46,17 @@ class SECEligibilityClient:
         self,
         user_agent: str,
         timeout_seconds: float = 30.0,
-        request_delay_seconds: float = 0.12,
         majority_window: int = 8,
     ):
         if not user_agent.strip():
             raise ValueError("SEC user agent must identify the requesting application")
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
-        self.request_delay_seconds = request_delay_seconds
         self.majority_window = majority_window
         self._cik_by_ticker: dict[str, str] | None = None
-        self._last_request_time = 0.0
-
-    def _rate_limit(self) -> None:
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self.request_delay_seconds:
-            time.sleep(self.request_delay_seconds - elapsed)
-        self._last_request_time = time.time()
 
     def _get_json(self, url: str) -> dict[str, Any]:
-        self._rate_limit()
+        wait_for_sec_slot()
         response = requests.get(
             url,
             headers={"User-Agent": self.user_agent, "Accept-Encoding": "gzip"},
@@ -134,7 +125,12 @@ class SECEligibilityClient:
 
     @staticmethod
     def classify_sec_eligible(recent_forms: list[str], *, window: int = 8) -> bool:
-        """Majority pin among last N periodic US vs FPI forms."""
+        """Majority pin among last N periodic US vs FPI forms.
+
+        Thin history uses whatever periodic forms exist (``periodic[:window]``).
+        Empty periodic history → not eligible. A US/FPI tie (``us == fpi``) is
+        SEC-eligible via ``us >= fpi`` (and ``us > 0``).
+        """
         periodic = [f for f in recent_forms if f in PERIODIC_US or f in PERIODIC_FPI]
         windowed = periodic[:window]
         if not windowed:

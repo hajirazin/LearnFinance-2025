@@ -178,6 +178,14 @@ class FundamentalsFetcher:
         )
         self._pending_new_filing: set[str] = set()
 
+    def _mark_pending(self, symbol: str) -> None:
+        self.index.mark_pending_new_filing(symbol)
+        self._pending_new_filing.add(symbol.upper())
+
+    def _clear_pending(self, symbol: str) -> None:
+        self.index.clear_pending_new_filing(symbol)
+        self._pending_new_filing.discard(symbol.upper())
+
     def decide_action_for_symbol(
         self,
         symbol: str,
@@ -399,7 +407,7 @@ class FundamentalsFetcher:
                     symbol, expected_head=expected_head
                 )
                 if expected_head is not None and not pulled_newer:
-                    self._pending_new_filing.add(symbol.upper())
+                    self._mark_pending(symbol)
                     # Keep prior cache; surface via pending set for refresh result
                     income_data = load_raw_response(
                         self.base_path, symbol, "income_statement"
@@ -413,7 +421,7 @@ class FundamentalsFetcher:
                             "returned no matching new period and no prior cache"
                         )
                 else:
-                    self._pending_new_filing.discard(symbol.upper())
+                    self._clear_pending(symbol)
                     payloads = {
                         "income_statement": income,
                         "balance_sheet": balance,
@@ -447,9 +455,9 @@ class FundamentalsFetcher:
                     ) not in heads and not any(
                         d > expected_head.filing_date for d, _a in heads
                     ):
-                        self._pending_new_filing.add(symbol.upper())
+                        self._mark_pending(symbol)
                     else:
-                        self._pending_new_filing.discard(symbol.upper())
+                        self._clear_pending(symbol)
                 self._save_payloads(
                     symbol, to_save, {"income_statement", "balance_sheet"}
                 )

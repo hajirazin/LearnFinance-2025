@@ -238,10 +238,19 @@ class HistoricalFundamentalsResponse(BaseModel):
     data: list[RatiosResponse]
 
 
+class PendingFilingResponse(BaseModel):
+    """Ops visibility for a symbol waiting on a newer SEC filing head."""
+
+    symbol: str
+    first_pending_at: str
+    age_days: int
+
+
 class RefreshFundamentalsResponse(BaseModel):
     """Response model for PUT fundamentals refresh endpoint."""
 
     refreshed: list[str]  # Symbols that were refreshed
     skipped: list[str]  # Fresh vs filing head (or pending_new_filing)
     failed: list[str]  # API / provider errors
+    pending_new_filing: list[PendingFilingResponse] = []
     api_status: ApiStatusResponse

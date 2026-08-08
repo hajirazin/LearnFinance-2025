@@ -97,12 +97,7 @@ razin_decision:
 
 def test_qb_implement_ship_consensus_after_implementation() -> None:
     """Ship party must be after Implementation + post-green, not before coding."""
-    skill = (
-        Path(__file__).resolve().parents[1]
-        / "skills"
-        / "qb-implement"
-        / "SKILL.md"
-    )
+    skill = Path(__file__).resolve().parents[1] / "skills" / "qb-implement" / "SKILL.md"
     text = skill.read_text(encoding="utf-8")
     impl_idx = text.index("### 3. Implementation")
     post_green_idx = text.index("### 4. Post-implement repo-green")

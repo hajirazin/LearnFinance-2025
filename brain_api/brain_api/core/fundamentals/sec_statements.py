@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
 import requests
+
+from brain_api.core.fundamentals.sec_rate_limit import wait_for_sec_slot
 
 SAC_INCOME_FIELDS = (
     "totalRevenue",
@@ -34,10 +35,15 @@ TAG_CHAINS: dict[str, tuple[str, ...]] = {
     "netIncome": ("NetIncomeLoss",),
     "totalCurrentAssets": ("AssetsCurrent",),
     "totalCurrentLiabilities": ("LiabilitiesCurrent",),
+    # Debt uses first-match via resolve_debt_points — chain listed for docs only.
     "shortLongTermDebtTotal": (
-        "LongTermDebt",
         "DebtLongtermAndShorttermCombinedAmount",
+        "DebtCurrent",
+        "ShortTermBorrowings",
+        "LongTermDebtCurrent",
+        "LongTermDebtNoncurrent",
         "LongTermDebtAndCapitalLeaseObligations",
+        "LongTermDebt",
     ),
     "totalShareholderEquity": ("StockholdersEquity",),
 }
@@ -84,24 +90,15 @@ class CompanyFactsClient:
         self,
         user_agent: str,
         timeout_seconds: float = 60.0,
-        request_delay_seconds: float = 0.12,
     ):
         if not user_agent.strip():
             raise ValueError("SEC user agent must identify the requesting application")
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
-        self.request_delay_seconds = request_delay_seconds
-        self._last_request_time = 0.0
-
-    def _rate_limit(self) -> None:
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self.request_delay_seconds:
-            time.sleep(self.request_delay_seconds - elapsed)
-        self._last_request_time = time.time()
 
     def fetch_companyfacts(self, cik: str) -> dict[str, Any]:
         """Download CompanyFacts JSON for a CIK."""
-        self._rate_limit()
+        wait_for_sec_slot()
         url = self._FACTS_URL.format(cik=cik)
         response = requests.get(
             url,
@@ -257,7 +254,98 @@ def _pick_flow_quarterly(points: list[_FactPoint]) -> dict[str, _FactPoint]:
     return result
 
 
+def _compose_debt_point(
+    *,
+    end: str,
+    tags: dict[str, _FactPoint],
+) -> _FactPoint:
+    """Resolve total debt for one period end (first-match, fail-loud)."""
+    if "DebtLongtermAndShorttermCombinedAmount" in tags:
+        return tags["DebtLongtermAndShorttermCombinedAmount"]
+
+    has_st = "ShortTermBorrowings" in tags
+    has_debt_current = "DebtCurrent" in tags
+    has_ltd_current = "LongTermDebtCurrent" in tags
+    has_noncurrent = "LongTermDebtNoncurrent" in tags
+
+    if has_debt_current or has_st or has_ltd_current:
+        if not has_noncurrent:
+            raise SECStatementError(
+                f"composed debt missing LongTermDebtNoncurrent for end {end}"
+            )
+        if has_debt_current:
+            current = tags["DebtCurrent"]
+            current_val = current.value
+        elif has_st and has_ltd_current:
+            current = tags["ShortTermBorrowings"]
+            ltdc = tags["LongTermDebtCurrent"]
+            current_val = current.value + ltdc.value
+            if ltdc.filed > current.filed:
+                current = ltdc
+        elif has_ltd_current and not has_st:
+            current = tags["LongTermDebtCurrent"]
+            current_val = current.value
+        else:
+            raise SECStatementError(f"composed debt missing current leg for end {end}")
+        noncurrent = tags["LongTermDebtNoncurrent"]
+        provenance = current if current.filed >= noncurrent.filed else noncurrent
+        return _FactPoint(
+            end=end,
+            start=None,
+            value=current_val + noncurrent.value,
+            filed=provenance.filed,
+            form=provenance.form,
+            accession=provenance.accession,
+            fy=provenance.fy,
+            fp=provenance.fp,
+        )
+
+    if "LongTermDebtAndCapitalLeaseObligations" in tags:
+        return tags["LongTermDebtAndCapitalLeaseObligations"]
+    if "LongTermDebt" in tags:
+        return tags["LongTermDebt"]
+    raise SECStatementError(f"no debt tags for end {end}")
+
+
+def resolve_debt_points(facts: dict[str, Any]) -> dict[str, _FactPoint]:
+    """First-match total-debt mapping for shortLongTermDebtTotal (no merge-all)."""
+    tag_names = (
+        "DebtLongtermAndShorttermCombinedAmount",
+        "DebtCurrent",
+        "ShortTermBorrowings",
+        "LongTermDebtCurrent",
+        "LongTermDebtNoncurrent",
+        "LongTermDebtAndCapitalLeaseObligations",
+        "LongTermDebt",
+    )
+    by_tag: dict[str, dict[str, _FactPoint]] = {}
+    ends: set[str] = set()
+    for tag in tag_names:
+        points = _extract_tag_points(facts, tag)
+        if not points:
+            continue
+        by_end = _pick_instant_points(points)
+        by_tag[tag] = by_end
+        ends |= set(by_end)
+
+    if not ends:
+        raise SECStatementError(
+            "No CompanyFacts USD points for field shortLongTermDebtTotal"
+        )
+
+    resolved: dict[str, _FactPoint] = {}
+    for end in ends:
+        tags_here = {
+            tag: by_end[end] for tag, by_end in by_tag.items() if end in by_end
+        }
+        # Fail loud on incomplete composed legs — do not skip the period
+        resolved[end] = _compose_debt_point(end=end, tags=tags_here)
+    return resolved
+
+
 def _resolve_field_points(facts: dict[str, Any], field: str) -> dict[str, _FactPoint]:
+    if field == "shortLongTermDebtTotal":
+        return resolve_debt_points(facts)
     merged: list[_FactPoint] = []
     for tag in TAG_CHAINS[field]:
         merged.extend(_extract_tag_points(facts, tag))

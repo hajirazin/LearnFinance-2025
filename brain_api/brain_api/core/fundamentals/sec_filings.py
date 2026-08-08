@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 import requests
 
+from brain_api.core.fundamentals.sec_rate_limit import wait_for_sec_slot
+
 
 @dataclass(frozen=True)
 class SECFilingAvailability:
@@ -42,6 +44,7 @@ class SECFilingAvailabilityClient:
         self._cik_by_ticker: dict[str, str] | None = None
 
     def _get_json(self, url: str) -> dict[str, Any]:
+        wait_for_sec_slot()
         response = requests.get(
             url,
             headers={"User-Agent": self.user_agent, "Accept-Encoding": "gzip"},
