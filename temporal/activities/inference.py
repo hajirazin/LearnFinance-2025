@@ -229,7 +229,6 @@ def infer_sac(
     symbols: list[str],
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
-    lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
 ) -> SACInferenceResponse:
     """Get SAC allocation for the requested SAC bucket.
@@ -244,7 +243,6 @@ def infer_sac(
         as_of_date=as_of_date,
         news=news,
         fundamentals=fundamentals,
-        lstm=lstm,
         patchtst=patchtst,
     )
     logger.info(f"Getting SAC allocation (universe={universe})...")

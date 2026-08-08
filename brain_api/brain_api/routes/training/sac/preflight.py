@@ -223,7 +223,7 @@ def assess_sac_training_readiness(
                 )
                 (missing if issue.retryable else errors).append(issue)
 
-    for forecaster_type in ("lstm", "patchtst"):
+    for forecaster_type in ("patchtst",):
         storage = SnapshotLocalStorage(forecaster_type)
         for cutoff in _required_snapshot_cutoffs(start_date, end_date):
             try:

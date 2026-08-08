@@ -1,7 +1,7 @@
-"""SAC portfolio allocator with dual forecasts (LSTM + PatchTST).
+"""SAC portfolio allocator with PatchTST-only forecasts.
 
-This module provides SAC-based portfolio allocation using both LSTM
-and PatchTST predicted weekly returns as forecast features.
+This module provides SAC-based portfolio allocation using PatchTST
+predicted weekly returns as forecast features.
 """
 
 from brain_api.core.sac.config import (

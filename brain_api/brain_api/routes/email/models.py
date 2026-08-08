@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from brain_api.routes.allocation import HRPAllocationResponse
 from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
-    LSTMInferenceResponse,
     PatchTSTInferenceResponse,
     SACInferenceResponse,
 )
@@ -195,7 +194,6 @@ class SACWeeklyReportEmailRequest(BaseModel):
 
     sac: SACInferenceResponse
 
-    lstm: LSTMInferenceResponse
     patchtst: PatchTSTInferenceResponse
 
     # "Going Into This Week" -- live broker snapshot for US (Alpaca for

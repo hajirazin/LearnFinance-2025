@@ -773,34 +773,6 @@ class TestForecastersTrainingSummaryGuardrails:
 def mock_weekly_summary_request():
     """Valid request payload for weekly summary endpoint."""
     return {
-        "lstm": {
-            "predictions": [
-                {
-                    "symbol": "AAPL",
-                    "predicted_weekly_return_pct": 2.5,
-                    "direction": "UP",
-                    "has_enough_history": True,
-                    "history_days_used": 252,
-                    "data_end_date": "2026-02-03",
-                    "target_week_start": "2026-02-03",
-                    "target_week_end": "2026-02-07",
-                },
-                {
-                    "symbol": "MSFT",
-                    "predicted_weekly_return_pct": 1.8,
-                    "direction": "UP",
-                    "has_enough_history": True,
-                    "history_days_used": 252,
-                    "data_end_date": "2026-02-03",
-                    "target_week_start": "2026-02-03",
-                    "target_week_end": "2026-02-07",
-                },
-            ],
-            "model_version": "v2026-01-15-abc123",
-            "as_of_date": "2026-02-03",
-            "target_week_start": "2026-02-03",
-            "target_week_end": "2026-02-07",
-        },
         "patchtst": {
             "predictions": [
                 {
@@ -873,9 +845,8 @@ def mock_weekly_llm_json_response():
         "para_1_overall_summary": "This week shows bullish momentum across tech stocks.",
         "para_2_sac": "SAC allocator favors AAPL and MSFT with moderate turnover.",
         "para_3_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
-        "para_4_lstm_forecast": "LSTM shows strong bullish signals for AAPL.",
-        "para_5_news_sentiment": "News sentiment is generally positive for holdings.",
-        "para_6_fundamentals": "Fundamentals remain strong with solid margins.",
+        "para_4_news_sentiment": "News sentiment is generally positive for holdings.",
+        "para_5_fundamentals": "Fundamentals remain strong with solid margins.",
     }
 
 

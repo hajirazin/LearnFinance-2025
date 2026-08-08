@@ -49,7 +49,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.inference import (
         get_fundamentals,
-        get_lstm_forecast,
         get_news_sentiment,
         get_patchtst_forecast,
         infer_sac,
@@ -113,8 +112,8 @@ class USWeeklyAllocationWorkflow:
         if not run_sac:
             skipped_algorithms.append("SAC")
 
-        # Phase 1: Get signals + forecasts (parallel)
-        fundamentals, news, lstm, patchtst = await asyncio.gather(
+        # Phase 1: Get signals + PatchTST forecast (parallel)
+        fundamentals, news, patchtst = await asyncio.gather(
             workflow.execute_activity(
                 get_fundamentals,
                 args=[symbols, as_of_date],
@@ -128,12 +127,6 @@ class USWeeklyAllocationWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
             workflow.execute_activity(
-                get_lstm_forecast,
-                args=[as_of_date, symbols],
-                start_to_close_timeout=INFERENCE_TIMEOUT,
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            ),
-            workflow.execute_activity(
                 get_patchtst_forecast,
                 args=[as_of_date, symbols],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
@@ -141,8 +134,8 @@ class USWeeklyAllocationWorkflow:
             ),
         )
 
-        target_week_start = lstm.target_week_start or as_of_date
-        target_week_end = lstm.target_week_end or as_of_date
+        target_week_start = patchtst.target_week_start or as_of_date
+        target_week_end = patchtst.target_week_end or as_of_date
 
         # Phase 2: SAC allocator (skipped if open orders on sac account).
         if run_sac:
@@ -155,7 +148,6 @@ class USWeeklyAllocationWorkflow:
                     symbols,
                     news,
                     fundamentals,
-                    lstm,
                     patchtst,
                 ],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
@@ -215,7 +207,7 @@ class USWeeklyAllocationWorkflow:
         # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[lstm, patchtst, news, fundamentals, sac_alloc, "halal_filtered"],
+            args=[patchtst, news, fundamentals, sac_alloc, "halal_filtered"],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
@@ -233,7 +225,6 @@ class USWeeklyAllocationWorkflow:
             send_weekly_email,
             args=[
                 summary,
-                lstm,
                 patchtst,
                 sac_alloc,
                 sac_submit,

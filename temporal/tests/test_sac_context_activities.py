@@ -8,7 +8,6 @@ from activities.sac_context import build_sac_feature_bundle
 from models import (
     AlpacaPortfolioResponse,
     FundamentalsResponse,
-    LSTMInferenceResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
     SACInferenceResponse,
@@ -49,18 +48,6 @@ def _canonical_inputs():
             }
         ],
     )
-    lstm = LSTMInferenceResponse(
-        predictions=[
-            {
-                "symbol": "AAPL",
-                "predicted_weekly_return_pct": 2.5,
-                "direction": "up",
-                "has_enough_history": True,
-            }
-        ],
-        model_version="lstm-v1",
-        as_of_date="2026-02-05",
-    )
     patchtst = PatchTSTInferenceResponse(
         predictions=[
             {
@@ -73,25 +60,24 @@ def _canonical_inputs():
         model_version="patch-v1",
         as_of_date="2026-02-05",
     )
-    return symbols, news, fundamentals, lstm, patchtst
+    return symbols, news, fundamentals, patchtst
 
 
 def test_confirmed_zero_news_is_neutral_with_zero_coverage():
-    symbols, news, fundamentals, lstm, patchtst = _canonical_inputs()
+    symbols, news, fundamentals, patchtst = _canonical_inputs()
 
     bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date="2026-02-05",
         news=news,
         fundamentals=fundamentals,
-        lstm=lstm,
         patchtst=patchtst,
     )
 
     assert bundle["signals"]["AAPL"]["news_sentiment"] == 0.0
     assert bundle["signals"]["AAPL"]["news_coverage"] == 0.0
     assert bundle["signals"]["AAPL"]["fundamental_age"] == 6.0
-    assert bundle["lstm_forecasts"] == {"AAPL": 0.025}
+    assert "lstm_forecasts" not in bundle
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
 
 
@@ -118,14 +104,14 @@ def test_fundamentals_activity_forwards_decision_date():
     ["missing_fundamentals", "fundamental_error", "missing_forecast"],
 )
 def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
-    symbols, news, fundamentals, lstm, patchtst = _canonical_inputs()
+    symbols, news, fundamentals, patchtst = _canonical_inputs()
     if mutation == "missing_fundamentals":
         fundamentals.per_symbol = []
     elif mutation == "fundamental_error":
         fundamentals.per_symbol[0].ratios = None
         fundamentals.per_symbol[0].error = "provider unavailable"
     else:
-        lstm.predictions = []
+        patchtst.predictions = []
 
     with pytest.raises(ValueError):
         build_sac_feature_bundle(
@@ -133,7 +119,6 @@ def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
             as_of_date="2026-02-05",
             news=news,
             fundamentals=fundamentals,
-            lstm=lstm,
             patchtst=patchtst,
         )
 
@@ -152,9 +137,8 @@ class _InferenceClient(FakeClient):
 
 
 def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
-    symbols, news, fundamentals, lstm, patchtst = _canonical_inputs()
+    symbols, news, fundamentals, patchtst = _canonical_inputs()
     decision_state = {
-        "schema_version": 2,
         "vector": [0.0],
         "context": {"as_of_date": "2026-02-05"},
         "digest": "abc123",
@@ -184,12 +168,12 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
             symbols=symbols,
             news=news,
             fundamentals=fundamentals,
-            lstm=lstm,
             patchtst=patchtst,
         )
 
     payload = fake.calls[0]["json"]
     assert payload["feature_bundle"]["signals"]["AAPL"]["fundamental_age"] == 6.0
+    assert "lstm_forecasts" not in payload["feature_bundle"]
     assert result.decision_state == decision_state
     assert result.state_digest == "abc123"
     assert result.forced_liquidations[0].symbol == "OLD"
@@ -197,7 +181,6 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
 
 def test_store_experience_persists_allocator_state_and_digest_verbatim():
     state = {
-        "schema_version": 2,
         "vector": [1.0, 2.0],
         "context": {"as_of_date": "2026-02-05"},
         "digest": "canonical-digest",

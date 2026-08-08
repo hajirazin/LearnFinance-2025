@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from brain_api.routes.allocation import HRPAllocationResponse
 from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
-    LSTMInferenceResponse,
     PatchTSTInferenceResponse,
     SACInferenceResponse,
 )
@@ -106,7 +105,6 @@ class SACWeeklySummaryRequest(BaseModel):
     correct bucket and the LLM cannot conflate the two runs.
     """
 
-    lstm: LSTMInferenceResponse  # from POST /inference/lstm
     patchtst: PatchTSTInferenceResponse  # from POST /inference/patchtst
     news: NewsSignalResponse  # from POST /signals/news
     fundamentals: FundamentalsResponse  # from POST /signals/fundamentals
@@ -117,7 +115,7 @@ class SACWeeklySummaryRequest(BaseModel):
 class WeeklySummaryResponse(BaseModel):
     """Response model for POST /llm/sac-weekly-summary (and other LLM summary endpoints)."""
 
-    summary: dict[str, str]  # 8 paragraph fields from LLM
+    summary: dict[str, str]  # paragraph fields from LLM
     provider: str  # "openai" or "ollama"
     model_used: str  # e.g., "gpt-5-mini" or "llama3.2"
     tokens_used: int | None  # Total tokens (None for OLLAMA)

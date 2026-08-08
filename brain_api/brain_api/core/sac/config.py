@@ -1,4 +1,4 @@
-"""SAC configuration with dual forecasts (LSTM + PatchTST).
+"""SAC configuration with PatchTST-only forecasts.
 
 Extends the shared SACBaseConfig with training-specific settings.
 """
@@ -11,10 +11,10 @@ from brain_api.core.portfolio_rl.sac_config import SACBaseConfig
 
 @dataclass
 class SACConfig(SACBaseConfig):
-    """Configuration for unified SAC agent with dual forecasts.
+    """Configuration for unified SAC agent with PatchTST-only forecasts.
 
     Inherits all SACBaseConfig settings and adds training-specific ones.
-    The agent receives both LSTM and PatchTST forecasts as input features.
+    The agent receives PatchTST predicted weekly returns as forecast features.
     """
 
     # Training data lookback (years of historical data)

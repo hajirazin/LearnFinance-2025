@@ -1,4 +1,4 @@
-"""SAC inference implementation with dual forecasts (LSTM + PatchTST)."""
+"""SAC inference implementation with PatchTST-only forecasts."""
 
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ class SACInferenceResult:
     model_version: str
     raw_action: np.ndarray
     state_vector: np.ndarray
-    state_schema_version: int
 
 
 def run_sac_inference(
@@ -40,10 +39,8 @@ def run_sac_inference(
     symbol_order: list[str],
     current_weights: np.ndarray,
     signals: dict[str, dict[str, float]],
-    lstm_forecasts: dict[str, float],
     patchtst_forecasts: dict[str, float],
     model_version: str,
-    state_schema_version: int = 1,
 ) -> SACInferenceResult:
     """Run SAC inference to get portfolio allocation.
 
@@ -54,46 +51,35 @@ def run_sac_inference(
         symbol_order: Ordered list of symbols.
         current_weights: Current portfolio weights (including CASH).
         signals: Dict of symbol -> dict of signal values.
-        lstm_forecasts: Dict of symbol -> LSTM forecast value.
         patchtst_forecasts: Dict of symbol -> PatchTST forecast value.
         model_version: Model version string.
 
     Returns:
         Inference result with allocation weights.
     """
-    # Build state vector with dual forecasts
-    schema = StateSchema(
-        n_stocks=len(symbol_order), schema_version=state_schema_version
-    )
+    schema = StateSchema(n_stocks=len(symbol_order))
     state = build_state_vector(
         signals=signals,
-        lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         portfolio_weights=current_weights,
         symbol_order=symbol_order,
         schema=schema,
     )
 
-    # Normalize state
     state_normalized = scaler.transform(state)
 
-    # Get action from actor (deterministic for inference)
     with torch.no_grad():
         action = actor.get_action(state_normalized, deterministic=True)
 
-    # Convert action logits to portfolio weights
     raw_weights = apply_softmax_to_weights(action)
 
-    # Apply constraints
     weights = enforce_constraints(
         raw_weights,
         cash_buffer=config.cash_buffer,
     )
 
-    # Compute turnover
     turnover = compute_turnover(current_weights, weights)
 
-    # Build allocation dict
     allocation = {}
     for i, symbol in enumerate(symbol_order):
         allocation[symbol] = float(weights[i])
@@ -105,5 +91,4 @@ def run_sac_inference(
         model_version=model_version,
         raw_action=action,
         state_vector=state,
-        state_schema_version=state_schema_version,
     )

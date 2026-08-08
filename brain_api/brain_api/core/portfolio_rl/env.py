@@ -62,13 +62,11 @@ class PortfolioEnv:
         self,
         symbol_returns: np.ndarray,
         signals: np.ndarray,
-        lstm_forecasts: np.ndarray,
         patchtst_forecasts: np.ndarray,
         prices: np.ndarray,
         symbol_order: list[str],
         config: RLBaseConfig | None = None,
         cost_config: IBKRSingaporeCostConfig | None = None,
-        schema_version: int = 2,
         max_episode_weeks: int | None = 52,
     ):
         """Initialize environment.
@@ -78,8 +76,6 @@ class PortfolioEnv:
                            Shape: (n_weeks, n_stocks).
             signals: Per-stock signals for each week.
                     Shape: (n_weeks, n_stocks, n_signals_per_stock).
-            lstm_forecasts: LSTM forecast feature for each stock each week.
-                           Shape: (n_weeks, n_stocks).
             patchtst_forecasts: PatchTST forecast feature for each stock each week.
                                Shape: (n_weeks, n_stocks).
             prices: Per-symbol close levels (NOT returns), shape
@@ -95,7 +91,6 @@ class PortfolioEnv:
         """
         self.symbol_returns = symbol_returns
         self.signals = signals
-        self.lstm_forecasts = lstm_forecasts
         self.patchtst_forecasts = patchtst_forecasts
         self.prices = prices
         self.symbol_order = symbol_order
@@ -114,15 +109,12 @@ class PortfolioEnv:
         if not np.all(np.isfinite(prices)) or np.any(prices <= 0):
             raise ValueError("prices must be complete, finite, and positive")
 
-        # New training uses strict v2. Artifact inference selects its schema
-        # explicitly; v1 remains available for already-persisted models.
-        self.schema = StateSchema(n_stocks=self.n_stocks, schema_version=schema_version)
+        self.schema = StateSchema(n_stocks=self.n_stocks)
 
         expected_signals = self.schema.n_signals_per_stock
         expected_shapes = {
             "symbol_returns": (self.n_weeks, self.n_stocks),
             "signals": (self.n_weeks, self.n_stocks, expected_signals),
-            "lstm_forecasts": (self.n_weeks, self.n_stocks),
             "patchtst_forecasts": (self.n_weeks, self.n_stocks),
         }
         for name, expected in expected_shapes.items():
@@ -181,13 +173,6 @@ class PortfolioEnv:
                     week_signals[stock_idx, signal_idx]
                 )
 
-        # Get LSTM forecast features for this week
-        week_lstm = self.lstm_forecasts[week_idx]  # (n_stocks,)
-        lstm_dict = {
-            symbol: float(week_lstm[stock_idx])
-            for stock_idx, symbol in enumerate(self.symbol_order)
-        }
-
         # Get PatchTST forecast features for this week
         week_patchtst = self.patchtst_forecasts[week_idx]  # (n_stocks,)
         patchtst_dict = {
@@ -197,7 +182,6 @@ class PortfolioEnv:
 
         return build_state_vector(
             signals=signals_dict,
-            lstm_forecasts=lstm_dict,
             patchtst_forecasts=patchtst_dict,
             portfolio_weights=self.current_weights,
             symbol_order=self.symbol_order,
@@ -386,7 +370,6 @@ class PortfolioEnv:
 def create_env_from_data(
     prices: dict[str, np.ndarray],
     signals: dict[str, dict[str, np.ndarray]],
-    lstm_forecasts: dict[str, np.ndarray],
     patchtst_forecasts: dict[str, np.ndarray],
     symbol_order: list[str],
     config: RLBaseConfig | None = None,
@@ -400,7 +383,6 @@ def create_env_from_data(
         prices: Dict of symbol -> array of prices (for computing returns
             and for sizing trades against the IBKR-SG cost model).
         signals: Dict of symbol -> dict of signal_name -> array of values.
-        lstm_forecasts: Dict of symbol -> array of LSTM forecast values.
         patchtst_forecasts: Dict of symbol -> array of PatchTST forecast values.
         symbol_order: Ordered list of symbols.
         config: RL configuration.
@@ -414,7 +396,7 @@ def create_env_from_data(
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because we compute returns
     n_stocks = len(symbol_order)
-    schema = StateSchema(n_stocks=n_stocks, schema_version=2)
+    schema = StateSchema(n_stocks=n_stocks)
     n_signals = schema.n_signals_per_stock
 
     # Build returns array + parallel prices array (close at the end of each
@@ -451,14 +433,6 @@ def create_env_from_data(
                 )
             signals_array[:, stock_idx, signal_idx] = signal_values[:n_weeks]
 
-    # Build LSTM forecasts array
-    lstm_array = np.zeros((n_weeks, n_stocks))
-    for stock_idx, symbol in enumerate(symbol_order):
-        if symbol not in lstm_forecasts or len(lstm_forecasts[symbol]) < n_weeks:
-            raise ValueError(f"Missing or short LSTM forecasts for {symbol}")
-        forecast_values = lstm_forecasts[symbol]
-        lstm_array[:, stock_idx] = forecast_values[:n_weeks]
-
     # Build PatchTST forecasts array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
@@ -473,7 +447,6 @@ def create_env_from_data(
     return PortfolioEnv(
         symbol_returns=symbol_returns,
         signals=signals_array,
-        lstm_forecasts=lstm_array,
         patchtst_forecasts=patchtst_array,
         prices=weekly_prices,
         symbol_order=symbol_order,

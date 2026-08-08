@@ -1,4 +1,4 @@
-"""HuggingFace Hub storage for SAC model artifacts (unified with dual forecasts).
+"""HuggingFace Hub storage for SAC model artifacts (PatchTST-only forecasts).
 
 SAC requires storing multiple components (actor, critic, target critic, log_alpha)
 plus the scaler, config, and symbol order. This is more complex than single-model
@@ -451,12 +451,12 @@ tags:
 
 # LearnFinance SAC Model - {version}
 
-Soft Actor-Critic (SAC) portfolio allocation agent using dual forecasts (LSTM + PatchTST) as features.
+Soft Actor-Critic (SAC) portfolio allocation agent using PatchTST forecasts as features.
 
 ## Model Details
 
 - **Version**: {version}
-- **Model Type**: SAC (Soft Actor-Critic) with dual forecasts
+- **Model Type**: SAC (Soft Actor-Critic) with PatchTST-only forecasts
 - **Training Window**: {metadata.get("data_window", {}).get("start", "N/A")} to {metadata.get("data_window", {}).get("end", "N/A")}
 - **Symbols**: {len(symbol_order)} stocks
 

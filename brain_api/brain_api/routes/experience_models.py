@@ -15,10 +15,6 @@ class ExperienceState(BaseModel):
     )
 
     # Forecaster predictions
-    lstm_forecasts: dict[str, float] = Field(
-        default_factory=dict,
-        description="LSTM predicted weekly returns per symbol: {AAPL: 0.012, MSFT: -0.005}",
-    )
     patchtst_forecasts: dict[str, float] = Field(
         default_factory=dict,
         description="PatchTST predicted weekly returns per symbol: {AAPL: 0.015, MSFT: -0.003}",

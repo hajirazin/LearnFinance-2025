@@ -42,7 +42,6 @@ def create_sac_metadata(
     eval_max_drawdown: float,
     bucket_name: str = "sac_halal_filtered",
     failure_reasons: list[str] | None = None,
-    state_schema_version: int = 1,
     training_seed: int | None = None,
     experiment_seeds: list[int] | None = None,
 ) -> dict[str, Any]:
@@ -54,7 +53,6 @@ def create_sac_metadata(
         "data_window": {"start": data_window_start, "end": data_window_end},
         "symbols": symbols,
         "config": config.to_dict(),
-        "state_schema_version": state_schema_version,
         "promoted": promoted,
         "prior_version": prior_version,
         "failure_reasons": list(failure_reasons or []),

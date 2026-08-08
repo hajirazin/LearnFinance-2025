@@ -70,7 +70,7 @@ brain_api/
 ├── core/                    # Pure functions, no FastAPI dependency
 │   ├── lstm/
 │   ├── patchtst/
-│   ├── sac/                 # SAC allocator (dual forecasts: LSTM + PatchTST)
+│   ├── sac/                 # SAC allocator (PatchTST forecast features)
 │   ├── hrp.py
 │   └── ...
 ├── storage/
@@ -117,7 +117,7 @@ temporal/                         # Temporal workflow orchestration
 | `POST /inference/patchtst` | US PatchTST price predictions (symbols from model metadata) |
 | `POST /inference/patchtst/india` | India PatchTST price predictions (loads `patchtst_india` storage) |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST score endpoint (US or India) -- returns `{symbol -> predicted_weekly_return_pct}` and enforces finite-score / `min_predictions` invariants used by Alpha-HRP |
-| `POST /inference/sac` | SAC allocation using dual forecasts (LSTM + PatchTST); `universe` query param is mandatory (`halal_filtered` or `halal`) |
+| `POST /inference/sac` | SAC allocation using PatchTST forecasts in the state vector; `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
 **Orders** (called by Monday run via Temporal after allocations):
@@ -142,7 +142,7 @@ temporal/                         # Temporal workflow orchestration
 | `POST /train/lstm` | Full LSTM retrain |
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
-| `POST /train/sac/full` | Full SAC retrain (dual forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
+| `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
 | `POST /train/sac/finetune` | SAC fine-tune on experience buffer (halal_filtered-only -- see "Operational requirements") |
 
 **Alpaca** (called by Monday run via Temporal for order execution):
@@ -246,7 +246,7 @@ Invariants:
 | Model | Input | Output |
 |-------|-------|--------|
 | HRP | Covariance matrix | Allocation weights |
-| SAC | State vector + dual forecasts (LSTM + PatchTST) | Allocation weights |
+| SAC | State vector + PatchTST forecast features | Allocation weights |
 
 ### Signal state vector (for SAC)
 
@@ -257,13 +257,13 @@ SAC consumes a flat state vector composed of **per-stock features** and **portfo
 | Feature | Source |
 |---------|--------|
 | News sentiment score | `/signals/news` (FinBERT) |
+| News coverage | `/signals/news` (article count scaled to [0, 1]) |
 | Gross margin | `/signals/fundamentals` |
 | Operating margin | `/signals/fundamentals` |
 | Net margin | `/signals/fundamentals` |
 | Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
 | Fundamental data age | Days since last fundamentals update |
-| LSTM predicted weekly return | `/inference/lstm` (US, re-run on the chosen 15) |
 | PatchTST predicted weekly return | `/inference/patchtst` (US, re-run on the chosen 15) |
 
 **Portfolio-level features (`n_stocks + 1`):**
@@ -273,13 +273,13 @@ SAC consumes a flat state vector composed of **per-stock features** and **portfo
 | Current weight per stock | Portfolio state |
 | Current cash weight (CASH slot) | Portfolio state |
 
-For `n_stocks = 15` -> `state_dim = 15*7 + 15*2 + 16 = 151`. Both LSTM and PatchTST run **on the 15-name slate** chosen by `halal_filtered` so that SAC's dual-forecast features cover the same symbols as its action space.
+For `n_stocks = 15` -> `state_dim = 15*8 + 15*1 + 16 = 151`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
 - **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
 - **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
-- **SAC** = RL allocator that receives the 9-per-stock features (including dual LSTM + PatchTST forecasts) plus portfolio weights, US only
+- **SAC** = RL allocator that receives the 9-per-stock features (8 signals + PatchTST forecast) plus portfolio weights, US only
 
 ## Data storage rules
 

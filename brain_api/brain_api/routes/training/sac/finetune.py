@@ -12,7 +12,7 @@ from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
 from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
-from brain_api.core.portfolio_rl.walkforward import build_dual_forecast_features
+from brain_api.core.portfolio_rl.walkforward import build_patchtst_forecast_features
 from brain_api.core.sac import (
     build_training_data as sac_build_training_data,
 )
@@ -244,24 +244,12 @@ def _run_sac_finetune(
                 }
 
         update_progress(job_id, {"phase": "walk_forward_forecasts"})
-        lstm_predictions, patchtst_predictions = build_dual_forecast_features(
+        patchtst_predictions = build_patchtst_forecast_features(
             weekly_prices=weekly_prices,
             weekly_dates=weekly_dates,
             symbols=available_symbols,
             shutdown_event=shutdown_event,
         )
-
-        for symbol in available_symbols:
-            if symbol in lstm_predictions:
-                pred_arr = lstm_predictions[symbol]
-                if len(pred_arr) >= min_weeks - 1:
-                    lstm_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
-                else:
-                    padded = np.zeros(min_weeks - 1)
-                    padded[-len(pred_arr) :] = pred_arr
-                    lstm_predictions[symbol] = padded
-            else:
-                lstm_predictions[symbol] = np.zeros(min_weeks - 1)
 
         for symbol in available_symbols:
             if symbol in patchtst_predictions:
@@ -279,7 +267,6 @@ def _run_sac_finetune(
         training_data = sac_build_training_data(
             weekly_prices,
             signals,
-            lstm_predictions,
             patchtst_predictions,
             available_symbols,
         )

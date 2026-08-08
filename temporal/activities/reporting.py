@@ -8,7 +8,6 @@ from activities.client import get_client
 from models import (
     FundamentalsResponse,
     HRPAllocationResponse,
-    LSTMInferenceResponse,
     NewsSignalResponse,
     OrderDetail,
     PaperAllocationResponse,
@@ -71,7 +70,6 @@ def _submit_to_dict(submit, order_details: list[OrderDetail] | None = None) -> d
 
 @activity.defn
 def generate_summary(
-    lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
@@ -88,7 +86,6 @@ def generate_summary(
         response = client.post(
             "/llm/sac-weekly-summary",
             json={
-                "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),
                 "news": news.model_dump(),
                 "fundamentals": fundamentals.model_dump(),
@@ -105,7 +102,6 @@ def generate_summary(
 @activity.defn
 def send_weekly_email(
     summary: WeeklySummaryResponse,
-    lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
     sac: SACInferenceResponse | SkippedAllocation,
     sac_submit: SubmitOrdersResponse | SkippedSubmitResponse,
@@ -143,7 +139,6 @@ def send_weekly_email(
                 "as_of_date": as_of_date,
                 "universe": universe,
                 "sac": _alloc_to_dict(sac),
-                "lstm": lstm.model_dump(),
                 "patchtst": patchtst.model_dump(),
                 "prior_allocation": (
                     prior_allocation.model_dump()

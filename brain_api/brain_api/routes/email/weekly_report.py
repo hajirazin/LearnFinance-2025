@@ -229,9 +229,9 @@ def send_sac_weekly_report_email(
     """Send a SAC-only weekly portfolio analysis email.
 
     Takes the AI-generated summary, the SAC Alpaca order execution
-    results, the SAC allocation, and forecast predictions (LSTM,
-    PatchTST), renders an HTML email using Jinja2, and sends via Gmail
-    SMTP. HRP weekly reporting runs through ``/email/us-alpha-hrp-report``.
+    results, the SAC allocation, and PatchTST forecast predictions,
+    renders an HTML email using Jinja2, and sends via Gmail SMTP.
+    HRP weekly reporting runs through ``/email/us-alpha-hrp-report``.
 
     Email configuration comes from environment variables:
     - GMAIL_USER: sender address
@@ -257,7 +257,6 @@ def send_sac_weekly_report_email(
             "as_of_date": request.as_of_date,
             "universe": request.universe,
             "sac": request.sac.model_dump(),
-            "lstm": request.lstm.model_dump(),
             "patchtst": request.patchtst.model_dump(),
             "prior_allocation": prior_allocation,
         },

@@ -19,7 +19,6 @@ from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
 from brain_api.core.portfolio_rl.state import (
     StateSchema,
     build_state_vector,
-    build_state_vector_strict_v2,
 )
 from brain_api.core.sac.config import SACConfig
 from brain_api.core.sac.training import (
@@ -30,9 +29,7 @@ from brain_api.core.sac.training import (
 )
 
 
-def _v2_inputs() -> tuple[
-    dict[str, dict[str, float]], dict[str, float], dict[str, float]
-]:
+def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
     signals = {
         "AAA": {
             "news_sentiment": 0.1,
@@ -45,18 +42,16 @@ def _v2_inputs() -> tuple[
             "fundamental_age": 12.0,
         }
     }
-    return signals, {"AAA": 0.02}, {"AAA": 0.03}
+    return signals, {"AAA": 0.03}
 
 
-def test_state_schema_v2_dimension_and_strict_construction() -> None:
-    signals, lstm, patchtst = _v2_inputs()
-    state = build_state_vector_strict_v2(
-        signals, lstm, patchtst, np.array([0.8, 0.2]), ["AAA"]
-    )
+def test_state_schema_dimension_and_strict_construction() -> None:
+    signals, patchtst = _patchtst_inputs()
+    state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
-    assert StateSchema.v2(15).state_dim == 166
-    assert StateSchema.v1(15).state_dim == 151
-    assert state.shape == (12,)
+    assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
+    assert StateSchema(n_stocks=15).state_dim == 151
+    assert state.shape == (11,)
     assert state[1] == pytest.approx(0.5)
 
 
@@ -64,33 +59,27 @@ def test_state_schema_v2_dimension_and_strict_construction() -> None:
     ("missing_from", "expected"),
     [
         ("signal", "news_coverage"),
-        ("lstm", "LSTM"),
         ("patchtst", "PatchTST"),
     ],
 )
-def test_state_schema_v2_never_zero_fills_missing_actor_inputs(
+def test_state_vector_never_zero_fills_missing_actor_inputs(
     missing_from: str, expected: str
 ) -> None:
-    signals, lstm, patchtst = _v2_inputs()
+    signals, patchtst = _patchtst_inputs()
     if missing_from == "signal":
         signals["AAA"].pop("news_coverage")
-    elif missing_from == "lstm":
-        lstm.clear()
     else:
         patchtst.clear()
 
     with pytest.raises(ValueError, match=expected):
-        build_state_vector_strict_v2(
-            signals, lstm, patchtst, np.array([0.8, 0.2]), ["AAA"]
+        build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
+
+
+def test_state_vector_rejects_empty_signals() -> None:
+    with pytest.raises(ValueError, match="Missing required SAC signals"):
+        build_state_vector(
+            {}, {}, np.array([0.0, 1.0]), ["AAA"], StateSchema(n_stocks=1)
         )
-
-
-def test_state_schema_v1_preserves_legacy_zero_fill() -> None:
-    state = build_state_vector(
-        {}, {}, {}, np.array([0.0, 1.0]), ["AAA"], StateSchema.v1(1)
-    )
-    assert np.count_nonzero(state[:-1]) == 0
-    assert state[-1] == 1.0
 
 
 def test_rebalance_transition_uses_exact_net_growth_and_drift() -> None:
@@ -120,8 +109,8 @@ def test_exact_reward_is_log_one_plus_gross_minus_cost() -> None:
     assert reward != pytest.approx((np.log(1.04) - np.log(1.01)) * 100.0)
 
 
-def test_training_data_requires_complete_v2_inputs_and_uses_trade_time_price() -> None:
-    signals, lstm, patchtst = _v2_inputs()
+def test_training_data_requires_complete_inputs_and_uses_trade_time_price() -> None:
+    signals, patchtst = _patchtst_inputs()
     signal_arrays = {
         "AAA": {
             name: np.array([value, value]) for name, value in signals["AAA"].items()
@@ -130,7 +119,6 @@ def test_training_data_requires_complete_v2_inputs_and_uses_trade_time_price() -
     data = build_training_data(
         prices={"AAA": np.array([100.0, 110.0, 99.0])},
         signals=signal_arrays,
-        lstm_predictions={"AAA": np.array([lstm["AAA"], lstm["AAA"]])},
         patchtst_predictions={"AAA": np.array([patchtst["AAA"], patchtst["AAA"]])},
         symbol_order=["AAA"],
     )
@@ -143,7 +131,6 @@ def test_training_data_requires_complete_v2_inputs_and_uses_trade_time_price() -
         build_training_data(
             {"AAA": np.array([100.0, 110.0, 99.0])},
             {"AAA": broken},
-            {"AAA": np.array([0.1, 0.1])},
             {"AAA": np.array([0.1, 0.1])},
             ["AAA"],
         )
@@ -234,14 +221,14 @@ def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> N
 
     class FakeEnv:
         action_dim = 2
-        state_dim = 12
+        state_dim = 11
 
         def reset(self, start_week=None):
             del start_week
-            return np.zeros(12)
+            return np.zeros(11)
 
         def step(self, action):
-            next_state = np.zeros(12)
+            next_state = np.zeros(11)
             next_state[0] = float(np.sum(action))
             return SimpleNamespace(next_state=next_state, done=False)
 
@@ -291,7 +278,6 @@ def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> N
     data = TrainingData(
         symbol_returns=np.zeros((208, 1)),
         signals=np.zeros((208, 1, 8)),
-        lstm_forecasts=np.zeros((208, 1)),
         patchtst_forecasts=np.zeros((208, 1)),
         prices=np.ones((208, 1)),
         symbol_order=["AAA"],

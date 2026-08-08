@@ -553,22 +553,10 @@ def build_dual_forecast_features(
     shutdown_event: threading.Event | None = None,
     target_dates: pd.DatetimeIndex | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Build both LSTM and PatchTST forecast features for RL training.
+    """Build both LSTM and PatchTST forecast features.
 
-    Requires pre-trained snapshots for both LSTM and PatchTST.
-
-    Args:
-        weekly_prices: Dict of symbol -> weekly price array
-        weekly_dates: DatetimeIndex of weekly dates
-        symbols: List of symbols
-        shutdown_event: If set, returns partial results.
-
-    Raises:
-        SnapshotUnavailableError: If any required snapshot is missing.
-        SnapshotInferenceError: If inference fails for any symbol/year.
-
-    Returns:
-        Tuple of (lstm_forecasts, patchtst_forecasts) where each is Dict of symbol -> array
+    Kept for non-SAC callers that still need dual walk-forward series.
+    SAC training uses :func:`build_patchtst_forecast_features` only.
     """
     print("[PortfolioRL] Generating dual walk-forward forecasts (LSTM + PatchTST)...")
 
@@ -592,3 +580,26 @@ def build_dual_forecast_features(
 
     print(f"[PortfolioRL] Generated dual forecasts for {len(lstm_forecasts)} symbols")
     return (lstm_forecasts, patchtst_forecasts)
+
+
+def build_patchtst_forecast_features(
+    weekly_prices: dict[str, np.ndarray],
+    weekly_dates: pd.DatetimeIndex,
+    symbols: list[str],
+    shutdown_event: threading.Event | None = None,
+    target_dates: pd.DatetimeIndex | None = None,
+) -> dict[str, np.ndarray]:
+    """Build PatchTST-only walk-forward forecast features for SAC training."""
+    print("[PortfolioRL] Generating PatchTST walk-forward forecasts for SAC...")
+    patchtst_forecasts = build_forecast_features(
+        weekly_prices,
+        weekly_dates,
+        symbols,
+        forecaster_type="patchtst",
+        shutdown_event=shutdown_event,
+        target_dates=target_dates,
+    )
+    print(
+        f"[PortfolioRL] Generated PatchTST forecasts for {len(patchtst_forecasts)} symbols"
+    )
+    return patchtst_forecasts

@@ -47,7 +47,6 @@ def make_sac_only_activities(
     sac_portfolio,
     fundamentals_resp,
     news_resp,
-    lstm_resp,
     patchtst_resp,
     sac_alloc,
     sac_orders,
@@ -109,7 +108,8 @@ def make_sac_only_activities(
 
     @activity.defn(name="get_lstm_forecast")
     def mock_get_lstm_forecast(as_of_date, symbols=None):
-        return lstm_resp
+        _forbid("get_lstm_forecast")
+        return None
 
     @activity.defn(name="get_patchtst_forecast")
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
@@ -123,7 +123,6 @@ def make_sac_only_activities(
         symbols,
         news,
         fundamentals,
-        lstm,
         patchtst,
     ):
         return sac_alloc
@@ -207,7 +206,7 @@ def make_sac_only_activities(
 
     @activity.defn(name="generate_summary")
     def mock_generate_summary(
-        lstm, patchtst, news, fundamentals, sac, universe
+        patchtst, news, fundamentals, sac, universe
     ) -> WeeklySummaryResponse:
         if summary_calls is not None:
             summary_calls.append(

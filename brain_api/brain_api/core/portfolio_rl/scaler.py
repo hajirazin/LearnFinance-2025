@@ -29,7 +29,7 @@ class PortfolioScaler:
     is_fitted: bool = False
 
     @classmethod
-    def create(cls, n_stocks: int = 15, schema_version: int = 1) -> PortfolioScaler:
+    def create(cls, n_stocks: int = 15) -> PortfolioScaler:
         """Create a new unfitted scaler.
 
         Args:
@@ -40,11 +40,10 @@ class PortfolioScaler:
         """
         from brain_api.core.portfolio_rl.state import StateSchema
 
-        schema = StateSchema(n_stocks=n_stocks, schema_version=schema_version)
-        n_signals_per_stock = schema.n_signals_per_stock
-        n_forecasts_per_stock = 2  # LSTM + PatchTST (dual forecasts)
-        n_forecast_features = n_stocks * n_forecasts_per_stock
-        n_features_to_scale = n_stocks * n_signals_per_stock + n_forecast_features
+        schema = StateSchema(n_stocks=n_stocks)
+        n_features_to_scale = (
+            n_stocks * schema.n_signals_per_stock + schema.n_forecast_features
+        )
         n_portfolio_weights = n_stocks + 1  # +1 for CASH
 
         return cls(

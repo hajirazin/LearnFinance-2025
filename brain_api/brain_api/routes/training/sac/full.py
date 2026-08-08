@@ -15,7 +15,7 @@ from brain_api.core.model_buckets import (
     get_bucket,
 )
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
-from brain_api.core.portfolio_rl.walkforward import build_dual_forecast_features
+from brain_api.core.portfolio_rl.walkforward import build_patchtst_forecast_features
 from brain_api.core.sac import (
     DEFAULT_SAC_CONFIG,
     SAC_EXPERIMENT_SEEDS,
@@ -301,7 +301,7 @@ def _run_sac_full_training(
                 signals[symbol][signal_name] = signal_arr[-(min_weeks - 1) :]
 
         update_progress(job_id, {"phase": "walk_forward_forecasts"})
-        lstm_predictions, patchtst_predictions = build_dual_forecast_features(
+        patchtst_predictions = build_patchtst_forecast_features(
             weekly_prices=weekly_prices,
             weekly_dates=weekly_dates,
             symbols=available_symbols,
@@ -310,27 +310,20 @@ def _run_sac_full_training(
         )
 
         for symbol in available_symbols:
-            for forecast_name, predictions in (
-                ("LSTM", lstm_predictions),
-                ("PatchTST", patchtst_predictions),
-            ):
-                if symbol not in predictions:
-                    raise ValueError(
-                        f"Missing {forecast_name} training forecasts for {symbol}"
-                    )
-                pred_arr = predictions[symbol]
-                if len(pred_arr) < min_weeks - 1:
-                    raise ValueError(
-                        f"{forecast_name} forecasts for {symbol} have "
-                        f"{len(pred_arr)} weeks; need {min_weeks - 1}"
-                    )
-                predictions[symbol] = pred_arr[-(min_weeks - 1) :]
+            if symbol not in patchtst_predictions:
+                raise ValueError(f"Missing PatchTST training forecasts for {symbol}")
+            pred_arr = patchtst_predictions[symbol]
+            if len(pred_arr) < min_weeks - 1:
+                raise ValueError(
+                    f"PatchTST forecasts for {symbol} have "
+                    f"{len(pred_arr)} weeks; need {min_weeks - 1}"
+                )
+            patchtst_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
 
         update_progress(job_id, {"phase": "training"})
         training_data = sac_build_training_data(
             weekly_prices,
             signals,
-            lstm_predictions,
             patchtst_predictions,
             available_symbols,
         )
@@ -391,7 +384,6 @@ def _run_sac_full_training(
                 eval_max_drawdown=candidate_result.eval_max_drawdown,
                 bucket_name=bucket_name,
                 failure_reasons=[],
-                state_schema_version=2,
                 training_seed=candidate.seed,
                 experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
             )
@@ -450,7 +442,6 @@ def _run_sac_full_training(
             eval_max_drawdown=result.eval_max_drawdown,
             bucket_name=bucket_name,
             failure_reasons=health.failure_reasons,
-            state_schema_version=2,
             training_seed=selected_candidate.seed,
             experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
         )

@@ -1,7 +1,7 @@
-"""SAC training implementation with dual forecasts (LSTM + PatchTST).
+"""SAC training implementation with PatchTST-only forecasts.
 
-Trains a SAC policy for portfolio allocation using both LSTM and PatchTST
-predictions as forecast features in the state vector.
+Trains a SAC policy for portfolio allocation using PatchTST
+predictions as the sole forecast features in the state vector.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from brain_api.core.sac.config import SACConfig
 
 @dataclass
 class SACTrainingResult:
-    """Result of SAC training with dual forecasts."""
+    """Result of SAC training with PatchTST-only forecasts."""
 
     actor: GaussianActor  # trained policy
     critic: TwinCritic  # trained critics
@@ -53,12 +53,11 @@ class SACTrainingResult:
 
 @dataclass
 class TrainingData:
-    """Prepared training data for SAC with dual forecasts."""
+    """Prepared training data for SAC with PatchTST-only forecasts."""
 
     # Arrays aligned by week index
     symbol_returns: np.ndarray  # (n_weeks, n_stocks)
     signals: np.ndarray  # (n_weeks, n_stocks, n_signals)
-    lstm_forecasts: np.ndarray  # (n_weeks, n_stocks)
     patchtst_forecasts: np.ndarray  # (n_weeks, n_stocks)
     # Rebalance-time Monday open prices (NOT returns); required by the IBKR-SG
     # cost model in PortfolioEnv.step to convert weight deltas into
@@ -74,7 +73,6 @@ class TrainingData:
 def build_training_data(
     prices: dict[str, np.ndarray],
     signals: dict[str, dict[str, np.ndarray]],
-    lstm_predictions: dict[str, np.ndarray],
     patchtst_predictions: dict[str, np.ndarray],
     symbol_order: list[str],
 ) -> TrainingData:
@@ -83,7 +81,6 @@ def build_training_data(
     Args:
         prices: Dict of symbol -> array of weekly prices.
         signals: Dict of symbol -> dict of signal_name -> array of signal values.
-        lstm_predictions: Dict of symbol -> array of LSTM weekly return predictions.
         patchtst_predictions: Dict of symbol -> array of PatchTST weekly return predictions.
         symbol_order: Ordered list of symbols to include.
 
@@ -100,7 +97,7 @@ def build_training_data(
     first_symbol = symbol_order[0]
     n_weeks = len(prices[first_symbol]) - 1  # -1 because returns need two points
 
-    schema = StateSchema(n_stocks=n_stocks, schema_version=2)
+    schema = StateSchema(n_stocks=n_stocks)
     signal_names = schema.signal_names
     n_signals = len(signal_names)
 
@@ -145,19 +142,6 @@ def build_training_data(
                 )
             signals_array[:, stock_idx, signal_idx] = signal_values
 
-    # Build LSTM forecast features array
-    lstm_array = np.zeros((n_weeks, n_stocks))
-    for stock_idx, symbol in enumerate(symbol_order):
-        if symbol not in lstm_predictions:
-            raise ValueError(f"Missing required LSTM forecasts for {symbol}")
-        lstm_preds = np.asarray(lstm_predictions[symbol], dtype=float)
-        if len(lstm_preds) != n_weeks or not np.all(np.isfinite(lstm_preds)):
-            raise ValueError(
-                f"LSTM forecasts for {symbol} must contain exactly "
-                f"{n_weeks} finite values"
-            )
-        lstm_array[:, stock_idx] = lstm_preds
-
     # Build PatchTST forecast features array
     patchtst_array = np.zeros((n_weeks, n_stocks))
     for stock_idx, symbol in enumerate(symbol_order):
@@ -174,7 +158,6 @@ def build_training_data(
     return TrainingData(
         symbol_returns=symbol_returns,
         signals=signals_array,
-        lstm_forecasts=lstm_array,
         patchtst_forecasts=patchtst_array,
         prices=weekly_prices,
         symbol_order=symbol_order,
@@ -206,19 +189,16 @@ def create_env_from_training_data(
     # Slice data for the specified window
     symbol_returns = training_data.symbol_returns[start_week:end_week]
     signals = training_data.signals[start_week:end_week]
-    lstm_forecasts = training_data.lstm_forecasts[start_week:end_week]
     patchtst_forecasts = training_data.patchtst_forecasts[start_week:end_week]
     prices = training_data.prices[start_week:end_week]
 
     return PortfolioEnv(
         symbol_returns=symbol_returns,
         signals=signals,
-        lstm_forecasts=lstm_forecasts,
         patchtst_forecasts=patchtst_forecasts,
         prices=prices,
         symbol_order=training_data.symbol_order,
         config=config,
-        schema_version=2,
     )
 
 
@@ -227,10 +207,10 @@ def train_sac(
     config: SACConfig,
     shutdown_event: threading.Event | None = None,
 ) -> SACTrainingResult:
-    """Train SAC model with dual forecasts.
+    """Train SAC model with PatchTST-only forecasts.
 
     Args:
-        training_data: Prepared training data with dual forecasts.
+        training_data: Prepared training data with PatchTST forecasts.
         config: SAC configuration.
 
     Returns:
@@ -264,7 +244,7 @@ def train_sac(
     )
 
     # Create and fit scaler on training data
-    scaler = PortfolioScaler.create(n_stocks=training_data.n_stocks, schema_version=2)
+    scaler = PortfolioScaler.create(n_stocks=training_data.n_stocks)
     # Collect sample states for fitting
     sample_states = []
     state = train_env.reset()
@@ -340,7 +320,7 @@ def finetune_sac(
     """Fine-tune SAC model on recent data.
 
     Args:
-        training_data: Recent training data with dual forecasts.
+        training_data: Recent training data with PatchTST forecasts.
         prior_actor: Previously trained actor.
         prior_critic: Previously trained critics.
         prior_critic_target: Previously trained target critics.

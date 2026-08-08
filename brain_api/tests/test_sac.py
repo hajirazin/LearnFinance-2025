@@ -1,4 +1,4 @@
-"""API-level tests for SAC training and inference endpoints (unified with dual forecasts).
+"""API-level tests for SAC training and inference endpoints (PatchTST-only forecasts).
 
 Tests focus on:
 - Endpoint contract (status codes, response structure)
@@ -123,6 +123,17 @@ def _mock_forecasts(symbols, forecaster_type, as_of_date) -> dict[str, float]:
     return dict.fromkeys(symbols, 0.01)
 
 
+def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
+    """Canonical PatchTST-only feature bundle for SAC inference tests."""
+    symbols = symbols if symbols is not None else mock_symbols()
+    return {
+        "symbols": symbols,
+        "signals": _mock_signals(symbols, None),
+        "patchtst_forecasts": _mock_forecasts(symbols, "patchtst", None),
+        "provenance": {"test": True},
+    }
+
+
 def _patch_sac_inference_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the side-effecting signal + forecast helpers used by
     ``/inference/sac``.
@@ -174,11 +185,8 @@ def create_mock_training_result(
             number of stocks or the available price data.
     """
     n_stocks = config.n_stocks
-    # State dim: signals (7 per stock) + forecasts (2 per stock) + weights
-    # LSTM return + PatchTST return = 2 forecast features per stock (no volatility)
-    state_dim = (
-        n_stocks * 7 + n_stocks * 2 + (n_stocks + 1)
-    )  # signals + dual forecasts + weights
+    # State dim: signals (8 per stock, incl. news_coverage) + PatchTST (1) + weights
+    state_dim = n_stocks * 8 + n_stocks * 1 + (n_stocks + 1)
     action_dim = n_stocks + 1
 
     actor = GaussianActor(
@@ -330,6 +338,7 @@ class TestSACLSTMInference:
                         {"symbol": "MSFT", "market_value": 2000.0},
                     ],
                 },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 
@@ -357,6 +366,7 @@ class TestSACLSTMInference:
                         {"symbol": "AAPL", "market_value": 9900.0},
                     ],
                 },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 
@@ -382,15 +392,7 @@ class TestSACLSTMInference:
                         {"symbol": "TSLA", "market_value": 5000.0},
                     ],
                 },
-                "feature_bundle": {
-                    "symbols": mock_symbols(),
-                    "signals": _mock_signals(mock_symbols(), None),
-                    "lstm_forecasts": _mock_forecasts(mock_symbols(), "lstm", None),
-                    "patchtst_forecasts": _mock_forecasts(
-                        mock_symbols(), "patchtst", None
-                    ),
-                    "provenance": {"test": True},
-                },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 
@@ -486,23 +488,22 @@ _TINY_SAC_BASE_CONFIG = SACConfig(
 )
 
 
-def _mock_dual_forecasts(
+def _mock_patchtst_forecasts(
     weekly_prices,
     weekly_dates,
     symbols,
     shutdown_event=None,
     target_dates=None,
 ):
-    """Stand-in for :func:`build_dual_forecast_features` used by the
-    full-training tests so they don't run real walk-forward LSTM +
+    """Stand-in for :func:`build_patchtst_forecast_features` used by the
+    SAC full-training / finetune tests so they don't run real walk-forward
     PatchTST fits on top of mock prices.
 
     Mirrors the pattern already used by
     :func:`TestSACLSTMFinetune.test_finetune_end_date_is_always_friday`.
     """
     n = len(weekly_dates)
-    zeros = {s: np.zeros(n) for s in symbols if s in weekly_prices}
-    return zeros, zeros
+    return {s: np.zeros(n) for s in symbols if s in weekly_prices}
 
 
 _RL_SIGNAL_KEYS: tuple[str, ...] = (
@@ -567,7 +568,7 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
       (``make_sac_config_for_n_stocks`` ``replace(...)``\\s from
       whatever base is bound on the route module, so this is the
       cheapest seam)
-    * ``build_dual_forecast_features`` -> :func:`_mock_dual_forecasts`
+    * ``build_patchtst_forecast_features`` -> :func:`_mock_patchtst_forecasts`
     * ``train_sac`` -> returns :func:`create_mock_training_result`
       with the *resolved* (per-bucket) config so the actor/critic
       shapes match downstream metadata writes.
@@ -590,7 +591,7 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(sac_full_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
     monkeypatch.setattr(
-        sac_full_route, "build_dual_forecast_features", _mock_dual_forecasts
+        sac_full_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
     )
     monkeypatch.setattr(
         sac_full_route, "build_rl_training_signals", _mock_rl_training_signals
@@ -641,7 +642,7 @@ class TestSACLSTMFinetune:
     ):
         """Finetune endpoint always uses Friday-anchored end_date.
 
-        Mocks ``load_prices_yfinance``, ``build_dual_forecast_features``,
+        Mocks ``load_prices_yfinance``, ``build_patchtst_forecast_features``,
         and ``finetune_sac`` on the route module so the real RL loop
         (``SACFinetuneConfig.total_timesteps=2_000`` plus walk-forward
         eval) is replaced by deterministic stubs. The route's
@@ -655,7 +656,7 @@ class TestSACLSTMFinetune:
 
         monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
         monkeypatch.setattr(
-            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
         )
         monkeypatch.setattr(
             sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
@@ -708,7 +709,7 @@ class TestSACLSTMFinetune:
 
         monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
         monkeypatch.setattr(
-            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
         )
         monkeypatch.setattr(
             sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
@@ -761,7 +762,7 @@ class TestSACLSTMFinetune:
 
         monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
         monkeypatch.setattr(
-            sac_ft_route, "build_dual_forecast_features", _mock_dual_forecasts
+            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
         )
         monkeypatch.setattr(
             sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
@@ -1338,7 +1339,7 @@ class TestExperienceList:
 
 
 # ============================================================================
-# State dimension and dual forecast validation tests
+# State dimension and PatchTST forecast validation tests
 # ============================================================================
 
 
@@ -1354,6 +1355,7 @@ class TestStateDimensionValidation:
                     "cash": 10000.0,
                     "positions": [],  # All cash, no positions
                 },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 
@@ -1380,6 +1382,7 @@ class TestStateDimensionValidation:
                         },  # NOT in model
                     ],
                 },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 

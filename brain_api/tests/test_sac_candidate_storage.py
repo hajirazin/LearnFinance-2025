@@ -10,12 +10,13 @@ from brain_api.storage.sac import SACHalalFilteredModelStorage
 
 
 def _artifacts(n_stocks: int = 2):
-    state_dim = 11 * n_stocks + 1
+    # signals (8) + PatchTST (1) + weights (n_stocks + 1) => 10 * n_stocks + 1
+    state_dim = 10 * n_stocks + 1
     action_dim = n_stocks + 1
     actor = GaussianActor(state_dim, action_dim)
     critic = TwinCritic(state_dim, action_dim)
     critic_target = TwinCritic(state_dim, action_dim)
-    scaler = PortfolioScaler.create(n_stocks=n_stocks, schema_version=2)
+    scaler = PortfolioScaler.create(n_stocks=n_stocks)
     scaler.fit(np.zeros((2, state_dim)))
     return actor, critic, critic_target, scaler
 
@@ -38,7 +39,7 @@ def test_candidate_artifacts_are_isolated_and_only_selected_seed_is_promoted(
             scaler,
             DEFAULT_SAC_CONFIG,
             symbols,
-            {"state_schema_version": 2, "training_seed": seed},
+            {"training_seed": seed},
         )
 
     promoted = storage.promote_candidate("v-test", 123)

@@ -494,9 +494,8 @@ def mock_weekly_report_email_request():
             "para_1_overall_summary": "This week shows bullish momentum.",
             "para_2_sac": "SAC allocator favors tech stocks.",
             "para_3_patchtst_forecast": "PatchTST predicts positive returns.",
-            "para_4_lstm_forecast": "LSTM shows bullish signals.",
-            "para_5_news_sentiment": "News sentiment is positive.",
-            "para_6_fundamentals": "Fundamentals remain strong.",
+            "para_4_news_sentiment": "News sentiment is positive.",
+            "para_5_fundamentals": "Fundamentals remain strong.",
         },
         "order_results": {
             "sac": {"orders_submitted": 6, "orders_failed": 1, "skipped": False},
@@ -513,34 +512,6 @@ def mock_weekly_report_email_request():
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
-        },
-        "lstm": {
-            "predictions": [
-                {
-                    "symbol": "AAPL",
-                    "predicted_weekly_return_pct": 2.5,
-                    "direction": "UP",
-                    "has_enough_history": True,
-                    "history_days_used": 252,
-                    "data_end_date": "2026-02-03",
-                    "target_week_start": "2026-02-03",
-                    "target_week_end": "2026-02-07",
-                },
-                {
-                    "symbol": "MSFT",
-                    "predicted_weekly_return_pct": 1.8,
-                    "direction": "UP",
-                    "has_enough_history": True,
-                    "history_days_used": 252,
-                    "data_end_date": "2026-02-03",
-                    "target_week_start": "2026-02-03",
-                    "target_week_end": "2026-02-07",
-                },
-            ],
-            "model_version": "v2026-01-15-lstm001",
-            "as_of_date": "2026-02-03",
-            "target_week_start": "2026-02-03",
-            "target_week_end": "2026-02-07",
         },
         "patchtst": {
             "predictions": [
@@ -948,7 +919,7 @@ class TestSACWeeklyReportEmailEndpoint:
 
         # Check Forecasters section
         assert "Price Forecasts" in body
-        assert "LSTM" in body
+        assert "LSTM" not in body
         assert "PatchTST" in body
 
         # Check footer

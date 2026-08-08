@@ -39,9 +39,9 @@ def generate_sac_weekly_summary(
 ) -> WeeklySummaryResponse:
     """Generate an LLM summary of the SAC-only weekly run.
 
-    Takes forecaster predictions (LSTM, PatchTST), the SAC allocator
-    result, and signals (news, fundamentals), and generates a summary
-    using the configured LLM provider (OpenAI or OLLAMA). HRP weekly
+    Takes PatchTST forecaster predictions, the SAC allocator result,
+    and signals (news, fundamentals), and generates a summary using
+    the configured LLM provider (OpenAI or OLLAMA). HRP weekly
     reporting lives in ``/llm/us-alpha-hrp-summary``.
 
     Does NOT include Alpaca order results - that data is only used in
@@ -52,7 +52,7 @@ def generate_sac_weekly_summary(
         provider: LLM provider (injected via dependency).
 
     Returns:
-        Summary with 6 paragraph fields and metadata.
+        Summary with paragraph fields and metadata.
 
     Raises:
         HTTPException: If template loading or LLM call fails.
@@ -70,7 +70,6 @@ def generate_sac_weekly_summary(
         ) from e
 
     prompt = template.render(
-        lstm=request.lstm.model_dump(),
         patchtst=request.patchtst.model_dump(),
         news=request.news.model_dump(),
         fundamentals=request.fundamentals.model_dump(),

@@ -97,7 +97,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.inference import (
         get_fundamentals,
-        get_lstm_forecast,
         get_news_sentiment,
         get_patchtst_forecast,
         infer_sac,
@@ -171,10 +170,10 @@ class USSACHalalAllocationWorkflow:
         if not run_sac:
             skipped_algorithms.append("SAC")
 
-        # Phase 1: Get signals + forecasts (parallel) on the halal slate.
-        # LSTM and PatchTST are halal_new-trained but are called per-symbol.
-        # Any missing forecast now fails canonical SAC context construction.
-        fundamentals, news, lstm, patchtst = await asyncio.gather(
+        # Phase 1: Get signals + PatchTST forecast (parallel) on the
+        # halal slate. PatchTST is called per-symbol; any missing
+        # forecast fails canonical SAC context construction.
+        fundamentals, news, patchtst = await asyncio.gather(
             workflow.execute_activity(
                 get_fundamentals,
                 args=[symbols, as_of_date],
@@ -188,12 +187,6 @@ class USSACHalalAllocationWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
             workflow.execute_activity(
-                get_lstm_forecast,
-                args=[as_of_date, symbols],
-                start_to_close_timeout=INFERENCE_TIMEOUT,
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            ),
-            workflow.execute_activity(
                 get_patchtst_forecast,
                 args=[as_of_date, symbols],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
@@ -201,8 +194,8 @@ class USSACHalalAllocationWorkflow:
             ),
         )
 
-        target_week_start = lstm.target_week_start or as_of_date
-        target_week_end = lstm.target_week_end or as_of_date
+        target_week_start = patchtst.target_week_start or as_of_date
+        target_week_end = patchtst.target_week_end or as_of_date
 
         # Phase 2: SAC allocator with universe='halal'.
         if run_sac:
@@ -215,7 +208,6 @@ class USSACHalalAllocationWorkflow:
                     symbols,
                     news,
                     fundamentals,
-                    lstm,
                     patchtst,
                 ],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
@@ -290,7 +282,7 @@ class USSACHalalAllocationWorkflow:
         # Phase 6: Generate summary + send email tagged universe='halal'.
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[lstm, patchtst, news, fundamentals, sac_alloc, UNIVERSE],
+            args=[patchtst, news, fundamentals, sac_alloc, UNIVERSE],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 
@@ -309,7 +301,6 @@ class USSACHalalAllocationWorkflow:
             send_weekly_email,
             args=[
                 summary,
-                lstm,
                 patchtst,
                 sac_alloc,
                 sac_submit,

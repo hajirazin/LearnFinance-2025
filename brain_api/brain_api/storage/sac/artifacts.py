@@ -21,4 +21,3 @@ class SACArtifacts:
     log_alpha: torch.Tensor
     symbol_order: list[str]
     version: str
-    state_schema_version: int = 1

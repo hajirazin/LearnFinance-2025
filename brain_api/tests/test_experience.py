@@ -41,22 +41,25 @@ def sample_full_state():
         "signals": {
             "AAPL": {
                 "news_sentiment": 0.3,
+                "news_coverage": 1.0,
                 "gross_margin": 0.42,
                 "operating_margin": 0.30,
                 "net_margin": 0.25,
                 "current_ratio": 1.5,
                 "debt_to_equity": 0.8,
+                "fundamental_age": 7.0,
             },
             "MSFT": {
                 "news_sentiment": 0.5,
+                "news_coverage": 0.67,
                 "gross_margin": 0.68,
                 "operating_margin": 0.42,
                 "net_margin": 0.36,
                 "current_ratio": 2.1,
                 "debt_to_equity": 0.4,
+                "fundamental_age": 14.0,
             },
         },
-        "lstm_forecasts": {"AAPL": 0.012, "MSFT": -0.005},
         "patchtst_forecasts": {"AAPL": 0.015, "MSFT": -0.003},
         "current_weights": {"AAPL": 0.10, "MSFT": 0.08, "CASH": 0.82},
     }
@@ -134,7 +137,7 @@ class TestExperienceFullStateSAC:
     ):
         from brain_api.routes.experience import get_experience_storage
 
-        state = {"schema_version": 2, "vector": [0.1, 0.9], "digest": "abc123"}
+        state = {"vector": [0.1, 0.9], "digest": "abc123"}
         body = {
             "run_id": "paper:2026-05-04",
             "week_start": "2026-05-04",
@@ -201,10 +204,10 @@ class TestExperienceFullStateSAC:
             assert "MSFT" in state["signals"]
             assert "operating_margin" in state["signals"]["MSFT"]
 
-    def test_sac_state_includes_both_forecasts(
+    def test_sac_state_includes_patchtst_forecasts(
         self, temp_storage, sample_full_state, sample_intended_action
     ):
-        """Test that stored SAC state includes both LSTM and PatchTST forecasts."""
+        """Test that stored SAC state includes PatchTST forecasts only."""
         record = ExperienceRecord(
             run_id="paper:2026-01-20:sac",
             week_start="2026-01-20",
@@ -220,7 +223,7 @@ class TestExperienceFullStateSAC:
 
         state = loaded.state
         if isinstance(state, dict):
-            assert "lstm_forecasts" in state
+            assert "lstm_forecasts" not in state
             assert "patchtst_forecasts" in state
 
     def test_sac_state_includes_current_weights(
@@ -1134,7 +1137,6 @@ class TestLabelSACUsesIBKRCostModel:
         actual_weights = {"AAPL": 0.5, "MSFT": 0.5, "CASH": 0.0}
         prior_state = {
             "signals": {},
-            "lstm_forecasts": {},
             "patchtst_forecasts": {},
             "current_weights": {"CASH": 1.0},
         }

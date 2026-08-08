@@ -224,16 +224,14 @@ class SACFilesystemStorage:
         )
 
     def load_artifacts(self, version: str) -> SACArtifacts:
-        """Load v1 or v2 artifacts; metadata absence means legacy schema v1."""
+        """Load SAC artifacts using the live StateSchema dim formula."""
+        from brain_api.core.portfolio_rl.state import StateSchema
+
         config = self.load_config(version)
         scaler = self.load_scaler(version)
         symbol_order = self.load_symbol_order(version)
-        metadata = self.read_metadata(version) or {}
-        schema_version = int(metadata.get("state_schema_version", 1))
-        if schema_version not in (1, 2):
-            raise ValueError(f"Unsupported SAC state schema version {schema_version}")
         n_stocks = len(symbol_order)
-        state_dim = (10 if schema_version == 1 else 11) * n_stocks + 1
+        state_dim = StateSchema(n_stocks=n_stocks).state_dim
         action_dim = n_stocks + 1
         version_dir = self._version_path(version)
 
@@ -274,7 +272,6 @@ class SACFilesystemStorage:
             log_alpha=log_alpha,
             symbol_order=symbol_order,
             version=version,
-            state_schema_version=schema_version,
         )
 
     def load_current_artifacts(self) -> SACArtifacts:

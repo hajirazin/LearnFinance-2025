@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-SAC_V2_SIGNAL_NAMES = (
+SAC_SIGNAL_NAMES = (
     "news_sentiment",
     "news_coverage",
     "gross_margin",
@@ -22,6 +22,9 @@ SAC_V2_SIGNAL_NAMES = (
     "debt_to_equity",
     "fundamental_age",
 )
+
+# Backward-compatible alias for callers/tests still importing the old name.
+SAC_V2_SIGNAL_NAMES = SAC_SIGNAL_NAMES
 
 
 class SACDecisionContextError(ValueError):
@@ -60,7 +63,6 @@ class SACFeatureBundle:
 
     symbols: tuple[str, ...]
     signals: dict[str, dict[str, float]]
-    lstm_forecasts: dict[str, float]
     patchtst_forecasts: dict[str, float]
     provenance: dict[str, Any]
 
@@ -70,22 +72,20 @@ class SACFeatureBundle:
         *,
         symbols: list[str] | tuple[str, ...],
         signals: Mapping[str, Mapping[str, Any]],
-        lstm_forecasts: Mapping[str, Any],
         patchtst_forecasts: Mapping[str, Any],
         provenance: Mapping[str, Any] | None = None,
     ) -> SACFeatureBundle:
-        """Validate and normalize a strict v2 feature bundle."""
+        """Validate and normalize the live PatchTST-only feature bundle."""
         symbol_order = tuple(symbols)
         if not symbol_order or len(set(symbol_order)) != len(symbol_order):
             raise SACDecisionContextError("symbols must be non-empty and unique")
         _require_exact_symbols(signals, symbol_order, field="signals")
-        _require_exact_symbols(lstm_forecasts, symbol_order, field="lstm_forecasts")
         _require_exact_symbols(
             patchtst_forecasts, symbol_order, field="patchtst_forecasts"
         )
 
         normalized_signals: dict[str, dict[str, float]] = {}
-        required = set(SAC_V2_SIGNAL_NAMES)
+        required = set(SAC_SIGNAL_NAMES)
         for symbol in symbol_order:
             symbol_signals = signals[symbol]
             missing = sorted(required - set(symbol_signals))
@@ -97,7 +97,7 @@ class SACFeatureBundle:
                 name: _finite_float(
                     symbol_signals[name], field=f"signals[{symbol}].{name}"
                 )
-                for name in SAC_V2_SIGNAL_NAMES
+                for name in SAC_SIGNAL_NAMES
             }
             coverage = normalized_signals[symbol]["news_coverage"]
             if not 0.0 <= coverage <= 1.0:
@@ -108,13 +108,6 @@ class SACFeatureBundle:
         return cls(
             symbols=symbol_order,
             signals=normalized_signals,
-            lstm_forecasts={
-                symbol: _finite_float(
-                    lstm_forecasts[symbol],
-                    field=f"lstm_forecasts[{symbol}]",
-                )
-                for symbol in symbol_order
-            },
             patchtst_forecasts={
                 symbol: _finite_float(
                     patchtst_forecasts[symbol],
@@ -130,7 +123,6 @@ class SACFeatureBundle:
         return {
             "symbols": list(self.symbols),
             "signals": self.signals,
-            "lstm_forecasts": self.lstm_forecasts,
             "patchtst_forecasts": self.patchtst_forecasts,
             "provenance": self.provenance,
         }
@@ -203,7 +195,6 @@ class SACDecisionContext:
 class SACDecisionState:
     """The exact actor state vector and its deterministic audit digest."""
 
-    schema_version: int
     vector: tuple[float, ...]
     context: SACDecisionContext
     digest: str
@@ -212,7 +203,6 @@ class SACDecisionState:
     def create(
         cls,
         *,
-        schema_version: int,
         vector: np.ndarray,
         context: SACDecisionContext,
     ) -> SACDecisionState:
@@ -223,7 +213,6 @@ class SACDecisionState:
                 "SAC decision state vector must be 1-D finite"
             )
         snapshot = {
-            "schema_version": schema_version,
             "vector": [float(value) for value in flat],
             "context": context.to_dict(),
         }
@@ -231,7 +220,6 @@ class SACDecisionState:
             snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False
         )
         return cls(
-            schema_version=schema_version,
             vector=tuple(snapshot["vector"]),
             context=context,
             digest=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
@@ -240,7 +228,6 @@ class SACDecisionState:
     def to_dict(self) -> dict[str, Any]:
         """Return the snapshot shape persisted with SAC experience."""
         return {
-            "schema_version": self.schema_version,
             "vector": list(self.vector),
             "context": self.context.to_dict(),
             "digest": self.digest,

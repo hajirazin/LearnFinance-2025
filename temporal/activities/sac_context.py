@@ -5,7 +5,6 @@ from datetime import date
 
 from models import (
     FundamentalsResponse,
-    LSTMInferenceResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
 )
@@ -44,7 +43,6 @@ def build_sac_feature_bundle(
     as_of_date: str,
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
-    lstm: LSTMInferenceResponse,
     patchtst: PatchTSTInferenceResponse,
 ) -> dict:
     """Build the strict feature bundle Brain uses for the SAC actor state."""
@@ -54,9 +52,6 @@ def build_sac_feature_bundle(
     news_by_symbol = _exact_per_symbol(news.per_symbol, symbols, field="news")
     fundamentals_by_symbol = _exact_per_symbol(
         fundamentals.per_symbol, symbols, field="fundamentals"
-    )
-    lstm_by_symbol = _exact_per_symbol(
-        lstm.predictions, symbols, field="lstm_forecasts"
     )
     patchtst_by_symbol = _exact_per_symbol(
         patchtst.predictions, symbols, field="patchtst_forecasts"
@@ -119,14 +114,6 @@ def build_sac_feature_bundle(
     return {
         "symbols": symbols,
         "signals": signals,
-        "lstm_forecasts": {
-            symbol: _required_finite(
-                lstm_by_symbol[symbol].predicted_weekly_return_pct,
-                field=f"lstm_forecasts[{symbol}]",
-            )
-            / 100.0
-            for symbol in symbols
-        },
         "patchtst_forecasts": {
             symbol: _required_finite(
                 patchtst_by_symbol[symbol].predicted_weekly_return_pct,
@@ -146,10 +133,6 @@ def build_sac_feature_bundle(
             "fundamentals": {
                 "as_of_date": fundamentals.as_of_date,
                 "filings": filing_provenance,
-            },
-            "lstm": {
-                "as_of_date": lstm.as_of_date,
-                "model_version": lstm.model_version,
             },
             "patchtst": {
                 "as_of_date": patchtst.as_of_date,

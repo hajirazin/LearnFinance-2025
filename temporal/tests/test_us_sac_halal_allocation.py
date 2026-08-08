@@ -113,7 +113,6 @@ def _make_sac_halal_activities(
     *,
     n_symbols: int,
     sac_portfolio: AlpacaPortfolioResponse,
-    lstm_resp,
     patchtst_resp,
     news_resp,
     fundamentals_resp,
@@ -184,7 +183,8 @@ def _make_sac_halal_activities(
 
     @activity.defn(name="get_lstm_forecast")
     def mock_get_lstm_forecast(as_of_date, symbols=None):
-        return lstm_resp
+        captured_calls["forbidden_get_lstm_forecast"] = True
+        return None
 
     @activity.defn(name="get_patchtst_forecast")
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
@@ -198,7 +198,6 @@ def _make_sac_halal_activities(
         symbols,
         news,
         fundamentals,
-        lstm,
         patchtst,
     ):
         captured_calls["infer_sac_universe"] = universe
@@ -290,7 +289,7 @@ def _make_sac_halal_activities(
 
     @activity.defn(name="generate_summary")
     def mock_generate_summary(
-        lstm, patchtst, news, fundamentals, sac, universe
+        patchtst, news, fundamentals, sac, universe
     ) -> WeeklySummaryResponse:
         captured_calls["summary_universe"] = universe
         return WeeklySummaryResponse(
@@ -359,7 +358,6 @@ class TestUSSACHalalAllocationHappyPath:
     async def test_halal_allocation_runs_with_variable_n_stocks(
         self,
         n_symbols,
-        lstm_resp,
         patchtst_resp,
         news_resp,
         fundamentals_resp,
@@ -388,7 +386,6 @@ class TestUSSACHalalAllocationHappyPath:
         activities = _make_sac_halal_activities(
             n_symbols=n_symbols,
             sac_portfolio=sac_portfolio,
-            lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
             news_resp=news_resp,
             fundamentals_resp=fundamentals_resp,
@@ -496,7 +493,6 @@ class TestUSSACHalalAllocationHappyPath:
     @pytest.mark.asyncio
     async def test_halal_skipped_when_open_orders(
         self,
-        lstm_resp,
         patchtst_resp,
         news_resp,
         fundamentals_resp,
@@ -516,7 +512,6 @@ class TestUSSACHalalAllocationHappyPath:
         activities = _make_sac_halal_activities(
             n_symbols=12,
             sac_portfolio=sac_portfolio,
-            lstm_resp=lstm_resp,
             patchtst_resp=patchtst_resp,
             news_resp=news_resp,
             fundamentals_resp=fundamentals_resp,
