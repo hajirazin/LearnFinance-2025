@@ -127,7 +127,9 @@ def client_with_mocks(temp_storage, monkeypatch):
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
+    def mock_run_batch(
+        symbols, cutoff_date, storage=None, artifacts=None, exchange="XNYS"
+    ):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -413,7 +415,9 @@ def india_client_with_mocks(temp_india_storage, monkeypatch):
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
+    def mock_run_batch(
+        symbols, cutoff_date, storage=None, artifacts=None, exchange="XNYS"
+    ):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -479,7 +483,9 @@ def test_inference_patchtst_india_uses_india_storage(
 
     seen_storage = []
 
-    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
+    def mock_run_batch(
+        symbols, cutoff_date, storage=None, artifacts=None, exchange="XNYS"
+    ):
         seen_storage.append(storage)
         return _make_mock_batch_result(symbols)
 
@@ -511,7 +517,9 @@ def score_batch_client(temp_storage, temp_india_storage, monkeypatch):
 
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch(symbols, cutoff_date, storage=None, artifacts=None):
+    def mock_run_batch(
+        symbols, cutoff_date, storage=None, artifacts=None, exchange="XNYS"
+    ):
         return _make_mock_batch_result(symbols)
 
     monkeypatch.setattr(inference_module, "run_batch_inference", mock_run_batch)
@@ -543,7 +551,7 @@ def test_score_batch_india_happy_path(score_batch_client, monkeypatch):
     """market='india' uses the India storage path and returns the same shape."""
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_filter(symbols):
+    def mock_filter(symbols, as_of=None):
         # Return all symbols, no exclusions
         return symbols, []
 
@@ -592,7 +600,9 @@ def test_score_batch_non_finite_returns_422(score_batch_client, monkeypatch):
     """A NaN prediction must surface as 422 (rank-band invariant violation)."""
     from brain_api.routes.inference import patchtst as inference_module
 
-    def mock_run_batch_with_nan(symbols, cutoff_date, storage=None, artifacts=None):
+    def mock_run_batch_with_nan(
+        symbols, cutoff_date, storage=None, artifacts=None, exchange="XNYS"
+    ):
         result = _make_mock_batch_result(symbols)
         # Replace the first prediction's score with NaN.
         result.predictions[0].predicted_weekly_return_pct = float("nan")
@@ -668,11 +678,13 @@ def test_score_batch_no_india_model_returns_400(monkeypatch):
 
 def test_score_batch_india_filters_max_price(score_batch_client, monkeypatch):
     """market='india' filters out symbols that exceed the max price threshold."""
+    from brain_api.core.filters.filter_by_max_price import MaxPriceExclusion
     from brain_api.routes.inference import patchtst as inference_module
 
-    # Mock filter_symbols_by_max_price
-    def mock_filter(symbols):
-        return ["RELIANCE.NS"], [("TCS.NS", 6000.0)]
+    def mock_filter(symbols, as_of=None):
+        return ["RELIANCE.NS"], [
+            MaxPriceExclusion(symbol="TCS.NS", price=6000.0, reason="above_max")
+        ]
 
     monkeypatch.setattr(inference_module, "filter_symbols_by_max_price", mock_filter)
 
@@ -698,7 +710,7 @@ def test_score_batch_us_skips_filter(score_batch_client, monkeypatch):
 
     filter_called = False
 
-    def mock_filter(symbols):
+    def mock_filter(symbols, as_of=None):
         nonlocal filter_called
         filter_called = True
         return symbols, []

@@ -624,7 +624,11 @@ def _backfill_patchtst_snapshots(
             continue
 
         result = patchtst_train_model(
-            dataset.X, dataset.y, dataset.feature_scaler, config
+            dataset.X,
+            dataset.y,
+            dataset.feature_scaler,
+            config,
+            anchor_dates=dataset.anchor_dates,
         )
 
         backfill_digest = compute_model_hash(

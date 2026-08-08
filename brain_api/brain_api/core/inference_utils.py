@@ -9,6 +9,11 @@ from datetime import date, timedelta
 import exchange_calendars as xcals
 import pandas as pd
 
+# exchange_calendars has no XNSE; XBOM (Bombay) is the India equity calendar
+# used for NSE/BSE holiday alignment in this repo.
+DEFAULT_US_EXCHANGE = "XNYS"
+DEFAULT_INDIA_EXCHANGE = "XBOM"
+
 
 @dataclass
 class WeekBoundaries:
@@ -23,37 +28,57 @@ class WeekBoundaries:
     calendar_friday: date  # Calendar Friday of the ISO week
 
 
-def compute_week_boundaries(as_of_date: date) -> WeekBoundaries:
+def _sessions_in_range(calendar, monday_ts: pd.Timestamp, friday_ts: pd.Timestamp):
+    """Return sessions in range, or empty if outside the calendar's known span.
+
+    Some exchange_calendars (notably XBOM) have a finite last_session; calling
+    sessions_in_range past that raises DateOutOfBounds. Fall back to empty so
+    callers use calendar Mon-Fri dates rather than crashing inference.
+    """
+    try:
+        return calendar.sessions_in_range(monday_ts, friday_ts)
+    except Exception as exc:
+        # Loud: holiday-aware boundaries unavailable; do not invent sessions.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "exchange calendar %s sessions_in_range(%s, %s) failed (%s); "
+            "falling back to calendar Mon-Fri",
+            getattr(calendar, "name", type(calendar).__name__),
+            monday_ts.date(),
+            friday_ts.date(),
+            exc,
+        )
+        return []
+
+
+def compute_week_boundaries(
+    as_of_date: date, exchange: str = DEFAULT_US_EXCHANGE
+) -> WeekBoundaries:
     """Compute holiday-aware week boundaries for the week containing as_of_date.
 
-    Uses the NYSE calendar (XNYS) to determine actual trading days.
+    Uses the given exchange calendar to determine actual trading days.
     The target week is the ISO week that contains as_of_date.
 
     Args:
         as_of_date: Reference date (typically the Monday when inference runs)
+        exchange: exchange_calendars name (default XNYS; India use XBOM)
 
     Returns:
         WeekBoundaries with actual trading day start/end for the week
     """
-    # Get NYSE calendar
-    nyse = xcals.get_calendar("XNYS")
+    calendar = xcals.get_calendar(exchange)
 
-    # Find the Monday of the ISO week containing as_of_date
-    # weekday(): Monday=0, Tuesday=1, ..., Sunday=6
     days_since_monday = as_of_date.weekday()
     calendar_monday = as_of_date - timedelta(days=days_since_monday)
     calendar_friday = calendar_monday + timedelta(days=4)
 
-    # Convert to pandas Timestamp for exchange_calendars
     monday_ts = pd.Timestamp(calendar_monday)
     friday_ts = pd.Timestamp(calendar_friday)
 
-    # Find trading days in the week
-    schedule = nyse.sessions_in_range(monday_ts, friday_ts)
+    schedule = _sessions_in_range(calendar, monday_ts, friday_ts)
 
     if len(schedule) == 0:
-        # Entire week is holiday - rare but possible (e.g., week between Christmas and New Year)
-        # Fall back to calendar dates; inference will note this in quality
         return WeekBoundaries(
             target_week_start=calendar_monday,
             target_week_end=calendar_friday,
@@ -72,24 +97,23 @@ def compute_week_boundaries(as_of_date: date) -> WeekBoundaries:
     )
 
 
-def compute_week_from_cutoff(cutoff_friday: date) -> WeekBoundaries:
+def compute_week_from_cutoff(
+    cutoff_friday: date, exchange: str = DEFAULT_US_EXCHANGE
+) -> WeekBoundaries:
     """Compute target week boundaries from a Friday cutoff date.
 
     Given a Friday cutoff date, returns the NEXT week (Mon-Fri after the cutoff).
-    Uses NYSE calendar for holiday awareness.
+    Uses the given exchange calendar for holiday awareness.
 
     Args:
         cutoff_friday: Must be a Friday. Data is available up to this date.
+        exchange: exchange_calendars name (default XNYS; India use XBOM)
 
     Returns:
         WeekBoundaries for the week AFTER cutoff_friday.
 
     Raises:
         ValueError: If cutoff_friday is not a Friday.
-
-    Example:
-        cutoff_friday = Jan 9, 2026 (Friday)
-        Returns: target_week_start = Jan 12 (Mon), target_week_end = Jan 16 (Fri)
     """
     if cutoff_friday.weekday() != 4:
         raise ValueError(
@@ -97,19 +121,16 @@ def compute_week_from_cutoff(cutoff_friday: date) -> WeekBoundaries:
             f"({cutoff_friday.strftime('%A')})"
         )
 
-    # Next week's Monday is 3 days after Friday
     calendar_monday = cutoff_friday + timedelta(days=3)
     calendar_friday = cutoff_friday + timedelta(days=7)
 
-    # Get NYSE calendar for holiday-aware boundaries
-    nyse = xcals.get_calendar("XNYS")
+    calendar = xcals.get_calendar(exchange)
     monday_ts = pd.Timestamp(calendar_monday)
     friday_ts = pd.Timestamp(calendar_friday)
 
-    schedule = nyse.sessions_in_range(monday_ts, friday_ts)
+    schedule = _sessions_in_range(calendar, monday_ts, friday_ts)
 
     if len(schedule) == 0:
-        # Entire week is holiday - fall back to calendar dates
         return WeekBoundaries(
             target_week_start=calendar_monday,
             target_week_end=calendar_friday,
@@ -137,11 +158,9 @@ def extract_trading_weeks(df: pd.DataFrame, min_days: int = 3) -> list[pd.DataFr
     Returns:
         List of DataFrames, one per valid trading week
     """
-    # Ensure we have a DatetimeIndex
     if not isinstance(df.index, pd.DatetimeIndex):
         return []
 
-    # Group by ISO week (year + week number)
     df = df.copy()
     df["_year_week"] = df.index.to_period("W")
 

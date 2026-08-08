@@ -1,9 +1,13 @@
+from datetime import date
 from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
-from brain_api.core.filters.filter_by_max_price import filter_symbols_by_max_price
+from brain_api.core.filters.filter_by_max_price import (
+    MaxPriceExclusion,
+    filter_symbols_by_max_price,
+)
 
 
 @pytest.fixture
@@ -15,12 +19,10 @@ def mock_load_prices():
 
 
 def test_filter_symbols_by_max_price_excludes_correctly(mock_load_prices):
-    """Test that symbols exceeding the max price are excluded, while others qualify."""
-    # Setup mock prices
-    # We create DataFrames with a 'close' column to mimic yfinance output
-    df_a = pd.DataFrame({"close": [3900.0, 4000.0]})  # Under 5000
-    df_b = pd.DataFrame({"close": [5900.0, 6000.0]})  # Over 5000
-    df_c = pd.DataFrame()  # Missing data
+    """Above-max and missing-price are distinct exclusion reasons."""
+    df_a = pd.DataFrame({"close": [3900.0, 4000.0]})
+    df_b = pd.DataFrame({"close": [5900.0, 6000.0]})
+    df_c = pd.DataFrame()
 
     mock_load_prices.return_value = {
         "SYM_A": df_a,
@@ -29,20 +31,25 @@ def test_filter_symbols_by_max_price_excludes_correctly(mock_load_prices):
     }
 
     symbols = ["SYM_A", "SYM_B", "SYM_C"]
+    as_of = date(2026, 1, 9)
 
-    qualifying, excluded = filter_symbols_by_max_price(symbols)
+    qualifying, excluded = filter_symbols_by_max_price(symbols, as_of=as_of)
 
     assert qualifying == ["SYM_A"]
-    # SYM_C has missing data, so its actual_price is evaluated as None in the logic, falling back to 0.0
-    assert excluded == [("SYM_B", 6000.0), ("SYM_C", 0.0)]
+    assert excluded == [
+        MaxPriceExclusion(symbol="SYM_B", price=6000.0, reason="above_max"),
+        MaxPriceExclusion(symbol="SYM_C", price=None, reason="missing_price"),
+    ]
 
     mock_load_prices.assert_called_once()
-    args, _ = mock_load_prices.call_args
+    args, _kwargs = mock_load_prices.call_args
     assert args[0] == symbols
+    assert args[1] == date(2026, 1, 2)
+    assert args[2] == as_of
 
 
 def test_filter_symbols_empty_input(mock_load_prices):
-    """Test that an empty list returns empty results immediately."""
+    """Empty list returns empty results immediately."""
     qualifying, excluded = filter_symbols_by_max_price([])
 
     assert qualifying == []

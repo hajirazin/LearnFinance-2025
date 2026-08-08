@@ -234,7 +234,8 @@ def run_inference(
     for i, (symbol, feat) in enumerate(valid_features):
         symbol_daily = daily_preds[i]  # (5,) daily close log returns
 
-        # Compound log returns: weekly_return = exp(sum(5 log returns)) - 1
+        # Compound next-prediction_length trading-day close log returns
+        # (API field name remains predicted_weekly_return_pct).
         weekly_return = float(np.exp(np.sum(symbol_daily)) - 1)
 
         # Daily returns list for response
@@ -275,11 +276,16 @@ def run_batch_inference(
     cutoff_date: date,
     storage: PatchTSTModelStorage | None = None,
     artifacts: Any = None,
+    exchange: str = "XNYS",
 ) -> BatchInferenceResult:
     """Run PatchTST inference on arbitrary symbols (OHLCV only).
 
     End-to-end pipeline: load model -> fetch prices -> build features -> run model.
     Predictions are sorted by predicted_weekly_return_pct descending.
+
+    ``predicted_weekly_return_pct`` is the compounded next-
+    ``prediction_length`` trading-day close log-return x 100 (not necessarily
+    the calendar Mon-Fri session count).
 
     Args:
         symbols: Ticker symbols to run inference on.
@@ -291,6 +297,8 @@ def run_batch_inference(
             we skip the storage read entirely. Routes that go through
             the storage-policy helper pass artifacts directly so
             ``hf_first`` callers don't double-touch HuggingFace.
+        exchange: exchange_calendars name for target-week boundaries
+            (``XNYS`` US, ``XBOM`` India).
 
     Returns:
         BatchInferenceResult with sorted predictions and model version.
@@ -313,7 +321,7 @@ def run_batch_inference(
         artifacts = storage.load_current_artifacts()
     config = artifacts.config
 
-    week_boundaries = compute_week_from_cutoff(cutoff_date)
+    week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
     logger.info(
         f"[PatchTST batch] {len(symbols)} symbols, "
         f"cutoff={cutoff_date}, target={week_boundaries.target_week_start}..{week_boundaries.target_week_end}"

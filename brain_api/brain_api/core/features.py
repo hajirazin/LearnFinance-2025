@@ -20,7 +20,8 @@ def compute_ohlcv_log_returns(
     Returns:
         DataFrame with columns: open_ret, high_ret, low_ret, close_ret, volume_ret
         First row is dropped when use_returns=True (NaN from shift).
-        Infinities replaced with 0, NaN filled with 0.
+        Non-finite values are **not** silently zeroed (AGENTS.md: no silent
+        fallbacks). Downstream dataset builders skip NaN/Inf samples.
     """
     if use_returns:
         features_df = pd.DataFrame(
@@ -46,9 +47,6 @@ def compute_ohlcv_log_returns(
             "close_ret",
             "volume_ret",
         ]
-
-    # Replace infinities with 0 and fill NaN
-    features_df = features_df.replace([np.inf, -np.inf], 0).fillna(0)
 
     return features_df
 

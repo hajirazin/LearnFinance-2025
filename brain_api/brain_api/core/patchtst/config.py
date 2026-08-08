@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 class PatchTSTConfig:
     """PatchTST model hyperparameters and training config.
 
-    5-channel OHLCV direct 5-day multi-task prediction with RevIN.
+    5-channel OHLCV direct 5-day prediction with RevIN on inputs.
 
     Uses channel-independent architecture with shared Transformer weights.
-    Multi-task loss on ALL 5 OHLCV channels provides data augmentation for
-    the shared weights. At inference, close_ret predictions are extracted
-    for the RL agent. RevIN (scaling="std") handles per-channel per-sample
-    normalization internally.
+    Training optimizes **close_ret only** (denormalized MSE) so the objective
+    matches Alpha-HRP / score-batch ranking on compounded close returns.
+    OHLCV remain as inputs; volume is not in the loss. RevIN (scaling="std")
+    handles per-channel per-sample input normalization internally.
 
     Input channels: OHLCV log returns (open_ret, high_ret, low_ret,
     close_ret, volume_ret).

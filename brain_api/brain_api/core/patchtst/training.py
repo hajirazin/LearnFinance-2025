@@ -1,22 +1,20 @@
 """PatchTST model training.
 
-5-channel OHLCV multi-task training with direct 5-day prediction.
+5-channel OHLCV input with **close-channel-only** training loss.
 
-Uses HuggingFace built-in loss which computes equal-weight MSE on ALL 5
-channels in RevIN-normalized space. This is PatchTST's intended usage --
-shared Transformer weights learn temporal patterns from 5 related OHLCV
-signals (data augmentation effect).
+RevIN (scaling="std") still normalizes inputs per-channel per-sample inside
+HuggingFace PatchTST. We do **not** use ``outputs.loss`` (equal-weight MSE on
+all denormalized OHLCV channels — volume-dominated). Instead we optimize:
 
-X: (n_samples, context_length, 5) -- UNSCALED raw OHLCV log returns.
-y: (n_samples, 5, 5) -- UNSCALED raw OHLCV log returns (5 days x 5 channels).
+    MSE(prediction_outputs[:, :, close_idx], batch_y[:, :, close_idx])
 
-RevIN (scaling="std") normalizes per-channel per-sample during forward pass.
-Built-in loss compares normalized predictions vs normalized targets.
-At inference, prediction_outputs are denormalized by RevIN automatically.
+which matches Alpha-HRP / score-batch ranking on compounded close returns.
+OHLCV channels remain in the input; only the loss is close-only.
 """
 
 import threading
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 import numpy as np
 import torch
@@ -75,30 +73,88 @@ def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
     return PatchTSTForPrediction(hf_config)
 
 
+def _close_channel_index(config: PatchTSTConfig) -> int:
+    return config.feature_names.index("close_ret")
+
+
+def _close_mse(
+    preds: torch.Tensor, targets: torch.Tensor, close_idx: int
+) -> torch.Tensor:
+    """MSE on denormalized close_ret channel only (batch, horizon)."""
+    return F.mse_loss(preds[:, :, close_idx], targets[:, :, close_idx])
+
+
+def _chrono_train_val_split(
+    X: np.ndarray,
+    y: np.ndarray,
+    anchor_dates: np.ndarray | None,
+    validation_split: float,
+    horizon_purge_calendar_days: int = 7,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Sort by anchor date (if provided) and split train/earlier vs val/later.
+
+    Purges train samples whose target window may overlap the first val anchor
+    (conservative calendar-day purge of ``horizon_purge_calendar_days``).
+    """
+    if anchor_dates is not None:
+        if len(anchor_dates) != len(X):
+            raise ValueError(
+                f"anchor_dates length {len(anchor_dates)} != X length {len(X)}"
+            )
+        order = np.argsort(anchor_dates)
+        X = X[order]
+        y = y[order]
+        anchor_dates = anchor_dates[order]
+
+    split_idx = int(len(X) * (1 - validation_split))
+    if split_idx <= 0 or split_idx >= len(X):
+        raise ValueError(
+            f"Invalid train/val split_idx={split_idx} for n_samples={len(X)}"
+        )
+
+    if anchor_dates is None:
+        return X[:split_idx], X[split_idx:], y[:split_idx], y[split_idx:]
+
+    min_val_anchor: date = anchor_dates[split_idx]
+    purge_before = min_val_anchor - timedelta(days=horizon_purge_calendar_days)
+    train_idx = [
+        i
+        for i in range(split_idx)
+        if anchor_dates[i] < purge_before  # strict: no overlap with val horizon
+    ]
+    if not train_idx:
+        # Degenerate tiny panels: fall back to unpurged chronological split
+        train_idx = list(range(split_idx))
+
+    X_train, y_train = X[train_idx], y[train_idx]
+    X_val, y_val = X[split_idx:], y[split_idx:]
+    return X_train, X_val, y_train, y_val
+
+
 def train_model_pytorch(
     X: np.ndarray,
     y: np.ndarray,
     feature_scaler: StandardScaler,
     config: PatchTSTConfig,
     shutdown_event: threading.Event | None = None,
+    anchor_dates: np.ndarray | None = None,
 ) -> TrainingResult:
-    """Train PatchTST model using PyTorch with multi-task loss on all 5 channels.
-
-    Uses HuggingFace built-in loss by passing future_values=batch_y. The
-    built-in loss computes MSE in RevIN-normalized space with equal weight
-    on all 5 channels. This is PatchTST's intended multi-task usage.
+    """Train PatchTST with close-channel-only MSE (denormalized outputs).
 
     Args:
-        X: Input sequences, shape (n_samples, context_length, 5) -- UNSCALED OHLCV log returns
-        y: Targets, shape (n_samples, 5, 5) -- UNSCALED OHLCV log returns (5 days x 5 channels)
+        X: Input sequences, shape (n_samples, context_length, 5) -- UNSCALED OHLCV
+        y: Targets, shape (n_samples, 5, 5) -- UNSCALED OHLCV (5 days x 5 channels)
         feature_scaler: Fitted scaler (diagnostic only, not used in training)
         config: Model configuration
+        shutdown_event: Optional cancellation event
+        anchor_dates: Optional per-sample anchor dates for chronological split
 
     Returns:
-        TrainingResult with trained model and metrics
+        TrainingResult with best checkpoint and close-only metrics
     """
     device = get_device()
     print(f"[PatchTST] Training on device: {device}")
+    close_idx = _close_channel_index(config)
 
     if len(X) == 0:
         print("[PatchTST] No training data - returning dummy model")
@@ -112,10 +168,9 @@ def train_model_pytorch(
             baseline_loss=float("inf"),
         )
 
-    # Time-based train/val split
-    split_idx = int(len(X) * (1 - config.validation_split))
-    X_train, X_val = X[:split_idx], X[split_idx:]
-    y_train, y_val = y[:split_idx], y[split_idx:]
+    X_train, X_val, y_train, y_val = _chrono_train_val_split(
+        X, y, anchor_dates, config.validation_split
+    )
 
     print(
         f"[PatchTST] Dataset: {len(X)} samples ({len(X_train)} train, {len(X_val)} val)"
@@ -127,11 +182,10 @@ def train_model_pytorch(
         f"[PatchTST] Channels: {config.num_input_channels}, context_length={config.context_length}, prediction_length={config.prediction_length}"
     )
     print(
-        "[PatchTST] Multi-task: loss on ALL 5 channels, RevIN enabled, targets UNSCALED"
+        f"[PatchTST] Loss: close-channel-only MSE (idx={close_idx}), "
+        "RevIN on inputs, do not use HF multi-task outputs.loss"
     )
 
-    # Create DataLoaders for memory-efficient batch loading
-    # Keep data on CPU and only move batches to GPU on demand
     train_dataset = TensorDataset(
         torch.from_numpy(X_train).float(), torch.from_numpy(y_train).float()
     )
@@ -143,7 +197,7 @@ def train_model_pytorch(
         train_dataset,
         batch_size=config.batch_size,
         shuffle=True,
-        num_workers=0,  # Keep simple for compatibility
+        num_workers=0,
         pin_memory=device.type == "cuda",
     )
     val_loader = DataLoader(
@@ -154,7 +208,6 @@ def train_model_pytorch(
         pin_memory=device.type == "cuda",
     )
 
-    # Create model (RevIN enabled by default)
     model = _create_patchtst_model(config).to(device)
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
@@ -163,7 +216,6 @@ def train_model_pytorch(
         optimizer, mode="min", factor=0.5, patience=5
     )
 
-    # Training loop
     best_val_loss = float("inf")
     best_model_state = None
     best_epoch = 0
@@ -182,22 +234,18 @@ def train_model_pytorch(
         first_batch_logged = False
 
         for batch_X, batch_y in train_loader:
-            # Move batch to device (memory-efficient: only one batch at a time)
-            batch_X = batch_X.to(device)  # (batch, context_length, 5)
-            batch_y = batch_y.to(device)  # (batch, 5, 5) = (batch, pred_len, channels)
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
 
             optimizer.zero_grad()
 
-            # Use HuggingFace built-in loss by passing future_values
-            # Built-in loss computes MSE in RevIN-normalized space on ALL 5 channels
-            # This is equal-weight multi-task loss -- PatchTST paper's intended usage
-            outputs = model(past_values=batch_X, future_values=batch_y)
-            loss = outputs.loss  # MSE on all 5 channels equally in normalized space
+            # Close-only loss on denormalized prediction_outputs (not outputs.loss)
+            outputs = model(past_values=batch_X)
+            pred_outputs = outputs.prediction_outputs
+            loss = _close_mse(pred_outputs, batch_y, close_idx)
 
-            # CRITICAL VERIFICATION: Log model output at epoch 0
             if epoch == 0 and not first_batch_logged:
                 first_batch_logged = True
-                pred_outputs = outputs.prediction_outputs  # (batch, 5, 5) denormalized
                 print("[PatchTST] VERIFY MODEL OUTPUT (epoch 0, batch 0):")
                 print(
                     f"  prediction_outputs shape: {pred_outputs.shape} (batch, pred_len=5, channels=5)"
@@ -205,8 +253,7 @@ def train_model_pytorch(
                 print(
                     f"  batch_y shape: {batch_y.shape} (batch, pred_len=5, channels=5)"
                 )
-                print(f"  built-in loss: {loss.item():.6f}")
-                print("  First sample, day 0, per-channel predictions (denormalized):")
+                print(f"  close-only loss: {loss.item():.6f}")
                 for ch_idx, ch_name in enumerate(config.feature_names):
                     pred_val = pred_outputs[0, 0, ch_idx].item()
                     target_val = batch_y[0, 0, ch_idx].item()
@@ -216,7 +263,6 @@ def train_model_pytorch(
 
             loss.backward()
 
-            # Gradient clipping
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 model.parameters(), config.max_grad_norm
             )
@@ -237,13 +283,10 @@ def train_model_pytorch(
             total_train_loss += loss.item()
             n_batches += 1
 
-            # Explicit cleanup to reduce memory pressure
-            del batch_X, batch_y, outputs, loss
+            del batch_X, batch_y, outputs, pred_outputs, loss
 
         avg_train_loss = total_train_loss / n_batches
 
-        # Validation (batch by batch to save memory)
-        # Use built-in loss for consistency with training
         model.eval()
         total_val_loss = 0.0
         n_val_batches = 0
@@ -251,17 +294,15 @@ def train_model_pytorch(
             for val_X, val_y in val_loader:
                 val_X = val_X.to(device)
                 val_y = val_y.to(device)
-                val_outputs = model(past_values=val_X, future_values=val_y)
-                total_val_loss += val_outputs.loss.item()  # built-in multi-task loss
+                preds = model(past_values=val_X).prediction_outputs
+                total_val_loss += _close_mse(preds, val_y, close_idx).item()
                 n_val_batches += 1
-                del val_X, val_y, val_outputs
+                del val_X, val_y, preds
         val_loss = total_val_loss / n_val_batches
 
-        # Learning rate scheduling
         scheduler.step(val_loss)
         current_lr = optimizer.param_groups[0]["lr"]
 
-        # Log every epoch
         loss_gap = avg_train_loss - val_loss
         overfitting_indicator = "OVERFITTING" if loss_gap < -0.001 else "OK"
         print(
@@ -287,25 +328,25 @@ def train_model_pytorch(
                 )
                 break
 
-    # Clear GPU cache to free memory after training loop
     if device.type == "mps":
         torch.mps.empty_cache()
     elif device.type == "cuda":
         torch.cuda.empty_cache()
 
     print(
-        f"[PatchTST] Best model at epoch {best_epoch} with val_loss={best_val_loss:.6f} (normalized)"
+        f"[PatchTST] Best model at epoch {best_epoch} with "
+        f"val_loss={best_val_loss:.6f} (close-only)"
     )
 
-    # Restore best model on CPU
+    # Restore best weights onto the training device model for final metrics
+    # (Phase B: metrics must match the promoted checkpoint, not last epoch).
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
     model_cpu = _create_patchtst_model(config)
     if best_model_state is not None:
         model_cpu.load_state_dict(best_model_state)
 
-    # Final metrics in RAW space (denormalized by RevIN) for comparable baseline.
-    # During training, built-in loss operates in RevIN-normalized space (~1.0 scale).
-    # For final reporting, compute MSE on prediction_outputs (denormalized by RevIN)
-    # so train_loss, val_loss, and baseline_loss are all in raw log-return space.
     model.eval()
 
     total_final_train_loss = 0.0
@@ -314,8 +355,8 @@ def train_model_pytorch(
         for train_X, train_y in train_loader:
             train_X = train_X.to(device)
             train_y = train_y.to(device)
-            preds = model(past_values=train_X).prediction_outputs  # denormalized
-            total_final_train_loss += F.mse_loss(preds, train_y).item()
+            preds = model(past_values=train_X).prediction_outputs
+            total_final_train_loss += _close_mse(preds, train_y, close_idx).item()
             n_final_batches += 1
             del train_X, train_y, preds
     final_train_loss = total_final_train_loss / n_final_batches
@@ -326,32 +367,28 @@ def train_model_pytorch(
         for val_X, val_y in val_loader:
             val_X = val_X.to(device)
             val_y = val_y.to(device)
-            preds = model(past_values=val_X).prediction_outputs  # denormalized
-            total_raw_val_loss += F.mse_loss(preds, val_y).item()
+            preds = model(past_values=val_X).prediction_outputs
+            total_raw_val_loss += _close_mse(preds, val_y, close_idx).item()
             n_raw_val_batches += 1
             del val_X, val_y, preds
     final_val_loss = total_raw_val_loss / n_raw_val_batches
 
-    # Baseline: predict mean return per channel per day (raw space)
-    # y_val shape: (n, 5, 5) -- compute mean across samples for each (day, channel)
-    y_val_mean = np.mean(y_val, axis=0, keepdims=True)  # (1, 5, 5)
-    baseline_loss = float(np.mean((y_val - y_val_mean) ** 2))
+    # Baseline: predict mean close return per day on val (close channel only)
+    y_val_close = y_val[:, :, close_idx]
+    y_val_close_mean = np.mean(y_val_close, axis=0, keepdims=True)
+    baseline_loss = float(np.mean((y_val_close - y_val_close_mean) ** 2))
 
     print(
-        f"[PatchTST] Training complete (normalized): "
-        f"train_loss={avg_train_loss:.6f}, val_loss={best_val_loss:.6f}"
-    )
-    print(
-        f"[PatchTST] Training complete (raw/denorm): "
+        f"[PatchTST] Training complete (close-only): "
         f"train_loss={final_train_loss:.6f}, val_loss={final_val_loss:.6f}, "
         f"baseline={baseline_loss:.6f}"
     )
     beats_baseline = final_val_loss < baseline_loss
     print(
-        f"[PatchTST] Model {'BEATS' if beats_baseline else 'does NOT beat'} baseline (raw space)"
+        f"[PatchTST] Model {'BEATS' if beats_baseline else 'does NOT beat'} "
+        "close-only baseline"
     )
 
-    # Final GPU cache cleanup before returning
     if device.type == "mps":
         torch.mps.empty_cache()
     elif device.type == "cuda":

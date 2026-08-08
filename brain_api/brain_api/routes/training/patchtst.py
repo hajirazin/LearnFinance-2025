@@ -198,6 +198,7 @@ def _train_patchtst_core(
         raise ValueError("No training samples could be built from aligned features")
 
     X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
+    anchor_dates = getattr(dataset, "anchor_dates", None)
     del dataset
     gc.collect()
 
@@ -205,7 +206,14 @@ def _train_patchtst_core(
         update_progress(job_id, {"phase": "training"})
     logger.info(f"{log_prefix} Starting model training...")
     t0 = time.time()
-    result = trainer(X, y, feature_scaler, config, shutdown_event=shutdown_event)
+    result = trainer(
+        X,
+        y,
+        feature_scaler,
+        config,
+        shutdown_event=shutdown_event,
+        anchor_dates=anchor_dates,
+    )
     t_train = time.time() - t0
     logger.info(f"{log_prefix} Training complete in {t_train:.1f}s")
     logger.info(

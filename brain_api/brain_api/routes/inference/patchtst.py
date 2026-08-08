@@ -21,7 +21,11 @@ import time
 from fastapi import APIRouter, HTTPException, Query
 
 from brain_api.core.filters.filter_by_max_price import filter_symbols_by_max_price
-from brain_api.core.inference_utils import compute_week_from_cutoff
+from brain_api.core.inference_utils import (
+    DEFAULT_INDIA_EXCHANGE,
+    DEFAULT_US_EXCHANGE,
+    compute_week_from_cutoff,
+)
 from brain_api.core.model_buckets import (
     BucketConfig,
     ModelType,
@@ -89,11 +93,18 @@ def _run_patchtst_inference(
     cutoff_date = get_patchtst_as_of_date(request)
     logger.info(f"{log_prefix} Cutoff date: {cutoff_date}")
 
-    week_boundaries = compute_week_from_cutoff(cutoff_date)
+    exchange = (
+        DEFAULT_INDIA_EXCHANGE if _is_india_bucket(bucket) else DEFAULT_US_EXCHANGE
+    )
+    week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
 
     try:
         batch_result = run_batch_inference(
-            symbols, cutoff_date, storage=storage, artifacts=artifacts
+            symbols,
+            cutoff_date,
+            storage=storage,
+            artifacts=artifacts,
+            exchange=exchange,
         )
     except ValueError as e:
         raise HTTPException(503, str(e)) from e
@@ -288,7 +299,10 @@ def patchtst_score_batch(
     cutoff_date = get_patchtst_as_of_date(
         PatchTSTInferenceRequest(as_of_date=request.as_of_date)
     )
-    week_boundaries = compute_week_from_cutoff(cutoff_date)
+    exchange = (
+        DEFAULT_INDIA_EXCHANGE if request.market == "india" else DEFAULT_US_EXCHANGE
+    )
+    week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
 
     symbols = list(request.symbols)
     logger.info(
@@ -296,21 +310,33 @@ def patchtst_score_batch(
         f"as_of={cutoff_date})"
     )
 
-    excluded_by_price: list[tuple[str, float]] = []
+    excluded_by_price = []
 
     if request.market == "india":
-        symbols, excluded_by_price = filter_symbols_by_max_price(symbols)
+        symbols, excluded_by_price = filter_symbols_by_max_price(
+            symbols, as_of=cutoff_date
+        )
 
         if excluded_by_price:
-            for sym, price in excluded_by_price:
-                logger.warning(
-                    f"Halal_India: excluded {sym} — price {price:.2f} exceeds "
-                    f"max price threshold"
-                )
+            for item in excluded_by_price:
+                if item.reason == "above_max":
+                    logger.warning(
+                        f"Halal_India: excluded {item.symbol} — price "
+                        f"{item.price:.2f} exceeds max price threshold"
+                    )
+                else:
+                    logger.warning(
+                        f"Halal_India: excluded {item.symbol} — missing price "
+                        f"as_of={cutoff_date}"
+                    )
 
     try:
         batch_result = run_batch_inference(
-            symbols, cutoff_date, storage=storage, artifacts=artifacts
+            symbols,
+            cutoff_date,
+            storage=storage,
+            artifacts=artifacts,
+            exchange=exchange,
         )
     except ValueError as e:
         raise HTTPException(503, str(e)) from e
@@ -322,11 +348,10 @@ def patchtst_score_batch(
             min_predictions=request.min_predictions,
         )
 
-        # Create excluded list of symboles with both excluded by price and excluded by non-finite scores
         if request.market == "india" and excluded_by_price:
-            for sym, _ in excluded_by_price:
-                if sym not in excluded:
-                    excluded.append(sym)  # Price exclusion, no score available
+            for item in excluded_by_price:
+                if item.symbol not in excluded:
+                    excluded.append(item.symbol)
 
     except RuntimeError as e:
         # Non-finite scores or below-floor count: math-invariant

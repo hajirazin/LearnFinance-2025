@@ -189,7 +189,7 @@ def get_halal_india_universe(
     )
 
     qualifying_symbols, excluded_by_price = filter_symbols_by_max_price(
-        qualifying_symbols
+        qualifying_symbols, as_of=cutoff_date
     )
 
     if excluded:
@@ -200,11 +200,17 @@ def get_halal_india_universe(
             )
 
     if excluded_by_price:
-        for sym, price in excluded_by_price:
-            logger.warning(
-                f"Halal_India: excluded {sym} — price {price:.2f} exceeds "
-                f"max price threshold INR"
-            )
+        for item in excluded_by_price:
+            if item.reason == "above_max":
+                logger.warning(
+                    f"Halal_India: excluded {item.symbol} — price "
+                    f"{item.price:.2f} exceeds max price threshold INR"
+                )
+            else:
+                logger.warning(
+                    f"Halal_India: excluded {item.symbol} — missing price "
+                    f"as_of={cutoff_date}"
+                )
 
     logger.info(
         f"Halal_India: {len(qualifying_symbols)}/{total_universe} symbols pass "
@@ -213,7 +219,12 @@ def get_halal_india_universe(
     )
 
     storage = PatchTSTIndiaModelStorage()
-    batch_result = run_batch_inference(qualifying_symbols, cutoff_date, storage=storage)
+    batch_result = run_batch_inference(
+        qualifying_symbols,
+        cutoff_date,
+        storage=storage,
+        exchange="XBOM",
+    )
 
     valid = [
         p for p in batch_result.predictions if p.predicted_weekly_return_pct is not None

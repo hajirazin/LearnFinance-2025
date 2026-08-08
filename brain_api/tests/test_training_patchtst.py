@@ -53,15 +53,24 @@ def mock_price_loader(symbols, start_date, end_date):
 
 def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
     """Return a mock dataset result for 5-channel OHLCV multi-task prediction."""
+    from datetime import date, timedelta
+
     n_samples = 10
+    anchors = np.array(
+        [date(2024, 1, 5) + timedelta(days=7 * i) for i in range(n_samples)],
+        dtype=object,
+    )
     return DatasetResult(
         X=np.random.randn(n_samples, config.context_length, 5),
         y=np.random.randn(n_samples, 5, 5),
         feature_scaler=StandardScaler(),
+        anchor_dates=anchors,
     )
 
 
-def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingResult:
+def mock_trainer(
+    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+) -> TrainingResult:
     """Return a mock training result with controllable metrics."""
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -76,7 +85,7 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
 
 
 def mock_trainer_worse_than_baseline(
-    X, y, feature_scaler, config, shutdown_event=None
+    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
 ) -> TrainingResult:
     """Mock trainer worse than baseline.
 
@@ -100,7 +109,7 @@ def mock_trainer_worse_than_baseline(
 
 
 def mock_trainer_nan_val_loss(
-    X, y, feature_scaler, config, shutdown_event=None
+    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
 ) -> TrainingResult:
     """Mock trainer that returns NaN val_loss to trip the guardrail."""
     hf_config = config.to_hf_config()
@@ -170,7 +179,12 @@ def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         snapshot_phase,
         "patchtst_train_model",
-        lambda X, y, feature_scaler, config, shutdown_event=None: mock_trainer(
+        lambda X,
+        y,
+        feature_scaler,
+        config,
+        shutdown_event=None,
+        anchor_dates=None: mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
         ),
     )

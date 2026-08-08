@@ -2020,8 +2020,12 @@ def test_get_halal_india_applies_max_price_filter():
 
     mock_result = _make_mock_batch_inference_result(["GOOD.NS"])
 
-    def mock_filter(symbols):
-        return ["GOOD.NS"], [("OVERPRICED.NS", 6000.0)]
+    from brain_api.core.filters.filter_by_max_price import MaxPriceExclusion
+
+    def mock_filter(symbols, as_of=None):
+        return ["GOOD.NS"], [
+            MaxPriceExclusion(symbol="OVERPRICED.NS", price=6000.0, reason="above_max")
+        ]
 
     with (
         patch(

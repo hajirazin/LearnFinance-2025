@@ -56,15 +56,24 @@ def _mock_price_loader(symbols, start_date, end_date):
 
 
 def _mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
+    from datetime import date, timedelta
+
     n_samples = 10
+    anchors = np.array(
+        [date(2024, 1, 5) + timedelta(days=7 * i) for i in range(n_samples)],
+        dtype=object,
+    )
     return DatasetResult(
         X=np.random.randn(n_samples, config.context_length, 5),
         y=np.random.randn(n_samples, 5, 5),
         feature_scaler=StandardScaler(),
+        anchor_dates=anchors,
     )
 
 
-def _mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingResult:
+def _mock_trainer(
+    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
     return TrainingResult(
@@ -78,7 +87,7 @@ def _mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> Training
 
 
 def _mock_trainer_worse(
-    X, y, feature_scaler, config, shutdown_event=None
+    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
 ) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -145,7 +154,12 @@ def _patch_india_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(
         snapshot_phase,
         "patchtst_train_model",
-        lambda X, y, feature_scaler, config, shutdown_event=None: _mock_trainer(
+        lambda X,
+        y,
+        feature_scaler,
+        config,
+        shutdown_event=None,
+        anchor_dates=None: _mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
         ),
     )
