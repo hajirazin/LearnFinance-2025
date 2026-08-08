@@ -598,6 +598,12 @@ class AllocationDetail:
     Shows the theoretical whole-share quantity for a given weight
     target and NAV, using the current market price. No order is
     generated or submitted.
+
+    ``stop_loss_*`` fields are display-only references computed at
+    conversion time so India Stage 2 email tables can render the same
+    ATR stop column as the US order table. Every paper row is a hold
+    / buy reference (never ``sell_no_stop``). See
+    :mod:`brain_api.core.stop_loss` for the formula.
     """
 
     symbol: str
@@ -605,6 +611,9 @@ class AllocationDetail:
     price: float
     whole_shares: int
     trade_value: float
+    stop_loss_price: float | None = None
+    stop_loss_distance_pct: float | None = None
+    stop_loss_reason: str = "atr_unavailable"
 
 
 @dataclass
@@ -625,6 +634,7 @@ def convert_weights_to_whole_shares(
     percentage_weights: dict[str, float],
     total_nav: float,
     prices: dict[str, float] | None = None,
+    atr_map: dict[str, float] | None = None,
 ) -> PaperAllocationResult:
     """Convert percentage weights to whole shares at current prices.
 
@@ -632,20 +642,38 @@ def convert_weights_to_whole_shares(
     reuses the same price-fetching logic as :func:`generate_orders`
     but uses floor-to-integer (``int()``) instead of fractional shares.
 
+    Stop-loss references are attached per row via
+    :func:`compute_stop_loss` so India weekly emails can surface the
+    same ATR(14)x2 / 5%-10% clamp column as the US order table.
+
     Args:
         percentage_weights: ``{symbol: weight_pct}`` where 100 = 100%.
         total_nav: Notional portfolio value in the local currency
             (e.g. 1 000 000 INR).
         prices: Optional pre-fetched prices. If ``None``, fetches via
             yfinance.
+        atr_map: Optional pre-computed ATR(14) per symbol. When
+            ``None``, fetches an OHLC window and computes ATR the same
+            way as :func:`generate_orders` (injectable for tests).
 
     Returns:
-        PaperAllocationResult with whole-share quantities.
+        PaperAllocationResult with whole-share quantities and stop-loss
+        fields on each detail row.
     """
     symbols = [s for s in percentage_weights if s and percentage_weights[s] > 0]
 
     if prices is None:
         prices = fetch_current_prices(symbols)
+
+    # Compute ATR(14) alongside prices so the India Stage 2 email
+    # table has a stop-loss reference per row without a second round-trip.
+    if atr_map is None:
+        try:
+            ohlc = fetch_ohlc_window(symbols)
+            atr_map = compute_atr_map(ohlc)
+        except Exception as e:
+            print(f"[PaperAllocation] ATR computation failed: {e}")
+            atr_map = {}
 
     details: list[AllocationDetail] = []
     total_allocated_pct = 0.0
@@ -663,6 +691,7 @@ def convert_weights_to_whole_shares(
         if trade_value < MIN_TRADE_VALUE:
             continue
         whole_shares = int(trade_value / price)
+        stop = compute_stop_loss(price, atr_map.get(symbol))
         details.append(
             AllocationDetail(
                 symbol=symbol,
@@ -670,6 +699,9 @@ def convert_weights_to_whole_shares(
                 price=price,
                 whole_shares=whole_shares,
                 trade_value=round(whole_shares * price, 2),
+                stop_loss_price=stop.price,
+                stop_loss_distance_pct=stop.distance_pct,
+                stop_loss_reason=stop.reason,
             )
         )
 

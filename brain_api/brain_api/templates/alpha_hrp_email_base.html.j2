@@ -180,7 +180,8 @@ universe-agnostic. #}
           <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid {{ self.stage2_primary() }};">Weight</th>
           {% if paper_allocation %}<th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Price</th>
           <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Whole Shares</th>
-          <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Notional</th>{% endif %}
+          <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Notional</th>
+          <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid {{ self.stage2_primary() }};">Stop Loss</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -201,7 +202,16 @@ universe-agnostic. #}
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">{{ "%.2f" | format(pad.price) }}</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">{{ pad.whole_shares }}</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-variant-numeric: tabular-nums;">{{ "%.2f" | format(pad.trade_value) }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">
+            {% if pad.stop_loss_reason == 'atr14' and pad.stop_loss_price is not none %}
+              {{ "%.2f" | format(pad.stop_loss_price) }}
+              <span style="color: #6b7280; font-size: 11px;">(-{{ "%.1f" | format(pad.stop_loss_distance_pct * 100) }}%)</span>
+            {% else %}
+              <span style="color: #9ca3af; font-style: italic;">n/a (no ATR)</span>
+            {% endif %}
+          </td>
           {% elif paper_allocation %}
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
           <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #9ca3af;">&mdash;</td>
@@ -212,13 +222,14 @@ universe-agnostic. #}
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">&Sigma;</td>
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">Total</td>
           <td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }}; font-weight: bold;">{{ "%.2f" | format(ns.total) }}%</td>
-          {% if paper_allocation %}<td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }};" colspan="3"></td>{% endif %}
+          {% if paper_allocation %}<td style="padding: 8px; border-top: 2px solid {{ self.stage2_primary() }};" colspan="4"></td>{% endif %}
         </tr>
       </tbody>
     </table>
     <p style="color: #6b7280; font-size: 12px; margin-top: 6px;"><em>Weights are HRP fractions &times; 100; the row sum should round to 100%. Tiny deviations reflect display rounding only.</em></p>
     {% if paper_allocation %}
     <p style="color: #6b7280; font-size: 12px; margin-top: 2px;"><em>Paper-only display: shares are floored to whole integers at a notional NAV of {{ "%.0f" | format(paper_allocation.total_nav) }}. The notional column may not exactly match the target weight due to integer rounding.</em></p>
+    <p style="color: #6b7280; font-size: 12px; margin-top: 2px;"><em>Stop-loss is a display-only reference computed via ATR(14) &times; 2 with 5% floor / 10% cap.</em></p>
     {% endif %}
   </div>
 {% endblock %}

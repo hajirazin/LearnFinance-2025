@@ -321,6 +321,9 @@ def make_india_alpha_hrp_activities(
                     price=100.0,
                     whole_shares=int((wt / 100.0 * total_nav) / 100.0),
                     trade_value=float(int((wt / 100.0 * total_nav) / 100.0) * 100),
+                    stop_loss_price=94.0,
+                    stop_loss_distance_pct=0.06,
+                    stop_loss_reason="atr14",
                 )
                 for sym, wt in sorted(
                     percentage_weights.items(),

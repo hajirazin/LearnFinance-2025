@@ -457,7 +457,9 @@ class TestConvertWeightsToWholeShares:
             "brain_api.core.orders.fetch_current_prices",
             return_value={"AAPL": 100.0},
         ):
-            result = convert_weights_to_whole_shares(weights, total_nav=100_000.0)
+            result = convert_weights_to_whole_shares(
+                weights, total_nav=100_000.0, atr_map={}
+            )
 
         assert len(result.details) == 1
         d = result.details[0]
@@ -474,7 +476,9 @@ class TestConvertWeightsToWholeShares:
             "brain_api.core.orders.fetch_current_prices",
             return_value={"RELNR.NS": 10_000.0},
         ):
-            result = convert_weights_to_whole_shares(weights, total_nav=100_000.0)
+            result = convert_weights_to_whole_shares(
+                weights, total_nav=100_000.0, atr_map={}
+            )
 
         assert len(result.details) == 1
         d = result.details[0]
@@ -494,7 +498,9 @@ class TestConvertWeightsToWholeShares:
                 "HIGHPR.NS": 200_000.0,  # 2% of 1M = 20k → 0 shares
             },
         ):
-            result = convert_weights_to_whole_shares(weights, total_nav=1_000_000.0)
+            result = convert_weights_to_whole_shares(
+                weights, total_nav=1_000_000.0, atr_map={}
+            )
 
         assert len(result.details) == 3
 
@@ -511,7 +517,9 @@ class TestConvertWeightsToWholeShares:
             "brain_api.core.orders.fetch_current_prices",
             return_value={"SKIP": 100.0, "AAPL": 100.0, "TINY": 1.0},
         ):
-            result = convert_weights_to_whole_shares(weights, total_nav=100_000.0)
+            result = convert_weights_to_whole_shares(
+                weights, total_nav=100_000.0, atr_map={}
+            )
 
         symbols = [d.symbol for d in result.details]
         assert "SKIP" not in symbols

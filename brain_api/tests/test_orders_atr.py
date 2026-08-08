@@ -26,6 +26,7 @@ from brain_api.core.orders import (
     PortfolioInput,
     PositionInput,
     compute_atr_map,
+    convert_weights_to_whole_shares,
     fetch_ohlc_window,
     generate_orders,
 )
@@ -194,6 +195,56 @@ class TestGenerateOrdersStopLossFields:
         assert payload["stop_loss_reason"] == "atr14"
         assert payload["stop_loss_price"] == pytest.approx(94.0)
         assert payload["stop_loss_distance_pct"] == pytest.approx(0.06)
+
+
+class TestConvertWeightsStopLossFields:
+    """``convert_weights_to_whole_shares`` populates stop-loss on each row.
+
+    India Stage 2 emails read these fields from paper_allocation; the
+    math is unit-tested in test_stop_loss.py -- here we only assert
+    wiring (injected atr_map, missing ATR sentinel, .NS symbols).
+    """
+
+    def test_row_with_atr_carries_atr14_stop(self):
+        result = convert_weights_to_whole_shares(
+            percentage_weights={"RELIANCE.NS": 50.0},
+            total_nav=1_000_000.0,
+            prices={"RELIANCE.NS": 100.0},
+            atr_map={"RELIANCE.NS": 3.0},
+        )
+        assert len(result.details) == 1
+        detail = result.details[0]
+        assert detail.symbol == "RELIANCE.NS"
+        assert detail.stop_loss_reason == "atr14"
+        # ATR=3 -> raw=6 (6%) inside [5%, 10%] -> stop at 94.
+        assert detail.stop_loss_price == pytest.approx(94.0)
+        assert detail.stop_loss_distance_pct == pytest.approx(0.06)
+
+    def test_row_without_atr_carries_unavailable_sentinel(self):
+        result = convert_weights_to_whole_shares(
+            percentage_weights={"TCS.NS": 50.0},
+            total_nav=1_000_000.0,
+            prices={"TCS.NS": 100.0},
+            atr_map={},  # no ATR -> never substitute a flat percent
+        )
+        assert len(result.details) == 1
+        detail = result.details[0]
+        assert detail.stop_loss_reason == "atr_unavailable"
+        assert detail.stop_loss_price is None
+        assert detail.stop_loss_distance_pct is None
+
+    def test_mixed_atr_availability_per_symbol(self):
+        result = convert_weights_to_whole_shares(
+            percentage_weights={"HAS.NS": 40.0, "MISS.NS": 40.0},
+            total_nav=1_000_000.0,
+            prices={"HAS.NS": 100.0, "MISS.NS": 200.0},
+            atr_map={"HAS.NS": 3.0},
+        )
+        by_symbol = {d.symbol: d for d in result.details}
+        assert by_symbol["HAS.NS"].stop_loss_reason == "atr14"
+        assert by_symbol["HAS.NS"].stop_loss_price == pytest.approx(94.0)
+        assert by_symbol["MISS.NS"].stop_loss_reason == "atr_unavailable"
+        assert by_symbol["MISS.NS"].stop_loss_price is None
 
 
 class TestFetchOhlcWindowNaNAlignment:

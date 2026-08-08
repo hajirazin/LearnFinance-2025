@@ -297,13 +297,20 @@ class GenerateOrdersResponse(BaseModel):
 
 
 class AllocationDetailModel(BaseModel):
-    """A single row in the paper-allocation table (whole shares, no fractions)."""
+    """A single row in the paper-allocation table (whole shares, no fractions).
+
+    ``stop_loss_*`` fields mirror brain_api's paper-allocation response
+    so India Stage 2 emails keep the ATR stop column end-to-end.
+    """
 
     symbol: str
     weight_pct: float
     price: float
     whole_shares: int
     trade_value: float
+    stop_loss_price: float | None = None
+    stop_loss_distance_pct: float | None = None
+    stop_loss_reason: str = "atr_unavailable"
 
 
 class PaperAllocationResponse(BaseModel):

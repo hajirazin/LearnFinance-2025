@@ -353,7 +353,12 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
 
 
 class AllocationDetailModel(BaseModel):
-    """A single row in the paper-allocation table."""
+    """A single row in the paper-allocation table.
+
+    ``stop_loss_*`` fields are display-only ATR references so India
+    Stage 2 email tables can render the same stop column as the US
+    order table. See ``brain_api.core.stop_loss``.
+    """
 
     symbol: str = Field(..., description="Stock symbol")
     weight_pct: float = Field(..., description="Target weight percentage (0..100)")
@@ -362,6 +367,16 @@ class AllocationDetailModel(BaseModel):
         ..., ge=0, description="Whole shares (floored to integer)"
     )
     trade_value: float = Field(..., ge=0, description="Notional value of shares held")
+    stop_loss_price: float | None = Field(
+        None, description="ATR-based stop-loss price (display-only)"
+    )
+    stop_loss_distance_pct: float | None = Field(
+        None, description="Stop distance as a fraction of entry price"
+    )
+    stop_loss_reason: str = Field(
+        "atr_unavailable",
+        description="atr14 | atr_unavailable (paper rows are never sells)",
+    )
 
 
 class PaperAllocationRequest(BaseModel):
@@ -441,6 +456,9 @@ def paper_allocation_endpoint(
             price=d.price,
             whole_shares=d.whole_shares,
             trade_value=d.trade_value,
+            stop_loss_price=d.stop_loss_price,
+            stop_loss_distance_pct=d.stop_loss_distance_pct,
+            stop_loss_reason=d.stop_loss_reason,
         )
         for d in result.details
     ]

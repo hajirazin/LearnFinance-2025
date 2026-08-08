@@ -1,8 +1,10 @@
-"""ATR-based stop-loss reference for weekly-rebalanced US strategies.
+"""ATR-based stop-loss reference for weekly-rebalanced strategies.
 
 Display-only helper. The four US weekly emails surface a recommended
-stop-loss price next to each BUY order so the human reader has a manual
-exit reference. No Alpaca-side bracket orders are submitted; the system
+stop-loss price next to each BUY order, and the two India weekly
+emails (Alpha-HRP, Double HRP) surface the same reference on each
+Stage 2 paper-allocation row so the human reader has a manual exit
+reference. No broker-side bracket orders are submitted; the system
 remains a paper-by-default rebalancer.
 
 Formula

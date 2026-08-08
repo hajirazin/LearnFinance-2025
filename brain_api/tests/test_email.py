@@ -749,6 +749,53 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         response = client.post("/email/india-alpha-hrp-report", json=payload)
         assert response.status_code == 422
 
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_report_stage2_renders_stop_loss_from_paper_allocation(
+        self,
+        mock_send_email,
+        mock_india_weekly_report_email_request,
+    ):
+        """Stage 2 Stop Loss column renders atr14 and atr_unavailable rows."""
+        mock_send_email.return_value = True
+        payload = dict(mock_india_weekly_report_email_request)
+        payload["paper_allocation"] = {
+            "details": [
+                {
+                    "symbol": "NSE000.NS",
+                    "weight_pct": 100.0 / 15,
+                    "price": 100.0,
+                    "whole_shares": 66,
+                    "trade_value": 6600.0,
+                    "stop_loss_price": 94.0,
+                    "stop_loss_distance_pct": 0.06,
+                    "stop_loss_reason": "atr14",
+                },
+                {
+                    "symbol": "NSE001.NS",
+                    "weight_pct": 100.0 / 15,
+                    "price": 200.0,
+                    "whole_shares": 33,
+                    "trade_value": 6600.0,
+                    "stop_loss_price": None,
+                    "stop_loss_distance_pct": None,
+                    "stop_loss_reason": "atr_unavailable",
+                },
+            ],
+            "total_nav": 100_000.0,
+            "prices_used": {"NSE000.NS": 100.0, "NSE001.NS": 200.0},
+            "total_allocated_pct": 200.0 / 15,
+        }
+
+        response = client.post("/email/india-alpha-hrp-report", json=payload)
+
+        assert response.status_code == 200, response.text
+        body = response.json()["body"]
+        assert "Stop Loss" in body
+        assert "94.00" in body
+        assert "(-6.0%)" in body
+        assert "n/a (no ATR)" in body
+        assert "ATR(14)" in body
+
 
 class TestSACWeeklyReportEmailEndpoint:
     """Tests for POST /email/sac-weekly-report endpoint."""
@@ -1296,3 +1343,41 @@ class TestIndiaDoubleHRPReportEmailEndpoint:
         assert "Going Into This Week" in body
         assert "recorded last week" in body
         assert "S001.NS" in body
+
+    @patch("brain_api.routes.email.weekly_report.send_html_email")
+    def test_india_double_hrp_stage2_renders_stop_loss_from_paper_allocation(
+        self,
+        mock_send_email,
+        mock_india_double_hrp_email_request,
+    ):
+        """Stage 2 Stop Loss column renders atr14 from paper_allocation."""
+        mock_send_email.return_value = True
+        mock_india_double_hrp_email_request["paper_allocation"] = {
+            "details": [
+                {
+                    "symbol": "S000.NS",
+                    "weight_pct": 100.0 / 15,
+                    "price": 100.0,
+                    "whole_shares": 66,
+                    "trade_value": 6600.0,
+                    "stop_loss_price": 94.0,
+                    "stop_loss_distance_pct": 0.06,
+                    "stop_loss_reason": "atr14",
+                },
+            ],
+            "total_nav": 100_000.0,
+            "prices_used": {"S000.NS": 100.0},
+            "total_allocated_pct": 100.0 / 15,
+        }
+        response = client.post(
+            "/email/india-double-hrp-report",
+            json=mock_india_double_hrp_email_request,
+        )
+        assert response.status_code == 200
+        body = response.json()["body"]
+        assert "Stop Loss" in body
+        assert "94.00" in body
+        assert "(-6.0%)" in body
+        assert "ATR(14)" in body
+        # Still no US order-execution table -- stop lives on Stage 2.
+        assert "Order Execution Detail" not in body
