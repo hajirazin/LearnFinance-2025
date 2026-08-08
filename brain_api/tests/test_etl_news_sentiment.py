@@ -6,7 +6,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from brain_api.etl.gap_fill import _create_zero_article_rows
+from brain_api.etl.gap_fill import (
+    MAX_ARTICLES_FOR_ZERO_FILL,
+    MAX_GAP_SYMBOLS_FOR_ZERO_FILL,
+    _allow_zero_article_fill,
+    _create_zero_article_rows,
+)
 from brain_api.main import app
 
 client = TestClient(app)
@@ -445,6 +450,256 @@ class TestGapFillUnmatchedSymbols:
                 assert len(symbol_row) == 1, f"Expected 1 row for {symbol}"
                 assert symbol_row.iloc[0]["article_count"] == 0
                 assert symbol_row.iloc[0]["sentiment_score"] == 0.0
+
+
+class TestZeroFillDualGate:
+    """Zero-fill only when both n_gaps and n_articles are within thresholds."""
+
+    def test_allow_zero_article_fill_helper(self):
+        assert _allow_zero_article_fill(n_gaps=20, n_articles=20) is True
+        assert _allow_zero_article_fill(n_gaps=1, n_articles=0) is True
+        assert (
+            _allow_zero_article_fill(
+                n_gaps=MAX_GAP_SYMBOLS_FOR_ZERO_FILL + 1,
+                n_articles=0,
+            )
+            is False
+        )
+        assert (
+            _allow_zero_article_fill(
+                n_gaps=1,
+                n_articles=MAX_ARTICLES_FOR_ZERO_FILL + 1,
+            )
+            is False
+        )
+
+    def test_many_gap_symbols_skips_zero_fill(self, tmp_path):
+        """n_gaps > 20 leaves unmatched symbols as gaps (no article_count=0)."""
+        from datetime import datetime
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from brain_api.core.finbert import SentimentScore
+        from brain_api.core.news_api.alpaca import AlpacaNewsArticle
+        from brain_api.etl.gap_fill import fill_sentiment_gaps
+
+        gap_date = date(2024, 6, 15)
+        symbols = [f"S{i:02d}" for i in range(21)]
+        parquet_path = tmp_path / "test_sentiment.parquet"
+        gaps = [(gap_date, symbol) for symbol in symbols]
+
+        mock_article = AlpacaNewsArticle(
+            id="matched",
+            headline="S00 news",
+            summary="Only one gap symbol covered",
+            author="Test",
+            created_at=datetime(2024, 6, 15, 10, 0, 0),
+            updated_at=datetime(2024, 6, 15, 10, 0, 0),
+            url="http://test.com",
+            symbols=["S00"],
+            source="test",
+        )
+
+        with (
+            patch("brain_api.etl.gap_fill.get_etl_symbols", return_value=symbols),
+            patch("brain_api.etl.gap_fill.find_gaps", return_value=gaps),
+            patch(
+                "brain_api.etl.gap_fill.categorize_gaps",
+                return_value=(gaps, []),
+            ),
+            patch("brain_api.etl.gap_fill.AlpacaNewsClient") as mock_client_cls,
+            patch("brain_api.etl.gap_fill.FinBERTScorer") as mock_scorer_cls,
+            patch(
+                "brain_api.etl.gap_fill.get_gap_statistics",
+                return_value={"gaps_found": 20},
+            ),
+        ):
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_client.call_count = 1
+            mock_client.fetch_news_for_date.return_value = [mock_article]
+
+            mock_scorer = MagicMock()
+            mock_scorer_cls.return_value = mock_scorer
+            mock_scorer.score_batch.return_value = [
+                SentimentScore(
+                    label="positive",
+                    p_pos=0.8,
+                    p_neg=0.1,
+                    p_neu=0.1,
+                    score=0.7,
+                    confidence=0.8,
+                )
+            ]
+
+            result = fill_sentiment_gaps(
+                universe="halal",
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 12, 31),
+                parquet_path=parquet_path,
+                local_only=True,
+            )
+
+        assert result.success
+        df = pd.read_parquet(parquet_path)
+        assert len(df) == 1
+        assert df.iloc[0]["symbol"] == "S00"
+        assert df.iloc[0]["article_count"] == 1
+        assert (df["article_count"] == 0).sum() == 0
+
+    def test_many_articles_skips_zero_fill(self, tmp_path):
+        """n_articles > 20 skips zeros even when n_gaps <= 20."""
+        from datetime import datetime
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from brain_api.core.finbert import SentimentScore
+        from brain_api.core.news_api.alpaca import AlpacaNewsArticle
+        from brain_api.etl.gap_fill import fill_sentiment_gaps
+
+        gap_date = date(2024, 6, 15)
+        symbols = ["AAPL", "MSFT", "GOOGL"]
+        parquet_path = tmp_path / "test_sentiment.parquet"
+        gaps = [(gap_date, symbol) for symbol in symbols]
+
+        articles = [
+            AlpacaNewsArticle(
+                id=f"a{i}",
+                headline=f"Headline {i}",
+                summary="Noise article",
+                author="Test",
+                created_at=datetime(2024, 6, 15, 10, 0, 0),
+                updated_at=datetime(2024, 6, 15, 10, 0, 0),
+                url=f"http://test.com/{i}",
+                symbols=["AAPL"] if i == 0 else ["NVDA"],
+                source="test",
+            )
+            for i in range(21)
+        ]
+
+        with (
+            patch("brain_api.etl.gap_fill.get_etl_symbols", return_value=symbols),
+            patch("brain_api.etl.gap_fill.find_gaps", return_value=gaps),
+            patch(
+                "brain_api.etl.gap_fill.categorize_gaps",
+                return_value=(gaps, []),
+            ),
+            patch("brain_api.etl.gap_fill.AlpacaNewsClient") as mock_client_cls,
+            patch("brain_api.etl.gap_fill.FinBERTScorer") as mock_scorer_cls,
+            patch(
+                "brain_api.etl.gap_fill.get_gap_statistics",
+                return_value={"gaps_found": 2},
+            ),
+        ):
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_client.call_count = 1
+            mock_client.fetch_news_for_date.return_value = articles
+
+            mock_scorer = MagicMock()
+            mock_scorer_cls.return_value = mock_scorer
+            mock_scorer.score_batch.side_effect = lambda texts: [
+                SentimentScore(
+                    label="positive",
+                    p_pos=0.8,
+                    p_neg=0.1,
+                    p_neu=0.1,
+                    score=0.7,
+                    confidence=0.8,
+                )
+                for _ in texts
+            ]
+
+            result = fill_sentiment_gaps(
+                universe="halal",
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 12, 31),
+                parquet_path=parquet_path,
+                local_only=True,
+            )
+
+        assert result.success
+        df = pd.read_parquet(parquet_path)
+        assert set(df["symbol"]) == {"AAPL"}
+        assert df.iloc[0]["article_count"] == 1
+        assert (df["article_count"] == 0).sum() == 0
+
+    def test_both_gates_pass_writes_zeros_for_unmatched(self, tmp_path):
+        """n_gaps <= 20 and n_articles <= 20 still zeros unmatched symbols."""
+        from datetime import datetime
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from brain_api.core.finbert import SentimentScore
+        from brain_api.core.news_api.alpaca import AlpacaNewsArticle
+        from brain_api.etl.gap_fill import fill_sentiment_gaps
+
+        gap_date = date(2024, 6, 15)
+        symbols = ["AAPL", "MSFT"]
+        parquet_path = tmp_path / "test_sentiment.parquet"
+        gaps = [(gap_date, symbol) for symbol in symbols]
+
+        mock_article = AlpacaNewsArticle(
+            id="aapl-only",
+            headline="AAPL news",
+            summary="Only AAPL",
+            author="Test",
+            created_at=datetime(2024, 6, 15, 10, 0, 0),
+            updated_at=datetime(2024, 6, 15, 10, 0, 0),
+            url="http://test.com",
+            symbols=["AAPL"],
+            source="test",
+        )
+
+        with (
+            patch("brain_api.etl.gap_fill.get_etl_symbols", return_value=symbols),
+            patch("brain_api.etl.gap_fill.find_gaps", return_value=gaps),
+            patch(
+                "brain_api.etl.gap_fill.categorize_gaps",
+                return_value=(gaps, []),
+            ),
+            patch("brain_api.etl.gap_fill.AlpacaNewsClient") as mock_client_cls,
+            patch("brain_api.etl.gap_fill.FinBERTScorer") as mock_scorer_cls,
+            patch(
+                "brain_api.etl.gap_fill.get_gap_statistics",
+                return_value={"gaps_found": 0},
+            ),
+        ):
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_client.call_count = 1
+            mock_client.fetch_news_for_date.return_value = [mock_article]
+
+            mock_scorer = MagicMock()
+            mock_scorer_cls.return_value = mock_scorer
+            mock_scorer.score_batch.return_value = [
+                SentimentScore(
+                    label="positive",
+                    p_pos=0.8,
+                    p_neg=0.1,
+                    p_neu=0.1,
+                    score=0.7,
+                    confidence=0.8,
+                )
+            ]
+
+            result = fill_sentiment_gaps(
+                universe="halal",
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 12, 31),
+                parquet_path=parquet_path,
+                local_only=True,
+            )
+
+        assert result.success
+        df = pd.read_parquet(parquet_path).set_index("symbol")
+        assert set(df.index) == {"AAPL", "MSFT"}
+        assert df.loc["AAPL", "article_count"] == 1
+        assert df.loc["MSFT", "article_count"] == 0
+        assert df.loc["MSFT", "sentiment_score"] == 0.0
 
 
 class TestRefreshTrainingDataEndpoint:

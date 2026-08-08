@@ -32,6 +32,25 @@ logger = logging.getLogger(__name__)
 # Checkpoint interval: save to parquet every N API calls
 CHECKPOINT_INTERVAL = 100
 
+# Buffer under Alpaca's 50-article response cap. Zero-fill (confirmed
+# no-news) is only safe when the day's remaining gap set is small AND
+# the provider response is quiet; otherwise leave gaps open for a later
+# run. SAC hard-fails on missing rows by design until coverage densifies.
+MAX_GAP_SYMBOLS_FOR_ZERO_FILL = 20
+MAX_ARTICLES_FOR_ZERO_FILL = 20
+
+
+def _allow_zero_article_fill(*, n_gaps: int, n_articles: int) -> bool:
+    """Return whether unmatched gap symbols may be written as article_count=0.
+
+    Skip zero-fill when either gate trips so a truncated multi-symbol
+    Alpaca response cannot mark unchecked symbols as confirmed no-news.
+    """
+    return (
+        n_gaps <= MAX_GAP_SYMBOLS_FOR_ZERO_FILL
+        and n_articles <= MAX_ARTICLES_FOR_ZERO_FILL
+    )
+
 
 @dataclass
 class GapFillProgress:
@@ -367,10 +386,27 @@ def fill_sentiment_gaps(
                 for article in articles
                 if _is_article_on_observation_date(article.created_at, gap_date)
             ]
+            n_gaps = len(gap_symbols)
+            n_articles = len(qualifying_articles)
+            allow_zeros = gap_date != today and _allow_zero_article_fill(
+                n_gaps=n_gaps,
+                n_articles=n_articles,
+            )
+            if not allow_zeros and gap_date != today:
+                logger.info(
+                    "Skipping zero-fill for %s: n_gaps=%d n_articles=%d "
+                    "(thresholds gaps<=%d articles<=%d)",
+                    gap_date,
+                    n_gaps,
+                    n_articles,
+                    MAX_GAP_SYMBOLS_FOR_ZERO_FILL,
+                    MAX_ARTICLES_FOR_ZERO_FILL,
+                )
 
             if not qualifying_articles:
-                # Record gaps we checked but found no articles (except today)
-                if gap_date != today:
+                # Record gaps we checked but found no articles (except today),
+                # only when both safety gates pass.
+                if allow_zeros:
                     for symbol in gap_symbols:
                         checked_gaps_no_articles.append((gap_date, symbol))
             else:
@@ -393,10 +429,9 @@ def fill_sentiment_gaps(
                             articles_with_scores.append((gap_date, symbol, score))
                             matched_symbols.add(symbol)
 
-                # Record unmatched gap symbols as zero-article (except today)
-                # This handles the case where Alpaca returns articles but none
-                # match the gap symbols we're looking for
-                if gap_date != today:
+                # Record unmatched gap symbols as zero-article only when both
+                # safety gates pass. Otherwise leave them as gaps for a later run.
+                if allow_zeros:
                     for symbol in gap_symbols:
                         if symbol not in matched_symbols:
                             checked_gaps_no_articles.append((gap_date, symbol))
