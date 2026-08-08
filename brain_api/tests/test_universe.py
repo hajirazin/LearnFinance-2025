@@ -10,6 +10,46 @@ from brain_api.main import app
 
 client = TestClient(app)
 
+
+# Sticky/screening DB isolation lives in conftest.py
+# (``isolate_sticky_history_db``) — do not reintroduce a real
+# ``data/allocation/sticky_history.db`` path here.
+
+
+@pytest.fixture(autouse=True)
+def _forbid_live_yfinance_in_universe_tests(monkeypatch):
+    """Fail loud if any universe test hits the network for prices.
+
+    India ``filter_symbols_by_max_price`` and US min-history filters both
+    call ``load_prices_yfinance``. Tests must mock those call sites; a
+    miss here used to open hundreds of yfinance sockets and exhaust FDs
+    (``Errno 24 Too many open files`` / SQLite unable to open DB).
+    """
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError(
+            "live load_prices_yfinance called from test_universe — "
+            "mock the filter / price loader instead"
+        )
+
+    monkeypatch.setattr("brain_api.core.prices.load_prices_yfinance", _boom)
+    monkeypatch.setattr(
+        "brain_api.core.filters.filter_by_max_price.load_prices_yfinance", _boom
+    )
+
+
+@pytest.fixture(autouse=True)
+def _default_india_max_price_passthrough(monkeypatch):
+    """Default: max-price filter is a no-op (no yfinance).
+
+    Individual tests that assert exclusion behavior re-patch this symbol.
+    """
+    monkeypatch.setattr(
+        "brain_api.universe.halal_india.filter_symbols_by_max_price",
+        lambda symbols, as_of=None: (list(symbols), []),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mock data for S&P 500 (replaces live pd.read_csv from datahub.io)
 # ---------------------------------------------------------------------------
