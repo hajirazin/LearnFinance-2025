@@ -1,0 +1,13 @@
+---
+description: QuantBMAD gates for LearnFinance-2025 — Research-track work must use qb-plan/qb-implement with party quantbmad consensus
+alwaysApply: true
+---
+
+# QuantBMAD
+
+- Research-glob paths (`_bmad/quantbmad/research_globs.py`) → only `qb-plan` / `qb-implement`. Do not use Plan-mode-only, quick-dev, or loop to ship those diffs.
+- **Party `quantbmad`:** all Quant agents are equal peers. No boss except Razin. `qb-plan` and `qb-implement` require unanimous party Agree or 3 disagreement loops then ask Razin. Invoke `bmad-party-mode --party quantbmad --mode subagent`.
+- Never write `Status: Approved` into `docs/plans/**/plan.md` (human only). Never forge `evidence-cert.md` PASS — only `qb-agent-skeptic` after consensus Agree or Razin override.
+- Require `party-consensus-plan.md` / `party-consensus-implement.md`. Spec: `docs/quantbmad-spec-v3.md`.
+- **`qb-implement` repo-green:** Must run `python3 _bmad/quantbmad/scripts/check_repo_green.py --phase pre` before starting and `--phase post` before done. Covers ruff + brain_api pytest + temporal pytest. Never skip failures as unrelated — fix them.
+- Do not use `git commit --no-verify` for Research-glob work.

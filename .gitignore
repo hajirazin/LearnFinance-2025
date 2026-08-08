@@ -222,7 +222,6 @@ scripts/output
 .github
 .agent
 .agents
-_bmad
 _bmad-output
 .cline
 .zencoder
@@ -230,3 +229,5 @@ _bmad-output
 .bmad-loop/cache/
 .bmad-loop/policy.toml
 .claude
+*.user.toml
+
