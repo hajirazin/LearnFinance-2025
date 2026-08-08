@@ -53,12 +53,17 @@ written_by: qb-agent-skeptic
 
 def _write_consensus(plan_dir: Path, kind: str) -> Path:
     votes = "\n".join(f"  {c}: agree — ok" for c in PARTY_MEMBER_CODES)
+    git_diff_line = (
+        "git_diff: docs/plans/2026-08-08-test/implement.diff\n"
+        if kind == "implement"
+        else ""
+    )
     path = plan_dir / f"party-consensus-{kind}.md"
     path.write_text(
         f"""# Party consensus
 kind: {kind}
 plan_or_impl: docs/plans/2026-08-08-test/plan.md
-round: 1
+{git_diff_line}round: 1
 votes:
 {votes}
 unanimous: true
@@ -149,14 +154,21 @@ def test_sync_writes_all_skills() -> None:
     assert check_mirrors(_ROOT) == []
 
 
-def test_real_repo_gate_with_research_path() -> None:
-    assert (
-        gate.main(
-            [
-                "--project-root",
-                str(_ROOT),
-                "brain_api/brain_api/core/hrp.py",
-            ]
-        )
-        == 0
+def test_real_repo_gate_research_path_requires_approved_triad() -> None:
+    """Research-glob paths need Approved plan + PASS cert + implement consensus.
+
+    When the working tree has no Approved triad (e.g. only Draft plans), the gate
+    must refuse. When a valid triad exists, it must pass.
+    """
+    plan, cert, consensus = gate.discover_gate_artifacts(_ROOT)
+    code = gate.main(
+        [
+            "--project-root",
+            str(_ROOT),
+            "brain_api/brain_api/core/hrp.py",
+        ]
     )
+    if plan is None or cert is None or consensus is None:
+        assert code == 1
+    else:
+        assert code == 0

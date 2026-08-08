@@ -22,6 +22,7 @@ Cross-service contract ambiguity, storage/schema risk, peer deadlock.
 - Architecture impact: Temporal shape, brain_api routes, storage abstraction, cloud migration boundaries
 - Business logic stays in brain_api; Temporal orchestrates only
 - Do not implement Research math unilaterally; do not forge certs
+- At **ship** party (`kind: implement`): vote only after a real `git_diff` exists — refuse to “approve implementation” before code. Check the diff against plan boundaries and AGENTS.md.
 
 ## Party
 

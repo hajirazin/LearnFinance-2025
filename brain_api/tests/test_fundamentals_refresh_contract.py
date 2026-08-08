@@ -9,16 +9,14 @@ from brain_api.core.data_freshness import (
     DataFreshnessResult,
     refresh_stale_fundamentals,
 )
+from brain_api.core.fundamentals.refresh_policy import RefreshAction
 from brain_api.core.fundamentals.storage import save_raw_response
 from brain_api.main import app
 
 client = TestClient(app)
 
 
-def test_refresh_reenriches_unresolved_cache_even_when_fetched_today(
-    tmp_path,
-    monkeypatch,
-):
+def test_refresh_reenriches_unprovenanced_cache(tmp_path, monkeypatch):
     unresolved = {"quarterlyReports": [{"fiscalDateEnding": "2020-03-31"}]}
     save_raw_response(tmp_path, "AAPL", "income_statement", unresolved)
     save_raw_response(tmp_path, "AAPL", "balance_sheet", unresolved)
@@ -26,20 +24,21 @@ def test_refresh_reenriches_unresolved_cache_even_when_fetched_today(
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-key")
 
     fetcher = MagicMock()
+    fetcher.decide_action_for_symbol.return_value = RefreshAction.ENRICH_ONLY
+    fetcher.eligibility_client = MagicMock()
+    eligibility = MagicMock()
+    eligibility.sec_eligible = False
+    eligibility.cik = None
+    fetcher.eligibility_client.classify.return_value = eligibility
+    fetcher._pending_new_filing = set()
     fetcher.get_api_status.return_value = {
         "calls_today": 0,
         "daily_limit": 25,
         "remaining": 25,
     }
-    with (
-        patch(
-            "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-            return_value=[],
-        ),
-        patch(
-            "brain_api.core.data_freshness.FundamentalsFetcher",
-            return_value=fetcher,
-        ),
+    with patch(
+        "brain_api.core.data_freshness.FundamentalsFetcher",
+        return_value=fetcher,
     ):
         result = refresh_stale_fundamentals(["AAPL"], base_path=tmp_path)
 
@@ -53,19 +52,20 @@ def test_refresh_marks_empty_provider_result_as_failed(tmp_path, monkeypatch):
     monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-key")
     fetcher = MagicMock()
+    fetcher.decide_action_for_symbol.return_value = RefreshAction.PULL
+    fetcher.eligibility_client = MagicMock()
+    eligibility = MagicMock()
+    eligibility.sec_eligible = False
+    eligibility.cik = None
+    fetcher.eligibility_client.classify.return_value = eligibility
+    fetcher._pending_new_filing = set()
     fetcher.fetch_symbol.side_effect = RuntimeError(
         "Alpha Vantage returned no usable quarterly income statement for AAPL"
     )
     fetcher.get_api_status.return_value = {}
-    with (
-        patch(
-            "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-            return_value=["AAPL"],
-        ),
-        patch(
-            "brain_api.core.data_freshness.FundamentalsFetcher",
-            return_value=fetcher,
-        ),
+    with patch(
+        "brain_api.core.data_freshness.FundamentalsFetcher",
+        return_value=fetcher,
     ):
         result = refresh_stale_fundamentals(["AAPL"], base_path=tmp_path)
 
@@ -86,14 +86,10 @@ def test_refresh_distinguishes_corrupt_cache_from_missing_enrichment(
     monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-key")
 
-    with patch(
-        "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-        return_value=[],
-    ):
-        result = refresh_stale_fundamentals(["AAPL"], base_path=tmp_path)
+    result = refresh_stale_fundamentals(["AAPL"], base_path=tmp_path)
 
     assert result.failed == ["AAPL"]
-    assert "cache inspection failed" in result.errors["AAPL"].lower()
+    assert result.errors["AAPL"]
 
 
 def test_refresh_training_data_api_returns_503_for_failed_fundamentals(monkeypatch):

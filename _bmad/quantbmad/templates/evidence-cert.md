@@ -12,4 +12,6 @@ skeptic_task_id_or_fresh_chat: <id or "fresh-chat:YYYY-MM-DD">
 verdict: PASS | FAIL | AMBIGUOUS
 written_by: qb-agent-skeptic
 # Parent agents must not edit the verdict or written_by fields.
-# Only after party consensus Agree or Razin override (3-loop escalate).
+# Implement-time: write after independent experiment re-run (early evidence gate).
+# Does NOT wait for ship-party consensus (that reviews git diff after code + green).
+# Plan-time skeptic-plan-review.md still waits for plan-party Agree / Razin override.

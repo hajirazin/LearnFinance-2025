@@ -1,19 +1,18 @@
-"""Fundamentals module for Alpha Vantage data fetching and analysis.
+"""Fundamentals module: SEC-first historical statements + AV fallback.
 
-This module provides tools for fetching and analyzing fundamental financial data
-from Alpha Vantage, including income statements and balance sheets.
+Historical refresh uses SEC CompanyFacts for SEC-eligible US names (CIK +
+majority recent 10-K/10-Q), Alpha Vantage + SEC enrichment for non-eligible
+names, and yfinance only on the inference (current) path.
 
 Storage strategy:
-- Raw JSON files: Store complete API responses as source of truth
+- Raw JSON files: Store complete provider responses as source of truth
   Location: data/raw/fundamentals/{symbol}/income_statement.json
             data/raw/fundamentals/{symbol}/balance_sheet.json
 - SQLite index: Track what's been fetched and when for quick lookups
   Location: data/cache/fundamentals.db
 
-This approach ensures:
-1. No data loss if parsing/schema changes
-2. Efficient lookups without re-parsing all files
-3. Rate limit awareness (25/day free tier)
+Freshness is filing-head based (cheap SEC submissions check), not fetch-today.
+AV daily_limit is observability only — no local pre-gate.
 """
 
 # Models
@@ -56,6 +55,19 @@ from brain_api.core.fundamentals.parser import (
     get_statement_as_of,
     parse_quarterly_statements,
 )
+from brain_api.core.fundamentals.refresh_policy import (
+    RefreshAction,
+    decide_refresh_action,
+)
+from brain_api.core.fundamentals.sec_eligibility import (
+    EligibilityResult,
+    FilingHead,
+    SECEligibilityClient,
+)
+from brain_api.core.fundamentals.sec_statements import (
+    SECStatementError,
+    build_statement_payloads_from_companyfacts,
+)
 
 # Storage
 from brain_api.core.fundamentals.storage import (
@@ -68,7 +80,9 @@ __all__ = [
     # Client
     "AlphaVantageClient",
     "AlphaVantageProviderError",
+    "EligibilityResult",
     "FetchRecord",
+    "FilingHead",
     "FundamentalRatios",
     "FundamentalsCacheError",
     # Fetcher
@@ -82,8 +96,13 @@ __all__ = [
     # Models
     "QuarterlyStatement",
     "RealAlphaVantageClient",
+    "RefreshAction",
+    "SECEligibilityClient",
+    "SECStatementError",
+    "build_statement_payloads_from_companyfacts",
     "cached_fundamentals_require_sec_enrichment",
     "compute_ratios",
+    "decide_refresh_action",
     # Loader (shared by all consumers)
     "get_default_data_path",
     # Storage

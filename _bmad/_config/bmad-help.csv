@@ -90,7 +90,7 @@ Web Design Studio,bmad-wds-usability-testing,Acceptance Testing,AT,Test on real 
 Web Design Studio,bmad-wds-product-evolution,Product Evolution,PE,Continuous improvement: feedback to Trigger Map to spec update to code to verify.,,,3-wds-build,bmad-wds-usability-testing,,false,design_artifacts,updated-artifacts
 QuantBMAD,_meta,,,,,,,,,false,docs/quantbmad-spec-v3.md,
 QuantBMAD,qb-plan,QuantBMAD Plan,QBP,"Classify Quick/Research/Go-live, ledger, hypothesis, probe, then party quantbmad consensus (unanimous or 3 loops→Razin); plan.md Draft only.",,,4-implementation,,qb-implement,true,docs/plans,plan.md|party-consensus-plan.md
-QuantBMAD,qb-implement,QuantBMAD Implement,QBI,"Human-Approved plan: repo-green pre (ruff+brain+temporal), evidence, party consensus, qb-agent-skeptic cert, implement, repo-green post. No unrelated-skip on failures.",,,4-implementation,qb-plan,bmad-code-review,true,docs/plans,evidence-cert.md|party-consensus-implement.md
+QuantBMAD,qb-implement,QuantBMAD Implement,QBI,"Human-Approved plan: repo-green pre, evidence, Skeptic cert, implement, repo-green post, then full party ship consensus on git_diff. No unrelated-skip on failures.",,,4-implementation,qb-plan,bmad-code-review,true,docs/plans,evidence-cert.md|party-consensus-implement.md
 QuantBMAD,qb-agent-skeptic,QuantBMAD Skeptic Agent,QAS,"Falsify-only peer agent in party quantbmad. Writes certs only after consensus Agree or Razin override. Never authors fixes.",,,anytime,,,false,docs/plans,skeptic-plan-review.md|evidence-cert.md
 QuantBMAD,qb-agent-researcher,Quant Researcher Agent,QAR,Hypothesis and falsification design peer.,,,anytime,,,false,,
 QuantBMAD,qb-agent-pm,Quant PM Agent,QAP,Track classification and roadmap peer.,,,anytime,,,false,,

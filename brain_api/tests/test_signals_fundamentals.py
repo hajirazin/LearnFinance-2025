@@ -701,7 +701,7 @@ def test_refresh_fundamentals_returns_200(temp_data_path):
 
 
 def test_refresh_skips_symbols_fetched_today(temp_data_path):
-    """PUT endpoint skips symbols that were already fetched today."""
+    """PUT endpoint skips symbols that are already filing-head fresh."""
     app.dependency_overrides[get_data_base_path] = lambda: temp_data_path
     client = TestClient(app)
 

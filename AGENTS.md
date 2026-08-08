@@ -575,13 +575,14 @@ Before merging changes that touch ML/model code:
 In-repo expansion sitting **in front of** BMad Method for math, model, allocator, universe, promotion, and broker-cost changes. Spec: [`docs/quantbmad-spec-v3.md`](docs/quantbmad-spec-v3.md).
 
 - **Workflow skills:** `qb-plan` → (human Approves `plan.md`) → `qb-implement`. Both require mandatory **party `quantbmad`** consensus (`bmad-party-mode --party quantbmad --mode subagent`): unanimous Agree, or after **3** disagreement loops ask **Razin**. No agent is boss of any other.
+- **Implement order:** pre-green → evidence → Skeptic `evidence-cert` (early gate) → code → post-green → **full party ship consensus on `git_diff`**. Plan consensus stays at end of `qb-plan`. Architect does not approve unwritten code.
 - **Agents (peers in party):** `qb-agent-researcher`, `qb-agent-pm`, `qb-agent-ml`, `qb-agent-risk`, `qb-agent-skeptic`, `qb-agent-validation`, `qb-agent-dev`, `qb-agent-architect`. Skeptic is an **agent**, not a workflow skill. Party members registered in `_bmad/custom/bmad-party-mode.toml`.
 - **Skills install:** literal copies under `.agents/skills/`, `.cursor/skills/`, `.gemini/skills/` from `_bmad/quantbmad/skills/` (no symlinks). Sync: `python3 _bmad/quantbmad/scripts/sync_skill_mirrors.py`.
 - **Research paths:** `_bmad/quantbmad/research_globs.py`. Do not ship those diffs via Plan-mode-only, `bmad-quick-dev`, `bmad-dev-story`, `bmad-dev-auto`, or `bmad-loop`.
 - **Approval:** no agent may write `Status: Approved` on `docs/plans/**/plan.md` (human edit only). Party Agree ≠ file Approved.
-- **Evidence:** only `qb-agent-skeptic` writes `evidence-cert.md` with `verdict: PASS`, and only after party consensus Agree or Razin override. Prefer different model provider for Skeptic than author.
-- **Consensus artifacts:** `party-consensus-plan.md` / `party-consensus-implement.md` required; validate with `validate_party_consensus.py`.
-- **Repo-green (qb-implement):** Before start and before done, `python3 _bmad/quantbmad/scripts/check_repo_green.py` must pass (ruff check+format on brain_api/temporal/_bmad/quantbmad; `uv run pytest` in brain_api; `uv run pytest` in temporal). **No “unrelated failure” escape** — fix everything or ask Razin.
+- **Evidence:** only `qb-agent-skeptic` writes `evidence-cert.md` with `verdict: PASS` after independent experiment re-run (early implement gate; before ship-party). Prefer different model provider for Skeptic than author. Plan-time `skeptic-plan-review.md` still follows plan-party Agree / Razin override.
+- **Consensus artifacts:** `party-consensus-plan.md` / `party-consensus-implement.md` required; validate with `validate_party_consensus.py`. Implement consensus requires a non-empty `git_diff` field.
+- **Repo-green (qb-implement):** Before start and before ship consensus, `python3 _bmad/quantbmad/scripts/check_repo_green.py` must pass (ruff check+format on brain_api/temporal/_bmad/quantbmad; `uv run pytest` in brain_api; `uv run pytest` in temporal). **No “unrelated failure” escape** — fix everything or ask Razin.
 - **Ledger:** [`docs/research-ledger.md`](docs/research-ledger.md). Every 5th Research PASS and all Go-live rows need Razin human audit.
 - **CI/pre-commit:** `quantbmad-research-gate` (mirrors + plan + cert + consensus). Do not use `--no-verify` for Research work.
 - **Tests:** `python3 -m pytest _bmad/quantbmad/tests`

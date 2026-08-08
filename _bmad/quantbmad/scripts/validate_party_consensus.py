@@ -48,6 +48,14 @@ def validate_party_consensus(path: Path) -> list[str]:
     if kind not in {"plan", "implement"}:
         errors.append(f"{path}: kind must be plan|implement (got {kind!r})")
 
+    if kind == "implement":
+        git_diff = _field(text, "git_diff")
+        if not git_diff or git_diff.startswith("<"):
+            errors.append(
+                f"{path}: kind implement requires non-empty git_diff "
+                "(ship consensus is after code; Architect reviews the diff)"
+            )
+
     round_raw = _field(text, "round")
     try:
         round_n = int(round_raw) if round_raw else -1

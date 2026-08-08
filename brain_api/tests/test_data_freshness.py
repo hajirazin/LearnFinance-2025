@@ -1,4 +1,4 @@
-"""Tests for data_freshness module."""
+"""Tests for data_freshness module (filing-head freshness, not fetch-today)."""
 
 from datetime import date
 from pathlib import Path
@@ -6,122 +6,57 @@ from unittest.mock import MagicMock, patch
 
 from brain_api.core.data_freshness import (
     ensure_fresh_training_data,
-    get_symbols_not_fetched_today,
     refresh_stale_fundamentals,
 )
-from brain_api.core.fundamentals.models import FetchRecord
+from brain_api.core.fundamentals.refresh_policy import RefreshAction
 from brain_api.etl.gap_fill import GapFillProgress, GapFillResult
 
 
-class TestGetSymbolsNotFetchedToday:
-    """Tests for get_symbols_not_fetched_today function."""
+def _mock_fetcher(
+    *,
+    actions: dict[str, RefreshAction] | None = None,
+    default_action: RefreshAction = RefreshAction.SKIP,
+    fetch_side_effect=None,
+    sec_eligible: set[str] | None = None,
+    pending: set[str] | None = None,
+) -> MagicMock:
+    fetcher = MagicMock()
+    actions = actions or {}
+    sec_eligible = sec_eligible or set()
+    pending = pending or set()
 
-    def test_none_fetched_returns_all_symbols(self, tmp_path: Path) -> None:
-        """All symbols need fetching when DB is empty."""
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
+    def decide(symbol: str, *, force_refresh: bool = False) -> RefreshAction:
+        if force_refresh:
+            return RefreshAction.PULL
+        return actions.get(symbol, default_action)
 
-        symbols = ["AAPL", "MSFT", "GOOGL"]
+    def classify(symbol: str):
+        result = MagicMock()
+        result.sec_eligible = symbol in sec_eligible
+        result.cik = "0000320193" if symbol in sec_eligible else None
+        return result
 
-        with patch(
-            "brain_api.core.data_freshness.FundamentalsIndex"
-        ) as mock_index_class:
-            mock_index = MagicMock()
-            mock_index.get_fetch_record.return_value = None
-            mock_index_class.return_value = mock_index
-
-            result = get_symbols_not_fetched_today(symbols, cache_dir)
-
-            assert result == ["AAPL", "MSFT", "GOOGL"]
-            assert mock_index.close.called
-
-    def test_some_fetched_today_returns_stale_only(self, tmp_path: Path) -> None:
-        """Only stale symbols returned when some fetched today."""
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-
-        symbols = ["AAPL", "MSFT", "GOOGL"]
-        today = date.today()
-        yesterday = (
-            date(today.year, today.month, today.day - 1)
-            if today.day > 1
-            else date(today.year, today.month - 1, 28)
-        )
-
-        def mock_get_record(symbol: str, endpoint: str) -> FetchRecord | None:
-            if symbol == "AAPL":
-                # Fetched today
-                return FetchRecord(
-                    symbol="AAPL",
-                    endpoint="income_statement",
-                    file_path="/path/to/aapl.json",
-                    fetched_at=f"{today.isoformat()}T10:00:00+00:00",
-                    latest_annual_date="2024-12-31",
-                    latest_quarterly_date="2024-09-30",
-                )
-            elif symbol == "MSFT":
-                # Fetched yesterday
-                return FetchRecord(
-                    symbol="MSFT",
-                    endpoint="income_statement",
-                    file_path="/path/to/msft.json",
-                    fetched_at=f"{yesterday.isoformat()}T10:00:00+00:00",
-                    latest_annual_date="2024-12-31",
-                    latest_quarterly_date="2024-09-30",
-                )
-            else:
-                # Never fetched
-                return None
-
-        with patch(
-            "brain_api.core.data_freshness.FundamentalsIndex"
-        ) as mock_index_class:
-            mock_index = MagicMock()
-            mock_index.get_fetch_record.side_effect = mock_get_record
-            mock_index_class.return_value = mock_index
-
-            result = get_symbols_not_fetched_today(symbols, cache_dir)
-
-            # AAPL was fetched today, so only MSFT and GOOGL should be returned
-            assert "AAPL" not in result
-            assert "MSFT" in result
-            assert "GOOGL" in result
-
-    def test_all_fetched_today_returns_empty(self, tmp_path: Path) -> None:
-        """Empty list when all fetched today."""
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-
-        symbols = ["AAPL", "MSFT"]
-        today = date.today()
-
-        with patch(
-            "brain_api.core.data_freshness.FundamentalsIndex"
-        ) as mock_index_class:
-            mock_index = MagicMock()
-            mock_index.get_fetch_record.return_value = FetchRecord(
-                symbol="ANY",
-                endpoint="income_statement",
-                file_path="/path/to/any.json",
-                fetched_at=f"{today.isoformat()}T10:00:00+00:00",
-                latest_annual_date="2024-12-31",
-                latest_quarterly_date="2024-09-30",
-            )
-            mock_index_class.return_value = mock_index
-
-            result = get_symbols_not_fetched_today(symbols, cache_dir)
-
-            assert result == []
+    fetcher.decide_action_for_symbol.side_effect = decide
+    fetcher.eligibility_client = MagicMock()
+    fetcher.eligibility_client.classify.side_effect = classify
+    fetcher._pending_new_filing = set(pending)
+    if fetch_side_effect is not None:
+        fetcher.fetch_symbol.side_effect = fetch_side_effect
+    fetcher.get_api_status.return_value = {
+        "calls_today": 0,
+        "daily_limit": 25,
+        "remaining": 25,
+    }
+    return fetcher
 
 
 class TestEnsureFreshTrainingData:
     """Tests for ensure_fresh_training_data function."""
 
     def test_fills_sentiment_gaps(self, tmp_path: Path) -> None:
-        """Calls gap_fill for sentiment."""
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         parquet_path.parent.mkdir(parents=True)
-        parquet_path.touch()  # Create empty file
+        parquet_path.touch()
 
         symbols = ["AAPL", "MSFT"]
         start_date = date(2024, 1, 1)
@@ -129,10 +64,7 @@ class TestEnsureFreshTrainingData:
 
         mock_gap_result = GapFillResult(
             success=True,
-            progress=GapFillProgress(
-                rows_added=100,
-                gaps_pre_api_date=50,
-            ),
+            progress=GapFillProgress(rows_added=100, gaps_pre_api_date=50),
         )
 
         with (
@@ -141,11 +73,22 @@ class TestEnsureFreshTrainingData:
                 return_value=mock_gap_result,
             ) as mock_fill,
             patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=[],
+                "brain_api.core.data_freshness.refresh_stale_fundamentals",
+            ) as mock_refresh,
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "test_key",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
             ),
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}),
         ):
+            mock_refresh.return_value = MagicMock(
+                refreshed=[],
+                skipped=["AAPL", "MSFT"],
+                failed=[],
+                errors={},
+            )
             result = ensure_fresh_training_data(
                 "halal_filtered",
                 symbols,
@@ -164,23 +107,15 @@ class TestEnsureFreshTrainingData:
             assert result.sentiment_gaps_filled == 100
             assert result.sentiment_gaps_remaining == 50
 
-    def test_refreshes_fundamentals_not_fetched_today(self, tmp_path: Path) -> None:
-        """Fetches fundamentals not fetched today."""
+    def test_refreshes_fundamentals_needing_pull(self, tmp_path: Path) -> None:
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         base_path = tmp_path
-
         symbols = ["AAPL", "MSFT"]
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
 
         with (
-            patch(
-                "brain_api.core.data_freshness.fill_sentiment_gaps",
-            ),
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["MSFT"],  # Only MSFT needs refreshing
-            ),
+            patch("brain_api.core.data_freshness.fill_sentiment_gaps"),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -192,10 +127,14 @@ class TestEnsureFreshTrainingData:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
+            mock_fetcher = _mock_fetcher(
+                actions={
+                    "AAPL": RefreshAction.SKIP,
+                    "MSFT": RefreshAction.PULL,
+                },
+            )
             mock_fetcher_class.return_value = mock_fetcher
 
-            # Parquet doesn't exist, so gap fill will be skipped
             result = ensure_fresh_training_data(
                 "halal_filtered",
                 symbols,
@@ -205,34 +144,26 @@ class TestEnsureFreshTrainingData:
                 fundamentals_base_path=base_path,
             )
 
-            # Should have called fetch_symbol for MSFT
             mock_fetcher.fetch_symbol.assert_called_once_with(
-                "MSFT", force_refresh=True
+                "MSFT", force_refresh=False
             )
             assert "MSFT" in result.fundamentals_refreshed
             assert "AAPL" not in result.fundamentals_refreshed
             assert mock_fetcher.close.called
 
     def test_continues_on_fundamentals_failure(self, tmp_path: Path) -> None:
-        """Logs warning and continues when fetch fails."""
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         base_path = tmp_path
-
         symbols = ["AAPL", "MSFT", "GOOGL"]
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
 
-        def mock_fetch(symbol: str, *, force_refresh: bool) -> None:
+        def mock_fetch(symbol: str, *, force_refresh: bool = False) -> None:
             if symbol == "MSFT":
                 raise Exception("API rate limit exceeded")
-            # Other symbols succeed
 
         with (
             patch("brain_api.core.data_freshness.fill_sentiment_gaps"),
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["AAPL", "MSFT", "GOOGL"],
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -244,8 +175,10 @@ class TestEnsureFreshTrainingData:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
-            mock_fetcher.fetch_symbol.side_effect = mock_fetch
+            mock_fetcher = _mock_fetcher(
+                default_action=RefreshAction.PULL,
+                fetch_side_effect=mock_fetch,
+            )
             mock_fetcher_class.return_value = mock_fetcher
 
             result = ensure_fresh_training_data(
@@ -257,27 +190,20 @@ class TestEnsureFreshTrainingData:
                 fundamentals_base_path=base_path,
             )
 
-            # AAPL and GOOGL should succeed, MSFT should fail
             assert "AAPL" in result.fundamentals_refreshed
             assert "GOOGL" in result.fundamentals_refreshed
             assert "MSFT" in result.fundamentals_failed
             assert len(result.fundamentals_failed) == 1
 
-    def test_skips_already_fresh_fundamentals(self, tmp_path: Path) -> None:
-        """Skips symbols fetched today."""
+    def test_skips_fresh_fundamentals(self, tmp_path: Path) -> None:
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         base_path = tmp_path
-
         symbols = ["AAPL", "MSFT"]
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
 
         with (
             patch("brain_api.core.data_freshness.fill_sentiment_gaps"),
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=[],  # All symbols already fetched today
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -289,7 +215,7 @@ class TestEnsureFreshTrainingData:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
+            mock_fetcher = _mock_fetcher(default_action=RefreshAction.SKIP)
             mock_fetcher_class.return_value = mock_fetcher
 
             result = ensure_fresh_training_data(
@@ -301,16 +227,13 @@ class TestEnsureFreshTrainingData:
                 fundamentals_base_path=base_path,
             )
 
-            # fetch_symbol should not be called since all are fresh
             mock_fetcher.fetch_symbol.assert_not_called()
             assert result.fundamentals_refreshed == []
             assert result.fundamentals_skipped_today == ["AAPL", "MSFT"]
 
-    def test_skips_fundamentals_when_no_api_key(self, tmp_path: Path) -> None:
-        """Skips fundamentals refresh when API key is not set."""
+    def test_fails_without_sec_user_agent(self, tmp_path: Path) -> None:
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         base_path = tmp_path
-
         symbols = ["AAPL", "MSFT"]
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
@@ -318,17 +241,10 @@ class TestEnsureFreshTrainingData:
         with (
             patch("brain_api.core.data_freshness.fill_sentiment_gaps"),
             patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["AAPL", "MSFT"],
-            ),
-            patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}, clear=False),
+            patch.dict("os.environ", {"SEC_USER_AGENT": ""}, clear=False),
         ):
-            mock_fetcher = MagicMock()
-            mock_fetcher_class.return_value = mock_fetcher
-
             result = ensure_fresh_training_data(
                 "halal_filtered",
                 symbols,
@@ -338,15 +254,13 @@ class TestEnsureFreshTrainingData:
                 fundamentals_base_path=base_path,
             )
 
-            # FundamentalsFetcher should not be instantiated
             mock_fetcher_class.assert_not_called()
             assert result.fundamentals_refreshed == []
+            assert set(result.fundamentals_failed) == {"AAPL", "MSFT"}
 
     def test_returns_duration_seconds(self, tmp_path: Path) -> None:
-        """Returns duration of the operation."""
         parquet_path = tmp_path / "output" / "daily_sentiment.parquet"
         base_path = tmp_path
-
         symbols = ["AAPL"]
         start_date = date(2024, 1, 1)
         end_date = date(2024, 12, 31)
@@ -354,11 +268,19 @@ class TestEnsureFreshTrainingData:
         with (
             patch("brain_api.core.data_freshness.fill_sentiment_gaps"),
             patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=[],
+                "brain_api.core.data_freshness.refresh_stale_fundamentals",
+            ) as mock_refresh,
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "k",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
             ),
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}),
         ):
+            mock_refresh.return_value = MagicMock(
+                refreshed=[], skipped=["AAPL"], failed=[], errors={}
+            )
             result = ensure_fresh_training_data(
                 "halal_filtered",
                 symbols,
@@ -367,35 +289,18 @@ class TestEnsureFreshTrainingData:
                 parquet_path=parquet_path,
                 fundamentals_base_path=base_path,
             )
-
             assert result.duration_seconds >= 0
 
 
 class TestRefreshStaleFundamentals:
-    """Tests for refresh_stale_fundamentals function.
+    """Tests for refresh_stale_fundamentals (filing-head policy)."""
 
-    This function is shared by:
-    - PUT /signals/fundamentals/historical endpoint
-    - ensure_fresh_training_data() before training
-    """
-
-    def test_skips_symbols_fetched_today(self, tmp_path: Path) -> None:
-        """All symbols already fetched today are skipped."""
-        base_path = tmp_path
-
+    def test_skips_fresh_symbols(self, tmp_path: Path) -> None:
         symbols = ["AAPL", "MSFT"]
-
         with (
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=[],  # All symbols already fetched today
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch(
-                "brain_api.core.data_freshness.FundamentalsIndex"
-            ) as mock_index_class,
             patch.dict(
                 "os.environ",
                 {
@@ -404,29 +309,19 @@ class TestRefreshStaleFundamentals:
                 },
             ),
         ):
-            mock_index = MagicMock()
-            mock_index.get_api_calls_today.return_value = 5
-            mock_index_class.return_value = mock_index
+            mock_fetcher = _mock_fetcher(default_action=RefreshAction.SKIP)
+            mock_fetcher_class.return_value = mock_fetcher
 
-            result = refresh_stale_fundamentals(symbols, base_path=base_path)
+            result = refresh_stale_fundamentals(symbols, base_path=tmp_path)
 
-            # FundamentalsFetcher should not be instantiated (nothing to fetch)
-            mock_fetcher_class.assert_not_called()
+            mock_fetcher.fetch_symbol.assert_not_called()
             assert result.refreshed == []
             assert result.skipped == ["AAPL", "MSFT"]
             assert result.failed == []
 
-    def test_refreshes_stale_symbols(self, tmp_path: Path) -> None:
-        """Symbols not fetched today are refreshed via API."""
-        base_path = tmp_path
-
+    def test_refreshes_pull_symbols(self, tmp_path: Path) -> None:
         symbols = ["AAPL", "MSFT", "GOOGL"]
-
         with (
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["MSFT", "GOOGL"],  # Only these need refreshing
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -438,36 +333,27 @@ class TestRefreshStaleFundamentals:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
-            mock_fetcher.get_api_status.return_value = {
-                "calls_today": 7,
-                "daily_limit": 25,
-                "remaining": 18,
-            }
+            mock_fetcher = _mock_fetcher(
+                actions={
+                    "AAPL": RefreshAction.SKIP,
+                    "MSFT": RefreshAction.PULL,
+                    "GOOGL": RefreshAction.PULL,
+                },
+            )
             mock_fetcher_class.return_value = mock_fetcher
 
-            result = refresh_stale_fundamentals(symbols, base_path=base_path)
+            result = refresh_stale_fundamentals(symbols, base_path=tmp_path)
 
-            # Should have called fetch_symbol for MSFT and GOOGL
             assert mock_fetcher.fetch_symbol.call_count == 2
-            mock_fetcher.fetch_symbol.assert_any_call("MSFT", force_refresh=True)
-            mock_fetcher.fetch_symbol.assert_any_call("GOOGL", force_refresh=True)
+            mock_fetcher.fetch_symbol.assert_any_call("MSFT", force_refresh=False)
+            mock_fetcher.fetch_symbol.assert_any_call("GOOGL", force_refresh=False)
             assert "MSFT" in result.refreshed
             assert "GOOGL" in result.refreshed
             assert "AAPL" in result.skipped
             assert mock_fetcher.close.called
 
     def test_returns_api_status(self, tmp_path: Path) -> None:
-        """Returns API status in result."""
-        base_path = tmp_path
-
-        symbols = ["AAPL"]
-
         with (
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["AAPL"],
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -479,7 +365,9 @@ class TestRefreshStaleFundamentals:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
+            mock_fetcher = _mock_fetcher(
+                actions={"AAPL": RefreshAction.PULL},
+            )
             mock_fetcher.get_api_status.return_value = {
                 "calls_today": 10,
                 "daily_limit": 25,
@@ -487,28 +375,18 @@ class TestRefreshStaleFundamentals:
             }
             mock_fetcher_class.return_value = mock_fetcher
 
-            result = refresh_stale_fundamentals(symbols, base_path=base_path)
+            result = refresh_stale_fundamentals(["AAPL"], base_path=tmp_path)
 
             assert result.api_status["calls_today"] == 10
             assert result.api_status["daily_limit"] == 25
             assert result.api_status["remaining"] == 15
 
     def test_continues_on_failure(self, tmp_path: Path) -> None:
-        """Continues fetching other symbols when one fails."""
-        base_path = tmp_path
-
-        symbols = ["AAPL", "MSFT", "GOOGL"]
-
-        def mock_fetch(symbol: str, *, force_refresh: bool) -> None:
+        def mock_fetch(symbol: str, *, force_refresh: bool = False) -> None:
             if symbol == "MSFT":
                 raise Exception("API rate limit exceeded")
-            # Other symbols succeed
 
         with (
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["AAPL", "MSFT", "GOOGL"],
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
@@ -520,42 +398,56 @@ class TestRefreshStaleFundamentals:
                 },
             ),
         ):
-            mock_fetcher = MagicMock()
-            mock_fetcher.fetch_symbol.side_effect = mock_fetch
-            mock_fetcher.get_api_status.return_value = {
-                "calls_today": 5,
-                "daily_limit": 25,
-                "remaining": 20,
-            }
+            mock_fetcher = _mock_fetcher(
+                default_action=RefreshAction.PULL,
+                fetch_side_effect=mock_fetch,
+            )
             mock_fetcher_class.return_value = mock_fetcher
 
-            result = refresh_stale_fundamentals(symbols, base_path=base_path)
+            result = refresh_stale_fundamentals(
+                ["AAPL", "MSFT", "GOOGL"], base_path=tmp_path
+            )
 
-            # AAPL and GOOGL should succeed, MSFT should fail
             assert "AAPL" in result.refreshed
             assert "GOOGL" in result.refreshed
             assert "MSFT" in result.failed
             assert len(result.failed) == 1
 
-    def test_skips_when_no_api_key(self, tmp_path: Path) -> None:
-        """Fails all symbols when API key is not set."""
-        base_path = tmp_path
-
-        symbols = ["AAPL", "MSFT"]
-
+    def test_fails_without_sec_user_agent(self, tmp_path: Path) -> None:
         with (
-            patch(
-                "brain_api.core.data_freshness.get_symbols_not_fetched_today",
-                return_value=["AAPL", "MSFT"],
-            ),
             patch(
                 "brain_api.core.data_freshness.FundamentalsFetcher"
             ) as mock_fetcher_class,
-            patch.dict("os.environ", {"ALPHA_VANTAGE_API_KEY": ""}, clear=False),
+            patch.dict("os.environ", {"SEC_USER_AGENT": ""}, clear=False),
         ):
-            result = refresh_stale_fundamentals(symbols, base_path=base_path)
+            result = refresh_stale_fundamentals(["AAPL", "MSFT"], base_path=tmp_path)
 
-            # FundamentalsFetcher should not be instantiated
             mock_fetcher_class.assert_not_called()
             assert result.refreshed == []
             assert result.failed == ["AAPL", "MSFT"]
+
+    def test_av_pull_requires_api_key(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "brain_api.core.data_freshness.FundamentalsFetcher"
+            ) as mock_fetcher_class,
+            patch.dict(
+                "os.environ",
+                {
+                    "ALPHA_VANTAGE_API_KEY": "",
+                    "SEC_USER_AGENT": "LearnFinance test@example.com",
+                },
+                clear=False,
+            ),
+        ):
+            mock_fetcher = _mock_fetcher(
+                actions={"SAP": RefreshAction.PULL},
+                sec_eligible=set(),
+            )
+            mock_fetcher_class.return_value = mock_fetcher
+
+            result = refresh_stale_fundamentals(["SAP"], base_path=tmp_path)
+
+            mock_fetcher.fetch_symbol.assert_not_called()
+            assert result.failed == ["SAP"]
+            assert "ALPHA_VANTAGE_API_KEY" in result.errors["SAP"]

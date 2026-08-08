@@ -117,7 +117,10 @@ def test_legacy_nested_fundamentals_cache_migrates_without_data_loss(tmp_path):
     assert legacy.exists()
 
 
-def test_cached_alpha_vantage_periods_are_sec_enriched_before_use(tmp_path):
+def test_cached_alpha_vantage_periods_are_sec_enriched_before_use(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
     payload = {
         "quarterlyReports": [
             {
@@ -145,11 +148,27 @@ def test_cached_alpha_vantage_periods_are_sec_enriched_before_use(tmp_path):
             self.calls += 1
             return [filing]
 
+    class StubEligibility:
+        def classify(self, symbol):
+            from brain_api.core.fundamentals.sec_eligibility import EligibilityResult
+
+            return EligibilityResult(
+                symbol=symbol.upper(),
+                cik=None,
+                sec_eligible=False,
+                recent_forms=(),
+            )
+
+        def fetch_filing_head(self, symbol, *, sec_eligible):
+            raise AssertionError("head-check should not run without CIK")
+
     provider = Provider()
     fetcher = FundamentalsFetcher(
         api_key="unused",
         base_path=tmp_path,
         filing_provider=provider,
+        eligibility_client=StubEligibility(),
+        companyfacts_client=object(),
     )
     try:
         result = fetcher.fetch_symbol("AAPL")
@@ -170,7 +189,13 @@ def test_unresolved_cached_periods_fail_without_sec_provider(tmp_path, monkeypat
     save_raw_response(tmp_path, "AAPL", "income_statement", payload)
     save_raw_response(tmp_path, "AAPL", "balance_sheet", payload)
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
-    fetcher = FundamentalsFetcher(api_key="unused", base_path=tmp_path)
+    fetcher = FundamentalsFetcher(
+        api_key="unused",
+        base_path=tmp_path,
+        eligibility_client=None,
+        companyfacts_client=None,
+        filing_provider=None,
+    )
     try:
         with pytest.raises(RuntimeError, match="SEC filing availability is required"):
             fetcher.fetch_symbol("AAPL")
@@ -178,7 +203,9 @@ def test_unresolved_cached_periods_fail_without_sec_provider(tmp_path, monkeypat
         fetcher.close()
 
 
-def test_fundamentals_fetch_rejects_empty_alpha_vantage_response(tmp_path):
+def test_fundamentals_fetch_rejects_empty_alpha_vantage_response(tmp_path, monkeypatch):
+    monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
+
     class EmptyAlphaVantageClient:
         daily_limit = 25
 
@@ -188,10 +215,26 @@ def test_fundamentals_fetch_rejects_empty_alpha_vantage_response(tmp_path):
         def fetch_balance_sheet(self, symbol):
             return {}
 
+    class StubEligibility:
+        def classify(self, symbol):
+            from brain_api.core.fundamentals.sec_eligibility import EligibilityResult
+
+            return EligibilityResult(
+                symbol=symbol.upper(),
+                cik=None,
+                sec_eligible=False,
+                recent_forms=(),
+            )
+
+        def fetch_filing_head(self, symbol, *, sec_eligible):
+            raise AssertionError("no CIK head-check expected")
+
     fetcher = FundamentalsFetcher(
         api_key="unused",
         base_path=tmp_path,
         filing_provider=object(),
+        eligibility_client=StubEligibility(),
+        companyfacts_client=object(),
     )
     fetcher.client = EmptyAlphaVantageClient()
     try:

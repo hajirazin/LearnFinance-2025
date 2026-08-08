@@ -231,4 +231,5 @@ _bmad-output
 .claude
 *.user.toml
 
-./docs
+docs/
+tmp/

@@ -2,8 +2,10 @@
 
 Ensures training data is up-to-date before training begins by:
 1. Filling news sentiment gaps in the parquet file
-2. Refreshing fundamentals that haven't been fetched today
+2. Refreshing fundamentals via SEC-first filing-head policy
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -15,9 +17,13 @@ from typing import Any
 
 from brain_api.core.fundamentals.fetcher import (
     FundamentalsFetcher,
-    cached_fundamentals_require_sec_enrichment,
+    has_usable_cached_quarters,
 )
-from brain_api.core.fundamentals.index import FundamentalsIndex
+from brain_api.core.fundamentals.refresh_policy import (
+    RefreshAction,
+    SymbolCacheState,
+    order_av_pull_queue,
+)
 from brain_api.etl.gap_fill import GapFillResult, fill_sentiment_gaps
 
 logger = logging.getLogger(__name__)
@@ -30,16 +36,12 @@ def get_default_data_path() -> Path:
 
 @dataclass
 class FundamentalsRefreshResult:
-    """Result of fundamentals refresh operation.
-
-    Shared by:
-    - PUT /signals/fundamentals/historical endpoint
-    - ensure_fresh_training_data() before training
-    """
+    """Result of fundamentals refresh operation."""
 
     refreshed: list[str] = field(default_factory=list)
-    skipped: list[str] = field(default_factory=list)  # Already fetched today
+    skipped: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    pending_new_filing: list[str] = field(default_factory=list)
     errors: dict[str, str] = field(default_factory=dict)
     api_status: dict[str, Any] = field(default_factory=dict)
 
@@ -49,7 +51,7 @@ class DataFreshnessResult:
     """Result of data freshness check."""
 
     sentiment_gaps_filled: int = 0
-    sentiment_gaps_remaining: int = 0  # Pre-2015 gaps that can't be filled
+    sentiment_gaps_remaining: int = 0
     fundamentals_refreshed: list[str] = field(default_factory=list)
     fundamentals_skipped_today: list[str] = field(default_factory=list)
     fundamentals_failed: list[str] = field(default_factory=list)
@@ -57,61 +59,17 @@ class DataFreshnessResult:
     duration_seconds: float = 0.0
 
 
-def get_symbols_not_fetched_today(
-    symbols: list[str],
-    cache_dir: Path,
-) -> list[str]:
-    """Find symbols whose fundamentals were NOT fetched today.
-
-    Args:
-        symbols: List of symbols to check
-        cache_dir: Directory containing fundamentals.db
-
-    Returns:
-        List of symbols that need to be fetched
-    """
-    index = FundamentalsIndex(cache_dir)
-    not_fetched_today: list[str] = []
-    today = date.today()
-
-    try:
-        for symbol in symbols:
-            record = index.get_fetch_record(symbol, "income_statement")
-            if record is None:
-                not_fetched_today.append(symbol)
-            else:
-                # Parse the ISO timestamp to get the date
-                # Format: 2026-01-05T07:47:12.286617+00:00
-                fetched_date_str = record.fetched_at.split("T")[0]
-                fetched_date = date.fromisoformat(fetched_date_str)
-                if fetched_date < today:
-                    not_fetched_today.append(symbol)
-                # else: fetched today, skip
-    finally:
-        index.close()
-
-    return not_fetched_today
-
-
 def refresh_stale_fundamentals(
     symbols: list[str],
     base_path: Path | None = None,
+    *,
+    force_refresh: bool = False,
 ) -> FundamentalsRefreshResult:
-    """Refresh fundamentals for symbols not fetched today.
+    """Refresh fundamentals using filing-head freshness (not fetch-today).
 
     SHARED BY:
     - PUT /signals/fundamentals/historical endpoint
     - ensure_fresh_training_data() before training
-
-    Only fetches symbols that haven't been fetched today.
-    Uses Alpha Vantage API (requires ALPHA_VANTAGE_API_KEY env var).
-
-    Args:
-        symbols: List of symbols to potentially refresh
-        base_path: Base path for fundamentals data (defaults to brain_api/data/)
-
-    Returns:
-        FundamentalsRefreshResult with refresh statistics
     """
     if base_path is None:
         base_path = get_default_data_path()
@@ -119,81 +77,20 @@ def refresh_stale_fundamentals(
     cache_dir = base_path / "cache"
     result = FundamentalsRefreshResult()
 
-    # A legacy cache with unresolved filing provenance must be enriched even
-    # when its Alpha Vantage index row says it was fetched today.
-    stale_symbols = get_symbols_not_fetched_today(symbols, cache_dir)
-    enrichment_symbols = []
-    for symbol in symbols:
-        try:
-            if cached_fundamentals_require_sec_enrichment(base_path, symbol):
-                enrichment_symbols.append(symbol)
-        except Exception as exc:
-            result.failed.append(symbol)
-            result.errors[symbol] = f"Fundamentals cache inspection failed: {exc}"
-    symbols_to_fetch = [
-        symbol
-        for symbol in symbols
-        if symbol in set(stale_symbols) | set(enrichment_symbols)
-    ]
-    result.skipped = [symbol for symbol in symbols if symbol not in symbols_to_fetch]
-
-    if not symbols_to_fetch:
-        logger.info(
-            f"[RefreshFundamentals] All {len(symbols)} symbols already fetched today"
-        )
-        # Get API status even if nothing to fetch
-        api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
-        if api_key:
-            index = FundamentalsIndex(cache_dir)
-            try:
-                calls_today = index.get_api_calls_today()
-                result.api_status = {
-                    "calls_today": calls_today,
-                    "daily_limit": 25,
-                    "remaining": max(0, 25 - calls_today),
-                }
-            finally:
-                index.close()
-        return result
-
-    logger.info(
-        f"[RefreshFundamentals] Refreshing {len(symbols_to_fetch)} symbols: {symbols_to_fetch}"
-    )
-
     sec_user_agent = os.environ.get("SEC_USER_AGENT", "").strip()
     if not sec_user_agent:
         logger.error(
             "[RefreshFundamentals] SEC_USER_AGENT not set; refusing unchecked "
             "fundamentals refresh"
         )
-        for symbol in symbols_to_fetch:
-            if symbol not in result.failed:
-                result.failed.append(symbol)
-            result.errors.setdefault(
-                symbol, "SEC_USER_AGENT is required for point-in-time filing enrichment"
+        for symbol in symbols:
+            result.failed.append(symbol)
+            result.errors[symbol] = (
+                "SEC_USER_AGENT is required for point-in-time filing enrichment"
             )
         return result
 
-    # Get Alpha Vantage API key. Cache-only SEC enrichment does not consume AV
-    # quota, but every stale symbol requires a fresh AV response.
     api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
-    stale_without_key = [symbol for symbol in stale_symbols if not api_key]
-    if stale_without_key:
-        logger.warning(
-            "[RefreshFundamentals] ALPHA_VANTAGE_API_KEY not set; stale symbols "
-            f"cannot refresh: {stale_without_key}"
-        )
-        for symbol in stale_without_key:
-            if symbol not in result.failed:
-                result.failed.append(symbol)
-            result.errors.setdefault(
-                symbol,
-                "ALPHA_VANTAGE_API_KEY is required to refresh stale fundamentals",
-            )
-
-    if all(symbol in result.failed for symbol in symbols_to_fetch):
-        return result
-
     fetcher = FundamentalsFetcher(
         api_key=api_key or "cache-enrichment-only",
         base_path=base_path,
@@ -201,32 +98,114 @@ def refresh_stale_fundamentals(
     )
 
     try:
-        # Fetch each symbol, continue on failure
-        for symbol in symbols_to_fetch:
+        pull_sec: list[str] = []
+        pull_av_states: list[tuple[str, SymbolCacheState]] = []
+        enrich_only: list[str] = []
+        forced: set[str] = set(symbols) if force_refresh else set()
+
+        for symbol in symbols:
+            try:
+                action = fetcher.decide_action_for_symbol(
+                    symbol, force_refresh=force_refresh or symbol in forced
+                )
+            except Exception as exc:
+                result.failed.append(symbol)
+                result.errors[symbol] = str(exc)
+                continue
+
+            if action == RefreshAction.SKIP:
+                result.skipped.append(symbol)
+                continue
+            if action == RefreshAction.ENRICH_ONLY:
+                enrich_only.append(symbol)
+                continue
+
+            # PULL — classify SEC vs AV for ordering
+            eligibility = None
+            if fetcher.eligibility_client is not None:
+                try:
+                    eligibility = fetcher.eligibility_client.classify(symbol)
+                except Exception as exc:
+                    result.failed.append(symbol)
+                    result.errors[symbol] = str(exc)
+                    continue
+            if eligibility is not None and eligibility.sec_eligible:
+                pull_sec.append(symbol)
+            else:
+                state = (
+                    SymbolCacheState.MISSING
+                    if not has_usable_cached_quarters(base_path, symbol)
+                    else SymbolCacheState.FILING_STALE
+                )
+                pull_av_states.append((symbol, state))
+
+        for symbol in enrich_only:
             if symbol in result.failed:
                 continue
             try:
-                fetcher.fetch_symbol(
-                    symbol,
-                    force_refresh=symbol in stale_symbols,
-                )
-                result.refreshed.append(symbol)
-                logger.info(f"[RefreshFundamentals] Refreshed {symbol}")
+                fetcher.fetch_symbol(symbol, force_refresh=False)
+                if symbol.upper() in fetcher._pending_new_filing:
+                    result.pending_new_filing.append(symbol)
+                else:
+                    result.refreshed.append(symbol)
+                logger.info(f"[RefreshFundamentals] Enriched {symbol}")
             except Exception as e:
-                logger.warning(f"[RefreshFundamentals] Failed to fetch {symbol}: {e}")
+                logger.warning(f"[RefreshFundamentals] Failed to enrich {symbol}: {e}")
                 result.failed.append(symbol)
                 result.errors[symbol] = str(e)
 
-        # Get API status
+        for symbol in pull_sec:
+            if symbol in result.failed or symbol in result.refreshed:
+                continue
+            try:
+                fetcher.fetch_symbol(symbol, force_refresh=force_refresh)
+                if symbol.upper() in fetcher._pending_new_filing:
+                    result.pending_new_filing.append(symbol)
+                    result.skipped.append(symbol)
+                else:
+                    result.refreshed.append(symbol)
+                logger.info(f"[RefreshFundamentals] Refreshed SEC {symbol}")
+            except Exception as e:
+                logger.warning(f"[RefreshFundamentals] Failed SEC {symbol}: {e}")
+                result.failed.append(symbol)
+                result.errors[symbol] = str(e)
+
+        av_queue = order_av_pull_queue(pull_av_states, forced=forced)
+        for symbol in av_queue:
+            if symbol in result.failed:
+                continue
+            if not api_key:
+                result.failed.append(symbol)
+                result.errors[symbol] = (
+                    "ALPHA_VANTAGE_API_KEY is required to refresh stale fundamentals"
+                )
+                continue
+            try:
+                fetcher.fetch_symbol(symbol, force_refresh=force_refresh)
+                if symbol.upper() in fetcher._pending_new_filing:
+                    result.pending_new_filing.append(symbol)
+                    if symbol not in result.skipped:
+                        result.skipped.append(symbol)
+                else:
+                    result.refreshed.append(symbol)
+                logger.info(f"[RefreshFundamentals] Refreshed AV {symbol}")
+            except Exception as e:
+                logger.warning(f"[RefreshFundamentals] Failed AV {symbol}: {e}")
+                result.failed.append(symbol)
+                result.errors[symbol] = str(e)
+
         result.api_status = fetcher.get_api_status()
     finally:
         fetcher.close()
 
+    # Deduplicate skipped/refreshed
+    result.skipped = [s for s in result.skipped if s not in result.refreshed]
+
     logger.info(
         f"[RefreshFundamentals] Complete - refreshed: {len(result.refreshed)}, "
-        f"skipped: {len(result.skipped)}, failed: {len(result.failed)}"
+        f"skipped: {len(result.skipped)}, failed: {len(result.failed)}, "
+        f"pending: {len(result.pending_new_filing)}"
     )
-
     return result
 
 
@@ -238,30 +217,10 @@ def ensure_fresh_training_data(
     parquet_path: Path | None = None,
     fundamentals_base_path: Path | None = None,
 ) -> DataFreshnessResult:
-    """Ensure training data is fresh before training.
-
-    1. Fills news sentiment gaps (2015+ via Alpaca API)
-    2. Refreshes fundamentals not fetched today
-
-    Called automatically by training endpoints.
-
-    Args:
-        universe: Registered ETL universe string -- forwarded to
-            ``fill_sentiment_gaps`` so the gap fill scopes its symbol
-            slate to the same universe the caller is training on.
-        symbols: List of symbols to ensure data for
-        start_date: Training window start date
-        end_date: Training window end date
-        parquet_path: Path to daily_sentiment.parquet (defaults to brain_api/data/output/)
-        fundamentals_base_path: Base path for fundamentals data (defaults to brain_api/data/)
-
-    Returns:
-        DataFreshnessResult with statistics on what was refreshed
-    """
+    """Ensure training data is fresh before training."""
     start_time = time.time()
     result = DataFreshnessResult()
 
-    # Set default paths
     if parquet_path is None:
         parquet_path = get_default_data_path() / "output" / "daily_sentiment.parquet"
     if fundamentals_base_path is None:
@@ -272,11 +231,7 @@ def ensure_fresh_training_data(
         f"window {start_date} to {end_date}"
     )
 
-    # ==========================================================================
-    # Phase 1: Fill news sentiment gaps
-    # ==========================================================================
     logger.info("[DataFreshness] Phase 1: Checking news sentiment gaps...")
-
     try:
         if parquet_path.exists():
             gap_result: GapFillResult = fill_sentiment_gaps(
@@ -284,19 +239,15 @@ def ensure_fresh_training_data(
                 start_date=start_date,
                 end_date=end_date,
                 parquet_path=parquet_path,
-                local_only=True,  # Don't upload to HuggingFace during training
+                local_only=True,
             )
-
             if gap_result.success:
                 result.sentiment_gaps_filled = gap_result.progress.rows_added
                 result.sentiment_gaps_remaining = gap_result.progress.gaps_pre_api_date
-                logger.info(
-                    f"[DataFreshness] Sentiment gaps filled: {result.sentiment_gaps_filled}, "
-                    f"remaining (pre-2015): {result.sentiment_gaps_remaining}"
-                )
             else:
                 logger.warning(
-                    f"[DataFreshness] Sentiment gap fill failed: {gap_result.progress.error}"
+                    f"[DataFreshness] Sentiment gap fill failed: "
+                    f"{gap_result.progress.error}"
                 )
         else:
             logger.warning(
@@ -306,13 +257,8 @@ def ensure_fresh_training_data(
     except Exception as e:
         logger.warning(f"[DataFreshness] Sentiment gap fill failed: {e}")
 
-    # ==========================================================================
-    # Phase 2: Refresh fundamentals not fetched today
-    # ==========================================================================
     logger.info("[DataFreshness] Phase 2: Checking fundamentals freshness...")
-
     try:
-        # Use shared refresh_stale_fundamentals function
         fund_result = refresh_stale_fundamentals(symbols, fundamentals_base_path)
         result.fundamentals_refreshed = fund_result.refreshed
         result.fundamentals_skipped_today = fund_result.skipped
@@ -323,16 +269,11 @@ def ensure_fresh_training_data(
         result.fundamentals_failed = list(symbols)
         result.fundamentals_errors = {symbol: str(e) for symbol in symbols}
 
-    # ==========================================================================
-    # Done
-    # ==========================================================================
     result.duration_seconds = time.time() - start_time
-
     logger.info(
         f"[DataFreshness] Complete in {result.duration_seconds:.1f}s - "
         f"sentiment: {result.sentiment_gaps_filled} filled, "
         f"fundamentals: {len(result.fundamentals_refreshed)} refreshed, "
         f"{len(result.fundamentals_failed)} failed"
     )
-
     return result

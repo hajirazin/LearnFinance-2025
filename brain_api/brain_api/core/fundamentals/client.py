@@ -39,8 +39,8 @@ class RealAlphaVantageClient:
 
         Args:
             api_key: Alpha Vantage API key
-            index: FundamentalsIndex for rate limit tracking
-            daily_limit: Maximum API calls per day
+            index: FundamentalsIndex for optional call counting
+            daily_limit: Informational only (no local pre-gate)
             request_delay: Seconds to wait between requests
         """
         self.api_key = api_key
@@ -50,20 +50,11 @@ class RealAlphaVantageClient:
         self._last_request_time: float = 0
 
     def _rate_limit(self) -> None:
-        """Enforce rate limiting between requests."""
+        """Enforce inter-request spacing (not a daily quota gate)."""
         elapsed = time.time() - self._last_request_time
         if elapsed < self.request_delay:
             time.sleep(self.request_delay - elapsed)
         self._last_request_time = time.time()
-
-    def _check_daily_limit(self) -> bool:
-        """Check if daily API limit has been reached.
-
-        Returns:
-            True if we can make more calls, False if limit reached
-        """
-        calls_today = self.index.get_api_calls_today()
-        return calls_today < self.daily_limit
 
     def _fetch_endpoint(self, function: str, symbol: str) -> dict[str, Any]:
         """Fetch data from Alpha Vantage API.
@@ -77,11 +68,7 @@ class RealAlphaVantageClient:
         """
         import requests
 
-        if not self._check_daily_limit():
-            raise AlphaVantageProviderError(
-                f"Alpha Vantage daily call limit reached before {function} for {symbol}"
-            )
-
+        # No local daily_limit pre-gate: call AV; fail when AV rejects.
         self._rate_limit()
 
         url = "https://www.alphavantage.co/query"

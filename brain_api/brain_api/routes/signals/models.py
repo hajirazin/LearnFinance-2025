@@ -242,6 +242,6 @@ class RefreshFundamentalsResponse(BaseModel):
     """Response model for PUT fundamentals refresh endpoint."""
 
     refreshed: list[str]  # Symbols that were refreshed
-    skipped: list[str]  # Already fetched today
-    failed: list[str]  # API errors
+    skipped: list[str]  # Fresh vs filing head (or pending_new_filing)
+    failed: list[str]  # API / provider errors
     api_status: ApiStatusResponse

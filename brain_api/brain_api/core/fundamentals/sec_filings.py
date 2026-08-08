@@ -115,7 +115,16 @@ class SECFilingAvailabilityClient:
 
         filings = []
         for report_date, filing_date, accession, form in zip(*columns, strict=True):
-            if form not in {"10-Q", "10-K", "20-F", "40-F"}:
+            if form not in {
+                "10-Q",
+                "10-K",
+                "20-F",
+                "40-F",
+                "10-Q/A",
+                "10-K/A",
+                "20-F/A",
+                "40-F/A",
+            }:
                 continue
             if not all((report_date, filing_date, accession)):
                 continue

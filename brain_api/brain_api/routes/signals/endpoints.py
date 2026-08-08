@@ -246,15 +246,14 @@ def refresh_fundamentals(
     request: RefreshFundamentalsRequest,
     base_path: Annotated[Path, Depends(get_data_base_path)],
 ) -> RefreshFundamentalsResponse:
-    """Refresh fundamentals for symbols not fetched today.
+    """Refresh fundamentals using SEC-first filing-head freshness.
 
-    This endpoint checks which symbols haven't been fetched today and
-    fetches fresh data from Alpha Vantage API for those symbols only.
+    Pulls SEC CompanyFacts for SEC-eligible US names; Alpha Vantage + SEC
+    enrichment for non-eligible. Skips symbols whose cache already matches
+    the latest applicable SEC filing head (and has provenance).
 
-    Requires ALPHA_VANTAGE_API_KEY environment variable.
-
-    Use this before calling POST /signals/fundamentals/historical to ensure
-    data is fresh.
+    Requires ``SEC_USER_AGENT``. ``ALPHA_VANTAGE_API_KEY`` is required only
+    for non-SEC-eligible pulls.
     """
     result = refresh_stale_fundamentals(
         symbols=request.symbols,
