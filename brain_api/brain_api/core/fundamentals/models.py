@@ -51,6 +51,14 @@ class FundamentalRatios:
     3 core ratios for RL allocators:
     - Profitability: gross_margin
     - Leverage: debt_to_equity
+
+    ``eps_diluted`` is a raw per-share figure (not a ratio) sourced
+    directly from the income statement's ``epsDiluted`` field (SEC
+    diluted EPS, Basic fallback -- see ``sec_statements.resolve_eps_points``).
+    It is optional here (``None`` when the filing lacks EPS) so
+    gross_margin/debt_to_equity availability never depends on it; the
+    SAC ``earnings_yield`` signal consumer is responsible for failing
+    loud when it needs EPS and finds it absent.
     """
 
     symbol: str
@@ -62,6 +70,9 @@ class FundamentalRatios:
     # Leverage
     debt_to_equity: float | None  # shortLongTermDebtTotal / totalShareholderEquity
 
+    # Raw per-share figure for SAC's earnings_yield signal
+    eps_diluted: float | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -69,12 +80,20 @@ class FundamentalRatios:
             "as_of_date": self.as_of_date,
             "gross_margin": self.gross_margin,
             "debt_to_equity": self.debt_to_equity,
+            "eps_diluted": self.eps_diluted,
         }
 
 
 @dataclass(frozen=True)
 class PointInTimeFundamental:
-    """Ratios from a filing that was publicly available by a decision date."""
+    """Ratios from a filing that was publicly available by a decision date.
+
+    ``eps_diluted`` is optional (``None`` when the underlying filing has
+    no diluted/basic EPS fact) -- it does NOT gate gross_margin/
+    debt_to_equity availability. Consumers that need it for
+    ``earnings_yield`` (SAC signal alignment) must fail loud when it is
+    ``None``, per AGENTS.md "no silent fallbacks".
+    """
 
     symbol: str
     fiscal_period_end: str
@@ -84,6 +103,7 @@ class PointInTimeFundamental:
     filing_source: str
     gross_margin: float
     debt_to_equity: float
+    eps_diluted: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return an audit-friendly JSON representation."""
@@ -96,6 +116,7 @@ class PointInTimeFundamental:
             "filing_source": self.filing_source,
             "gross_margin": self.gross_margin,
             "debt_to_equity": self.debt_to_equity,
+            "eps_diluted": self.eps_diluted,
         }
 
 

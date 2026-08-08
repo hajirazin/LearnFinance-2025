@@ -101,6 +101,7 @@
   </div>
 
   <!-- SAC Allocation -->
+  {% set sac_signals = sac.decision_state.context.feature_bundle.signals if sac.decision_state else None %}
   <div style="margin-bottom: 24px;">
     <h3 style="color: #374151; border-bottom: 2px solid #8b5cf6; padding-bottom: 8px;">SAC Allocation (Off-Policy RL)</h3>
     <p style="color: #6b7280; font-size: 14px;">SAC turnover: {{ "%.1f" | format(sac.turnover * 100) }}% | v{{ sac.model_version }}</p>
@@ -110,6 +111,10 @@
           <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #ef4444; width: 30px;">#</th>
           <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #ef4444;">Symbol</th>
           <th style="padding: 8px 6px; text-align: left; border-bottom: 2px solid #ef4444;">Weight</th>
+          {% if sac_signals %}
+          <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #ef4444; font-size: 12px;">Mom 1w/4w/12-1</th>
+          <th style="padding: 8px 6px; text-align: right; border-bottom: 2px solid #ef4444; font-size: 12px;">Earn. Yield</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -123,6 +128,14 @@
               <span>{{ "%.1f" | format(wt * 100) }}%</span>
             </div>
           </td>
+          {% if sac_signals %}
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-size: 12px; color: #6b7280;">
+            {% if sym in sac_signals %}{{ "%.1f" | format(sac_signals[sym].momentum_1w * 100) }}% / {{ "%.1f" | format(sac_signals[sym].momentum_4w * 100) }}% / {{ "%.1f" | format(sac_signals[sym].momentum_12_1 * 100) }}%{% else %}N/A{% endif %}
+          </td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-size: 12px; color: #6b7280;">
+            {% if sym in sac_signals %}{{ "%.1f" | format(sac_signals[sym].earnings_yield * 100) }}%{% else %}N/A{% endif %}
+          </td>
+          {% endif %}
         </tr>
         {% endif %}{% endfor %}
       </tbody>

@@ -7,6 +7,7 @@ from activities import inference as inference_module
 from activities.sac_context import build_sac_feature_bundle
 from models import (
     AlpacaPortfolioResponse,
+    ClosesResponse,
     FundamentalsResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
@@ -38,6 +39,7 @@ def _canonical_inputs():
                     "gross_margin": 0.42,
                     "net_margin": 0.24,
                     "debt_to_equity": 0.3,
+                    "eps_diluted": 6.0,
                     "filing_available_date": "2026-01-30",
                     "filing_accession_number": "0001",
                     "filing_form": "10-Q",
@@ -61,6 +63,11 @@ def _canonical_inputs():
     return symbols, news, fundamentals, patchtst
 
 
+def _canonical_closes(symbols: list[str]) -> dict[str, list[float]]:
+    """253 daily closes per symbol -- MOM_12_1_LOOKBACK_BARS(252) + 1."""
+    return {symbol: [100.0 + i * 0.1 for i in range(253)] for symbol in symbols}
+
+
 def test_confirmed_zero_news_is_neutral_with_zero_coverage():
     symbols, news, fundamentals, patchtst = _canonical_inputs()
 
@@ -70,12 +77,15 @@ def test_confirmed_zero_news_is_neutral_with_zero_coverage():
         news=news,
         fundamentals=fundamentals,
         patchtst=patchtst,
+        closes=_canonical_closes(symbols),
     )
 
     assert bundle["signals"]["AAPL"]["news_sentiment"] == 0.0
     assert bundle["signals"]["AAPL"]["news_coverage"] == 0.0
     assert bundle["signals"]["AAPL"]["fundamental_age"] == 6.0
     assert "gross_margin" in bundle["signals"]["AAPL"]
+    assert "momentum_1w" in bundle["signals"]["AAPL"]
+    assert "earnings_yield" in bundle["signals"]["AAPL"]
     assert "lstm_forecasts" not in bundle
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
 
@@ -119,6 +129,7 @@ def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
             news=news,
             fundamentals=fundamentals,
             patchtst=patchtst,
+            closes=_canonical_closes(symbols),
         )
 
 
@@ -168,6 +179,9 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
             news=news,
             fundamentals=fundamentals,
             patchtst=patchtst,
+            closes=ClosesResponse(
+                as_of_date="2026-02-05", closes=_canonical_closes(symbols)
+            ),
         )
 
     payload = fake.calls[0]["json"]

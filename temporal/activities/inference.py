@@ -5,9 +5,13 @@ import logging
 from temporalio import activity
 
 from activities.client import get_client
-from activities.sac_context import build_sac_feature_bundle
+from activities.sac_context import (
+    MOM_12_1_LOOKBACK_BARS,
+    build_sac_feature_bundle,
+)
 from models import (
     AlpacaPortfolioResponse,
+    ClosesResponse,
     FundamentalsResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
@@ -22,6 +26,33 @@ from models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Minimum trailing daily closes for SAC's momentum_12_1 (skip 21 bars,
+# then a 252-bar/~12-month lookback -- see activities.sac_context).
+SAC_MOMENTUM_LOOKBACK_BARS = MOM_12_1_LOOKBACK_BARS + 1
+
+
+@activity.defn
+def get_closes(
+    symbols: list[str],
+    as_of_date: str,
+    lookback_bars: int = SAC_MOMENTUM_LOOKBACK_BARS,
+) -> ClosesResponse:
+    """Fetch raw daily closes for SAC momentum signals (momentum_1w/4w/12_1)."""
+    logger.info(f"Fetching {lookback_bars}-bar closes for {len(symbols)} symbols...")
+    with get_client() as client:
+        response = client.post(
+            "/signals/prices",
+            json={
+                "symbols": symbols,
+                "as_of_date": as_of_date,
+                "lookback_bars": lookback_bars,
+            },
+        )
+        response.raise_for_status()
+    result = ClosesResponse(**response.json())
+    logger.info(f"Got closes for {len(result.closes)} symbols")
+    return result
 
 
 @activity.defn
@@ -230,6 +261,7 @@ def infer_sac(
     news: NewsSignalResponse,
     fundamentals: FundamentalsResponse,
     patchtst: PatchTSTInferenceResponse,
+    closes: ClosesResponse,
 ) -> SACInferenceResponse:
     """Get SAC allocation for the requested SAC bucket.
 
@@ -237,6 +269,8 @@ def infer_sac(
     SAC workflow declares its bucket explicitly. brain_api resolves
     the bucket via ``get_bucket(ModelType.SAC, universe)`` and loads
     that bucket's frozen ``symbol_order``. Per AGENTS.md rule #1.
+    ``closes`` (from the ``get_closes`` activity) feeds SAC's
+    momentum_1w/4w/12_1 signals.
     """
     feature_bundle = build_sac_feature_bundle(
         symbols=symbols,
@@ -244,6 +278,7 @@ def infer_sac(
         news=news,
         fundamentals=fundamentals,
         patchtst=patchtst,
+        closes=closes.closes,
     )
     logger.info(f"Getting SAC allocation (universe={universe})...")
     with get_client() as client:

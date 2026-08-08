@@ -18,6 +18,10 @@ SAC_SIGNAL_NAMES = (
     "gross_margin",
     "debt_to_equity",
     "fundamental_age",
+    "momentum_1w",
+    "momentum_4w",
+    "momentum_12_1",
+    "earnings_yield",
 )
 
 # Backward-compatible alias for callers/tests still importing the old name.

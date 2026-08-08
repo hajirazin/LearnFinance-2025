@@ -4,6 +4,7 @@ import logging
 from datetime import timedelta
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -20,6 +21,8 @@ from brain_api.core.sac import (
     compute_version as sac_compute_version,
 )
 from brain_api.core.sac import finetune_sac
+from brain_api.core.sac.decision_context import SAC_SIGNAL_NAMES
+from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.promotion import evaluate_sac_finetune_artifact_health
 from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.storage.policy import (
@@ -185,7 +188,16 @@ def _run_sac_finetune(
         )
 
         update_progress(job_id, {"phase": "loading_prices"})
-        prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+        # Fetch extra calendar history before start_date so the earliest
+        # in-window week still has enough trading bars for momentum_12_1
+        # (skip 21 + lookback 252 = 273 bars). The recency window used for
+        # weekly_prices/signals stays anchored to [start_date, end_date]
+        # via the explicit weekly_cutoffs filter below and the
+        # weekly_cutoffs passed to build_rl_training_signals -- this is a
+        # wider price fetch on an existing call, not a change to
+        # finetune's intended short lookback.
+        price_start_date = start_date - timedelta(days=MOM_12_1_CALENDAR_BUFFER_DAYS)
+        prices_dict = load_prices_yfinance(symbols, price_start_date, end_date)
 
         if len(prices_dict) == 0:
             raise ValueError("No price data available for fine-tuning")
@@ -196,11 +208,13 @@ def _run_sac_finetune(
                 f"Need at least 5 symbols with data, got {len(available_symbols)}"
             )
 
+        window_start_ts = pd.Timestamp(start_date)
         weekly_prices = {}
         for symbol in available_symbols:
             df = prices_dict[symbol]
             if df is not None and len(df) > 0:
                 weekly = df["close"].resample("W-FRI").last().dropna()
+                weekly = weekly[weekly.index >= window_start_ts]
                 weekly_prices[symbol] = weekly.values
 
         min_weeks = min(
@@ -210,6 +224,7 @@ def _run_sac_finetune(
         weekly_df = (
             prices_dict[available_symbols[0]]["close"].resample("W-FRI").last().dropna()
         )
+        weekly_df = weekly_df[weekly_df.index >= window_start_ts]
         weekly_dates = weekly_df.index[-min_weeks:]
 
         for symbol in available_symbols:
@@ -217,7 +232,11 @@ def _run_sac_finetune(
 
         update_progress(job_id, {"phase": "loading_signals"})
         signals = build_rl_training_signals(
-            prices_dict, available_symbols, start_date, end_date
+            prices_dict,
+            available_symbols,
+            start_date,
+            end_date,
+            weekly_cutoffs=weekly_dates,
         )
 
         for symbol in available_symbols:
@@ -233,11 +252,38 @@ def _run_sac_finetune(
                         )
                         signals[symbol][signal_name] = padded
             else:
+                # Dummy defaults for a symbol entirely missing from
+                # `signals` (rare edge case: no aligned week at all).
+                # Keys are the literal SAC signal names -- "news_sentiment",
+                # "news_coverage", "gross_margin", "debt_to_equity",
+                # "fundamental_age", "momentum_1w", "momentum_4w",
+                # "momentum_12_1", "earnings_yield" -- verified below to
+                # match SAC_SIGNAL_NAMES exactly so this cannot silently
+                # drift when a new signal is added.
+                dummy_defaults: dict[str, float] = {
+                    "news_sentiment": 0.0,
+                    "news_coverage": 0.0,
+                    "gross_margin": 0.0,
+                    "debt_to_equity": 0.0,
+                    "fundamental_age": 1.0,
+                    "momentum_1w": 0.0,
+                    "momentum_4w": 0.0,
+                    "momentum_12_1": 0.0,
+                    "earnings_yield": 0.0,
+                }
+                if set(dummy_defaults) != set(SAC_SIGNAL_NAMES):
+                    raise ValueError(
+                        "finetune dummy signal defaults drifted from "
+                        f"SAC_SIGNAL_NAMES: {sorted(set(dummy_defaults))} != "
+                        f"{sorted(SAC_SIGNAL_NAMES)}"
+                    )
                 signals[symbol] = {
-                    "news_sentiment": np.zeros(min_weeks - 1),
-                    "gross_margin": np.zeros(min_weeks - 1),
-                    "debt_to_equity": np.zeros(min_weeks - 1),
-                    "fundamental_age": np.ones(min_weeks - 1),
+                    name: (
+                        np.ones(min_weeks - 1)
+                        if default == 1.0
+                        else np.zeros(min_weeks - 1)
+                    )
+                    for name, default in dummy_defaults.items()
                 }
 
         update_progress(job_id, {"phase": "walk_forward_forecasts"})

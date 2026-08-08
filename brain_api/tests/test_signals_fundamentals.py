@@ -435,6 +435,8 @@ def test_fundamentals_ratios_values_reasonable(client_with_yfinance_mock):
     # Gross margin should be between 0 and 1
     assert ratios["gross_margin"] is not None
     assert 0 < ratios["gross_margin"] < 1
+
+
 # ============================================================================
 # Current Fundamentals - Validation tests
 # ============================================================================

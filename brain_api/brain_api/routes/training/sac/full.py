@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import replace
+from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
@@ -30,6 +31,7 @@ from brain_api.core.sac import (
 from brain_api.core.sac import (
     compute_version as sac_compute_version,
 )
+from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.promotion import evaluate_sac_artifact_health
 from brain_api.core.sac.trade_clock import (
     build_sac_weekly_trade_clock,
@@ -247,7 +249,12 @@ def _run_sac_full_training(
         version = sac_compute_version(start_date, end_date, symbols, config)
 
         update_progress(job_id, {"phase": "loading_prices"})
-        prices_dict = load_prices_yfinance(symbols, start_date, end_date)
+        # Fetch extra calendar history before start_date so the earliest
+        # training week still has enough trading bars for momentum_12_1
+        # (skip 21 + lookback 252 = 273 bars). This widens the existing
+        # price fetch; it is not a new ETL pipeline.
+        price_start_date = start_date - timedelta(days=MOM_12_1_CALENDAR_BUFFER_DAYS)
+        prices_dict = load_prices_yfinance(symbols, price_start_date, end_date)
 
         if len(prices_dict) == 0:
             raise ValueError("No price data available for training")

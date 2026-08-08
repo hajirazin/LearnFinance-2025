@@ -223,6 +223,7 @@ class FundamentalRatios(BaseModel):
     gross_margin: float | None = None
     current_ratio: float | None = None
     debt_to_equity: float | None = None
+    eps_diluted: float | None = None
     fiscal_period_end: str | None = None
     filing_available_date: str | None = None
     filing_accession_number: str | None = None
@@ -243,6 +244,13 @@ class FundamentalsResponse(BaseModel):
 
     per_symbol: list[PerSymbolFundamentals]
     as_of_date: str
+
+
+class ClosesResponse(BaseModel):
+    """Response from POST /signals/prices -- raw daily closes for SAC momentum."""
+
+    as_of_date: str
+    closes: dict[str, list[float]]
 
 
 # ============================================================================

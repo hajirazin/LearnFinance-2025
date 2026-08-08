@@ -105,6 +105,7 @@ def compute_ratios(
     # Initialize all ratios as None
     gross_margin = None
     debt_to_equity = None
+    eps_diluted = None
 
     # Compute profitability ratios from income statement
     if income:
@@ -113,6 +114,12 @@ def compute_ratios(
 
         if total_revenue and total_revenue > 0 and gross_profit is not None:
             gross_margin = float(gross_profit / total_revenue)
+
+        # Raw per-share figure (not a ratio) for SAC's earnings_yield.
+        # Optional -- a filing lacking EPS must not block gross_margin.
+        eps_diluted_raw = income.get_value("epsDiluted")
+        if eps_diluted_raw is not None:
+            eps_diluted = float(eps_diluted_raw)
 
     # Compute leverage from balance sheet
     if balance:
@@ -127,4 +134,5 @@ def compute_ratios(
         as_of_date=as_of_date,
         gross_margin=round(gross_margin, 4) if gross_margin is not None else None,
         debt_to_equity=round(debt_to_equity, 4) if debt_to_equity is not None else None,
+        eps_diluted=round(eps_diluted, 4) if eps_diluted is not None else None,
     )

@@ -37,6 +37,10 @@ def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
             "gross_margin": 0.5,
             "debt_to_equity": 0.3,
             "fundamental_age": 12.0,
+            "momentum_1w": 0.01,
+            "momentum_4w": 0.02,
+            "momentum_12_1": 0.10,
+            "earnings_yield": 0.05,
         }
     }
     return signals, {"AAA": 0.03}
@@ -47,8 +51,8 @@ def test_state_schema_dimension_and_strict_construction() -> None:
     state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
     assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
-    assert StateSchema(n_stocks=15).state_dim == 106
-    assert state.shape == (8,)
+    assert StateSchema(n_stocks=15).state_dim == 166
+    assert state.shape == (12,)
     assert state[1] == pytest.approx(0.5)
 
 
@@ -274,7 +278,7 @@ def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> N
     )
     data = TrainingData(
         symbol_returns=np.zeros((208, 1)),
-        signals=np.zeros((208, 1, 8)),
+        signals=np.zeros((208, 1, 9)),
         patchtst_forecasts=np.zeros((208, 1)),
         prices=np.ones((208, 1)),
         symbol_order=["AAA"],

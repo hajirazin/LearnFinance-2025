@@ -190,12 +190,17 @@ class RatiosResponse(BaseModel):
     3 core ratios for RL allocators:
     - Profitability: gross_margin
     - Leverage: debt_to_equity
+
+    ``eps_diluted`` is a raw per-share figure (SEC diluted EPS, Basic
+    fallback) used to derive SAC's ``earnings_yield`` signal. It is
+    optional here; earnings_yield consumers fail loud when it is absent.
     """
 
     symbol: str
     as_of_date: str
     gross_margin: float | None
     debt_to_equity: float | None
+    eps_diluted: float | None = None
     fiscal_period_end: str | None = None
     filing_available_date: str | None = None
     filing_accession_number: str | None = None
@@ -250,3 +255,40 @@ class RefreshFundamentalsResponse(BaseModel):
     failed: list[str]  # API / provider errors
     pending_new_filing: list[PendingFilingResponse] = []
     api_status: ApiStatusResponse
+
+
+# ============================================================================
+# Prices (closes) models -- SAC momentum_1w/4w/12_1
+# ============================================================================
+
+MIN_MOMENTUM_LOOKBACK_BARS = 253  # MOM_12_1_LOOKBACK_BARS(252) + 1 (P_t itself)
+
+
+class ClosesRequest(BaseModel):
+    """Request model for raw daily closes (SAC momentum signals)."""
+
+    symbols: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_FUNDAMENTALS_SYMBOLS,
+        description=f"List of ticker symbols (1-{MAX_FUNDAMENTALS_SYMBOLS})",
+    )
+    as_of_date: str = Field(
+        ...,
+        description="Decision date (YYYY-MM-DD); closes are as of/before this date",
+    )
+    lookback_bars: int = Field(
+        MIN_MOMENTUM_LOOKBACK_BARS,
+        ge=MIN_MOMENTUM_LOOKBACK_BARS,
+        description=(
+            "Trailing trading-day bars to return per symbol, oldest first. "
+            "Defaults to momentum_12_1's requirement (skip 21 + lookback 252)."
+        ),
+    )
+
+
+class ClosesResponse(BaseModel):
+    """Response model for raw daily closes, oldest close first per symbol."""
+
+    as_of_date: str
+    closes: dict[str, list[float]]

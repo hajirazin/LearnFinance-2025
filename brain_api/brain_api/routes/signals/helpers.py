@@ -118,8 +118,8 @@ def ratios_to_response(
         symbol=ratios.symbol,
         as_of_date=ratios.as_of_date,
         gross_margin=ratios.gross_margin,
-        current_ratio=ratios.current_ratio,
         debt_to_equity=ratios.debt_to_equity,
+        eps_diluted=ratios.eps_diluted,
     )
 
 

@@ -19,6 +19,13 @@ from brain_api.core.news_sentiment import (
     NewsObservationError,
     aggregate_weekly_news_observation,
 )
+from brain_api.core.sac.momentum_signals import (
+    MomentumSignalError,
+    compute_earnings_yield,
+    compute_momentum_1w,
+    compute_momentum_4w,
+    compute_momentum_12_1,
+)
 
 # Alias for backward compatibility
 load_historical_fundamentals = load_historical_fundamentals_from_cache
@@ -222,6 +229,70 @@ def align_signals_to_weekly(
         symbol_signals["fundamental_age"] = (
             (weekly_index.values - last_updates).astype("timedelta64[D]").astype(float)
         )
+
+        # earnings_yield = eps_diluted / as_of_close (SEC diluted EPS,
+        # Basic fallback -- a distinct metric from the universe screening
+        # module's operating-income-over-enterprise-value ratio; see
+        # AGENTS.md universe pipeline invariants for that unrelated usage).
+        # eps_diluted is optional on the fundamentals frame (does not
+        # gate gross_margin/debt_to_equity), so it is validated here,
+        # separately from `ratio_columns` above.
+        if "eps_diluted" not in fund_aligned.columns:
+            raise ValueError(f"Fundamentals missing eps_diluted for {symbol}")
+        if fund_aligned["eps_diluted"].isna().any():
+            raise ValueError(f"Missing point-in-time eps_diluted for {symbol}")
+        eps_diluted_values = fund_aligned["eps_diluted"].to_numpy(dtype=float)
+
+        # momentum_1w = P_t/P_t-5-1 (5 trading bars); momentum_4w =
+        # P_t/P_t-20-1 (20 trading bars); momentum_12_1 = P_t-21/P_t-252-1
+        # (skip 21 bars, then 252-bar/~12-month lookback). Same daily
+        # close series already loaded for `weekly_index` above -- locate
+        # each week's trading-day position in the raw (unresampled)
+        # daily series so the bar counts above are literal trading days,
+        # not calendar weeks.
+        close_series = price_df["close"]
+        if close_series.index.tz is not None:
+            close_series = close_series.tz_localize(None)
+        close_dates = close_series.index.values
+        close_values = close_series.to_numpy(dtype=float)
+        close_positions = (
+            np.searchsorted(close_dates, weekly_index.values, side="right") - 1
+        )
+        if np.any(close_positions < 0):
+            raise ValueError(
+                f"No daily close available on/before a training week for {symbol}"
+            )
+
+        momentum_1w = np.empty(n_weeks)
+        momentum_4w = np.empty(n_weeks)
+        momentum_12_1 = np.empty(n_weeks)
+        earnings_yield = np.empty(n_weeks)
+        for week_idx, close_position in enumerate(close_positions):
+            as_of_index = int(close_position)
+            try:
+                momentum_1w[week_idx] = compute_momentum_1w(
+                    close_values, as_of_index=as_of_index
+                )
+                momentum_4w[week_idx] = compute_momentum_4w(
+                    close_values, as_of_index=as_of_index
+                )
+                momentum_12_1[week_idx] = compute_momentum_12_1(
+                    close_values, as_of_index=as_of_index
+                )
+                earnings_yield[week_idx] = compute_earnings_yield(
+                    eps_diluted=float(eps_diluted_values[week_idx]),
+                    as_of_close=float(close_values[as_of_index]),
+                )
+            except MomentumSignalError as exc:
+                raise ValueError(
+                    f"Momentum/earnings-yield computation failed for {symbol} "
+                    f"at {weekly_index[week_idx].date()}: {exc}"
+                ) from exc
+
+        symbol_signals["momentum_1w"] = momentum_1w
+        symbol_signals["momentum_4w"] = momentum_4w
+        symbol_signals["momentum_12_1"] = momentum_12_1
+        symbol_signals["earnings_yield"] = earnings_yield
 
         signals[symbol] = symbol_signals
 

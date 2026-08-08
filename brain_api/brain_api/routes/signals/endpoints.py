@@ -1,16 +1,18 @@
 """Signal route handlers."""
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException
 
 from brain_api.core.data_freshness import refresh_stale_fundamentals
 from brain_api.core.fundamentals import (
     load_historical_fundamentals_from_cache,
     load_point_in_time_fundamentals,
 )
+from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.news_sentiment import (
     NewsFetcher,
     SentimentScorer,
@@ -28,6 +30,8 @@ from brain_api.routes.signals.helpers import (
 )
 from brain_api.routes.signals.models import (
     ApiStatusResponse,
+    ClosesRequest,
+    ClosesResponse,
     CurrentRatiosResponse,
     FundamentalsRequest,
     FundamentalsResponse,
@@ -223,8 +227,8 @@ def get_historical_fundamentals(
                     symbol=symbol,
                     as_of_date=idx.strftime("%Y-%m-%d"),
                     gross_margin=safe_float(row.get("gross_margin")),
-                    current_ratio=safe_float(row.get("current_ratio")),
                     debt_to_equity=safe_float(row.get("debt_to_equity")),
+                    eps_diluted=safe_float(row.get("eps_diluted")),
                     fiscal_period_end=row.get("fiscal_period_end"),
                     filing_available_date=row.get("filing_available_date"),
                     filing_accession_number=row.get("filing_accession_number"),
@@ -238,6 +242,46 @@ def get_historical_fundamentals(
         end_date=request.end_date,
         data=all_ratios,
     )
+
+
+@router.post("/prices", response_model=ClosesResponse)
+def get_closes(request: ClosesRequest) -> ClosesResponse:
+    """Raw daily closes for SAC momentum signals (momentum_1w/4w/12_1).
+
+    Fail-loud: any requested symbol with fewer than ``lookback_bars``
+    trading-day closes on/before ``as_of_date`` is a 422, never a
+    silent zero-fill or truncated series.
+    """
+    as_of = date.fromisoformat(request.as_of_date)
+    # Buffer for weekends/holidays; ~365/252 calendar days per trading day.
+    calendar_days = int(request.lookback_bars * 365 / 252) + 30
+    start = as_of - timedelta(days=calendar_days)
+    prices = load_prices_yfinance(request.symbols, start, as_of)
+
+    closes: dict[str, list[float]] = {}
+    for symbol in request.symbols:
+        price_df = prices.get(symbol)
+        if price_df is None or price_df.empty:
+            raise HTTPException(
+                status_code=422, detail=f"Missing price history for {symbol}"
+            )
+        series = price_df["close"]
+        index = series.index
+        if index.tz is not None:
+            index = index.tz_localize(None)
+        series = series.set_axis(index)
+        series = series[series.index.normalize() <= pd.Timestamp(as_of)]
+        if len(series) < request.lookback_bars:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Only {len(series)} closes for {symbol}; need >= "
+                    f"{request.lookback_bars} for momentum_12_1"
+                ),
+            )
+        closes[symbol] = [float(v) for v in series.tail(request.lookback_bars)]
+
+    return ClosesResponse(as_of_date=request.as_of_date, closes=closes)
 
 
 @router.put("/fundamentals/historical", response_model=RefreshFundamentalsResponse)

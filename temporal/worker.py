@@ -24,6 +24,7 @@ from activities.execution import (
 )
 from activities.inference import (
     allocate_hrp,
+    get_closes,
     get_fundamentals,
     get_lstm_forecast,
     get_news_sentiment,
@@ -123,6 +124,7 @@ ALL_ACTIVITIES = [
     get_news_sentiment,
     get_lstm_forecast,
     get_patchtst_forecast,
+    get_closes,
     infer_sac,
     allocate_hrp,
     select_sticky_top_n,

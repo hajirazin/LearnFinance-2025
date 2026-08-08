@@ -40,6 +40,7 @@ from activities.reporting import send_weekly_email as _send_weekly_email_signatu
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
+    ClosesResponse,
     GenerateOrdersResponse,
     MarketClockResponse,
     OrderModel,
@@ -190,6 +191,16 @@ def _make_sac_halal_activities(
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
         return patchtst_resp
 
+    @activity.defn(name="get_closes")
+    def mock_get_closes(symbols, as_of_date, lookback_bars=253):
+        return ClosesResponse(
+            as_of_date=as_of_date,
+            closes={
+                symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
+                for symbol in symbols
+            },
+        )
+
     @activity.defn(name="infer_sac")
     def mock_infer_sac(
         portfolio,
@@ -199,6 +210,7 @@ def _make_sac_halal_activities(
         news,
         fundamentals,
         patchtst,
+        closes,
     ):
         captured_calls["infer_sac_universe"] = universe
         return sac_alloc
@@ -333,6 +345,7 @@ def _make_sac_halal_activities(
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
+        mock_get_closes,
         mock_infer_sac,
         mock_generate_orders_sac,
         mock_store_experience_sac,

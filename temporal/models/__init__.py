@@ -6,6 +6,7 @@ from models.etl import RefreshTrainingDataRequest, RefreshTrainingDataResponse
 from models.forecast_email import (
     AllocationDetailModel,
     AlpacaPortfolioResponse,
+    ClosesResponse,
     FundamentalsResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
@@ -63,6 +64,7 @@ __all__ = [
     # Forecast Email Flow
     "AlpacaPortfolioResponse",
     "AllocationDetailModel",
+    "ClosesResponse",
     "FundamentalsResponse",
     "GenerateOrdersResponse",
     "HRPAllocationResponse",

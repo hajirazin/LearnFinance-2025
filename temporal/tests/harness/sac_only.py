@@ -14,11 +14,17 @@ from activities.reporting import send_weekly_email
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
+    ClosesResponse,
     MarketClockResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
     WeeklySummaryResponse,
 )
+
+# momentum_12_1 needs >= MOM_12_1_LOOKBACK_BARS(252) + 1 daily closes;
+# the harness's synthetic series is a simple increasing sequence so
+# momentum values are non-zero (never a silent zero-fill).
+_DEFAULT_MOMENTUM_BARS = 253
 
 # Default clock payload: market is open. Tests that need a closed
 # market or a specific ``next_open`` override via the
@@ -115,6 +121,16 @@ def make_sac_only_activities(
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
         return patchtst_resp
 
+    @activity.defn(name="get_closes")
+    def mock_get_closes(symbols, as_of_date, lookback_bars=_DEFAULT_MOMENTUM_BARS):
+        return ClosesResponse(
+            as_of_date=as_of_date,
+            closes={
+                symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
+                for symbol in symbols
+            },
+        )
+
     @activity.defn(name="infer_sac")
     def mock_infer_sac(
         portfolio,
@@ -124,6 +140,7 @@ def make_sac_only_activities(
         news,
         fundamentals,
         patchtst,
+        closes,
     ):
         return sac_alloc
 
@@ -246,6 +263,7 @@ def make_sac_only_activities(
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
+        mock_get_closes,
         mock_infer_sac,
         mock_generate_orders_sac,
         mock_store_experience_sac,

@@ -76,6 +76,18 @@ GROSS_PROFIT_COST_TAGS = (
     "CostOfGoodsSold",
 )
 
+# Diluted EPS is preferred for SAC's earnings_yield signal; Basic is a
+# fallback only when a filer has never reported diluted EPS (rare, e.g.
+# simple capital structure). Per-share facts use unit "USD/shares", not
+# "USD" -- see ``_extract_tag_points``'s ``unit`` parameter. These are
+# NEVER differenced across quarters (see ``_pick_direct_duration_points``)
+# because per-share amounts are not additive across periods with
+# different weighted-average share counts.
+EPS_DILUTED_TAGS = ("EarningsPerShareDiluted",)
+EPS_BASIC_TAGS = ("EarningsPerShareBasic",)
+EPS_QUARTER_DURATION_DAYS = (60, 120)
+EPS_ANNUAL_DURATION_DAYS = (350, 380)
+
 FLOW_FIELDS = frozenset(SAC_INCOME_FIELDS)
 INSTANT_FIELDS = frozenset(SAC_BALANCE_FIELDS)
 PERIODIC_FORMS = frozenset(
@@ -140,12 +152,14 @@ class CompanyFactsClient:
         return payload
 
 
-def _extract_tag_points(facts: dict[str, Any], tag: str) -> list[_FactPoint]:
+def _extract_tag_points(
+    facts: dict[str, Any], tag: str, *, unit: str = "USD"
+) -> list[_FactPoint]:
     us_gaap = ((facts.get("facts") or {}).get("us-gaap") or {}).get(tag)
     if not isinstance(us_gaap, dict):
         return []
     units = us_gaap.get("units") or {}
-    series = units.get("USD")
+    series = units.get(unit)
     if not isinstance(series, list):
         return []
     points: list[_FactPoint] = []
@@ -280,6 +294,66 @@ def _pick_flow_quarterly(points: list[_FactPoint]) -> dict[str, _FactPoint]:
                 continue
             result[standalone.end] = standalone
     return result
+
+
+def _pick_direct_duration_points(
+    points: list[_FactPoint], *, min_days: int, max_days: int
+) -> dict[str, _FactPoint]:
+    """Latest filed fact per period end whose OWN duration is in range.
+
+    Unlike ``_pick_flow_quarterly``, this never derives a value by
+    differencing a YTD cumulative fact against a prior quarter -- that
+    subtraction is valid for additive flow amounts (revenue, income)
+    but NOT for per-share amounts like diluted EPS, whose weighted
+    average share count differs between periods.
+    """
+    by_end: dict[str, _FactPoint] = {}
+    for point in sorted(points, key=lambda p: (p.end, p.filed, p.accession)):
+        duration = _duration_days(point.start, point.end)
+        if duration is None or not (min_days <= duration <= max_days):
+            continue
+        by_end[point.end] = point
+    return by_end
+
+
+def resolve_eps_points(facts: dict[str, Any]) -> tuple[dict[str, _FactPoint], bool]:
+    """Direct-duration diluted EPS per period end; Basic EPS as fallback.
+
+    Returns ``(points_by_end, used_basic_fallback)`` where quarterly
+    ends are keyed directly and the annual (FY) end is keyed
+    ``"annual:{end}"`` -- mirroring the ``annual:`` convention used by
+    ``_pick_flow_quarterly`` for income/balance fields so callers can
+    reuse the same end-date bookkeeping. Empty dict means the CIK has
+    no diluted or basic per-share facts at all (caller decides whether
+    that is fatal).
+    """
+    diluted_points: list[_FactPoint] = []
+    for tag in EPS_DILUTED_TAGS:
+        diluted_points.extend(_extract_tag_points(facts, tag, unit="USD/shares"))
+
+    quarter_min, quarter_max = EPS_QUARTER_DURATION_DAYS
+    annual_min, annual_max = EPS_ANNUAL_DURATION_DAYS
+
+    def _merged(points: list[_FactPoint]) -> dict[str, _FactPoint]:
+        quarterly = _pick_direct_duration_points(
+            points, min_days=quarter_min, max_days=quarter_max
+        )
+        annual = _pick_direct_duration_points(
+            points, min_days=annual_min, max_days=annual_max
+        )
+        merged = dict(quarterly)
+        for end, point in annual.items():
+            merged[f"annual:{end}"] = point
+        return merged
+
+    diluted_merged = _merged(diluted_points)
+    if diluted_merged:
+        return diluted_merged, False
+
+    basic_points: list[_FactPoint] = []
+    for tag in EPS_BASIC_TAGS:
+        basic_points.extend(_extract_tag_points(facts, tag, unit="USD/shares"))
+    return _merged(basic_points), True
 
 
 def _sum_tag_values(
@@ -556,6 +630,8 @@ def build_statement_payloads_from_companyfacts(
     if not income_ends:
         raise SECStatementError(f"No quarterly income periods for {symbol}")
 
+    eps_points, eps_is_basic_fallback = resolve_eps_points(facts)
+
     quarterly_income: list[dict[str, Any]] = []
     gross_profit_derived = not _extract_tag_points(facts, "GrossProfit")
     for end in sorted(income_ends, reverse=True):
@@ -577,6 +653,19 @@ def build_statement_payloads_from_companyfacts(
                 provenance = point
         if missing or provenance is None:
             continue
+        # epsDiluted is additive to the row, not required for the row to
+        # exist -- a filing missing diluted/basic EPS should not block
+        # gross_margin/debt_to_equity availability for that period. The
+        # earnings_yield consumer (SAC signal alignment) is responsible
+        # for failing loud when it needs EPS and finds it absent.
+        eps_point = eps_points.get(end)
+        if eps_point is not None:
+            values["epsDiluted"] = eps_point.value
+            field_source["epsDiluted"] = (
+                "sec_eps_basic_fallback"
+                if eps_is_basic_fallback
+                else "sec_companyfacts"
+            )
         quarterly_income.append(
             _period_report(end, values, provenance, cik=cik, field_source=field_source)
         )
@@ -643,6 +732,9 @@ def build_statement_payloads_from_companyfacts(
             provenance = point
         if missing or provenance is None:
             continue
+        annual_eps_point = eps_points.get(f"annual:{end}")
+        if annual_eps_point is not None:
+            values["epsDiluted"] = annual_eps_point.value
         annual_income.append(_period_report(end, values, provenance, cik=cik))
 
     income_payload = {

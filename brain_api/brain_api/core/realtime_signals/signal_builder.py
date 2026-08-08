@@ -1,7 +1,7 @@
 """Real-time signal builder for RL inference."""
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import ClassVar
 
@@ -15,15 +15,26 @@ class RealTimeSignalBuilder:
 
     Fetches:
     - News sentiment: yfinance news + FinBERT scoring
-    - Fundamentals: yfinance ticker.info (gross_margin, current_ratio, etc.)
+    - Fundamentals: yfinance ticker.info (gross_margin, debt_to_equity)
+    - Momentum: yfinance daily closes (same source as SAC training)
+    - Earnings yield: SEC point-in-time diluted EPS (never yfinance-only
+      EPS -- see ``brain_api.core.sac.momentum_signals``)
     """
 
-    # Signal keys that match training format
+    # Signal keys must exactly match SAC_SIGNAL_NAMES (order matters --
+    # this is a literal list, not a re-export, so the plan's static
+    # source-contract check can verify it independently of the
+    # decision_context module).
     SIGNAL_KEYS: ClassVar[list[str]] = [
         "news_sentiment",
+        "news_coverage",
         "gross_margin",
         "debt_to_equity",
         "fundamental_age",
+        "momentum_1w",
+        "momentum_4w",
+        "momentum_12_1",
+        "earnings_yield",
     ]
 
     def __init__(self, base_path: Path | None = None):
@@ -54,7 +65,10 @@ class RealTimeSignalBuilder:
             f"[SignalBuilder] Fetching real-time signals for {len(symbols)} symbols"
         )
 
-        # Initialize with zeros (fallback if fetching fails)
+        # Initialize with zeros (fallback if fetching fails). This applies
+        # only to the pre-existing news/fundamentals fetchers below, which
+        # already log-and-continue on failure. Momentum + earnings_yield
+        # are fail-loud (no zero-fill) -- see `_fetch_momentum_and_earnings_yield`.
         signals = self._init_empty_signals(symbols)
 
         # Fetch news sentiment
@@ -62,6 +76,10 @@ class RealTimeSignalBuilder:
 
         # Fetch fundamentals
         self._fetch_fundamentals(symbols, as_of_date, signals)
+
+        # Fetch momentum + earnings yield (fail-loud; raises on
+        # insufficient bars or missing/non-finite EPS per AGENTS.md rule 1)
+        self._fetch_momentum_and_earnings_yield(symbols, as_of_date, signals)
 
         return signals
 
@@ -135,6 +153,78 @@ class RealTimeSignalBuilder:
 
         logger.info(
             f"[SignalBuilder] Fundamentals fetched for {fundamentals_fetched} symbols"
+        )
+
+    def _fetch_momentum_and_earnings_yield(
+        self,
+        symbols: list[str],
+        as_of_date: date,
+        signals: dict[str, dict[str, float]],
+    ) -> None:
+        """Compute momentum_1w/4w/12_1 + earnings_yield (fail-loud).
+
+        Momentum uses the same yfinance daily closes as SAC training
+        (``brain_api.core.prices.load_prices_yfinance``); earnings_yield
+        uses SEC point-in-time diluted EPS
+        (``load_point_in_time_fundamentals``) -- never yfinance-only EPS,
+        per the plan's "do not invent AV/yfinance-only EPS" constraint.
+        No zero-fill on failure: this raises so callers see the exact
+        symbol/reason rather than a silently wrong actor input.
+        """
+        from brain_api.core.fundamentals import load_point_in_time_fundamentals
+        from brain_api.core.prices import load_prices_yfinance
+        from brain_api.core.sac.momentum_signals import (
+            MOM_12_1_LOOKBACK_BARS,
+            compute_earnings_yield,
+            compute_momentum_1w,
+            compute_momentum_4w,
+            compute_momentum_12_1,
+        )
+
+        # 252-bar lookback (~12 months) needs a wide enough calendar
+        # window; ~2x trading days in calendar days covers weekends/holidays.
+        lookback_start = as_of_date - timedelta(
+            days=int(MOM_12_1_LOOKBACK_BARS * 365 / 252) + 30
+        )
+        prices = load_prices_yfinance(
+            symbols, lookback_start, as_of_date, log_prefix="[SignalBuilder]"
+        )
+        fundamentals = load_point_in_time_fundamentals(symbols, as_of_date=as_of_date)
+
+        for symbol in symbols:
+            price_df = prices.get(symbol)
+            if price_df is None or price_df.empty:
+                raise ValueError(
+                    f"[SignalBuilder] Missing price history for {symbol}; "
+                    "cannot compute momentum"
+                )
+            closes = price_df["close"].to_numpy(dtype=float)
+            as_of_index = len(closes) - 1
+
+            fundamental = fundamentals.get(symbol)
+            if fundamental is None or fundamental.eps_diluted is None:
+                raise ValueError(
+                    f"[SignalBuilder] Missing SEC point-in-time eps_diluted "
+                    f"for {symbol}; cannot compute earnings_yield"
+                )
+
+            signals[symbol]["momentum_1w"] = compute_momentum_1w(
+                closes, as_of_index=as_of_index
+            )
+            signals[symbol]["momentum_4w"] = compute_momentum_4w(
+                closes, as_of_index=as_of_index
+            )
+            signals[symbol]["momentum_12_1"] = compute_momentum_12_1(
+                closes, as_of_index=as_of_index
+            )
+            signals[symbol]["earnings_yield"] = compute_earnings_yield(
+                eps_diluted=fundamental.eps_diluted,
+                as_of_close=float(closes[as_of_index]),
+            )
+
+        logger.info(
+            f"[SignalBuilder] Momentum + earnings_yield computed for "
+            f"{len(symbols)} symbols"
         )
 
     # =========================================================================

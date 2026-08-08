@@ -20,6 +20,7 @@ from brain_api.core.portfolio_rl.data_loading import (
     align_signals_to_weekly,
     load_historical_news_sentiment,
 )
+from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
 from brain_api.core.sac.trade_clock import (
     build_sac_weekly_trade_clock,
@@ -97,7 +98,12 @@ def assess_sac_training_readiness(
     weekly_cutoffs = trade_clock.transition_actor_cutoffs
 
     try:
-        prices = load_prices_yfinance(symbols, start_date, end_date)
+        # Fetch extra calendar history before start_date so the earliest
+        # weekly cutoff still has enough trading bars for momentum_12_1
+        # (skip 21 + lookback 252 = 273 bars) -- mirrors the buffer used
+        # by the actual /train/sac/full price fetch.
+        price_start_date = start_date - timedelta(days=MOM_12_1_CALENDAR_BUFFER_DAYS)
+        prices = load_prices_yfinance(symbols, price_start_date, end_date)
     except Exception as exc:
         prices = {}
         errors.append(SACReadinessIssue("prices", str(exc), retryable=True))

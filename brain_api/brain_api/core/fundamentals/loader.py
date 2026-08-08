@@ -8,6 +8,7 @@ from the local cache. All consumers should use this function:
 - SAC training/finetune
 """
 
+import math
 from datetime import date
 from pathlib import Path
 
@@ -146,6 +147,12 @@ def load_historical_fundamentals_from_cache(
                             "filing_source": provenance_stmt.filing_source,
                             "gross_margin": ratios.gross_margin,
                             "debt_to_equity": ratios.debt_to_equity,
+                            # Optional -- does NOT gate inclusion of this
+                            # period. May be NaN when the filing has no
+                            # diluted/basic EPS fact; earnings_yield
+                            # consumers must fail loud on NaN, not
+                            # zero-fill (see AGENTS.md rule #1).
+                            "eps_diluted": ratios.eps_diluted,
                         }
                     )
 
@@ -178,6 +185,13 @@ def load_point_in_time_fundamentals(
         if frame.empty:
             continue
         row = frame.iloc[-1]
+        eps_raw = row.get("eps_diluted") if "eps_diluted" in frame.columns else None
+        eps_diluted = (
+            float(eps_raw)
+            if eps_raw is not None
+            and not (isinstance(eps_raw, float) and math.isnan(eps_raw))
+            else None
+        )
         result[symbol] = PointInTimeFundamental(
             symbol=symbol,
             fiscal_period_end=str(row["fiscal_period_end"]),
@@ -187,5 +201,6 @@ def load_point_in_time_fundamentals(
             filing_source=str(row["filing_source"]),
             gross_margin=float(row["gross_margin"]),
             debt_to_equity=float(row["debt_to_equity"]),
+            eps_diluted=eps_diluted,
         )
     return result

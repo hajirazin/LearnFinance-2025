@@ -132,8 +132,9 @@ temporal/                         # Temporal workflow orchestration
 |----------|---------|
 | `POST /signals/news` | News sentiment (FinBERT, real-time) |
 | `POST /signals/news/historical` | News sentiment (historical) |
-| `POST /signals/fundamentals` | Financial ratios (5 metrics) |
+| `POST /signals/fundamentals` | Financial ratios (gross margin, debt-to-equity, `eps_diluted` for SAC's `earnings_yield`, etc.) |
 | `POST /signals/fundamentals/historical` | Historical fundamentals |
+| `POST /signals/prices` | Raw daily closes for SAC's `momentum_1w`/`momentum_4w`/`momentum_12_1` (Temporal's `get_closes` activity) |
 
 **Training** (called by Saturday/Sunday cron or manual):
 
@@ -250,19 +251,26 @@ Invariants:
 
 ### Signal state vector (for SAC)
 
-SAC consumes a flat state vector composed of **per-stock features** and **portfolio-level features**. Source of truth: `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
+SAC consumes a flat state vector composed of **per-stock signals**, a **per-stock PatchTST forecast**, and **portfolio-level features**. Source of truth: `SAC_SIGNAL_NAMES` in [brain_api/brain_api/core/sac/decision_context.py](brain_api/brain_api/core/sac/decision_context.py) and `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
 
-**Per-stock features (8 per stock, x `n_stocks`):**
+**Per-stock signals (9 per stock, x `n_stocks`, from `SAC_SIGNAL_NAMES`):**
 
 | Feature | Source |
 |---------|--------|
 | News sentiment score | `/signals/news` (FinBERT) |
 | News coverage | `/signals/news` (article count scaled to [0, 1]) |
 | Gross margin | `/signals/fundamentals` |
-| Operating margin | `/signals/fundamentals` |
-| Current ratio | `/signals/fundamentals` |
 | Debt to equity | `/signals/fundamentals` |
 | Fundamental data age | Days since last fundamentals update |
+| Momentum 1w (`P[t]/P[t-5] - 1`, 5 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
+| Momentum 4w (`P[t]/P[t-20] - 1`, 20 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
+| Momentum 12-1 (`P[t-21]/P[t-252] - 1`, skip 21 bars then 252-bar lookback) | Daily closes (yfinance train / `/signals/prices` infer) |
+| Earnings yield (`eps_diluted / as_of_close`) | SEC point-in-time diluted EPS (`/signals/fundamentals`, Basic fallback) / as-of close. Never raw P/E, never `stock_filter` EBIT/EV. |
+
+**Per-stock forecast feature (1 per stock, x `n_stocks`, separate from the 9 signals above):**
+
+| Feature | Source |
+|---------|--------|
 | PatchTST predicted weekly return | `/inference/patchtst` (US, re-run on the chosen 15) |
 
 **Portfolio-level features (`n_stocks + 1`):**
@@ -272,7 +280,7 @@ SAC consumes a flat state vector composed of **per-stock features** and **portfo
 | Current weight per stock | Portfolio state |
 | Current cash weight (CASH slot) | Portfolio state |
 
-For `n_stocks = 15` -> `state_dim = 15*7 + 15*1 + 16 = 136`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
+For `n_stocks = 15` -> `state_dim = 15*9 + 15*1 + 16 = 166`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. Momentum and earnings yield are fail-loud (no silent zero-fill for insufficient price history, missing/non-finite EPS, or `P<=0`); train (`portfolio_rl.data_loading`) and Monday infer (`temporal/activities/sac_context.py`) duplicate the same bar counts (5/20/21/252) and encodings to avoid train/infer skew across the two independent deployables. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)

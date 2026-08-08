@@ -84,6 +84,10 @@ _MOCK_SIGNAL_KEYS: tuple[str, ...] = (
     "gross_margin",
     "debt_to_equity",
     "fundamental_age",
+    "momentum_1w",
+    "momentum_4w",
+    "momentum_12_1",
+    "earnings_yield",
 )
 
 
@@ -102,6 +106,10 @@ def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
             "gross_margin": 0.45,
             "debt_to_equity": 0.5,
             "fundamental_age": 7.0,
+            "momentum_1w": 0.01,
+            "momentum_4w": 0.02,
+            "momentum_12_1": 0.10,
+            "earnings_yield": 0.05,
         }
         for symbol in symbols
     }
@@ -179,8 +187,8 @@ def create_mock_training_result(
             number of stocks or the available price data.
     """
     n_stocks = config.n_stocks
-    # State dim: signals (5 per stock) + PatchTST (1) + weights
-    state_dim = n_stocks * 5 + n_stocks * 1 + (n_stocks + 1)
+    # State dim: signals (9 per stock, SAC_SIGNAL_NAMES) + PatchTST (1) + weights
+    state_dim = n_stocks * 9 + n_stocks * 1 + (n_stocks + 1)
     action_dim = n_stocks + 1
 
     actor = GaussianActor(
@@ -506,6 +514,10 @@ _RL_SIGNAL_KEYS: tuple[str, ...] = (
     "gross_margin",
     "debt_to_equity",
     "fundamental_age",
+    "momentum_1w",
+    "momentum_4w",
+    "momentum_12_1",
+    "earnings_yield",
 )
 
 
