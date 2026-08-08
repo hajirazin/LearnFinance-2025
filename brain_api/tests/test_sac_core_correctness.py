@@ -34,10 +34,8 @@ def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
         "AAA": {
             "news_sentiment": 0.1,
             "news_coverage": 0.5,
-            "gross_margin": 0.4,
-            "operating_margin": 0.3,
-            "current_ratio": 1.5,
-            "debt_to_equity": 0.4,
+            "gross_margin": 0.5,
+            "debt_to_equity": 0.3,
             "fundamental_age": 12.0,
         }
     }
@@ -49,8 +47,8 @@ def test_state_schema_dimension_and_strict_construction() -> None:
     state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
     assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
-    assert StateSchema(n_stocks=15).state_dim == 136
-    assert state.shape == (10,)
+    assert StateSchema(n_stocks=15).state_dim == 106
+    assert state.shape == (8,)
     assert state[1] == pytest.approx(0.5)
 
 
@@ -220,14 +218,14 @@ def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> N
 
     class FakeEnv:
         action_dim = 2
-        state_dim = 11
+        state_dim = 9
 
         def reset(self, start_week=None):
             del start_week
-            return np.zeros(11)
+            return np.zeros(9)
 
         def step(self, action):
-            next_state = np.zeros(11)
+            next_state = np.zeros(9)
             next_state[0] = float(np.sum(action))
             return SimpleNamespace(next_state=next_state, done=False)
 

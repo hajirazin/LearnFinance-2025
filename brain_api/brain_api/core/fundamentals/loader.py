@@ -122,9 +122,6 @@ def load_historical_fundamentals_from_cache(
                 required_ratios = (
                     (
                         ratios.gross_margin,
-                        ratios.operating_margin,
-                        ratios.net_margin,
-                        ratios.current_ratio,
                         ratios.debt_to_equity,
                     )
                     if ratios is not None
@@ -148,9 +145,6 @@ def load_historical_fundamentals_from_cache(
                             "filing_form": provenance_stmt.filing_form,
                             "filing_source": provenance_stmt.filing_source,
                             "gross_margin": ratios.gross_margin,
-                            "operating_margin": ratios.operating_margin,
-                            "net_margin": ratios.net_margin,
-                            "current_ratio": ratios.current_ratio,
                             "debt_to_equity": ratios.debt_to_equity,
                         }
                     )
@@ -192,9 +186,6 @@ def load_point_in_time_fundamentals(
             filing_form=str(row["filing_form"]),
             filing_source=str(row["filing_source"]),
             gross_margin=float(row["gross_margin"]),
-            operating_margin=float(row["operating_margin"]),
-            net_margin=float(row["net_margin"]),
-            current_ratio=float(row["current_ratio"]),
             debt_to_equity=float(row["debt_to_equity"]),
         )
     return result

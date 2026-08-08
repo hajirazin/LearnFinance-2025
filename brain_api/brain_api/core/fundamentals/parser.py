@@ -104,39 +104,20 @@ def compute_ratios(
 
     # Initialize all ratios as None
     gross_margin = None
-    operating_margin = None
-    net_margin = None
-    current_ratio = None
     debt_to_equity = None
 
     # Compute profitability ratios from income statement
     if income:
         total_revenue = income.get_value("totalRevenue")
         gross_profit = income.get_value("grossProfit")
-        operating_income = income.get_value("operatingIncome")
-        net_income = income.get_value("netIncome")
 
-        if total_revenue and total_revenue > 0:
-            if gross_profit is not None:
-                gross_margin = float(gross_profit / total_revenue)
-            if operating_income is not None:
-                operating_margin = float(operating_income / total_revenue)
-            if net_income is not None:
-                net_margin = float(net_income / total_revenue)
+        if total_revenue and total_revenue > 0 and gross_profit is not None:
+            gross_margin = float(gross_profit / total_revenue)
 
-    # Compute liquidity and leverage from balance sheet
+    # Compute leverage from balance sheet
     if balance:
-        total_current_assets = balance.get_value("totalCurrentAssets")
-        total_current_liabilities = balance.get_value("totalCurrentLiabilities")
         total_debt = balance.get_value("shortLongTermDebtTotal")
         shareholder_equity = balance.get_value("totalShareholderEquity")
-
-        if (
-            total_current_assets
-            and total_current_liabilities
-            and total_current_liabilities > 0
-        ):
-            current_ratio = float(total_current_assets / total_current_liabilities)
 
         if total_debt is not None and shareholder_equity and shareholder_equity > 0:
             debt_to_equity = float(total_debt / shareholder_equity)
@@ -145,10 +126,5 @@ def compute_ratios(
         symbol=symbol,
         as_of_date=as_of_date,
         gross_margin=round(gross_margin, 4) if gross_margin is not None else None,
-        operating_margin=round(operating_margin, 4)
-        if operating_margin is not None
-        else None,
-        net_margin=round(net_margin, 4) if net_margin is not None else None,
-        current_ratio=round(current_ratio, 4) if current_ratio is not None else None,
         debt_to_equity=round(debt_to_equity, 4) if debt_to_equity is not None else None,
     )

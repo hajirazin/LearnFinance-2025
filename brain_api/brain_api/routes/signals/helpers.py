@@ -89,8 +89,6 @@ def get_yfinance_ratios(symbol: str, as_of_date: str) -> RatiosResponse | None:
 
         # yfinance provides these as decimals (e.g., 0.45 for 45%)
         gross_margin = info.get("grossMargins")
-        operating_margin = info.get("operatingMargins")
-        net_margin = info.get("profitMargins")
         current_ratio = info.get("currentRatio")
         debt_to_equity = info.get("debtToEquity")
 
@@ -103,8 +101,6 @@ def get_yfinance_ratios(symbol: str, as_of_date: str) -> RatiosResponse | None:
             symbol=symbol,
             as_of_date=as_of_date,
             gross_margin=round(gross_margin, 4) if gross_margin else None,
-            operating_margin=round(operating_margin, 4) if operating_margin else None,
-            net_margin=round(net_margin, 4) if net_margin else None,
             current_ratio=round(current_ratio, 4) if current_ratio else None,
             debt_to_equity=round(debt_to_equity, 4) if debt_to_equity else None,
         )
@@ -122,8 +118,6 @@ def ratios_to_response(
         symbol=ratios.symbol,
         as_of_date=ratios.as_of_date,
         gross_margin=ratios.gross_margin,
-        operating_margin=ratios.operating_margin,
-        net_margin=ratios.net_margin,
         current_ratio=ratios.current_ratio,
         debt_to_equity=ratios.debt_to_equity,
     )

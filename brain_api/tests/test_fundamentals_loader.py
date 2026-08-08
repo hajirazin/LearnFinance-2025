@@ -160,12 +160,8 @@ class TestLoadHistoricalFundamentalsFromCache:
         assert isinstance(result["AAPL"], pd.DataFrame)
         assert len(result["AAPL"]) > 0
 
-        # Check expected columns
         expected_cols = [
             "gross_margin",
-            "operating_margin",
-            "net_margin",
-            "current_ratio",
             "debt_to_equity",
         ]
         for col in expected_cols:

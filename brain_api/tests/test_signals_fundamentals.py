@@ -125,7 +125,6 @@ SAMPLE_YFINANCE_INFO = {
     "grossMargins": 0.45,
     "operatingMargins": 0.30,
     "profitMargins": 0.25,
-    "currentRatio": 1.5,
     "debtToEquity": 150,  # yfinance returns as percentage (150 = 1.5x)
     "ebitda": 100000000,
     # Note: interestExpense NOT available in yfinance ticker.info
@@ -419,9 +418,6 @@ def test_fundamentals_returns_ratios(client_with_yfinance_mock):
 
     assert ratios is not None
     assert "gross_margin" in ratios
-    assert "operating_margin" in ratios
-    assert "net_margin" in ratios
-    assert "current_ratio" in ratios
     assert "debt_to_equity" in ratios
 
 
@@ -439,16 +435,6 @@ def test_fundamentals_ratios_values_reasonable(client_with_yfinance_mock):
     # Gross margin should be between 0 and 1
     assert ratios["gross_margin"] is not None
     assert 0 < ratios["gross_margin"] < 1
-
-    # Operating margin should be between 0 and 1
-    assert ratios["operating_margin"] is not None
-    assert 0 < ratios["operating_margin"] < 1
-
-    # Net margin should be between 0 and 1
-    assert ratios["net_margin"] is not None
-    assert 0 < ratios["net_margin"] < 1
-
-
 # ============================================================================
 # Current Fundamentals - Validation tests
 # ============================================================================

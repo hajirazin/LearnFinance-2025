@@ -221,8 +221,6 @@ class FundamentalRatios(BaseModel):
     symbol: str = ""
     as_of_date: str = ""
     gross_margin: float | None = None
-    operating_margin: float | None = None
-    net_margin: float | None = None
     current_ratio: float | None = None
     debt_to_equity: float | None = None
     fiscal_period_end: str | None = None

@@ -187,18 +187,14 @@ class RefreshFundamentalsRequest(BaseModel):
 class RatiosResponse(BaseModel):
     """Financial ratios for a symbol at a point in time.
 
-    5 core ratios for RL allocators:
-    - Profitability: gross_margin, operating_margin, net_margin
-    - Liquidity: current_ratio
+    3 core ratios for RL allocators:
+    - Profitability: gross_margin
     - Leverage: debt_to_equity
     """
 
     symbol: str
     as_of_date: str
     gross_margin: float | None
-    operating_margin: float | None
-    net_margin: float | None
-    current_ratio: float | None
     debt_to_equity: float | None
     fiscal_period_end: str | None = None
     filing_available_date: str | None = None

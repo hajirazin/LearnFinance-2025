@@ -78,10 +78,7 @@ def strict_preflight_dependencies(monkeypatch):
     fundamentals = {
         "AAA": pd.DataFrame(
             {
-                "gross_margin": [0.5],
-                "operating_margin": [0.3],
-                "net_margin": [0.2],
-                "current_ratio": [1.5],
+                "gross_margin": [0.4],
                 "debt_to_equity": [0.4],
             },
             index=pd.DatetimeIndex(["2023-01-01"]),

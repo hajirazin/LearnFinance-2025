@@ -48,9 +48,8 @@ class QuarterlyStatement:
 class FundamentalRatios:
     """Computed financial ratios for a symbol at a point in time.
 
-    5 core ratios for RL allocators:
-    - Profitability: gross_margin, operating_margin, net_margin
-    - Liquidity: current_ratio
+    3 core ratios for RL allocators:
+    - Profitability: gross_margin
     - Leverage: debt_to_equity
     """
 
@@ -59,11 +58,6 @@ class FundamentalRatios:
 
     # Profitability
     gross_margin: float | None  # grossProfit / totalRevenue
-    operating_margin: float | None  # operatingIncome / totalRevenue
-    net_margin: float | None  # netIncome / totalRevenue
-
-    # Liquidity
-    current_ratio: float | None  # totalCurrentAssets / totalCurrentLiabilities
 
     # Leverage
     debt_to_equity: float | None  # shortLongTermDebtTotal / totalShareholderEquity
@@ -74,9 +68,6 @@ class FundamentalRatios:
             "symbol": self.symbol,
             "as_of_date": self.as_of_date,
             "gross_margin": self.gross_margin,
-            "operating_margin": self.operating_margin,
-            "net_margin": self.net_margin,
-            "current_ratio": self.current_ratio,
             "debt_to_equity": self.debt_to_equity,
         }
 
@@ -92,9 +83,6 @@ class PointInTimeFundamental:
     filing_form: str
     filing_source: str
     gross_margin: float
-    operating_margin: float
-    net_margin: float
-    current_ratio: float
     debt_to_equity: float
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,9 +95,6 @@ class PointInTimeFundamental:
             "filing_form": self.filing_form,
             "filing_source": self.filing_source,
             "gross_margin": self.gross_margin,
-            "operating_margin": self.operating_margin,
-            "net_margin": self.net_margin,
-            "current_ratio": self.current_ratio,
             "debt_to_equity": self.debt_to_equity,
         }
 

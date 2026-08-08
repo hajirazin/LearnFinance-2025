@@ -223,8 +223,6 @@ def get_historical_fundamentals(
                     symbol=symbol,
                     as_of_date=idx.strftime("%Y-%m-%d"),
                     gross_margin=safe_float(row.get("gross_margin")),
-                    operating_margin=safe_float(row.get("operating_margin")),
-                    net_margin=safe_float(row.get("net_margin")),
                     current_ratio=safe_float(row.get("current_ratio")),
                     debt_to_equity=safe_float(row.get("debt_to_equity")),
                     fiscal_period_end=row.get("fiscal_period_end"),

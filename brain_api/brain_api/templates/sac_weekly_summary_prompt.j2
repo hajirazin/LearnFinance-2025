@@ -36,7 +36,7 @@ Top 5 Allocations:
 
 ## Fundamentals (Financial Ratios)
 {% for item in fundamentals.per_symbol[:10] %}
-- {{ item.symbol }}: {% if item.ratios %}gross={{ "%.0f" | format((item.ratios.gross_margin or 0) * 100) }}%, op={{ "%.0f" | format((item.ratios.operating_margin or 0) * 100) }}%, curr_ratio={{ "%.1f" | format(item.ratios.current_ratio or 0) }}{% else %}N/A{% endif %}
+- {{ item.symbol }}: {% if item.ratios %}gross={{ "%.0f" | format((item.ratios.gross_margin or 0) * 100) }}%{% else %}N/A{% endif %}
 {% endfor %}
 
 ## Instructions

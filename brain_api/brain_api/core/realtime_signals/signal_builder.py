@@ -15,15 +15,13 @@ class RealTimeSignalBuilder:
 
     Fetches:
     - News sentiment: yfinance news + FinBERT scoring
-    - Fundamentals: yfinance ticker.info (gross_margin, operating_margin, etc.)
+    - Fundamentals: yfinance ticker.info (gross_margin, current_ratio, etc.)
     """
 
     # Signal keys that match training format
     SIGNAL_KEYS: ClassVar[list[str]] = [
         "news_sentiment",
         "gross_margin",
-        "operating_margin",
-        "current_ratio",
         "debt_to_equity",
         "fundamental_age",
     ]
@@ -127,8 +125,6 @@ class RealTimeSignalBuilder:
                 ratios = get_yfinance_ratios(symbol, as_of_date.isoformat())
                 if ratios:
                     signals[symbol]["gross_margin"] = ratios.gross_margin or 0.0
-                    signals[symbol]["operating_margin"] = ratios.operating_margin or 0.0
-                    signals[symbol]["current_ratio"] = ratios.current_ratio or 0.0
                     signals[symbol]["debt_to_equity"] = ratios.debt_to_equity or 0.0
                     # fundamental_age stays 0 for current data
                     fundamentals_fetched += 1
@@ -244,9 +240,6 @@ class RealTimeSignalBuilder:
                     df = pd.DataFrame(
                         {
                             "gross_margin": [ratios.gross_margin or 0.0],
-                            "operating_margin": [ratios.operating_margin or 0.0],
-                            "net_margin": [ratios.net_margin or 0.0],
-                            "current_ratio": [ratios.current_ratio or 0.0],
                             "debt_to_equity": [ratios.debt_to_equity or 0.0],
                         },
                         index=pd.DatetimeIndex([pd.Timestamp(end_date)]),

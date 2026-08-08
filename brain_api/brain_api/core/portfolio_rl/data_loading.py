@@ -199,8 +199,6 @@ def align_signals_to_weekly(
         fund_aligned = fund_df.reindex(weekly_index, method="ffill")
         ratio_columns = [
             "gross_margin",
-            "operating_margin",
-            "current_ratio",
             "debt_to_equity",
         ]
         missing_ratio_columns = set(ratio_columns).difference(fund_aligned.columns)

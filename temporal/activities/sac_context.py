@@ -87,13 +87,6 @@ def build_sac_feature_bundle(
             "gross_margin": _required_finite(
                 ratios.gross_margin, field=f"fundamentals[{symbol}].gross_margin"
             ),
-            "operating_margin": _required_finite(
-                ratios.operating_margin,
-                field=f"fundamentals[{symbol}].operating_margin",
-            ),
-            "current_ratio": _required_finite(
-                ratios.current_ratio, field=f"fundamentals[{symbol}].current_ratio"
-            ),
             "debt_to_equity": _required_finite(
                 ratios.debt_to_equity,
                 field=f"fundamentals[{symbol}].debt_to_equity",

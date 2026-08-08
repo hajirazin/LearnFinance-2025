@@ -36,9 +36,7 @@ def _canonical_inputs():
                 "symbol": "AAPL",
                 "ratios": {
                     "gross_margin": 0.42,
-                    "operating_margin": 0.31,
                     "net_margin": 0.24,
-                    "current_ratio": 1.8,
                     "debt_to_equity": 0.3,
                     "filing_available_date": "2026-01-30",
                     "filing_accession_number": "0001",
@@ -77,7 +75,7 @@ def test_confirmed_zero_news_is_neutral_with_zero_coverage():
     assert bundle["signals"]["AAPL"]["news_sentiment"] == 0.0
     assert bundle["signals"]["AAPL"]["news_coverage"] == 0.0
     assert bundle["signals"]["AAPL"]["fundamental_age"] == 6.0
-    assert "net_margin" not in bundle["signals"]["AAPL"]
+    assert "gross_margin" in bundle["signals"]["AAPL"]
     assert "lstm_forecasts" not in bundle
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
 
