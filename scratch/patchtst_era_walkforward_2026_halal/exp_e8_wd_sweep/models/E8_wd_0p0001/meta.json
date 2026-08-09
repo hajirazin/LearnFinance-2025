@@ -1,0 +1,13 @@
+{
+  "name": "E8_wd_0p0001",
+  "weight_decay": 0.0001,
+  "lr": 0.0003,
+  "max_grad_norm": 1.0,
+  "best_epoch": 2,
+  "best_val_close_mse": 0.0008547679729720888,
+  "baseline_mse": 0.0009311718749813735,
+  "beats_baseline_best": true,
+  "stopped_epoch": 17,
+  "barely_trained": true,
+  "mean_wd_over_grad_ratio_best_ep": 42.854083335538434
+}

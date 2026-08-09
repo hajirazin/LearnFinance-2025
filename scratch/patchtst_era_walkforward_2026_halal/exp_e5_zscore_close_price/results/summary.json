@@ -1,0 +1,219 @@
+{
+  "y_train_stats": {
+    "n": 6720,
+    "y_z_mean": 0.5158288478851318,
+    "y_z_std": 1.5675476789474487,
+    "y_z_p01": -3.2327963590621946,
+    "y_z_p99": 3.9662277412414713,
+    "y_z_min": -7.279151916503906,
+    "y_z_max": 19.513486862182617
+  },
+  "train": {
+    "name": "E5_zscore_close_price",
+    "representation": "zscore_close_price_levels",
+    "zscore": "per_sample_context_mean_std",
+    "num_input_channels": 1,
+    "scaling": null,
+    "lr": 0.0003,
+    "best_epoch": 45,
+    "best_val_mse_z": 0.6172430862983068,
+    "baseline_mse_z": 2.601269483566284,
+    "beats_baseline_best": true,
+    "stopped_epoch": 60,
+    "ran_full_100": false,
+    "barely_trained": false
+  },
+  "walkforward": {
+    "n_rows": 1500,
+    "n_weeks": 25,
+    "mae_frac": 0.03569517208492086,
+    "mae_as_pct_points_display": 3.569517208492086,
+    "rmse_frac": 0.05022498577341324,
+    "mean_pred_frac": 0.0007739320321586532,
+    "mean_actual_frac": 0.0010776970858162901,
+    "std_pred_frac": 0.04056193228945442,
+    "std_actual_frac": 0.031219073524308808,
+    "corr_frac": 0.03847568603514338,
+    "dir_acc": 0.494,
+    "naive_predict0_mae_frac": 0.021582098140139654,
+    "beats_naive0_daily": false,
+    "mae_z": 0.5729567272557334,
+    "weekly_mae_frac": 0.050342821347689165,
+    "weekly_naive0_mae_frac": 0.04856741553590477,
+    "beats_naive0_weekly": false,
+    "weekly_mae_pp_display": 5.034282134768916,
+    "day1_mae_frac": 0.020420029904872686,
+    "day1_dir_acc": 0.5233333333333333,
+    "day1_mae_z": 0.32020087443404777,
+    "day2_mae_frac": 0.02912365818145761,
+    "day2_dir_acc": 0.47,
+    "day2_mae_z": 0.4537789216838886,
+    "day3_mae_frac": 0.03713771307914559,
+    "day3_dir_acc": 0.5,
+    "day3_mae_z": 0.5850406716057279,
+    "day4_mae_frac": 0.04180586132791142,
+    "day4_dir_acc": 0.5266666666666666,
+    "day4_mae_z": 0.6854585473021294,
+    "day5_mae_frac": 0.04998859793121698,
+    "day5_dir_acc": 0.45,
+    "day5_mae_z": 0.8203046212528736,
+    "pred_frac_min": -0.19269573023076259,
+    "pred_frac_max": 0.28046030098098185
+  },
+  "vs_e4": {
+    "e4_mae_frac": 0.02150438819309294,
+    "e4_dir_acc": 0.528,
+    "e4_beats_naive0": true,
+    "e5_mae_frac": 0.03569517208492086,
+    "e5_dir_acc": 0.494,
+    "e5_beats_naive0_daily": false,
+    "e5_better_mae_than_e4": false
+  },
+  "samples_first_week_3_symbols": [
+    {
+      "week_start": "2026-01-05",
+      "symbol": "NVDA",
+      "ctx_mu": 186.1235,
+      "ctx_sigma": 7.8242,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_price": 188.12,
+          "pred_price": 190.8345,
+          "actual_frac": -0.003866,
+          "pred_frac": 0.010508
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_price": 187.24,
+          "pred_price": 190.9573,
+          "actual_frac": -0.004678,
+          "pred_frac": 0.015082
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_price": 189.11,
+          "pred_price": 191.1617,
+          "actual_frac": 0.009987,
+          "pred_frac": 0.020945
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_price": 185.04,
+          "pred_price": 191.3154,
+          "actual_frac": -0.021522,
+          "pred_frac": 0.011662
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_price": 184.86,
+          "pred_price": 191.4137,
+          "actual_frac": -0.000973,
+          "pred_frac": 0.034445
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "AAPL",
+      "ctx_mu": 269.4707,
+      "ctx_sigma": 9.33,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_price": 267.26,
+          "pred_price": 271.8948,
+          "actual_frac": -0.013837,
+          "pred_frac": 0.003265
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_price": 262.36,
+          "pred_price": 272.1156,
+          "actual_frac": -0.018334,
+          "pred_frac": 0.018168
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_price": 260.33,
+          "pred_price": 272.5352,
+          "actual_frac": -0.007737,
+          "pred_frac": 0.038783
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_price": 259.04,
+          "pred_price": 272.5212,
+          "actual_frac": -0.004955,
+          "pred_frac": 0.04683
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_price": 259.37,
+          "pred_price": 272.7353,
+          "actual_frac": 0.001274,
+          "pred_frac": 0.052869
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "TSM",
+      "ctx_mu": 293.8847,
+      "ctx_sigma": 8.9015,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_price": 322.25,
+          "pred_price": 317.8137,
+          "actual_frac": 0.00826,
+          "pred_frac": -0.00562
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_price": 327.43,
+          "pred_price": 317.9853,
+          "actual_frac": 0.016074,
+          "pred_frac": -0.013234
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_price": 318.68,
+          "pred_price": 317.9888,
+          "actual_frac": -0.026723,
+          "pred_frac": -0.028834
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_price": 318.01,
+          "pred_price": 318.1781,
+          "actual_frac": -0.002102,
+          "pred_frac": -0.001575
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_price": 323.63,
+          "pred_price": 318.3241,
+          "actual_frac": 0.017672,
+          "pred_frac": 0.000988
+        }
+      ]
+    }
+  ],
+  "note": "Z-score close PRICE levels using per-sample 60d context mean/std. Predict next 5 closes in z-space; inverse to $; score daily % vs actual. Not z-score of %. Main today uses log-returns+RevIN \u2014 this is price-level."
+}

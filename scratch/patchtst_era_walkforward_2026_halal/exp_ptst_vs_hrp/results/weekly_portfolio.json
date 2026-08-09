@@ -1,0 +1,2177 @@
+[
+  {
+    "week_start": "2026-01-05",
+    "week_end": "2026-01-09",
+    "arm": "EW-12",
+    "ret_frac": 0.0017030382884489113,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-05",
+    "week_end": "2026-01-09",
+    "arm": "HRP-252",
+    "ret_frac": 0.003711566222439651,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-05",
+    "week_end": "2026-01-09",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.013081660538991445,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-05",
+    "week_end": "2026-01-09",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.009802667054109091,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-05",
+    "week_end": "2026-01-09",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.009874910061077026,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "NVDA",
+      "TSLA"
+    ]
+  },
+  {
+    "week_start": "2026-01-12",
+    "week_end": "2026-01-16",
+    "arm": "EW-12",
+    "ret_frac": 0.014817804729835848,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-12",
+    "week_end": "2026-01-16",
+    "arm": "HRP-252",
+    "ret_frac": 0.005051411320567188,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-12",
+    "week_end": "2026-01-16",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.014302916028996224,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-12",
+    "week_end": "2026-01-16",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.019572700720350816,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-12",
+    "week_end": "2026-01-16",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.007966553191076704,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "NVDA",
+      "TSLA"
+    ]
+  },
+  {
+    "week_start": "2026-01-26",
+    "week_end": "2026-01-30",
+    "arm": "EW-12",
+    "ret_frac": 0.004916889463881848,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-26",
+    "week_end": "2026-01-30",
+    "arm": "HRP-252",
+    "ret_frac": 0.009804293317525612,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-26",
+    "week_end": "2026-01-30",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.01815518787089969,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-26",
+    "week_end": "2026-01-30",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.0017154840504302062,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-01-26",
+    "week_end": "2026-01-30",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.01750385850351147,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSLA"
+    ]
+  },
+  {
+    "week_start": "2026-02-02",
+    "week_end": "2026-02-06",
+    "arm": "EW-12",
+    "ret_frac": -0.01882142449419431,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-02",
+    "week_end": "2026-02-06",
+    "arm": "HRP-252",
+    "ret_frac": -0.0007017157589873744,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-02",
+    "week_end": "2026-02-06",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.007906598360323069,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-02",
+    "week_end": "2026-02-06",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.006761071318493296,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-02",
+    "week_end": "2026-02-06",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.0011553171624618468,
+    "n_names": 6,
+    "selected": [
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-02-09",
+    "week_end": "2026-02-13",
+    "arm": "EW-12",
+    "ret_frac": -0.01008749552156139,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-09",
+    "week_end": "2026-02-13",
+    "arm": "HRP-252",
+    "ret_frac": -0.021062995644588554,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-09",
+    "week_end": "2026-02-13",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.014329996412862889,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-09",
+    "week_end": "2026-02-13",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.0023159838921604607,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-09",
+    "week_end": "2026-02-13",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.002967902307971773,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "MSFT",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-02-23",
+    "week_end": "2026-02-27",
+    "arm": "EW-12",
+    "ret_frac": -0.009263091349487865,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-23",
+    "week_end": "2026-02-27",
+    "arm": "HRP-252",
+    "ret_frac": 0.003948065203904103,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-23",
+    "week_end": "2026-02-27",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.009106165586381453,
+    "n_names": 6,
+    "selected": [
+      "META",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-23",
+    "week_end": "2026-02-27",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.015184607563812364,
+    "n_names": 6,
+    "selected": [
+      "META",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-02-23",
+    "week_end": "2026-02-27",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.020460514126372693,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "LLY",
+      "META",
+      "MU",
+      "TSLA",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-02",
+    "week_end": "2026-03-06",
+    "arm": "EW-12",
+    "ret_frac": -0.025963265571344398,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-02",
+    "week_end": "2026-03-06",
+    "arm": "HRP-252",
+    "ret_frac": -0.017792650264477846,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-02",
+    "week_end": "2026-03-06",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.03226120024455888,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-02",
+    "week_end": "2026-03-06",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.05199372882814889,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-02",
+    "week_end": "2026-03-06",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.031123063996640582,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-09",
+    "week_end": "2026-03-13",
+    "arm": "EW-12",
+    "ret_frac": 0.004896568017455998,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-09",
+    "week_end": "2026-03-13",
+    "arm": "HRP-252",
+    "ret_frac": -0.0013317066590518068,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-09",
+    "week_end": "2026-03-13",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.014093456965982014,
+    "n_names": 6,
+    "selected": [
+      "LLY",
+      "META",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-09",
+    "week_end": "2026-03-13",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.023598115542947364,
+    "n_names": 6,
+    "selected": [
+      "LLY",
+      "META",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-09",
+    "week_end": "2026-03-13",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.028416646299035335,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-16",
+    "week_end": "2026-03-20",
+    "arm": "EW-12",
+    "ret_frac": -0.022301802883060245,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-16",
+    "week_end": "2026-03-20",
+    "arm": "HRP-252",
+    "ret_frac": -0.015616712195225107,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-16",
+    "week_end": "2026-03-20",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.0007803476711889803,
+    "n_names": 6,
+    "selected": [
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-16",
+    "week_end": "2026-03-20",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.015655598067115195,
+    "n_names": 6,
+    "selected": [
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-16",
+    "week_end": "2026-03-20",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.0008777667221254934,
+    "n_names": 6,
+    "selected": [
+      "GOOGL",
+      "META",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-23",
+    "week_end": "2026-03-27",
+    "arm": "EW-12",
+    "ret_frac": -0.038658679403852425,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-23",
+    "week_end": "2026-03-27",
+    "arm": "HRP-252",
+    "ret_frac": -0.020072636681413656,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-23",
+    "week_end": "2026-03-27",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.001147360228566979,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-23",
+    "week_end": "2026-03-27",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.03454882233024029,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-03-23",
+    "week_end": "2026-03-27",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.00040592558073063406,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "LLY",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-06",
+    "week_end": "2026-04-10",
+    "arm": "EW-12",
+    "ret_frac": 0.059463740721465215,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-06",
+    "week_end": "2026-04-10",
+    "arm": "HRP-252",
+    "ret_frac": 0.02452506620039782,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-06",
+    "week_end": "2026-04-10",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.0126763279091832,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-06",
+    "week_end": "2026-04-10",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.0663971382412566,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-06",
+    "week_end": "2026-04-10",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.023219219220405825,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AVGO",
+      "META",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-13",
+    "week_end": "2026-04-17",
+    "arm": "EW-12",
+    "ret_frac": 0.06865352913666964,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-13",
+    "week_end": "2026-04-17",
+    "arm": "HRP-252",
+    "ret_frac": 0.0438750908338643,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-13",
+    "week_end": "2026-04-17",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.004918807559814843,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-13",
+    "week_end": "2026-04-17",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.05689434375463829,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-13",
+    "week_end": "2026-04-17",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.03659527867232483,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "LLY",
+      "MSFT",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-20",
+    "week_end": "2026-04-24",
+    "arm": "EW-12",
+    "ret_frac": 0.03376230186684626,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-20",
+    "week_end": "2026-04-24",
+    "arm": "HRP-252",
+    "ret_frac": 0.01023589269303377,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-20",
+    "week_end": "2026-04-24",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.048860463916723565,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "META",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-04-20",
+    "week_end": "2026-04-24",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.08001438926828283,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "META",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-04-20",
+    "week_end": "2026-04-24",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.014022602009595549,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "LLY",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-27",
+    "week_end": "2026-05-01",
+    "arm": "EW-12",
+    "ret_frac": 0.020918029674331845,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-27",
+    "week_end": "2026-05-01",
+    "arm": "HRP-252",
+    "ret_frac": 0.023963576746468842,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-27",
+    "week_end": "2026-05-01",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.01657441143059782,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-27",
+    "week_end": "2026-05-01",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.015235950256177667,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "MU",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-04-27",
+    "week_end": "2026-05-01",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.03358157741105475,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "MSFT",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-04",
+    "week_end": "2026-05-08",
+    "arm": "EW-12",
+    "ret_frac": 0.07471184496929531,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-04",
+    "week_end": "2026-05-08",
+    "arm": "HRP-252",
+    "ret_frac": 0.01692988979465308,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-04",
+    "week_end": "2026-05-08",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.0807265738538702,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-05-04",
+    "week_end": "2026-05-08",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.1365628323720214,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-05-04",
+    "week_end": "2026-05-08",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.012666182638043474,
+    "n_names": 6,
+    "selected": [
+      "AVGO",
+      "META",
+      "MSFT",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-11",
+    "week_end": "2026-05-15",
+    "arm": "EW-12",
+    "ret_frac": 0.007928879670135558,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-11",
+    "week_end": "2026-05-15",
+    "arm": "HRP-252",
+    "ret_frac": 0.03279150985310091,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-11",
+    "week_end": "2026-05-15",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.006740733869234924,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-05-11",
+    "week_end": "2026-05-15",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.014992600008457516,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-05-11",
+    "week_end": "2026-05-15",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.04342179877569884,
+    "n_names": 6,
+    "selected": [
+      "AVGO",
+      "META",
+      "MSFT",
+      "NVDA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-18",
+    "week_end": "2026-05-22",
+    "arm": "EW-12",
+    "ret_frac": 0.008160135640618802,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-18",
+    "week_end": "2026-05-22",
+    "arm": "HRP-252",
+    "ret_frac": 0.004053935536544348,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-05-18",
+    "week_end": "2026-05-22",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.004711557950554965,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA"
+    ]
+  },
+  {
+    "week_start": "2026-05-18",
+    "week_end": "2026-05-22",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.010364491792544355,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA"
+    ]
+  },
+  {
+    "week_start": "2026-05-18",
+    "week_end": "2026-05-22",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.014637933605798733,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "META",
+      "MU",
+      "NVDA"
+    ]
+  },
+  {
+    "week_start": "2026-06-01",
+    "week_end": "2026-06-05",
+    "arm": "EW-12",
+    "ret_frac": -0.05079869174693974,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-01",
+    "week_end": "2026-06-05",
+    "arm": "HRP-252",
+    "ret_frac": -0.02169088046935639,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-01",
+    "week_end": "2026-06-05",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.03605887050766584,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-01",
+    "week_end": "2026-06-05",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.06619386721583721,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-01",
+    "week_end": "2026-06-05",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.035133499919160954,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "NVDA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-08",
+    "week_end": "2026-06-12",
+    "arm": "EW-12",
+    "ret_frac": 0.006969695283912252,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-08",
+    "week_end": "2026-06-12",
+    "arm": "HRP-252",
+    "ret_frac": -0.027448016273772972,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-08",
+    "week_end": "2026-06-12",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.01823834712256781,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-08",
+    "week_end": "2026-06-12",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.027976461134563885,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-08",
+    "week_end": "2026-06-12",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.010321504609008936,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "MU",
+      "NVDA",
+      "TSLA"
+    ]
+  },
+  {
+    "week_start": "2026-06-22",
+    "week_end": "2026-06-26",
+    "arm": "EW-12",
+    "ret_frac": -0.03751230577635288,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-22",
+    "week_end": "2026-06-26",
+    "arm": "HRP-252",
+    "ret_frac": -0.027366788046536264,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-06-22",
+    "week_end": "2026-06-26",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.02599524387864101,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-22",
+    "week_end": "2026-06-26",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.03190513405778254,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-06-22",
+    "week_end": "2026-06-26",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.017107334990053756,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MSFT",
+      "MU",
+      "TSLA"
+    ]
+  },
+  {
+    "week_start": "2026-07-06",
+    "week_end": "2026-07-10",
+    "arm": "EW-12",
+    "ret_frac": 0.037537558085047835,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-06",
+    "week_end": "2026-07-10",
+    "arm": "HRP-252",
+    "ret_frac": 0.021619416161490147,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-06",
+    "week_end": "2026-07-10",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.00500437819448037,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-06",
+    "week_end": "2026-07-10",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.012387543632236929,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-06",
+    "week_end": "2026-07-10",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.022176794415013742,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "LLY",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-13",
+    "week_end": "2026-07-17",
+    "arm": "EW-12",
+    "ret_frac": -0.036164035894316646,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-13",
+    "week_end": "2026-07-17",
+    "arm": "HRP-252",
+    "ret_frac": 0.01814955850252418,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-13",
+    "week_end": "2026-07-17",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.0011402690472446663,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-13",
+    "week_end": "2026-07-17",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.057061763222343354,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-13",
+    "week_end": "2026-07-17",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.002594420907260227,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-20",
+    "week_end": "2026-07-24",
+    "arm": "EW-12",
+    "ret_frac": -0.007347863352996631,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-20",
+    "week_end": "2026-07-24",
+    "arm": "HRP-252",
+    "ret_frac": -0.001706895537583273,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-20",
+    "week_end": "2026-07-24",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.011312947875060791,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-20",
+    "week_end": "2026-07-24",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.01408912711536616,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-20",
+    "week_end": "2026-07-24",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.03989779651149563,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "GOOGL",
+      "LLY",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-07-27",
+    "week_end": "2026-07-31",
+    "arm": "EW-12",
+    "ret_frac": -0.005227325261027677,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-27",
+    "week_end": "2026-07-31",
+    "arm": "HRP-252",
+    "ret_frac": 0.010191184911067106,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-27",
+    "week_end": "2026-07-31",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": -0.04014290085845094,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-27",
+    "week_end": "2026-07-31",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": -0.052233670294785,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MU",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-07-27",
+    "week_end": "2026-07-31",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": -0.039956827710163526,
+    "n_names": 6,
+    "selected": [
+      "AMD",
+      "LLY",
+      "META",
+      "MU",
+      "TSLA",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-08-03",
+    "week_end": "2026-08-07",
+    "arm": "EW-12",
+    "ret_frac": 0.04633645128899004,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-08-03",
+    "week_end": "2026-08-07",
+    "arm": "HRP-252",
+    "ret_frac": 0.02363231983538594,
+    "n_names": 12,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ]
+  },
+  {
+    "week_start": "2026-08-03",
+    "week_end": "2026-08-07",
+    "arm": "PTST_close_top6_HRP",
+    "ret_frac": 0.03707370287978285,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MSFT",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-08-03",
+    "week_end": "2026-08-07",
+    "arm": "PTST_close_top6_EW",
+    "ret_frac": 0.04046104580854544,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "MSFT",
+      "MU",
+      "TSM"
+    ]
+  },
+  {
+    "week_start": "2026-08-03",
+    "week_end": "2026-08-07",
+    "arm": "PTST_multi_top6_HRP",
+    "ret_frac": 0.032898093621898286,
+    "n_names": 6,
+    "selected": [
+      "AAPL",
+      "AMD",
+      "LLY",
+      "META",
+      "MU",
+      "TSLA"
+    ]
+  }
+]

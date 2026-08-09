@@ -1,0 +1,56 @@
+{
+  "train": {
+    "name": "E9_listnet_wd0",
+    "loss": "listnet_weekly_close",
+    "weight_decay": 0.0,
+    "listnet_temp": 0.02,
+    "best_epoch": 8,
+    "best_val_listnet": 2.702563745820004,
+    "stopped_epoch": 23,
+    "barely_trained": false
+  },
+  "oos": {
+    "n_weeks": 25,
+    "mean_spearman_ic": 0.00335664335664336,
+    "std_spearman_ic": 0.40972156278407,
+    "mean_top3_overlap": 0.30666666666666664,
+    "mean_top6_overlap": 0.5133333333333333,
+    "random_top3_overlap": 0.25,
+    "random_top6_overlap": 0.5,
+    "arms": {
+      "HRP-252": {
+        "cum_return_pct": 9.739158124853642,
+        "sharpe_ann_approx": 1.439444742347095,
+        "hit_rate": 0.6,
+        "max_drawdown_pct": -7.458183278702457
+      },
+      "E9_top6_HRP": {
+        "cum_return_pct": 5.571234638042899,
+        "sharpe_ann_approx": 0.6242150338300274,
+        "hit_rate": 0.68,
+        "max_drawdown_pct": -16.494030357183586
+      },
+      "E9_top6_EW": {
+        "cum_return_pct": 14.634452141037467,
+        "sharpe_ann_approx": 1.0045671673977803,
+        "hit_rate": 0.56,
+        "max_drawdown_pct": -17.176009589729226
+      },
+      "EW-all": {
+        "cum_return_pct": 12.174652095913263,
+        "sharpe_ann_approx": 1.099367316816566,
+        "hit_rate": 0.56,
+        "max_drawdown_pct": -11.471657669259239
+      }
+    },
+    "gates": {
+      "mean_ic_gt_0_05": false,
+      "top3_overlap_gt_random": true,
+      "beats_hrp_sharpe": false,
+      "pass_ranking": false
+    }
+  },
+  "prior_close_only_ic": 0.015664335664335668,
+  "ic_lift_vs_prior": -0.012307692307692308,
+  "note": "ListNet on weekly compounded close log-returns; wd=0 from E8. Gates: mean IC>0.05 and top3 overlap > random."
+}

@@ -1,0 +1,243 @@
+{
+  "y_train_stats": {
+    "n": 6720,
+    "y_z_mean": -0.00557149900123477,
+    "y_z_std": 1.1115853786468506,
+    "y_z_p01": -2.9491445899009703,
+    "y_z_p99": 2.8944511628150966,
+    "y_z_min": -13.11453628540039,
+    "y_z_max": 16.94650650024414
+  },
+  "train": {
+    "name": "E6_zscore_pct_returns",
+    "representation": "zscore_simple_return_fraction",
+    "example": "2% -> 0.02 -> z via context mu/sigma",
+    "zscore": "per_sample_context_mean_std_on_returns",
+    "num_input_channels": 1,
+    "scaling": null,
+    "lr": 0.0003,
+    "best_epoch": 42,
+    "best_val_mse_z": 1.1661563515663147,
+    "baseline_mse_z": 1.1999963521957397,
+    "beats_baseline_best": true,
+    "stopped_epoch": 57,
+    "ran_full_100": false,
+    "barely_trained": false
+  },
+  "walkforward": {
+    "n_rows": 1500,
+    "n_weeks": 25,
+    "mae_frac": 0.02226119748525206,
+    "mae_as_pct_points_display": 2.226119748525206,
+    "rmse_frac": 0.03191683998698489,
+    "mean_pred_frac": 0.0017395463515924047,
+    "mean_actual_frac": 0.0010776970858162901,
+    "std_pred_frac": 0.006381119264878798,
+    "std_actual_frac": 0.031219073524308808,
+    "corr_frac": -0.007272117971638445,
+    "dir_acc": 0.49533333333333335,
+    "naive_predict0_mae_frac": 0.021582098140139654,
+    "beats_naive0_daily": false,
+    "mae_z": 0.8552517865276408,
+    "weekly_mae_frac": 0.05116033884297584,
+    "weekly_naive0_mae_frac": 0.04856741553590477,
+    "beats_naive0_weekly": false,
+    "weekly_mae_pp_display": 5.116033884297584,
+    "weekly_dir_acc": 0.48333333333333334,
+    "weekly_corr": -0.02890937022412641,
+    "pred_frac_min": -0.07907130672056562,
+    "pred_frac_max": 0.07286233803663758,
+    "day1_mae_frac": 0.019505317553860386,
+    "day1_dir_acc": 0.51,
+    "day1_mae_z": 0.7643228258906045,
+    "day2_mae_frac": 0.02136663592965606,
+    "day2_dir_acc": 0.4533333333333333,
+    "day2_mae_z": 0.7961093388389986,
+    "day3_mae_frac": 0.022744463360925855,
+    "day3_dir_acc": 0.49333333333333335,
+    "day3_mae_z": 0.8729015941989944,
+    "day4_mae_frac": 0.02472772873672094,
+    "day4_dir_acc": 0.49333333333333335,
+    "day4_mae_z": 0.9586910954862546,
+    "day5_mae_frac": 0.022961841845097065,
+    "day5_dir_acc": 0.5266666666666666,
+    "day5_mae_z": 0.8842340782233516
+  },
+  "compare": {
+    "e6": {
+      "best_epoch": 42,
+      "mae_frac": 0.02226119748525206,
+      "dir_acc": 0.49533333333333335,
+      "std_pred_frac": 0.006381119264878798,
+      "beats_naive0_daily": false,
+      "weekly_mae_pp": 5.116033884297584,
+      "beats_naive0_weekly": false,
+      "weekly_dir_acc": 0.48333333333333334
+    },
+    "e4": {
+      "best_epoch": 10,
+      "mae_frac": 0.02150438819309294,
+      "dir_acc": 0.528,
+      "std_pred_frac": 0.0014663630405658884,
+      "beats_naive0_daily": true
+    },
+    "e6_better_daily_mae_than_e4": false,
+    "e5": {
+      "best_epoch": 45,
+      "mae_frac": 0.03569517208492086,
+      "dir_acc": 0.494,
+      "weekly_mae_pp": 5.034282134768916,
+      "beats_naive0_weekly": false
+    },
+    "e6_better_daily_mae_than_e5": true,
+    "prior_close_only_weekly_mae_pp": 5.079297102215899,
+    "naive0_weekly_from_prior_approx_pp": 4.8567
+  },
+  "samples_first_week_3_symbols": [
+    {
+      "week_start": "2026-01-05",
+      "symbol": "NVDA",
+      "ctx_mu": 0.000617,
+      "ctx_sigma": 0.023518,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": -0.003866,
+          "pred_frac": 0.005658,
+          "actual_z": -0.1906,
+          "pred_z": 0.2144
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": -0.004678,
+          "pred_frac": -0.002332,
+          "actual_z": -0.2251,
+          "pred_z": -0.1254
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": 0.009987,
+          "pred_frac": 0.002413,
+          "actual_z": 0.3984,
+          "pred_z": 0.0764
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.021522,
+          "pred_frac": -1.5e-05,
+          "actual_z": -0.9413,
+          "pred_z": -0.0269
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": -0.000973,
+          "pred_frac": -0.001534,
+          "actual_z": -0.0676,
+          "pred_z": -0.0914
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "AAPL",
+      "ctx_mu": 0.000981,
+      "ctx_sigma": 0.011173,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": -0.013837,
+          "pred_frac": 0.002339,
+          "actual_z": -1.3262,
+          "pred_z": 0.1215
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": -0.018334,
+          "pred_frac": 0.000656,
+          "actual_z": -1.7287,
+          "pred_z": -0.0291
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": -0.007737,
+          "pred_frac": 0.002085,
+          "actual_z": -0.7803,
+          "pred_z": 0.0988
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.004955,
+          "pred_frac": 0.001717,
+          "actual_z": -0.5313,
+          "pred_z": 0.0658
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": 0.001274,
+          "pred_frac": -0.000461,
+          "actual_z": 0.0262,
+          "pred_z": -0.1291
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "TSM",
+      "ctx_mu": 0.001649,
+      "ctx_sigma": 0.022771,
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": 0.00826,
+          "pred_frac": 0.005023,
+          "actual_z": 0.2903,
+          "pred_z": 0.1482
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": 0.016074,
+          "pred_frac": -0.002675,
+          "actual_z": 0.6335,
+          "pred_z": -0.1899
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": -0.026723,
+          "pred_frac": -0.000348,
+          "actual_z": -1.246,
+          "pred_z": -0.0877
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.002102,
+          "pred_frac": 0.003795,
+          "actual_z": -0.1648,
+          "pred_z": 0.0942
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": 0.017672,
+          "pred_frac": -0.00036,
+          "actual_z": 0.7037,
+          "pred_z": -0.0882
+        }
+      ]
+    }
+  ],
+  "note": "Z-score daily simple-return fractions using per-sample 60d context mu/sigma; denorm for % and weekly compound (Alpha-HRP metric)."
+}

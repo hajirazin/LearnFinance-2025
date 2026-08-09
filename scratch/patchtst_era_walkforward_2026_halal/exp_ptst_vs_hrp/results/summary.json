@@ -1,0 +1,127 @@
+{
+  "universe": "legacy_halal_12",
+  "n_symbols": 12,
+  "symbols": [
+    "AAPL",
+    "AMD",
+    "AVGO",
+    "GOOGL",
+    "LLY",
+    "META",
+    "MSFT",
+    "MU",
+    "NVDA",
+    "TSLA",
+    "TSM",
+    "XOM"
+  ],
+  "top_k": 6,
+  "hrp_lookback": 252,
+  "n_weeks": 25,
+  "models": {
+    "close_only": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_era_walkforward_2026_halal/models/close_only/weights.pt",
+    "multitask": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_era_walkforward_2026_halal/models/multitask/weights.pt"
+  },
+  "arms": {
+    "EW-12": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.12174652095913263,
+      "cum_return_pct": 12.174652095913263,
+      "mean_weekly_frac": 0.005145219423272047,
+      "std_weekly_frac": 0.03374914311231246,
+      "sharpe_weekly": 0.15245481659043822,
+      "sharpe_ann_approx": 1.099367316816566,
+      "hit_rate": 0.56,
+      "max_drawdown_frac": -0.11471657669259239,
+      "max_drawdown_pct": -11.471657669259239
+    },
+    "HRP-252": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.09739158124853642,
+      "cum_return_pct": 9.739158124853642,
+      "mean_weekly_frac": 0.003907671184078951,
+      "std_weekly_frac": 0.019576032906794785,
+      "sharpe_weekly": 0.19961507025882702,
+      "sharpe_ann_approx": 1.439444742347095,
+      "hit_rate": 0.6,
+      "max_drawdown_frac": -0.07458183278702457,
+      "max_drawdown_pct": -7.458183278702457
+    },
+    "PTST_close_top6_HRP": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.09908489964245182,
+      "cum_return_pct": 9.908489964245181,
+      "mean_weekly_frac": 0.004115976285201998,
+      "std_weekly_frac": 0.026421369796154722,
+      "sharpe_weekly": 0.1557820929405796,
+      "sharpe_ann_approx": 1.123360647792713,
+      "hit_rate": 0.64,
+      "max_drawdown_frac": -0.1236863760768444,
+      "max_drawdown_pct": -12.368637607684441
+    },
+    "PTST_close_top6_EW": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.14703817262742325,
+      "cum_return_pct": 14.703817262742325,
+      "mean_weekly_frac": 0.00651177903373738,
+      "std_weekly_frac": 0.046466798677642536,
+      "sharpe_weekly": 0.14013831852097264,
+      "sharpe_ann_approx": 1.0105517861693434,
+      "hit_rate": 0.52,
+      "max_drawdown_frac": -0.15143948503109628,
+      "max_drawdown_pct": -15.143948503109627
+    },
+    "PTST_multi_top6_HRP": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.06163407407045196,
+      "cum_return_pct": 6.163407407045196,
+      "mean_weekly_frac": 0.002682572140852846,
+      "std_weekly_frac": 0.024459953177594113,
+      "sharpe_weekly": 0.10967200637612605,
+      "sharpe_ann_approx": 0.7908560849442721,
+      "hit_rate": 0.48,
+      "max_drawdown_frac": -0.11277290026746256,
+      "max_drawdown_pct": -11.277290026746256
+    }
+  },
+  "vs_hrp": {
+    "EW-12": {
+      "cum_minus_hrp_pp": 2.4354939710596213,
+      "sharpe_minus_hrp": -0.340077425530529,
+      "beats_hrp_cum": true,
+      "beats_hrp_sharpe": false
+    },
+    "HRP-252": {
+      "cum_minus_hrp_pp": 0.0,
+      "sharpe_minus_hrp": 0.0,
+      "beats_hrp_cum": false,
+      "beats_hrp_sharpe": false
+    },
+    "PTST_close_top6_HRP": {
+      "cum_minus_hrp_pp": 0.16933183939153995,
+      "sharpe_minus_hrp": -0.31608409455438213,
+      "beats_hrp_cum": true,
+      "beats_hrp_sharpe": false
+    },
+    "PTST_close_top6_EW": {
+      "cum_minus_hrp_pp": 4.964659137888683,
+      "sharpe_minus_hrp": -0.4288929561777517,
+      "beats_hrp_cum": true,
+      "beats_hrp_sharpe": false
+    },
+    "PTST_multi_top6_HRP": {
+      "cum_minus_hrp_pp": -3.5757507178084458,
+      "sharpe_minus_hrp": -0.648588657402823,
+      "beats_hrp_cum": false,
+      "beats_hrp_sharpe": false
+    }
+  },
+  "rank_ic": {
+    "close_only_spearman_mean": 0.015664335664335668,
+    "close_only_spearman_std": 0.40439794592081135,
+    "multitask_spearman_mean": 0.040839160839160844,
+    "multitask_spearman_std": 0.34982753552496765,
+    "n_weeks_ic": 25
+  },
+  "caveat": "Fixed 12-name slate; not production Alpha-HRP (halal_new screen) or Double HRP. No costs/turnover. close_only model was barely_trained (best_epoch=2) in prior walkforward."
+}

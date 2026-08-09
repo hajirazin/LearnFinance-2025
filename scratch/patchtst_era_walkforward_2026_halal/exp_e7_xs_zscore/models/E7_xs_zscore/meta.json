@@ -1,0 +1,14 @@
+{
+  "name": "E7_xs_zscore",
+  "representation": "cross_sectional_z_of_daily_simple_return",
+  "input": "60d_raw_simple_return_frac",
+  "target": "next_5_xs_z_across_universe",
+  "lr": 0.0003,
+  "best_epoch": 10,
+  "best_val_mse_xs_z": 1.0028405288855236,
+  "baseline_mse_xs_z": 1.0025063753128052,
+  "beats_baseline_best": false,
+  "stopped_epoch": 25,
+  "ran_full_100": false,
+  "barely_trained": false
+}
