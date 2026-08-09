@@ -371,7 +371,8 @@ def _run_sac_full_training(
         update_progress(job_id, {"phase": "artifact_health_check"})
         hf_model_repo = hf_repo_getter()
         # prior_version is kept purely for audit lineage on metadata.
-        # Health is recorded for review but never activates the artifact.
+        # The promotion decision below is the new artifact's own
+        # guardrails (CAGR floor); prior metrics are NEVER consulted.
         try:
             prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
         except StoragePolicyError as exc:
@@ -448,14 +449,23 @@ def _run_sac_full_training(
             actual_symbol_count=len(available_symbols),
             artifact_dir=selected_candidate_dir,
         )
-        promoted = False
+        promoted = health.is_healthy
         logger.info(
-            f"[SAC] Versioned artifact health: "
-            f"{'PASS' if health.is_healthy else 'FAIL'} "
-            f"(promotion is excluded from the SAC v3 rebuild)"
+            f"[SAC] Promotion: {'YES' if promoted else 'NO'} "
+            f"(CAGR: {result.eval_cagr * 100:.2f}%)"
+            + ("" if promoted else f" (failures: {health.failure_reasons})")
         )
 
-        # SAC v3 implementation writes reviewable versioned artifacts only.
+        selected_auxiliary = SACV3AuxiliaryArtifacts(
+            regime_hmm=result.regime_hmm,
+            median_patchtst_scaler={
+                "mean": float(result.scaler.median_mean),
+                "scale": float(result.scaler.median_scale),
+            },
+            audit_metadata=dict(result.audit_metadata),
+        )
+
+        # Final metadata write with the real promoted + failure_reasons.
         metadata = create_sac_metadata(
             version=version,
             data_window_start=start_date.isoformat(),
@@ -476,30 +486,28 @@ def _run_sac_full_training(
             training_seed=selected_candidate.seed,
             experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
         )
-        storage.write_candidate_metadata(
-            version,
-            selected_candidate.seed,
-            metadata,
-        )
-        storage.write_artifacts(
-            version,
-            result.actor,
-            result.critic,
-            result.critic_target,
-            result.log_alpha,
-            result.scaler,
-            selected_config,
-            available_symbols,
-            metadata,
-            SACV3AuxiliaryArtifacts(
-                regime_hmm=result.regime_hmm,
-                median_patchtst_scaler={
-                    "mean": float(result.scaler.median_mean),
-                    "scale": float(result.scaler.median_scale),
-                },
-                audit_metadata=dict(result.audit_metadata),
-            ),
-        )
+        if promoted:
+            storage.promote_candidate(version, selected_candidate.seed)
+            storage.write_artifacts(
+                version,
+                result.actor,
+                result.critic,
+                result.critic_target,
+                result.log_alpha,
+                result.scaler,
+                selected_config,
+                available_symbols,
+                metadata,
+                selected_auxiliary,
+            )
+            storage.promote_version(version)
+            logger.info(f"[SAC] Version {version} promoted to current")
+        else:
+            storage.write_candidate_metadata(
+                version,
+                selected_candidate.seed,
+                metadata,
+            )
 
         hf_repo = None
         hf_url = None
@@ -511,6 +519,12 @@ def _run_sac_full_training(
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo, local_cache=storage
                 )
+                # make_current = promoted (no cold-start fallback). An
+                # unhealthy inaugural leaves HF main empty and forces
+                # the operator to investigate -- per AGENTS.md rule #1.
+                logger.info(
+                    f"[SAC] HF upload: promoted={promoted} -> make_current={promoted}"
+                )
                 hf_info = hf_storage.upload_model(
                     version=version,
                     actor=result.actor,
@@ -521,15 +535,8 @@ def _run_sac_full_training(
                     config=selected_config,
                     symbol_order=available_symbols,
                     metadata=metadata,
-                    v3_auxiliary=SACV3AuxiliaryArtifacts(
-                        regime_hmm=result.regime_hmm,
-                        median_patchtst_scaler={
-                            "mean": float(result.scaler.median_mean),
-                            "scale": float(result.scaler.median_scale),
-                        },
-                        audit_metadata=dict(result.audit_metadata),
-                    ),
-                    make_current=False,
+                    v3_auxiliary=selected_auxiliary,
+                    make_current=promoted,
                 )
                 hf_repo = hf_info.repo_id
                 hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"

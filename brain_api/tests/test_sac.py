@@ -673,8 +673,8 @@ class TestSACFullTraining:
             assert "data_window_end" in data
             assert "promoted" in data
             assert "symbols_used" in data
-            assert data["promoted"] is False
-            assert temp_storage.read_current_version() is None
+            assert data["promoted"] is True
+            assert temp_storage.read_current_version() == data["version"]
         finally:
             app.dependency_overrides.clear()
 
@@ -870,7 +870,7 @@ class TestSACFullTraining:
     def test_force_retrain_rejection_preserves_same_version_active_artifact(
         self, temp_storage, monkeypatch
     ):
-        """A forced rerun writes a version but never creates a current pointer."""
+        """A rejected force-retrain must leave the prior promoted current intact."""
         from brain_api.routes.training.sac import full as sac_full_route
 
         app.dependency_overrides.clear()
@@ -882,7 +882,8 @@ class TestSACFullTraining:
             assert initial.status_code == 202
             first_status = client.get(f"/train/status/{initial.json()['job_id']}")
             version = first_status.json()["result"]["version"]
-            assert temp_storage.read_current_version() is None
+            assert first_status.json()["result"]["promoted"] is True
+            assert temp_storage.read_current_version() == version
             actor_path = (
                 temp_storage.base_path
                 / "models"
@@ -906,7 +907,7 @@ class TestSACFullTraining:
             status = client.get(f"/train/status/{rejected.json()['job_id']}")
             assert status.json()["status"] == "completed"
             assert status.json()["result"]["promoted"] is False
-            assert temp_storage.read_current_version() is None
+            assert temp_storage.read_current_version() == version
         finally:
             app.dependency_overrides.clear()
 
@@ -951,10 +952,15 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
-    def test_full_training_new_window_writes_new_version_without_current(
+    def test_full_training_new_window_writes_new_version_and_promotes(
         self, temp_storage, monkeypatch
     ):
-        """A new data window writes another version without activating it."""
+        """A forced retrain on a new data window writes+promotes a new version.
+
+        Without ``force=True``, a healthy first run leaves ``current``
+        pointing at a matching-symbol v3 artifact, so the symbol-equality
+        short-circuit would return 200 instead of retraining.
+        """
         from datetime import date as dt_date
 
         from brain_api.routes.training.sac import full as sac_full_route
@@ -972,7 +978,8 @@ class TestSACFullTraining:
 
             first_status = client.get(f"/train/status/{r1.json()['job_id']}")
             v1 = first_status.json()["result"]["version"]
-            assert temp_storage.read_current_version() is None
+            assert first_status.json()["result"]["promoted"] is True
+            assert temp_storage.read_current_version() == v1
 
             monkeypatch.setattr(
                 sac_full_route,
@@ -980,11 +987,13 @@ class TestSACFullTraining:
                 lambda: (dt_date(2015, 1, 2), dt_date(2025, 12, 26)),
             )
 
-            r2 = client.post("/train/sac/full")
+            r2 = client.post("/train/sac/full", json={"force": True})
             assert r2.status_code == 202
             second_status = client.get(f"/train/status/{r2.json()['job_id']}")
-            assert second_status.json()["result"]["version"] != v1
-            assert temp_storage.read_current_version() is None
+            v2 = second_status.json()["result"]["version"]
+            assert v2 != v1
+            assert second_status.json()["result"]["promoted"] is True
+            assert temp_storage.read_current_version() == v2
         finally:
             app.dependency_overrides.clear()
 
@@ -1013,8 +1022,9 @@ class TestSACFullTraining:
         try:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
-
-            assert temp_storage.read_current_version() is None
+            first_status = client.get(f"/train/status/{r1.json()['job_id']}")
+            v1 = first_status.json()["result"]["version"]
+            assert temp_storage.read_current_version() == v1
 
             monkeypatch.setattr(
                 sac_full_route,
@@ -1027,6 +1037,11 @@ class TestSACFullTraining:
                 f"Expected 202 (force=True bypasses symbol-equality and "
                 f"new window produces a fresh version), got {r2.status_code}"
             )
+            second_status = client.get(f"/train/status/{r2.json()['job_id']}")
+            v2 = second_status.json()["result"]["version"]
+            assert v2 != v1
+            assert second_status.json()["result"]["promoted"] is True
+            assert temp_storage.read_current_version() == v2
         finally:
             app.dependency_overrides.clear()
 
@@ -1050,8 +1065,9 @@ class TestSACFullTraining:
         try:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
-
-            assert temp_storage.read_current_version() is None
+            first_status = client.get(f"/train/status/{r1.json()['job_id']}")
+            v1 = first_status.json()["result"]["version"]
+            assert temp_storage.read_current_version() == v1
 
             def _different_symbols() -> list[str]:
                 return [f"ZZZ{i:02d}" for i in range(10)]
@@ -1067,6 +1083,12 @@ class TestSACFullTraining:
             assert r2.status_code == 202, (
                 f"Expected 202 (different symbols -> short-circuit misses, "
                 f"training restarts), got {r2.status_code}"
+            )
+            second_status = client.get(f"/train/status/{r2.json()['job_id']}")
+            assert second_status.json()["result"]["promoted"] is True
+            assert (
+                temp_storage.read_current_version()
+                == second_status.json()["result"]["version"]
             )
         finally:
             app.dependency_overrides.clear()
