@@ -1,0 +1,13 @@
+{
+  "name": "E3_close_lr1e3_gatedES",
+  "lr": 0.001,
+  "require_beat_baseline_for_early_stop": true,
+  "best_epoch": 7,
+  "best_val_close_mse": 0.0008545808959752321,
+  "baseline_mse": 0.0009311718749813735,
+  "beats_baseline_best": true,
+  "ever_beat_baseline": true,
+  "stopped_epoch": 22,
+  "ran_full_100": false,
+  "barely_trained": false
+}

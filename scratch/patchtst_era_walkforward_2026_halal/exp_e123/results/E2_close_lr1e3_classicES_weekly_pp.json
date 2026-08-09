@@ -1,0 +1,2028 @@
+{
+  "experiment": "E2_close_lr1e3_classicES",
+  "train_meta": {
+    "name": "E2_close_lr1e3_classicES",
+    "lr": 0.001,
+    "require_beat_baseline_for_early_stop": false,
+    "best_epoch": 7,
+    "best_val_close_mse": 0.0008545808959752321,
+    "baseline_mse": 0.0009311718749813735,
+    "beats_baseline_best": true,
+    "ever_beat_baseline": true,
+    "stopped_epoch": 22,
+    "ran_full_100": false,
+    "barely_trained": false
+  },
+  "overall": {
+    "name": "E2_close_lr1e3_classicES",
+    "n_weeks": 25,
+    "n_rows": 300,
+    "mae_pp": 5.084968103249025,
+    "mean_signed_pp_actual_minus_pred": -0.4502668124538827,
+    "naive_predict0_mae_pp": 4.856741553590476,
+    "beats_naive0": false
+  },
+  "metric": "pp = actual_weekly_pct - pred_weekly_pct",
+  "weeks": [
+    {
+      "week_start": "2026-01-05",
+      "week_end": "2026-01-09",
+      "week_mae_pp": 2.8802,
+      "week_mean_signed_pp_actual_minus_pred": -0.7546,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -4.295,
+          "pred_pct": 0.5122,
+          "pp_actual_minus_pred": -4.8072,
+          "abs_pp": 4.8072
+        },
+        "AMD": {
+          "actual_pct": -9.084,
+          "pred_pct": 0.6303,
+          "pp_actual_minus_pred": -9.7143,
+          "abs_pp": 9.7143
+        },
+        "AVGO": {
+          "actual_pct": -0.7623,
+          "pred_pct": 0.423,
+          "pp_actual_minus_pred": -1.1853,
+          "abs_pp": 1.1853
+        },
+        "GOOGL": {
+          "actual_pct": 4.2583,
+          "pred_pct": 2.1805,
+          "pp_actual_minus_pred": 2.0778,
+          "abs_pp": 2.0778
+        },
+        "LLY": {
+          "actual_pct": -1.555,
+          "pred_pct": 2.1582,
+          "pp_actual_minus_pred": -3.7132,
+          "abs_pp": 3.7132
+        },
+        "META": {
+          "actual_pct": 0.4074,
+          "pred_pct": -0.6663,
+          "pp_actual_minus_pred": 1.0738,
+          "abs_pp": 1.0738
+        },
+        "MSFT": {
+          "actual_pct": 1.3405,
+          "pred_pct": -0.7952,
+          "pp_actual_minus_pred": 2.1358,
+          "abs_pp": 2.1358
+        },
+        "MU": {
+          "actual_pct": 9.4065,
+          "pred_pct": 4.7148,
+          "pp_actual_minus_pred": 4.6917,
+          "abs_pp": 4.6917
+        },
+        "NVDA": {
+          "actual_pct": -2.1128,
+          "pred_pct": 0.2761,
+          "pp_actual_minus_pred": -2.3889,
+          "abs_pp": 2.3889
+        },
+        "TSLA": {
+          "actual_pct": 1.5842,
+          "pred_pct": 0.2219,
+          "pp_actual_minus_pred": 1.3623,
+          "abs_pp": 1.3623
+        },
+        "TSM": {
+          "actual_pct": 1.2578,
+          "pred_pct": 0.8005,
+          "pp_actual_minus_pred": 0.4573,
+          "abs_pp": 0.4573
+        },
+        "XOM": {
+          "actual_pct": 1.598,
+          "pred_pct": 0.6437,
+          "pp_actual_minus_pred": 0.9544,
+          "abs_pp": 0.9544
+        }
+      }
+    },
+    {
+      "week_start": "2026-01-12",
+      "week_end": "2026-01-16",
+      "week_mae_pp": 3.6819,
+      "week_mean_signed_pp_actual_minus_pred": 0.4911,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -1.4805,
+          "pred_pct": 0.4307,
+          "pp_actual_minus_pred": -1.9112,
+          "abs_pp": 1.9112
+        },
+        "AMD": {
+          "actual_pct": 14.1064,
+          "pred_pct": -0.4362,
+          "pp_actual_minus_pred": 14.5426,
+          "abs_pp": 14.5426
+        },
+        "AVGO": {
+          "actual_pct": 1.9538,
+          "pred_pct": 0.1553,
+          "pp_actual_minus_pred": 1.7984,
+          "abs_pp": 1.7984
+        },
+        "GOOGL": {
+          "actual_pct": 0.4352,
+          "pred_pct": 2.5446,
+          "pp_actual_minus_pred": -2.1093,
+          "abs_pp": 2.1093
+        },
+        "LLY": {
+          "actual_pct": -2.3656,
+          "pred_pct": 2.353,
+          "pp_actual_minus_pred": -4.7186,
+          "abs_pp": 4.7186
+        },
+        "META": {
+          "actual_pct": -5.024,
+          "pred_pct": -0.584,
+          "pp_actual_minus_pred": -4.4401,
+          "abs_pp": 4.4401
+        },
+        "MSFT": {
+          "actual_pct": -4.0519,
+          "pred_pct": -0.5191,
+          "pp_actual_minus_pred": -3.5328,
+          "abs_pp": 3.5328
+        },
+        "MU": {
+          "actual_pct": 5.1175,
+          "pred_pct": 5.4382,
+          "pp_actual_minus_pred": -0.3207,
+          "abs_pp": 0.3207
+        },
+        "NVDA": {
+          "actual_pct": 0.7411,
+          "pred_pct": 0.318,
+          "pp_actual_minus_pred": 0.4231,
+          "abs_pp": 0.4231
+        },
+        "TSLA": {
+          "actual_pct": -1.6876,
+          "pred_pct": 0.4244,
+          "pp_actual_minus_pred": -2.112,
+          "abs_pp": 2.112
+        },
+        "TSM": {
+          "actual_pct": 5.7998,
+          "pred_pct": 0.8315,
+          "pp_actual_minus_pred": 4.9684,
+          "abs_pp": 4.9684
+        },
+        "XOM": {
+          "actual_pct": 4.2372,
+          "pred_pct": 0.9317,
+          "pp_actual_minus_pred": 3.3055,
+          "abs_pp": 3.3055
+        }
+      }
+    },
+    {
+      "week_start": "2026-01-26",
+      "week_end": "2026-01-30",
+      "week_mae_pp": 4.54,
+      "week_mean_signed_pp_actual_minus_pred": -0.1975,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 4.6122,
+          "pred_pct": -0.6253,
+          "pp_actual_minus_pred": 5.2375,
+          "abs_pp": 5.2375
+        },
+        "AMD": {
+          "actual_pct": -8.8378,
+          "pred_pct": 0.1476,
+          "pp_actual_minus_pred": -8.9854,
+          "abs_pp": 8.9854
+        },
+        "AVGO": {
+          "actual_pct": 3.5151,
+          "pred_pct": -0.884,
+          "pp_actual_minus_pred": 4.3991,
+          "abs_pp": 4.3991
+        },
+        "GOOGL": {
+          "actual_pct": 3.0708,
+          "pred_pct": 1.7374,
+          "pp_actual_minus_pred": 1.3334,
+          "abs_pp": 1.3334
+        },
+        "LLY": {
+          "actual_pct": -2.5501,
+          "pred_pct": 2.2173,
+          "pp_actual_minus_pred": -4.7674,
+          "abs_pp": 4.7674
+        },
+        "META": {
+          "actual_pct": 8.765,
+          "pred_pct": -0.9829,
+          "pp_actual_minus_pred": 9.7478,
+          "abs_pp": 9.7478
+        },
+        "MSFT": {
+          "actual_pct": -7.6532,
+          "pred_pct": -1.03,
+          "pp_actual_minus_pred": -6.6232,
+          "abs_pp": 6.6232
+        },
+        "MU": {
+          "actual_pct": 3.8108,
+          "pred_pct": 5.3001,
+          "pp_actual_minus_pred": -1.4893,
+          "abs_pp": 1.4893
+        },
+        "NVDA": {
+          "actual_pct": 1.8437,
+          "pred_pct": -0.0673,
+          "pp_actual_minus_pred": 1.911,
+          "abs_pp": 1.911
+        },
+        "TSLA": {
+          "actual_pct": -4.1531,
+          "pred_pct": 0.0604,
+          "pp_actual_minus_pred": -4.2135,
+          "abs_pp": 4.2135
+        },
+        "TSM": {
+          "actual_pct": -1.2871,
+          "pred_pct": 1.0589,
+          "pp_actual_minus_pred": -2.346,
+          "abs_pp": 2.346
+        },
+        "XOM": {
+          "actual_pct": 4.764,
+          "pred_pct": 1.3379,
+          "pp_actual_minus_pred": 3.4261,
+          "abs_pp": 3.4261
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-02",
+      "week_end": "2026-02-06",
+      "week_mae_pp": 5.4391,
+      "week_mean_signed_pp_actual_minus_pred": -2.5145,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 7.1836,
+          "pred_pct": -0.2546,
+          "pp_actual_minus_pred": 7.4382,
+          "abs_pp": 7.4382
+        },
+        "AMD": {
+          "actual_pct": -11.9503,
+          "pred_pct": -0.6179,
+          "pp_actual_minus_pred": -11.3324,
+          "abs_pp": 11.3324
+        },
+        "AVGO": {
+          "actual_pct": 0.489,
+          "pred_pct": -0.6126,
+          "pp_actual_minus_pred": 1.1016,
+          "abs_pp": 1.1016
+        },
+        "GOOGL": {
+          "actual_pct": -4.4793,
+          "pred_pct": 1.5488,
+          "pp_actual_minus_pred": -6.0281,
+          "abs_pp": 6.0281
+        },
+        "LLY": {
+          "actual_pct": 2.0277,
+          "pred_pct": 1.3039,
+          "pp_actual_minus_pred": 0.7238,
+          "abs_pp": 0.7238
+        },
+        "META": {
+          "actual_pct": -7.6818,
+          "pred_pct": 1.0716,
+          "pp_actual_minus_pred": -8.7534,
+          "abs_pp": 8.7534
+        },
+        "MSFT": {
+          "actual_pct": -6.7745,
+          "pred_pct": -1.4356,
+          "pp_actual_minus_pred": -5.3389,
+          "abs_pp": 5.3389
+        },
+        "MU": {
+          "actual_pct": -4.8665,
+          "pred_pct": 5.0713,
+          "pp_actual_minus_pred": -9.9377,
+          "abs_pp": 9.9377
+        },
+        "NVDA": {
+          "actual_pct": -2.9927,
+          "pred_pct": -0.564,
+          "pp_actual_minus_pred": -2.4287,
+          "abs_pp": 2.4287
+        },
+        "TSLA": {
+          "actual_pct": -4.4841,
+          "pred_pct": -0.582,
+          "pp_actual_minus_pred": -3.9021,
+          "abs_pp": 3.9021
+        },
+        "TSM": {
+          "actual_pct": 5.533,
+          "pred_pct": 0.7671,
+          "pp_actual_minus_pred": 4.766,
+          "abs_pp": 4.766
+        },
+        "XOM": {
+          "actual_pct": 5.4102,
+          "pred_pct": 1.8924,
+          "pp_actual_minus_pred": 3.5178,
+          "abs_pp": 3.5178
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-09",
+      "week_end": "2026-02-13",
+      "week_mae_pp": 2.8802,
+      "week_mean_signed_pp_actual_minus_pred": -1.4809,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -8.0325,
+          "pred_pct": 0.3194,
+          "pp_actual_minus_pred": -8.3519,
+          "abs_pp": 8.3519
+        },
+        "AMD": {
+          "actual_pct": -0.5373,
+          "pred_pct": -1.1202,
+          "pp_actual_minus_pred": 0.5829,
+          "abs_pp": 0.5829
+        },
+        "AVGO": {
+          "actual_pct": -2.3279,
+          "pred_pct": -0.4703,
+          "pp_actual_minus_pred": -1.8576,
+          "abs_pp": 1.8576
+        },
+        "GOOGL": {
+          "actual_pct": -5.3088,
+          "pred_pct": 0.9717,
+          "pp_actual_minus_pred": -6.2805,
+          "abs_pp": 6.2805
+        },
+        "LLY": {
+          "actual_pct": -1.718,
+          "pred_pct": 0.8676,
+          "pp_actual_minus_pred": -2.5856,
+          "abs_pp": 2.5856
+        },
+        "META": {
+          "actual_pct": -3.2791,
+          "pred_pct": 0.4803,
+          "pp_actual_minus_pred": -3.7594,
+          "abs_pp": 3.7594
+        },
+        "MSFT": {
+          "actual_pct": 0.0449,
+          "pred_pct": -1.8286,
+          "pp_actual_minus_pred": 1.8735,
+          "abs_pp": 1.8735
+        },
+        "MU": {
+          "actual_pct": 4.2996,
+          "pred_pct": 3.9735,
+          "pp_actual_minus_pred": 0.3261,
+          "abs_pp": 0.3261
+        },
+        "NVDA": {
+          "actual_pct": -1.4023,
+          "pred_pct": -0.492,
+          "pp_actual_minus_pred": -0.9103,
+          "abs_pp": 0.9103
+        },
+        "TSLA": {
+          "actual_pct": 1.5397,
+          "pred_pct": -0.5489,
+          "pp_actual_minus_pred": 2.0887,
+          "abs_pp": 2.0887
+        },
+        "TSM": {
+          "actual_pct": 5.0193,
+          "pred_pct": 1.4947,
+          "pp_actual_minus_pred": 3.5247,
+          "abs_pp": 3.5247
+        },
+        "XOM": {
+          "actual_pct": -0.4026,
+          "pred_pct": 2.0193,
+          "pp_actual_minus_pred": -2.4218,
+          "abs_pp": 2.4218
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-23",
+      "week_end": "2026-02-27",
+      "week_mae_pp": 2.9503,
+      "week_mean_signed_pp_actual_minus_pred": -1.9074,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -0.1512,
+          "pred_pct": -0.1507,
+          "pp_actual_minus_pred": -0.0005,
+          "abs_pp": 0.0005
+        },
+        "AMD": {
+          "actual_pct": 0.03,
+          "pred_pct": 0.0209,
+          "pp_actual_minus_pred": 0.0091,
+          "abs_pp": 0.0091
+        },
+        "AVGO": {
+          "actual_pct": -3.9381,
+          "pred_pct": -0.0459,
+          "pp_actual_minus_pred": -3.8922,
+          "abs_pp": 3.8922
+        },
+        "GOOGL": {
+          "actual_pct": -1.0223,
+          "pred_pct": 0.489,
+          "pp_actual_minus_pred": -1.5113,
+          "abs_pp": 1.5113
+        },
+        "LLY": {
+          "actual_pct": 4.2069,
+          "pred_pct": -0.2946,
+          "pp_actual_minus_pred": 4.5016,
+          "abs_pp": 4.5016
+        },
+        "META": {
+          "actual_pct": -1.1408,
+          "pred_pct": 0.921,
+          "pp_actual_minus_pred": -2.0618,
+          "abs_pp": 2.0618
+        },
+        "MSFT": {
+          "actual_pct": -1.1303,
+          "pred_pct": -1.3404,
+          "pp_actual_minus_pred": 0.21,
+          "abs_pp": 0.21
+        },
+        "MU": {
+          "actual_pct": -3.6901,
+          "pred_pct": 6.4287,
+          "pp_actual_minus_pred": -10.1188,
+          "abs_pp": 10.1188
+        },
+        "NVDA": {
+          "actual_pct": -6.6537,
+          "pred_pct": 0.5884,
+          "pp_actual_minus_pred": -7.2421,
+          "abs_pp": 7.2421
+        },
+        "TSLA": {
+          "actual_pct": -2.2607,
+          "pred_pct": 0.5386,
+          "pp_actual_minus_pred": -2.7993,
+          "abs_pp": 2.7993
+        },
+        "TSM": {
+          "actual_pct": 1.0903,
+          "pred_pct": 2.6103,
+          "pp_actual_minus_pred": -1.52,
+          "abs_pp": 1.52
+        },
+        "XOM": {
+          "actual_pct": 3.5443,
+          "pred_pct": 2.0076,
+          "pp_actual_minus_pred": 1.5367,
+          "abs_pp": 1.5367
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-02",
+      "week_end": "2026-03-06",
+      "week_mae_pp": 4.854,
+      "week_mean_signed_pp_actual_minus_pred": -3.0111,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -2.5437,
+          "pred_pct": -0.5083,
+          "pp_actual_minus_pred": -2.0354,
+          "abs_pp": 2.0354
+        },
+        "AMD": {
+          "actual_pct": -3.8859,
+          "pred_pct": -0.6016,
+          "pp_actual_minus_pred": -3.2843,
+          "abs_pp": 3.2843
+        },
+        "AVGO": {
+          "actual_pct": 3.4204,
+          "pred_pct": -1.441,
+          "pp_actual_minus_pred": 4.8614,
+          "abs_pp": 4.8614
+        },
+        "GOOGL": {
+          "actual_pct": -4.2469,
+          "pred_pct": -0.0199,
+          "pp_actual_minus_pred": -4.227,
+          "abs_pp": 4.227
+        },
+        "LLY": {
+          "actual_pct": -5.8613,
+          "pred_pct": 0.0643,
+          "pp_actual_minus_pred": -5.9256,
+          "abs_pp": 5.9256
+        },
+        "META": {
+          "actual_pct": -0.5122,
+          "pred_pct": 0.1897,
+          "pp_actual_minus_pred": -0.7019,
+          "abs_pp": 0.7019
+        },
+        "MSFT": {
+          "actual_pct": 4.13,
+          "pred_pct": -1.681,
+          "pp_actual_minus_pred": 5.811,
+          "abs_pp": 5.811
+        },
+        "MU": {
+          "actual_pct": -10.202,
+          "pred_pct": 4.7934,
+          "pp_actual_minus_pred": -14.9954,
+          "abs_pp": 14.9954
+        },
+        "NVDA": {
+          "actual_pct": 0.3556,
+          "pred_pct": -0.0294,
+          "pp_actual_minus_pred": 0.3849,
+          "abs_pp": 0.3849
+        },
+        "TSLA": {
+          "actual_pct": -1.436,
+          "pred_pct": -0.4491,
+          "pp_actual_minus_pred": -0.9869,
+          "abs_pp": 0.9869
+        },
+        "TSM": {
+          "actual_pct": -9.528,
+          "pred_pct": 2.322,
+          "pp_actual_minus_pred": -11.85,
+          "abs_pp": 11.85
+        },
+        "XOM": {
+          "actual_pct": -0.8459,
+          "pred_pct": 2.3383,
+          "pp_actual_minus_pred": -3.1842,
+          "abs_pp": 3.1842
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-09",
+      "week_end": "2026-03-13",
+      "week_mae_pp": 2.4477,
+      "week_mean_signed_pp_actual_minus_pred": 0.3984,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -2.8509,
+          "pred_pct": -0.5683,
+          "pp_actual_minus_pred": -2.2826,
+          "abs_pp": 2.2826
+        },
+        "AMD": {
+          "actual_pct": 0.4989,
+          "pred_pct": -0.975,
+          "pp_actual_minus_pred": 1.4739,
+          "abs_pp": 1.4739
+        },
+        "AVGO": {
+          "actual_pct": -2.5176,
+          "pred_pct": -1.4767,
+          "pp_actual_minus_pred": -1.0408,
+          "abs_pp": 1.0408
+        },
+        "GOOGL": {
+          "actual_pct": 1.2596,
+          "pred_pct": -0.351,
+          "pp_actual_minus_pred": 1.6106,
+          "abs_pp": 1.6106
+        },
+        "LLY": {
+          "actual_pct": -0.5301,
+          "pred_pct": 0.0514,
+          "pp_actual_minus_pred": -0.5815,
+          "abs_pp": 0.5815
+        },
+        "META": {
+          "actual_pct": -4.8305,
+          "pred_pct": -0.1848,
+          "pp_actual_minus_pred": -4.6457,
+          "abs_pp": 4.6457
+        },
+        "MSFT": {
+          "actual_pct": -3.2791,
+          "pred_pct": -1.4212,
+          "pp_actual_minus_pred": -1.8579,
+          "abs_pp": 1.8579
+        },
+        "MU": {
+          "actual_pct": 15.077,
+          "pred_pct": 3.6391,
+          "pp_actual_minus_pred": 11.4379,
+          "abs_pp": 11.4379
+        },
+        "NVDA": {
+          "actual_pct": 1.3665,
+          "pred_pct": -0.2541,
+          "pp_actual_minus_pred": 1.6206,
+          "abs_pp": 1.6206
+        },
+        "TSLA": {
+          "actual_pct": -1.3939,
+          "pred_pct": -0.75,
+          "pp_actual_minus_pred": -0.6439,
+          "abs_pp": 0.6439
+        },
+        "TSM": {
+          "actual_pct": -0.1712,
+          "pred_pct": 1.0725,
+          "pp_actual_minus_pred": -1.2436,
+          "abs_pp": 1.2436
+        },
+        "XOM": {
+          "actual_pct": 3.2471,
+          "pred_pct": 2.3135,
+          "pp_actual_minus_pred": 0.9336,
+          "abs_pp": 0.9336
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-16",
+      "week_end": "2026-03-20",
+      "week_mae_pp": 3.3216,
+      "week_mean_signed_pp_actual_minus_pred": -2.5691,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -0.8516,
+          "pred_pct": -0.6928,
+          "pp_actual_minus_pred": -0.1588,
+          "abs_pp": 0.1588
+        },
+        "AMD": {
+          "actual_pct": 4.1057,
+          "pred_pct": -0.4094,
+          "pp_actual_minus_pred": 4.5151,
+          "abs_pp": 4.5151
+        },
+        "AVGO": {
+          "actual_pct": -3.6162,
+          "pred_pct": -0.3377,
+          "pp_actual_minus_pred": -3.2785,
+          "abs_pp": 3.2785
+        },
+        "GOOGL": {
+          "actual_pct": -0.4234,
+          "pred_pct": -0.0996,
+          "pp_actual_minus_pred": -0.3239,
+          "abs_pp": 0.3239
+        },
+        "LLY": {
+          "actual_pct": -7.9567,
+          "pred_pct": -0.5162,
+          "pp_actual_minus_pred": -7.4405,
+          "abs_pp": 7.4405
+        },
+        "META": {
+          "actual_pct": -3.267,
+          "pred_pct": -0.3493,
+          "pp_actual_minus_pred": -2.9177,
+          "abs_pp": 2.9177
+        },
+        "MSFT": {
+          "actual_pct": -3.4585,
+          "pred_pct": -1.4206,
+          "pp_actual_minus_pred": -2.0379,
+          "abs_pp": 2.0379
+        },
+        "MU": {
+          "actual_pct": -0.758,
+          "pred_pct": 5.1976,
+          "pp_actual_minus_pred": -5.9556,
+          "abs_pp": 5.9556
+        },
+        "NVDA": {
+          "actual_pct": -4.1886,
+          "pred_pct": 0.2857,
+          "pp_actual_minus_pred": -4.4743,
+          "abs_pp": 4.4743
+        },
+        "TSLA": {
+          "actual_pct": -5.9407,
+          "pred_pct": -1.5115,
+          "pp_actual_minus_pred": -4.4292,
+          "abs_pp": 4.4292
+        },
+        "TSM": {
+          "actual_pct": -2.681,
+          "pred_pct": 1.464,
+          "pp_actual_minus_pred": -4.145,
+          "abs_pp": 4.145
+        },
+        "XOM": {
+          "actual_pct": 2.2739,
+          "pred_pct": 2.4573,
+          "pp_actual_minus_pred": -0.1834,
+          "abs_pp": 0.1834
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-23",
+      "week_end": "2026-03-27",
+      "week_mae_pp": 4.9009,
+      "week_mean_signed_pp_actual_minus_pred": -3.7772,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 0.3266,
+          "pred_pct": -0.6677,
+          "pp_actual_minus_pred": 0.9943,
+          "abs_pp": 0.9943
+        },
+        "AMD": {
+          "actual_pct": 0.3278,
+          "pred_pct": -0.3698,
+          "pp_actual_minus_pred": 0.6976,
+          "abs_pp": 0.6976
+        },
+        "AVGO": {
+          "actual_pct": -3.1658,
+          "pred_pct": -0.6859,
+          "pp_actual_minus_pred": -2.4799,
+          "abs_pp": 2.4799
+        },
+        "GOOGL": {
+          "actual_pct": -8.8571,
+          "pred_pct": -0.1792,
+          "pp_actual_minus_pred": -8.678,
+          "abs_pp": 8.678
+        },
+        "LLY": {
+          "actual_pct": -3.1389,
+          "pred_pct": -1.3067,
+          "pp_actual_minus_pred": -1.8321,
+          "abs_pp": 1.8321
+        },
+        "META": {
+          "actual_pct": -11.4443,
+          "pred_pct": -0.8012,
+          "pp_actual_minus_pred": -10.6431,
+          "abs_pp": 10.6431
+        },
+        "MSFT": {
+          "actual_pct": -6.5729,
+          "pred_pct": -1.8812,
+          "pp_actual_minus_pred": -4.6917,
+          "abs_pp": 4.6917
+        },
+        "MU": {
+          "actual_pct": -15.5309,
+          "pred_pct": 3.7982,
+          "pp_actual_minus_pred": -19.329,
+          "abs_pp": 19.329
+        },
+        "NVDA": {
+          "actual_pct": -2.9994,
+          "pred_pct": -0.4166,
+          "pp_actual_minus_pred": -2.5828,
+          "abs_pp": 2.5828
+        },
+        "TSLA": {
+          "actual_pct": -1.6659,
+          "pred_pct": -2.2444,
+          "pp_actual_minus_pred": 0.5785,
+          "abs_pp": 0.5785
+        },
+        "TSM": {
+          "actual_pct": -0.7593,
+          "pred_pct": 1.0726,
+          "pp_actual_minus_pred": -1.8319,
+          "abs_pp": 1.8319
+        },
+        "XOM": {
+          "actual_pct": 7.0896,
+          "pred_pct": 2.6181,
+          "pp_actual_minus_pred": 4.4715,
+          "abs_pp": 4.4715
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-06",
+      "week_end": "2026-04-10",
+      "week_mae_pp": 7.7569,
+      "week_mean_signed_pp_actual_minus_pred": 6.1935,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 1.7818,
+          "pred_pct": -0.1362,
+          "pp_actual_minus_pred": 1.918,
+          "abs_pp": 1.918
+        },
+        "AMD": {
+          "actual_pct": 12.6621,
+          "pred_pct": 0.3089,
+          "pp_actual_minus_pred": 12.3531,
+          "abs_pp": 12.3531
+        },
+        "AVGO": {
+          "actual_pct": 18.1211,
+          "pred_pct": -0.6257,
+          "pp_actual_minus_pred": 18.7468,
+          "abs_pp": 18.7468
+        },
+        "GOOGL": {
+          "actual_pct": 7.259,
+          "pred_pct": -0.4301,
+          "pp_actual_minus_pred": 7.6892,
+          "abs_pp": 7.6892
+        },
+        "LLY": {
+          "actual_pct": 0.4158,
+          "pred_pct": -0.9488,
+          "pp_actual_minus_pred": 1.3646,
+          "abs_pp": 1.3646
+        },
+        "META": {
+          "actual_pct": 9.6438,
+          "pred_pct": -1.0416,
+          "pp_actual_minus_pred": 10.6854,
+          "abs_pp": 10.6854
+        },
+        "MSFT": {
+          "actual_pct": -0.6935,
+          "pred_pct": -1.9512,
+          "pp_actual_minus_pred": 1.2577,
+          "abs_pp": 1.2577
+        },
+        "MU": {
+          "actual_pct": 14.84,
+          "pred_pct": 0.7366,
+          "pp_actual_minus_pred": 14.1034,
+          "abs_pp": 14.1034
+        },
+        "NVDA": {
+          "actual_pct": 6.3363,
+          "pred_pct": -0.345,
+          "pp_actual_minus_pred": 6.6813,
+          "abs_pp": 6.6813
+        },
+        "TSLA": {
+          "actual_pct": -3.228,
+          "pred_pct": -1.4104,
+          "pp_actual_minus_pred": -1.8176,
+          "abs_pp": 1.8176
+        },
+        "TSM": {
+          "actual_pct": 9.3086,
+          "pred_pct": 0.4056,
+          "pp_actual_minus_pred": 8.9031,
+          "abs_pp": 8.9031
+        },
+        "XOM": {
+          "actual_pct": -5.0906,
+          "pred_pct": 2.4719,
+          "pp_actual_minus_pred": -7.5625,
+          "abs_pp": 7.5625
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-13",
+      "week_end": "2026-04-17",
+      "week_mae_pp": 7.9135,
+      "week_mean_signed_pp_actual_minus_pred": 6.7427,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 3.7431,
+          "pred_pct": 0.0548,
+          "pp_actual_minus_pred": 3.6883,
+          "abs_pp": 3.6883
+        },
+        "AMD": {
+          "actual_pct": 13.61,
+          "pred_pct": 1.0524,
+          "pp_actual_minus_pred": 12.5576,
+          "abs_pp": 12.5576
+        },
+        "AVGO": {
+          "actual_pct": 9.4173,
+          "pred_pct": 0.5105,
+          "pp_actual_minus_pred": 8.9068,
+          "abs_pp": 8.9068
+        },
+        "GOOGL": {
+          "actual_pct": 7.7039,
+          "pred_pct": -0.3988,
+          "pp_actual_minus_pred": 8.1027,
+          "abs_pp": 8.1027
+        },
+        "LLY": {
+          "actual_pct": -1.3241,
+          "pred_pct": -1.0185,
+          "pp_actual_minus_pred": -0.3057,
+          "abs_pp": 0.3057
+        },
+        "META": {
+          "actual_pct": 9.3179,
+          "pred_pct": 0.1068,
+          "pp_actual_minus_pred": 9.2112,
+          "abs_pp": 9.2112
+        },
+        "MSFT": {
+          "actual_pct": 13.9995,
+          "pred_pct": -1.8735,
+          "pp_actual_minus_pred": 15.873,
+          "abs_pp": 15.873
+        },
+        "MU": {
+          "actual_pct": 8.198,
+          "pred_pct": 2.0389,
+          "pp_actual_minus_pred": 6.1591,
+          "abs_pp": 6.1591
+        },
+        "NVDA": {
+          "actual_pct": 6.9183,
+          "pred_pct": 0.2316,
+          "pp_actual_minus_pred": 6.6867,
+          "abs_pp": 6.6867
+        },
+        "TSLA": {
+          "actual_pct": 14.8073,
+          "pred_pct": -1.9446,
+          "pp_actual_minus_pred": 16.7519,
+          "abs_pp": 16.7519
+        },
+        "TSM": {
+          "actual_pct": -0.027,
+          "pred_pct": 1.059,
+          "pp_actual_minus_pred": -1.086,
+          "abs_pp": 1.086
+        },
+        "XOM": {
+          "actual_pct": -3.9801,
+          "pred_pct": 1.6529,
+          "pp_actual_minus_pred": -5.6329,
+          "abs_pp": 5.6329
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-20",
+      "week_end": "2026-04-24",
+      "week_mae_pp": 4.8302,
+      "week_mean_signed_pp_actual_minus_pred": 2.7252,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 0.3071,
+          "pred_pct": 0.8036,
+          "pp_actual_minus_pred": -0.4964,
+          "abs_pp": 0.4964
+        },
+        "AMD": {
+          "actual_pct": 24.9362,
+          "pred_pct": 1.0948,
+          "pp_actual_minus_pred": 23.8414,
+          "abs_pp": 23.8414
+        },
+        "AVGO": {
+          "actual_pct": 3.9898,
+          "pred_pct": 1.9013,
+          "pp_actual_minus_pred": 2.0884,
+          "abs_pp": 2.0884
+        },
+        "GOOGL": {
+          "actual_pct": 0.7961,
+          "pred_pct": 0.4118,
+          "pp_actual_minus_pred": 0.3843,
+          "abs_pp": 0.3843
+        },
+        "LLY": {
+          "actual_pct": -4.646,
+          "pred_pct": -1.1409,
+          "pp_actual_minus_pred": -3.5051,
+          "abs_pp": 3.5051
+        },
+        "META": {
+          "actual_pct": -1.9635,
+          "pred_pct": 1.0989,
+          "pp_actual_minus_pred": -3.0624,
+          "abs_pp": 3.0624
+        },
+        "MSFT": {
+          "actual_pct": 0.4328,
+          "pred_pct": -0.3083,
+          "pp_actual_minus_pred": 0.7412,
+          "abs_pp": 0.7412
+        },
+        "MU": {
+          "actual_pct": 9.1524,
+          "pred_pct": 1.515,
+          "pp_actual_minus_pred": 7.6374,
+          "abs_pp": 7.6374
+        },
+        "NVDA": {
+          "actual_pct": 3.2676,
+          "pred_pct": 0.9023,
+          "pp_actual_minus_pred": 2.3652,
+          "abs_pp": 2.3652
+        },
+        "TSLA": {
+          "actual_pct": -6.0706,
+          "pred_pct": -0.5044,
+          "pp_actual_minus_pred": -5.5662,
+          "abs_pp": 5.5662
+        },
+        "TSM": {
+          "actual_pct": 8.6262,
+          "pred_pct": 1.1845,
+          "pp_actual_minus_pred": 7.4416,
+          "abs_pp": 7.4416
+        },
+        "XOM": {
+          "actual_pct": 1.6867,
+          "pred_pct": 0.8539,
+          "pp_actual_minus_pred": 0.8328,
+          "abs_pp": 0.8328
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-27",
+      "week_end": "2026-05-01",
+      "week_mae_pp": 5.171,
+      "week_mean_signed_pp_actual_minus_pred": 1.4813,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 3.3498,
+          "pred_pct": 0.5379,
+          "pp_actual_minus_pred": 2.8119,
+          "abs_pp": 2.8119
+        },
+        "AMD": {
+          "actual_pct": 3.66,
+          "pred_pct": 2.9044,
+          "pp_actual_minus_pred": 0.7557,
+          "abs_pp": 0.7557
+        },
+        "AVGO": {
+          "actual_pct": -0.3501,
+          "pred_pct": 2.1221,
+          "pp_actual_minus_pred": -2.4722,
+          "abs_pp": 2.4722
+        },
+        "GOOGL": {
+          "actual_pct": 11.989,
+          "pred_pct": 0.2874,
+          "pp_actual_minus_pred": 11.7015,
+          "abs_pp": 11.7015
+        },
+        "LLY": {
+          "actual_pct": 8.9789,
+          "pred_pct": -1.1024,
+          "pp_actual_minus_pred": 10.0813,
+          "abs_pp": 10.0813
+        },
+        "META": {
+          "actual_pct": -9.8188,
+          "pred_pct": 0.1999,
+          "pp_actual_minus_pred": -10.0187,
+          "abs_pp": 10.0187
+        },
+        "MSFT": {
+          "actual_pct": -2.3974,
+          "pred_pct": -0.943,
+          "pp_actual_minus_pred": -1.4545,
+          "abs_pp": 1.4545
+        },
+        "MU": {
+          "actual_pct": 9.1581,
+          "pred_pct": 1.308,
+          "pp_actual_minus_pred": 7.8501,
+          "abs_pp": 7.8501
+        },
+        "NVDA": {
+          "actual_pct": -4.715,
+          "pred_pct": 0.8074,
+          "pp_actual_minus_pred": -5.5224,
+          "abs_pp": 5.5224
+        },
+        "TSLA": {
+          "actual_pct": 3.8586,
+          "pred_pct": -1.024,
+          "pp_actual_minus_pred": 4.8826,
+          "abs_pp": 4.8826
+        },
+        "TSM": {
+          "actual_pct": -1.1902,
+          "pred_pct": 1.4806,
+          "pp_actual_minus_pred": -2.6707,
+          "abs_pp": 2.6707
+        },
+        "XOM": {
+          "actual_pct": 2.5787,
+          "pred_pct": 0.7484,
+          "pp_actual_minus_pred": 1.8303,
+          "abs_pp": 1.8303
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-04",
+      "week_end": "2026-05-08",
+      "week_mae_pp": 7.4394,
+      "week_mean_signed_pp_actual_minus_pred": 6.2856,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 4.7048,
+          "pred_pct": 0.1818,
+          "pp_actual_minus_pred": 4.523,
+          "abs_pp": 4.523
+        },
+        "AMD": {
+          "actual_pct": 26.2523,
+          "pred_pct": 5.2009,
+          "pp_actual_minus_pred": 21.0514,
+          "abs_pp": 21.0514
+        },
+        "AVGO": {
+          "actual_pct": 2.0699,
+          "pred_pct": 2.763,
+          "pp_actual_minus_pred": -0.6931,
+          "abs_pp": 0.6931
+        },
+        "GOOGL": {
+          "actual_pct": 3.9177,
+          "pred_pct": 1.3285,
+          "pp_actual_minus_pred": 2.5892,
+          "abs_pp": 2.5892
+        },
+        "LLY": {
+          "actual_pct": -1.5446,
+          "pred_pct": -1.0396,
+          "pp_actual_minus_pred": -0.5051,
+          "abs_pp": 0.5051
+        },
+        "META": {
+          "actual_pct": 0.1446,
+          "pred_pct": -0.6688,
+          "pp_actual_minus_pred": 0.8133,
+          "abs_pp": 0.8133
+        },
+        "MSFT": {
+          "actual_pct": 0.1641,
+          "pred_pct": 0.0899,
+          "pp_actual_minus_pred": 0.0742,
+          "abs_pp": 0.0742
+        },
+        "MU": {
+          "actual_pct": 37.7345,
+          "pred_pct": 3.2155,
+          "pp_actual_minus_pred": 34.519,
+          "abs_pp": 34.519
+        },
+        "NVDA": {
+          "actual_pct": 8.4404,
+          "pred_pct": 1.2012,
+          "pp_actual_minus_pred": 7.2392,
+          "abs_pp": 7.2392
+        },
+        "TSLA": {
+          "actual_pct": 9.6029,
+          "pred_pct": -0.2109,
+          "pp_actual_minus_pred": 9.8138,
+          "abs_pp": 9.8138
+        },
+        "TSM": {
+          "actual_pct": 3.523,
+          "pred_pct": 1.7961,
+          "pp_actual_minus_pred": 1.7269,
+          "abs_pp": 1.7269
+        },
+        "XOM": {
+          "actual_pct": -5.3552,
+          "pred_pct": 0.3695,
+          "pp_actual_minus_pred": -5.7247,
+          "abs_pp": 5.7247
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-11",
+      "week_end": "2026-05-15",
+      "week_mae_pp": 4.7256,
+      "week_mean_signed_pp_actual_minus_pred": -0.6856,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 2.3558,
+          "pred_pct": 0.5987,
+          "pp_actual_minus_pred": 1.7571,
+          "abs_pp": 1.7571
+        },
+        "AMD": {
+          "actual_pct": -6.8301,
+          "pred_pct": 6.7196,
+          "pp_actual_minus_pred": -13.5497,
+          "abs_pp": 13.5497
+        },
+        "AVGO": {
+          "actual_pct": -1.1186,
+          "pred_pct": 2.024,
+          "pp_actual_minus_pred": -3.1426,
+          "abs_pp": 3.1426
+        },
+        "GOOGL": {
+          "actual_pct": -1.003,
+          "pred_pct": 2.2336,
+          "pp_actual_minus_pred": -3.2366,
+          "abs_pp": 3.2366
+        },
+        "LLY": {
+          "actual_pct": 5.9539,
+          "pred_pct": -0.4619,
+          "pp_actual_minus_pred": 6.4158,
+          "abs_pp": 6.4158
+        },
+        "META": {
+          "actual_pct": 0.7546,
+          "pred_pct": -0.6537,
+          "pp_actual_minus_pred": 1.4082,
+          "abs_pp": 1.4082
+        },
+        "MSFT": {
+          "actual_pct": 1.6381,
+          "pred_pct": 0.296,
+          "pp_actual_minus_pred": 1.3421,
+          "abs_pp": 1.3421
+        },
+        "MU": {
+          "actual_pct": -2.966,
+          "pred_pct": 5.336,
+          "pp_actual_minus_pred": -8.3019,
+          "abs_pp": 8.3019
+        },
+        "NVDA": {
+          "actual_pct": 4.7026,
+          "pred_pct": 1.1452,
+          "pp_actual_minus_pred": 3.5574,
+          "abs_pp": 3.5574
+        },
+        "TSLA": {
+          "actual_pct": -1.4264,
+          "pred_pct": 0.1097,
+          "pp_actual_minus_pred": -1.5361,
+          "abs_pp": 1.5361
+        },
+        "TSM": {
+          "actual_pct": -1.7805,
+          "pred_pct": 0.9197,
+          "pp_actual_minus_pred": -2.7003,
+          "abs_pp": 2.7003
+        },
+        "XOM": {
+          "actual_pct": 9.2343,
+          "pred_pct": -0.5253,
+          "pp_actual_minus_pred": 9.7596,
+          "abs_pp": 9.7596
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-18",
+      "week_end": "2026-05-22",
+      "week_mae_pp": 2.9162,
+      "week_mean_signed_pp_actual_minus_pred": -0.9317,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 2.8611,
+          "pred_pct": 1.2525,
+          "pp_actual_minus_pred": 1.6087,
+          "abs_pp": 1.6087
+        },
+        "AMD": {
+          "actual_pct": 10.2358,
+          "pred_pct": 6.5284,
+          "pp_actual_minus_pred": 3.7074,
+          "abs_pp": 3.7074
+        },
+        "AVGO": {
+          "actual_pct": -2.5988,
+          "pred_pct": 2.1523,
+          "pp_actual_minus_pred": -4.7511,
+          "abs_pp": 4.7511
+        },
+        "GOOGL": {
+          "actual_pct": -3.4805,
+          "pred_pct": 2.3767,
+          "pp_actual_minus_pred": -5.8573,
+          "abs_pp": 5.8573
+        },
+        "LLY": {
+          "actual_pct": 5.9786,
+          "pred_pct": -0.0449,
+          "pp_actual_minus_pred": 6.0235,
+          "abs_pp": 6.0235
+        },
+        "META": {
+          "actual_pct": -0.6463,
+          "pred_pct": -0.2894,
+          "pp_actual_minus_pred": -0.3569,
+          "abs_pp": 0.3569
+        },
+        "MSFT": {
+          "actual_pct": -0.794,
+          "pred_pct": 0.5573,
+          "pp_actual_minus_pred": -1.3513,
+          "abs_pp": 1.3513
+        },
+        "MU": {
+          "actual_pct": 3.6348,
+          "pred_pct": 4.9325,
+          "pp_actual_minus_pred": -1.2977,
+          "abs_pp": 1.2977
+        },
+        "NVDA": {
+          "actual_pct": -4.4337,
+          "pred_pct": 1.635,
+          "pp_actual_minus_pred": -6.0687,
+          "abs_pp": 6.0687
+        },
+        "TSLA": {
+          "actual_pct": 0.8929,
+          "pred_pct": 0.3255,
+          "pp_actual_minus_pred": 0.5674,
+          "abs_pp": 0.5674
+        },
+        "TSM": {
+          "actual_pct": 0.042,
+          "pred_pct": 1.0871,
+          "pp_actual_minus_pred": -1.045,
+          "abs_pp": 1.045
+        },
+        "XOM": {
+          "actual_pct": -1.8997,
+          "pred_pct": 0.4598,
+          "pp_actual_minus_pred": -2.3595,
+          "abs_pp": 2.3595
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-01",
+      "week_end": "2026-06-05",
+      "week_mae_pp": 8.1886,
+      "week_mean_signed_pp_actual_minus_pred": -7.3786,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -1.5125,
+          "pred_pct": 1.512,
+          "pp_actual_minus_pred": -3.0246,
+          "abs_pp": 3.0246
+        },
+        "AMD": {
+          "actual_pct": -9.6338,
+          "pred_pct": 8.3399,
+          "pp_actual_minus_pred": -17.9737,
+          "abs_pp": 17.9737
+        },
+        "AVGO": {
+          "actual_pct": -13.6625,
+          "pred_pct": 3.0081,
+          "pp_actual_minus_pred": -16.6706,
+          "abs_pp": 16.6706
+        },
+        "GOOGL": {
+          "actual_pct": -3.1051,
+          "pred_pct": 2.0074,
+          "pp_actual_minus_pred": -5.1125,
+          "abs_pp": 5.1125
+        },
+        "LLY": {
+          "actual_pct": 2.391,
+          "pred_pct": 0.9112,
+          "pp_actual_minus_pred": 1.4797,
+          "abs_pp": 1.4797
+        },
+        "META": {
+          "actual_pct": -6.2465,
+          "pred_pct": -0.3372,
+          "pp_actual_minus_pred": -5.9093,
+          "abs_pp": 5.9093
+        },
+        "MSFT": {
+          "actual_pct": -7.456,
+          "pred_pct": 0.9646,
+          "pp_actual_minus_pred": -8.4206,
+          "abs_pp": 8.4206
+        },
+        "MU": {
+          "actual_pct": -11.0185,
+          "pred_pct": 7.9047,
+          "pp_actual_minus_pred": -18.9232,
+          "abs_pp": 18.9232
+        },
+        "NVDA": {
+          "actual_pct": -2.8607,
+          "pred_pct": 1.2989,
+          "pp_actual_minus_pred": -4.1595,
+          "abs_pp": 4.1595
+        },
+        "TSLA": {
+          "actual_pct": -10.2779,
+          "pred_pct": 0.7065,
+          "pp_actual_minus_pred": -10.9844,
+          "abs_pp": 10.9844
+        },
+        "TSM": {
+          "actual_pct": -0.7838,
+          "pred_pct": 1.4409,
+          "pp_actual_minus_pred": -2.2248,
+          "abs_pp": 2.2248
+        },
+        "XOM": {
+          "actual_pct": 3.208,
+          "pred_pct": -0.1719,
+          "pp_actual_minus_pred": 3.3799,
+          "abs_pp": 3.3799
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-08",
+      "week_end": "2026-06-12",
+      "week_mae_pp": 3.4347,
+      "week_mean_signed_pp_actual_minus_pred": -1.0472,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -5.2743,
+          "pred_pct": 1.4421,
+          "pp_actual_minus_pred": -6.7163,
+          "abs_pp": 6.7163
+        },
+        "AMD": {
+          "actual_pct": 9.6895,
+          "pred_pct": 7.3217,
+          "pp_actual_minus_pred": 2.3678,
+          "abs_pp": 2.3678
+        },
+        "AVGO": {
+          "actual_pct": -0.9489,
+          "pred_pct": 1.1694,
+          "pp_actual_minus_pred": -2.1182,
+          "abs_pp": 2.1182
+        },
+        "GOOGL": {
+          "actual_pct": -2.4014,
+          "pred_pct": 1.5898,
+          "pp_actual_minus_pred": -3.9913,
+          "abs_pp": 3.9913
+        },
+        "LLY": {
+          "actual_pct": 0.1396,
+          "pred_pct": 1.1443,
+          "pp_actual_minus_pred": -1.0047,
+          "abs_pp": 1.0047
+        },
+        "META": {
+          "actual_pct": -4.3879,
+          "pred_pct": -0.7012,
+          "pp_actual_minus_pred": -3.6867,
+          "abs_pp": 3.6867
+        },
+        "MSFT": {
+          "actual_pct": -6.2232,
+          "pred_pct": 0.3291,
+          "pp_actual_minus_pred": -6.5522,
+          "abs_pp": 6.5522
+        },
+        "MU": {
+          "actual_pct": 13.611,
+          "pred_pct": 6.4901,
+          "pp_actual_minus_pred": 7.1208,
+          "abs_pp": 7.1208
+        },
+        "NVDA": {
+          "actual_pct": 0.0439,
+          "pred_pct": 0.9302,
+          "pp_actual_minus_pred": -0.8863,
+          "abs_pp": 0.8863
+        },
+        "TSLA": {
+          "actual_pct": 3.9463,
+          "pred_pct": -0.229,
+          "pp_actual_minus_pred": 4.1753,
+          "abs_pp": 4.1753
+        },
+        "TSM": {
+          "actual_pct": 2.11,
+          "pred_pct": 1.4492,
+          "pp_actual_minus_pred": 0.6607,
+          "abs_pp": 0.6607
+        },
+        "XOM": {
+          "actual_pct": -1.941,
+          "pred_pct": -0.0051,
+          "pp_actual_minus_pred": -1.9359,
+          "abs_pp": 1.9359
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-22",
+      "week_end": "2026-06-26",
+      "week_mae_pp": 7.6407,
+      "week_mean_signed_pp_actual_minus_pred": -6.1875,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -4.775,
+          "pred_pct": 1.4871,
+          "pp_actual_minus_pred": -6.2621,
+          "abs_pp": 6.2621
+        },
+        "AMD": {
+          "actual_pct": -2.9384,
+          "pred_pct": 8.5882,
+          "pp_actual_minus_pred": -11.5266,
+          "abs_pp": 11.5266
+        },
+        "AVGO": {
+          "actual_pct": -11.2629,
+          "pred_pct": 2.3195,
+          "pp_actual_minus_pred": -13.5824,
+          "abs_pp": 13.5824
+        },
+        "GOOGL": {
+          "actual_pct": -8.3254,
+          "pred_pct": 2.0943,
+          "pp_actual_minus_pred": -10.4197,
+          "abs_pp": 10.4197
+        },
+        "LLY": {
+          "actual_pct": 9.9721,
+          "pred_pct": 1.7506,
+          "pp_actual_minus_pred": 8.2214,
+          "abs_pp": 8.2214
+        },
+        "META": {
+          "actual_pct": -4.6724,
+          "pred_pct": -0.0973,
+          "pp_actual_minus_pred": -4.5751,
+          "abs_pp": 4.5751
+        },
+        "MSFT": {
+          "actual_pct": -1.6948,
+          "pred_pct": 0.2398,
+          "pp_actual_minus_pred": -1.9345,
+          "abs_pp": 1.9345
+        },
+        "MU": {
+          "actual_pct": -0.1464,
+          "pred_pct": 9.4645,
+          "pp_actual_minus_pred": -9.6109,
+          "abs_pp": 9.6109
+        },
+        "NVDA": {
+          "actual_pct": -8.6193,
+          "pred_pct": 1.6667,
+          "pp_actual_minus_pred": -10.286,
+          "abs_pp": 10.286
+        },
+        "TSLA": {
+          "actual_pct": -5.1886,
+          "pred_pct": 0.4981,
+          "pp_actual_minus_pred": -5.6868,
+          "abs_pp": 5.6868
+        },
+        "TSM": {
+          "actual_pct": -6.442,
+          "pred_pct": 2.6429,
+          "pp_actual_minus_pred": -9.085,
+          "abs_pp": 9.085
+        },
+        "XOM": {
+          "actual_pct": -0.9216,
+          "pred_pct": -1.4199,
+          "pp_actual_minus_pred": 0.4983,
+          "abs_pp": 0.4983
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-06",
+      "week_end": "2026-07-10",
+      "week_mae_pp": 4.7231,
+      "week_mean_signed_pp_actual_minus_pred": 1.5918,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 2.1676,
+          "pred_pct": 1.7358,
+          "pp_actual_minus_pred": 0.4319,
+          "abs_pp": 0.4319
+        },
+        "AMD": {
+          "actual_pct": 7.7382,
+          "pred_pct": 7.5774,
+          "pp_actual_minus_pred": 0.1609,
+          "abs_pp": 0.1609
+        },
+        "AVGO": {
+          "actual_pct": 10.9641,
+          "pred_pct": 0.793,
+          "pp_actual_minus_pred": 10.1711,
+          "abs_pp": 10.1711
+        },
+        "GOOGL": {
+          "actual_pct": -0.7585,
+          "pred_pct": 1.4775,
+          "pp_actual_minus_pred": -2.236,
+          "abs_pp": 2.236
+        },
+        "LLY": {
+          "actual_pct": -2.0867,
+          "pred_pct": 2.3415,
+          "pp_actual_minus_pred": -4.4281,
+          "abs_pp": 4.4281
+        },
+        "META": {
+          "actual_pct": 14.807,
+          "pred_pct": 0.2374,
+          "pp_actual_minus_pred": 14.5696,
+          "abs_pp": 14.5696
+        },
+        "MSFT": {
+          "actual_pct": -1.3803,
+          "pred_pct": 0.5005,
+          "pp_actual_minus_pred": -1.8808,
+          "abs_pp": 1.8808
+        },
+        "MU": {
+          "actual_pct": 0.3834,
+          "pred_pct": 8.5466,
+          "pp_actual_minus_pred": -8.1632,
+          "abs_pp": 8.1632
+        },
+        "NVDA": {
+          "actual_pct": 8.279,
+          "pred_pct": 0.865,
+          "pp_actual_minus_pred": 7.414,
+          "abs_pp": 7.414
+        },
+        "TSLA": {
+          "actual_pct": 3.6371,
+          "pred_pct": 1.198,
+          "pp_actual_minus_pred": 2.439,
+          "abs_pp": 2.439
+        },
+        "TSM": {
+          "actual_pct": -0.0115,
+          "pred_pct": 2.0676,
+          "pp_actual_minus_pred": -2.0792,
+          "abs_pp": 2.0792
+        },
+        "XOM": {
+          "actual_pct": 1.3057,
+          "pred_pct": -1.3972,
+          "pp_actual_minus_pred": 2.7029,
+          "abs_pp": 2.7029
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-13",
+      "week_end": "2026-07-17",
+      "week_mae_pp": 7.5929,
+      "week_mean_signed_pp_actual_minus_pred": -5.4162,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 5.8417,
+          "pred_pct": 1.7409,
+          "pp_actual_minus_pred": 4.1008,
+          "abs_pp": 4.1008
+        },
+        "AMD": {
+          "actual_pct": -11.1366,
+          "pred_pct": 6.9903,
+          "pp_actual_minus_pred": -18.1269,
+          "abs_pp": 18.1269
+        },
+        "AVGO": {
+          "actual_pct": -7.2856,
+          "pred_pct": 0.5649,
+          "pp_actual_minus_pred": -7.8505,
+          "abs_pp": 7.8505
+        },
+        "GOOGL": {
+          "actual_pct": -2.9145,
+          "pred_pct": 0.6852,
+          "pp_actual_minus_pred": -3.5997,
+          "abs_pp": 3.5997
+        },
+        "LLY": {
+          "actual_pct": -0.7967,
+          "pred_pct": 2.2422,
+          "pp_actual_minus_pred": -3.0389,
+          "abs_pp": 3.0389
+        },
+        "META": {
+          "actual_pct": -3.4668,
+          "pred_pct": 0.2096,
+          "pp_actual_minus_pred": -3.6764,
+          "abs_pp": 3.6764
+        },
+        "MSFT": {
+          "actual_pct": 2.2643,
+          "pred_pct": -0.0724,
+          "pp_actual_minus_pred": 2.3368,
+          "abs_pp": 2.3368
+        },
+        "MU": {
+          "actual_pct": -13.3105,
+          "pred_pct": 6.6979,
+          "pp_actual_minus_pred": -20.0084,
+          "abs_pp": 20.0084
+        },
+        "NVDA": {
+          "actual_pct": -3.8633,
+          "pred_pct": 0.7074,
+          "pp_actual_minus_pred": -4.5707,
+          "abs_pp": 4.5707
+        },
+        "TSLA": {
+          "actual_pct": -6.6019,
+          "pred_pct": 1.0901,
+          "pp_actual_minus_pred": -7.692,
+          "abs_pp": 7.692
+        },
+        "TSM": {
+          "actual_pct": -8.2329,
+          "pred_pct": 1.2582,
+          "pp_actual_minus_pred": -9.4912,
+          "abs_pp": 9.4912
+        },
+        "XOM": {
+          "actual_pct": 6.106,
+          "pred_pct": -0.5171,
+          "pp_actual_minus_pred": 6.6231,
+          "abs_pp": 6.6231
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-20",
+      "week_end": "2026-07-24",
+      "week_mae_pp": 4.5559,
+      "week_mean_signed_pp_actual_minus_pred": -2.0201,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -0.2157,
+          "pred_pct": 1.9841,
+          "pp_actual_minus_pred": -2.1999,
+          "abs_pp": 2.1999
+        },
+        "AMD": {
+          "actual_pct": 5.2828,
+          "pred_pct": 4.9869,
+          "pp_actual_minus_pred": 0.2959,
+          "abs_pp": 0.2959
+        },
+        "AVGO": {
+          "actual_pct": 2.9906,
+          "pred_pct": -0.5187,
+          "pp_actual_minus_pred": 3.5093,
+          "abs_pp": 3.5093
+        },
+        "GOOGL": {
+          "actual_pct": -7.7948,
+          "pred_pct": 0.4584,
+          "pp_actual_minus_pred": -8.2532,
+          "abs_pp": 8.2532
+        },
+        "LLY": {
+          "actual_pct": 1.435,
+          "pred_pct": 2.3549,
+          "pp_actual_minus_pred": -0.9199,
+          "abs_pp": 0.9199
+        },
+        "META": {
+          "actual_pct": -7.8668,
+          "pred_pct": -0.1621,
+          "pp_actual_minus_pred": -7.7047,
+          "abs_pp": 7.7047
+        },
+        "MSFT": {
+          "actual_pct": -3.0775,
+          "pred_pct": -0.5201,
+          "pp_actual_minus_pred": -2.5575,
+          "abs_pp": 2.5575
+        },
+        "MU": {
+          "actual_pct": 8.4811,
+          "pred_pct": 5.7583,
+          "pp_actual_minus_pred": 2.7227,
+          "abs_pp": 2.7227
+        },
+        "NVDA": {
+          "actual_pct": 1.9871,
+          "pred_pct": 0.2402,
+          "pp_actual_minus_pred": 1.7469,
+          "abs_pp": 1.7469
+        },
+        "TSLA": {
+          "actual_pct": -17.8054,
+          "pred_pct": 0.0157,
+          "pp_actual_minus_pred": -17.821,
+          "abs_pp": 17.821
+        },
+        "TSM": {
+          "actual_pct": 1.2652,
+          "pred_pct": 0.8016,
+          "pp_actual_minus_pred": 0.4635,
+          "abs_pp": 0.4635
+        },
+        "XOM": {
+          "actual_pct": 6.5011,
+          "pred_pct": 0.0248,
+          "pp_actual_minus_pred": 6.4763,
+          "abs_pp": 6.4763
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-27",
+      "week_end": "2026-07-31",
+      "week_mae_pp": 7.706,
+      "week_mean_signed_pp_actual_minus_pred": -1.4434,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": -7.2398,
+          "pred_pct": 1.8242,
+          "pp_actual_minus_pred": -9.064,
+          "abs_pp": 9.064
+        },
+        "AMD": {
+          "actual_pct": -8.7748,
+          "pred_pct": 4.3124,
+          "pp_actual_minus_pred": -13.0872,
+          "abs_pp": 13.0872
+        },
+        "AVGO": {
+          "actual_pct": 1.9271,
+          "pred_pct": -0.228,
+          "pp_actual_minus_pred": 2.1551,
+          "abs_pp": 2.1551
+        },
+        "GOOGL": {
+          "actual_pct": 11.3811,
+          "pred_pct": -0.6364,
+          "pp_actual_minus_pred": 12.0175,
+          "abs_pp": 12.0175
+        },
+        "LLY": {
+          "actual_pct": -3.9456,
+          "pred_pct": 2.7546,
+          "pp_actual_minus_pred": -6.7002,
+          "abs_pp": 6.7002
+        },
+        "META": {
+          "actual_pct": -6.4652,
+          "pred_pct": -0.8714,
+          "pp_actual_minus_pred": -5.5937,
+          "abs_pp": 5.5937
+        },
+        "MSFT": {
+          "actual_pct": 21.7501,
+          "pred_pct": -0.8797,
+          "pp_actual_minus_pred": 22.6297,
+          "abs_pp": 22.6297
+        },
+        "MU": {
+          "actual_pct": -10.6325,
+          "pred_pct": 5.4651,
+          "pp_actual_minus_pred": -16.0976,
+          "abs_pp": 16.0976
+        },
+        "NVDA": {
+          "actual_pct": -2.9443,
+          "pred_pct": -0.1364,
+          "pp_actual_minus_pred": -2.8079,
+          "abs_pp": 2.8079
+        },
+        "TSLA": {
+          "actual_pct": -0.5814,
+          "pred_pct": -1.3545,
+          "pp_actual_minus_pred": 0.7731,
+          "abs_pp": 0.7731
+        },
+        "TSM": {
+          "actual_pct": 0.2082,
+          "pred_pct": 0.3694,
+          "pp_actual_minus_pred": -0.1612,
+          "abs_pp": 0.1612
+        },
+        "XOM": {
+          "actual_pct": -0.9558,
+          "pred_pct": 0.4291,
+          "pp_actual_minus_pred": -1.3849,
+          "abs_pp": 1.3849
+        }
+      }
+    },
+    {
+      "week_start": "2026-08-03",
+      "week_end": "2026-08-07",
+      "week_mae_pp": 4.6336,
+      "week_mean_signed_pp_actual_minus_pred": 4.1565,
+      "per_stock": {
+        "AAPL": {
+          "actual_pct": 1.4308,
+          "pred_pct": 0.7896,
+          "pp_actual_minus_pred": 0.6412,
+          "abs_pp": 0.6412
+        },
+        "AMD": {
+          "actual_pct": 1.5142,
+          "pred_pct": 2.7205,
+          "pp_actual_minus_pred": -1.2063,
+          "abs_pp": 1.2063
+        },
+        "AVGO": {
+          "actual_pct": 9.8849,
+          "pred_pct": -0.6211,
+          "pp_actual_minus_pred": 10.506,
+          "abs_pp": 10.506
+        },
+        "GOOGL": {
+          "actual_pct": -0.5139,
+          "pred_pct": -0.6178,
+          "pp_actual_minus_pred": 0.1039,
+          "abs_pp": 0.1039
+        },
+        "LLY": {
+          "actual_pct": 3.2093,
+          "pred_pct": 1.3502,
+          "pp_actual_minus_pred": 1.8592,
+          "abs_pp": 1.8592
+        },
+        "META": {
+          "actual_pct": 6.357,
+          "pred_pct": -0.5629,
+          "pp_actual_minus_pred": 6.9199,
+          "abs_pp": 6.9199
+        },
+        "MSFT": {
+          "actual_pct": 7.5895,
+          "pred_pct": 1.1477,
+          "pp_actual_minus_pred": 6.4418,
+          "abs_pp": 6.4418
+        },
+        "MU": {
+          "actual_pct": 6.6267,
+          "pred_pct": 2.446,
+          "pp_actual_minus_pred": 4.1807,
+          "abs_pp": 4.1807
+        },
+        "NVDA": {
+          "actual_pct": 11.5616,
+          "pred_pct": 0.2974,
+          "pp_actual_minus_pred": 11.2643,
+          "abs_pp": 11.2643
+        },
+        "TSLA": {
+          "actual_pct": 5.5814,
+          "pred_pct": -1.6878,
+          "pp_actual_minus_pred": 7.2693,
+          "abs_pp": 7.2693
+        },
+        "TSM": {
+          "actual_pct": 3.906,
+          "pred_pct": 0.3516,
+          "pp_actual_minus_pred": 3.5544,
+          "abs_pp": 3.5544
+        },
+        "XOM": {
+          "actual_pct": -1.544,
+          "pred_pct": 0.1126,
+          "pp_actual_minus_pred": -1.6566,
+          "abs_pp": 1.6566
+        }
+      }
+    }
+  ]
+}

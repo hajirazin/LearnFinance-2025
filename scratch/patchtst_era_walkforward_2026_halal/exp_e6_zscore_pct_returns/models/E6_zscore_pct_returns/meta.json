@@ -1,0 +1,16 @@
+{
+  "name": "E6_zscore_pct_returns",
+  "representation": "zscore_simple_return_fraction",
+  "example": "2% -> 0.02 -> z via context mu/sigma",
+  "zscore": "per_sample_context_mean_std_on_returns",
+  "num_input_channels": 1,
+  "scaling": null,
+  "lr": 0.0003,
+  "best_epoch": 42,
+  "best_val_mse_z": 1.1661563515663147,
+  "baseline_mse_z": 1.1999963521957397,
+  "beats_baseline_best": true,
+  "stopped_epoch": 57,
+  "ran_full_100": false,
+  "barely_trained": false
+}

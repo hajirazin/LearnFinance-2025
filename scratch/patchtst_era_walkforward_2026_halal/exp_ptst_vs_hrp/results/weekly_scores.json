@@ -1,0 +1,2102 @@
+[
+  {
+    "week_start": "2026-01-05",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.4827141761779785,
+    "score_multitask_pct": 2.6874899864196777,
+    "actual_weekly_pct": -4.2950497136633565
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "AMD",
+    "score_close_only_pct": 0.529634952545166,
+    "score_multitask_pct": -1.9742786884307861,
+    "actual_weekly_pct": -9.08399469318889
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "AVGO",
+    "score_close_only_pct": 0.33675432205200195,
+    "score_multitask_pct": 3.8608551025390625,
+    "actual_weekly_pct": -0.7623249334639204
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 2.1313905715942383,
+    "score_multitask_pct": 4.704272747039795,
+    "actual_weekly_pct": 4.25829404653022
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.113223075866699,
+    "score_multitask_pct": 4.695022106170654,
+    "actual_weekly_pct": -1.5550304514791558
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "META",
+    "score_close_only_pct": -0.7239699363708496,
+    "score_multitask_pct": -0.4000425338745117,
+    "actual_weekly_pct": 0.40743908050031585
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.8278369903564453,
+    "score_multitask_pct": 0.47326087951660156,
+    "actual_weekly_pct": 1.340549817135872
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "MU",
+    "score_close_only_pct": 4.59364652633667,
+    "score_multitask_pct": -1.5020012855529785,
+    "actual_weekly_pct": 9.40649979299868
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.2121448516845703,
+    "score_multitask_pct": 0.4772782325744629,
+    "actual_weekly_pct": -2.1127907673865742
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.14857053756713867,
+    "score_multitask_pct": 4.60054874420166,
+    "actual_weekly_pct": 1.5842222305509024
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.7385611534118652,
+    "score_multitask_pct": -2.4338722229003906,
+    "actual_weekly_pct": 1.2577890915479673
+  },
+  {
+    "week_start": "2026-01-05",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.6128311157226562,
+    "score_multitask_pct": 0.18688440322875977,
+    "actual_weekly_pct": 1.5980424460566356
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.4029989242553711,
+    "score_multitask_pct": 2.3696303367614746,
+    "actual_weekly_pct": -1.4805090836184198
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.5263030529022217,
+    "score_multitask_pct": -1.0964632034301758,
+    "actual_weekly_pct": 14.106415278045748
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "AVGO",
+    "score_close_only_pct": 0.07457733154296875,
+    "score_multitask_pct": -0.8787691593170166,
+    "actual_weekly_pct": 1.9537902456807865
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 2.494633197784424,
+    "score_multitask_pct": 1.4147043228149414,
+    "actual_weekly_pct": 0.4352170447408543
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.3060083389282227,
+    "score_multitask_pct": 5.7082414627075195,
+    "actual_weekly_pct": -2.365643009662699
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "META",
+    "score_close_only_pct": -0.6407737731933594,
+    "score_multitask_pct": -1.8452823162078857,
+    "actual_weekly_pct": -5.024040315017153
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.5520820617675781,
+    "score_multitask_pct": -1.407533884048462,
+    "actual_weekly_pct": -4.051914012100699
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "MU",
+    "score_close_only_pct": 5.3156256675720215,
+    "score_multitask_pct": -6.193065643310547,
+    "actual_weekly_pct": 5.117506693766294
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.2602219581604004,
+    "score_multitask_pct": -0.9533584117889404,
+    "actual_weekly_pct": 0.7410987302089111
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.3530740737915039,
+    "score_multitask_pct": 2.5107860565185547,
+    "actual_weekly_pct": -1.6876046832250635
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.7802486419677734,
+    "score_multitask_pct": -4.009371995925903,
+    "actual_weekly_pct": 5.7998296605620725
+  },
+  {
+    "week_start": "2026-01-12",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.895845890045166,
+    "score_multitask_pct": -1.2424707412719727,
+    "actual_weekly_pct": 4.237219126422387
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.6495535373687744,
+    "score_multitask_pct": 0.9063005447387695,
+    "actual_weekly_pct": 4.612166590005673
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "AMD",
+    "score_close_only_pct": 0.05644559860229492,
+    "score_multitask_pct": -9.560120105743408,
+    "actual_weekly_pct": -8.837799443754601
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.9666085243225098,
+    "score_multitask_pct": 1.5684008598327637,
+    "actual_weekly_pct": 3.515075903479592
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.6883134841918945,
+    "score_multitask_pct": 2.400672435760498,
+    "actual_weekly_pct": 3.070779602088658
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.1682143211364746,
+    "score_multitask_pct": 4.337000846862793,
+    "actual_weekly_pct": -2.550058128171928
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "META",
+    "score_close_only_pct": -1.0440170764923096,
+    "score_multitask_pct": -0.38980841636657715,
+    "actual_weekly_pct": 8.764950722330255
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.0668516159057617,
+    "score_multitask_pct": -0.9093165397644043,
+    "actual_weekly_pct": -7.65318225729864
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "MU",
+    "score_close_only_pct": 5.177474021911621,
+    "score_multitask_pct": 0.6919026374816895,
+    "actual_weekly_pct": 3.810837287357227
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.12846589088439941,
+    "score_multitask_pct": -1.311171054840088,
+    "actual_weekly_pct": 1.8436653421568305
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.014132261276245117,
+    "score_multitask_pct": 1.2502431869506836,
+    "actual_weekly_pct": -4.15311851375737
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.0047197341918945,
+    "score_multitask_pct": 0.23096799850463867,
+    "actual_weekly_pct": -1.2870659125746586
+  },
+  {
+    "week_start": "2026-01-26",
+    "symbol": "XOM",
+    "score_close_only_pct": 1.298511028289795,
+    "score_multitask_pct": -1.1938214302062988,
+    "actual_weekly_pct": 4.76401616479718
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.2814054489135742,
+    "score_multitask_pct": -0.7684051990509033,
+    "actual_weekly_pct": 7.1835915452622245
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.7082521915435791,
+    "score_multitask_pct": 0.24166107177734375,
+    "actual_weekly_pct": -11.950320532549984
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.6918966770172119,
+    "score_multitask_pct": 1.8801689147949219,
+    "actual_weekly_pct": 0.48899055069631103
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.5030384063720703,
+    "score_multitask_pct": 3.6744117736816406,
+    "actual_weekly_pct": -4.479294274685652
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "LLY",
+    "score_close_only_pct": 1.2579798698425293,
+    "score_multitask_pct": 2.952098846435547,
+    "actual_weekly_pct": 2.0276747627476555
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "META",
+    "score_close_only_pct": 1.0133862495422363,
+    "score_multitask_pct": -2.4976909160614014,
+    "actual_weekly_pct": -7.681783395302688
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.4828681945800781,
+    "score_multitask_pct": 1.7242908477783203,
+    "actual_weekly_pct": -6.774499364988429
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "MU",
+    "score_close_only_pct": 4.9446940422058105,
+    "score_multitask_pct": 7.258915901184082,
+    "actual_weekly_pct": -4.866467943450092
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.6192982196807861,
+    "score_multitask_pct": 0.30776262283325195,
+    "actual_weekly_pct": -2.9927280252047384
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.6522655487060547,
+    "score_multitask_pct": 3.016829490661621,
+    "actual_weekly_pct": -4.484100775152577
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.7142543792724609,
+    "score_multitask_pct": 3.6867380142211914,
+    "actual_weekly_pct": 5.533037475800406
+  },
+  {
+    "week_start": "2026-02-02",
+    "symbol": "XOM",
+    "score_close_only_pct": 1.8537521362304688,
+    "score_multitask_pct": -0.5757927894592285,
+    "actual_weekly_pct": 5.410190583794394
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.2846956253051758,
+    "score_multitask_pct": -3.440415859222412,
+    "actual_weekly_pct": -8.03250277941273
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "AMD",
+    "score_close_only_pct": -1.2295663356781006,
+    "score_multitask_pct": 4.69362735748291,
+    "actual_weekly_pct": -0.5373225408123572
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.5543351173400879,
+    "score_multitask_pct": -2.027231454849243,
+    "actual_weekly_pct": -2.3278864854672565
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.9277701377868652,
+    "score_multitask_pct": 3.882730007171631,
+    "actual_weekly_pct": -5.308797902656048
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "LLY",
+    "score_close_only_pct": 0.8028268814086914,
+    "score_multitask_pct": -1.1180639266967773,
+    "actual_weekly_pct": -1.7180491776594864
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "META",
+    "score_close_only_pct": 0.4212498664855957,
+    "score_multitask_pct": 1.7926335334777832,
+    "actual_weekly_pct": -3.2791101080788976
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.8806636333465576,
+    "score_multitask_pct": 1.894533634185791,
+    "actual_weekly_pct": 0.04487028698421103
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "MU",
+    "score_close_only_pct": 3.8480043411254883,
+    "score_multitask_pct": 11.198008060455322,
+    "actual_weekly_pct": 4.299577165809354
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.5508005619049072,
+    "score_multitask_pct": 0.4168272018432617,
+    "actual_weekly_pct": -1.4023008749052601
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.6144523620605469,
+    "score_multitask_pct": 3.131580352783203,
+    "actual_weekly_pct": 1.5397381030360036
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.4371871948242188,
+    "score_multitask_pct": 2.061903476715088,
+    "actual_weekly_pct": 5.019343254031949
+  },
+  {
+    "week_start": "2026-02-09",
+    "symbol": "XOM",
+    "score_close_only_pct": 1.976180076599121,
+    "score_multitask_pct": -0.3300011157989502,
+    "actual_weekly_pct": -0.4025535667431468
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.1889944076538086,
+    "score_multitask_pct": -1.5504896640777588,
+    "actual_weekly_pct": -0.15118070783298743
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.07899999618530273,
+    "score_multitask_pct": 4.192900657653809,
+    "actual_weekly_pct": 0.02998392166519981
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.134199857711792,
+    "score_multitask_pct": -6.343859434127808,
+    "actual_weekly_pct": -3.938074956824489
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.44711828231811523,
+    "score_multitask_pct": 0.9662628173828125,
+    "actual_weekly_pct": -1.0222874812341298
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.35846829414367676,
+    "score_multitask_pct": 2.0247459411621094,
+    "actual_weekly_pct": 4.206946854094595
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "META",
+    "score_close_only_pct": 0.8639931678771973,
+    "score_multitask_pct": 2.003812789916992,
+    "actual_weekly_pct": -1.1408322568291274
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.3927876949310303,
+    "score_multitask_pct": -1.3461768627166748,
+    "actual_weekly_pct": -1.1303327109662087
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "MU",
+    "score_close_only_pct": 6.310558319091797,
+    "score_multitask_pct": 8.937287330627441,
+    "actual_weekly_pct": -3.6901272426948184
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.5323171615600586,
+    "score_multitask_pct": -0.012731552124023438,
+    "actual_weekly_pct": -6.653674215300198
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.4758119583129883,
+    "score_multitask_pct": 2.1037697792053223,
+    "actual_weekly_pct": -2.260695787726541
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "TSM",
+    "score_close_only_pct": 2.5506973266601562,
+    "score_multitask_pct": 0.48851966857910156,
+    "actual_weekly_pct": 1.0902946872615393
+  },
+  {
+    "week_start": "2026-02-23",
+    "symbol": "XOM",
+    "score_close_only_pct": 1.9620180130004883,
+    "score_multitask_pct": 4.247796535491943,
+    "actual_weekly_pct": 3.5442702770017265
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.5464494228363037,
+    "score_multitask_pct": 0.6488204002380371,
+    "actual_weekly_pct": -2.5437207233745207
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.7015109062194824,
+    "score_multitask_pct": 2.098250389099121,
+    "actual_weekly_pct": -3.8859266655961178
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "AVGO",
+    "score_close_only_pct": -1.5121102333068848,
+    "score_multitask_pct": -0.6904244422912598,
+    "actual_weekly_pct": 3.4204423754948587
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.05633234977722168,
+    "score_multitask_pct": 1.7102360725402832,
+    "actual_weekly_pct": -4.246863079683216
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.0018715858459472656,
+    "score_multitask_pct": 0.10373592376708984,
+    "actual_weekly_pct": -5.8612699471402685
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "META",
+    "score_close_only_pct": 0.1342296600341797,
+    "score_multitask_pct": 1.466989517211914,
+    "actual_weekly_pct": -0.5122045360445804
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.7348051071166992,
+    "score_multitask_pct": -2.39751935005188,
+    "actual_weekly_pct": 4.1299591648468414
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "MU",
+    "score_close_only_pct": 4.681026935577393,
+    "score_multitask_pct": 11.680567264556885,
+    "actual_weekly_pct": -10.202004952436772
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.08609294891357422,
+    "score_multitask_pct": 2.947831153869629,
+    "actual_weekly_pct": 0.35555328976353273
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.5091369152069092,
+    "score_multitask_pct": 0.0458836555480957,
+    "actual_weekly_pct": -1.4359888298585366
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "TSM",
+    "score_close_only_pct": 2.265024185180664,
+    "score_multitask_pct": 2.94039249420166,
+    "actual_weekly_pct": -9.5279975447761
+  },
+  {
+    "week_start": "2026-03-02",
+    "symbol": "XOM",
+    "score_close_only_pct": 2.293229103088379,
+    "score_multitask_pct": 3.972506523132324,
+    "actual_weekly_pct": -0.8458972368084017
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.6084322929382324,
+    "score_multitask_pct": 0.950467586517334,
+    "actual_weekly_pct": -2.850926971762646
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "AMD",
+    "score_close_only_pct": -1.0798394680023193,
+    "score_multitask_pct": 2.398502826690674,
+    "actual_weekly_pct": 0.4988862185764775
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "AVGO",
+    "score_close_only_pct": -1.5525758266448975,
+    "score_multitask_pct": -0.8859634399414062,
+    "actual_weekly_pct": -2.517552362512765
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.38811564445495605,
+    "score_multitask_pct": 1.7130494117736816,
+    "actual_weekly_pct": 1.2595504167236093
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.013363361358642578,
+    "score_multitask_pct": 1.4865398406982422,
+    "actual_weekly_pct": -0.5301263123809519
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "META",
+    "score_close_only_pct": -0.24006366729736328,
+    "score_multitask_pct": 1.4596939086914062,
+    "actual_weekly_pct": -4.830500277036731
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.4760255813598633,
+    "score_multitask_pct": -4.831743240356445,
+    "actual_weekly_pct": -3.279050259756866
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "MU",
+    "score_close_only_pct": 3.5207629203796387,
+    "score_multitask_pct": 12.846922874450684,
+    "actual_weekly_pct": 15.076969735429158
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.31342506408691406,
+    "score_multitask_pct": 2.5237202644348145,
+    "actual_weekly_pct": 1.3665462690880759
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.8093953132629395,
+    "score_multitask_pct": -1.8720686435699463,
+    "actual_weekly_pct": -1.3938947460890305
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.0112643241882324,
+    "score_multitask_pct": 6.290113925933838,
+    "actual_weekly_pct": -0.1711520153361401
+  },
+  {
+    "week_start": "2026-03-09",
+    "symbol": "XOM",
+    "score_close_only_pct": 2.267634868621826,
+    "score_multitask_pct": 4.755246639251709,
+    "actual_weekly_pct": 3.247131926005009
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.7316827774047852,
+    "score_multitask_pct": 1.4356732368469238,
+    "actual_weekly_pct": -0.8515871044318057
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.5143225193023682,
+    "score_multitask_pct": 0.7461190223693848,
+    "actual_weekly_pct": 4.105694434285856
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.3994405269622803,
+    "score_multitask_pct": 0.9814620018005371,
+    "actual_weekly_pct": -3.616213609403607
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.1353919506072998,
+    "score_multitask_pct": 1.786971092224121,
+    "actual_weekly_pct": -0.4234480562610554
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.579911470413208,
+    "score_multitask_pct": 0.41681528091430664,
+    "actual_weekly_pct": -7.956714533136644
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "META",
+    "score_close_only_pct": -0.4061400890350342,
+    "score_multitask_pct": 2.470409870147705,
+    "actual_weekly_pct": -3.2670232048155
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.4747023582458496,
+    "score_multitask_pct": -2.2360384464263916,
+    "actual_weekly_pct": -3.45847379546409
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "MU",
+    "score_close_only_pct": 5.0804853439331055,
+    "score_multitask_pct": 8.444404602050781,
+    "actual_weekly_pct": -0.757987222048917
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.22830963134765625,
+    "score_multitask_pct": 1.8480420112609863,
+    "actual_weekly_pct": -4.18862860014303
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "TSLA",
+    "score_close_only_pct": -1.5701472759246826,
+    "score_multitask_pct": -0.9760677814483643,
+    "actual_weekly_pct": -5.940700415840993
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.4054179191589355,
+    "score_multitask_pct": 5.884075164794922,
+    "actual_weekly_pct": -2.680975256324747
+  },
+  {
+    "week_start": "2026-03-16",
+    "symbol": "XOM",
+    "score_close_only_pct": 2.4106264114379883,
+    "score_multitask_pct": 2.7626991271972656,
+    "actual_weekly_pct": 2.2738939039122386
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.7077455520629883,
+    "score_multitask_pct": 1.2916326522827148,
+    "actual_weekly_pct": 0.3266250819193184
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "AMD",
+    "score_close_only_pct": -0.4731118679046631,
+    "score_multitask_pct": -0.5867421627044678,
+    "actual_weekly_pct": 0.32782181299695345
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.7476449012756348,
+    "score_multitask_pct": 0.7970094680786133,
+    "actual_weekly_pct": -3.165764961092077
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.21483898162841797,
+    "score_multitask_pct": 0.8000969886779785,
+    "actual_weekly_pct": -8.85714407379049
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.373070478439331,
+    "score_multitask_pct": 1.6826629638671875,
+    "actual_weekly_pct": -3.1388575702542054
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "META",
+    "score_close_only_pct": -0.8573710918426514,
+    "score_multitask_pct": 1.9770622253417969,
+    "actual_weekly_pct": -11.444261953781032
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.9350767135620117,
+    "score_multitask_pct": -1.7290472984313965,
+    "actual_weekly_pct": -6.572919167376057
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "MU",
+    "score_close_only_pct": 3.6839842796325684,
+    "score_multitask_pct": 5.823767185211182,
+    "actual_weekly_pct": -15.530856851196384
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.4736661911010742,
+    "score_multitask_pct": 0.998079776763916,
+    "actual_weekly_pct": -2.999416773199881
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "TSLA",
+    "score_close_only_pct": -2.2993266582489014,
+    "score_multitask_pct": 0.8765935897827148,
+    "actual_weekly_pct": -1.6659433158946801
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.0145187377929688,
+    "score_multitask_pct": 4.873621463775635,
+    "actual_weekly_pct": -0.7593245274428284
+  },
+  {
+    "week_start": "2026-03-23",
+    "symbol": "XOM",
+    "score_close_only_pct": 2.5740504264831543,
+    "score_multitask_pct": 4.035818576812744,
+    "actual_weekly_pct": 7.089627014488453
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "AAPL",
+    "score_close_only_pct": -0.17843842506408691,
+    "score_multitask_pct": -0.33612847328186035,
+    "actual_weekly_pct": 1.781811835733338
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "AMD",
+    "score_close_only_pct": 0.19693374633789062,
+    "score_multitask_pct": -6.203746795654297,
+    "actual_weekly_pct": 12.66206587868175
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.6922245025634766,
+    "score_multitask_pct": 0.22121667861938477,
+    "actual_weekly_pct": 18.12112612050596
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.47513246536254883,
+    "score_multitask_pct": -2.6613712310791016,
+    "actual_weekly_pct": 7.259019514556186
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.0197341442108154,
+    "score_multitask_pct": -3.4707069396972656,
+    "actual_weekly_pct": 0.4157798950624292
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "META",
+    "score_close_only_pct": -1.1100232601165771,
+    "score_multitask_pct": 0.6078958511352539,
+    "actual_weekly_pct": 9.643832688072273
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "MSFT",
+    "score_close_only_pct": -2.0058810710906982,
+    "score_multitask_pct": -1.5633702278137207,
+    "actual_weekly_pct": -0.6935137356479548
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "MU",
+    "score_close_only_pct": 0.6233572959899902,
+    "score_multitask_pct": 4.642689228057861,
+    "actual_weekly_pct": 14.839997693516317
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.4066646099090576,
+    "score_multitask_pct": -0.9070515632629395,
+    "actual_weekly_pct": 6.336324218861211
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "TSLA",
+    "score_close_only_pct": -1.4706194400787354,
+    "score_multitask_pct": -0.813901424407959,
+    "actual_weekly_pct": -3.2280385615445994
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.337982177734375,
+    "score_multitask_pct": 0.6192564964294434,
+    "actual_weekly_pct": 9.308635194424886
+  },
+  {
+    "week_start": "2026-04-06",
+    "symbol": "XOM",
+    "score_close_only_pct": 2.4239063262939453,
+    "score_multitask_pct": 4.691123962402344,
+    "actual_weekly_pct": -5.090551876463534
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.011777877807617188,
+    "score_multitask_pct": -0.11621713638305664,
+    "actual_weekly_pct": 3.7430895227164918
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "AMD",
+    "score_close_only_pct": 0.9407162666320801,
+    "score_multitask_pct": -15.224659442901611,
+    "actual_weekly_pct": 13.610031944198564
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "AVGO",
+    "score_close_only_pct": 0.4363894462585449,
+    "score_multitask_pct": -9.823358058929443,
+    "actual_weekly_pct": 9.4173117754077
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.44544339179992676,
+    "score_multitask_pct": -5.563497543334961,
+    "actual_weekly_pct": 7.703947545626311
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.0866403579711914,
+    "score_multitask_pct": -1.022350788116455,
+    "actual_weekly_pct": -1.3241446554102865
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "META",
+    "score_close_only_pct": 0.03578662872314453,
+    "score_multitask_pct": -6.467998027801514,
+    "actual_weekly_pct": 9.317944274337076
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.9286394119262695,
+    "score_multitask_pct": -2.348470687866211,
+    "actual_weekly_pct": 13.999518459650172
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "MU",
+    "score_close_only_pct": 1.9208431243896484,
+    "score_multitask_pct": -6.0288190841674805,
+    "actual_weekly_pct": 8.198010244311149
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.16851425170898438,
+    "score_multitask_pct": -6.374621391296387,
+    "actual_weekly_pct": 6.918299027281538
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "TSLA",
+    "score_close_only_pct": -2.003377676010132,
+    "score_multitask_pct": -1.880943775177002,
+    "actual_weekly_pct": 14.807273564300827
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.9882569313049316,
+    "score_multitask_pct": -4.985314607620239,
+    "actual_weekly_pct": -0.02698491685606541
+  },
+  {
+    "week_start": "2026-04-13",
+    "symbol": "XOM",
+    "score_close_only_pct": 1.6043782234191895,
+    "score_multitask_pct": 5.590724945068359,
+    "actual_weekly_pct": -3.9800618215599104
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.7590532302856445,
+    "score_multitask_pct": -3.6847352981567383,
+    "actual_weekly_pct": 0.3071407832298867
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "AMD",
+    "score_close_only_pct": 0.9785056114196777,
+    "score_multitask_pct": -9.219706058502197,
+    "actual_weekly_pct": 24.936233074962377
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "AVGO",
+    "score_close_only_pct": 1.8280386924743652,
+    "score_multitask_pct": -7.656192779541016,
+    "actual_weekly_pct": 3.989767520977172
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.3603219985961914,
+    "score_multitask_pct": -10.466068983078003,
+    "actual_weekly_pct": 0.7960668692954753
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.2098491191864014,
+    "score_multitask_pct": -3.4786343574523926,
+    "actual_weekly_pct": -4.646020728895495
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "META",
+    "score_close_only_pct": 1.0213136672973633,
+    "score_multitask_pct": -12.99443244934082,
+    "actual_weekly_pct": -1.9635405904849024
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.373607873916626,
+    "score_multitask_pct": -8.073699474334717,
+    "actual_weekly_pct": 0.4328358133541821
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "MU",
+    "score_close_only_pct": 1.3923048973083496,
+    "score_multitask_pct": -6.366944313049316,
+    "actual_weekly_pct": 9.152436597916779
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.8386850357055664,
+    "score_multitask_pct": -5.942654609680176,
+    "actual_weekly_pct": 3.2675584272128244
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.5711793899536133,
+    "score_multitask_pct": -8.824431896209717,
+    "actual_weekly_pct": -6.070592486804049
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.1151671409606934,
+    "score_multitask_pct": -0.7956266403198242,
+    "actual_weekly_pct": 8.626178530385452
+  },
+  {
+    "week_start": "2026-04-20",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.805819034576416,
+    "score_multitask_pct": 5.092489719390869,
+    "actual_weekly_pct": 1.6866984290658138
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.49303770065307617,
+    "score_multitask_pct": -1.8392980098724365,
+    "actual_weekly_pct": 3.349818184765896
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "AMD",
+    "score_close_only_pct": 2.770841121673584,
+    "score_multitask_pct": -11.01919412612915,
+    "actual_weekly_pct": 3.660047461454452
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "AVGO",
+    "score_close_only_pct": 2.0473122596740723,
+    "score_multitask_pct": -1.6413331031799316,
+    "actual_weekly_pct": -0.35008301450949464
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.2358555793762207,
+    "score_multitask_pct": -2.0313382148742676,
+    "actual_weekly_pct": 11.98896901180908
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.1680185794830322,
+    "score_multitask_pct": 0.16100406646728516,
+    "actual_weekly_pct": 8.978912297420916
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "META",
+    "score_close_only_pct": 0.12331008911132812,
+    "score_multitask_pct": -3.5041987895965576,
+    "actual_weekly_pct": -9.8188267810713
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "MSFT",
+    "score_close_only_pct": -1.0052204132080078,
+    "score_multitask_pct": -0.7320523262023926,
+    "actual_weekly_pct": -2.3974360116912896
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "MU",
+    "score_close_only_pct": 1.1817097663879395,
+    "score_multitask_pct": -3.577667474746704,
+    "actual_weekly_pct": 9.158081140312468
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.7418394088745117,
+    "score_multitask_pct": -2.4682939052581787,
+    "actual_weekly_pct": -4.715036790114102
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "TSLA",
+    "score_close_only_pct": -1.0911345481872559,
+    "score_multitask_pct": -2.9795825481414795,
+    "actual_weekly_pct": 3.8586287542583086
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.406562328338623,
+    "score_multitask_pct": -5.105161666870117,
+    "actual_weekly_pct": -1.1901749562796993
+  },
+  {
+    "week_start": "2026-04-27",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.6989598274230957,
+    "score_multitask_pct": 2.833545207977295,
+    "actual_weekly_pct": 2.5787363128429774
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.13707876205444336,
+    "score_multitask_pct": -1.407158374786377,
+    "actual_weekly_pct": 4.704787601414795
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "AMD",
+    "score_close_only_pct": 5.09263277053833,
+    "score_multitask_pct": -2.23427414894104,
+    "actual_weekly_pct": 26.25228591924531
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "AVGO",
+    "score_close_only_pct": 2.69010066986084,
+    "score_multitask_pct": 1.4814972877502441,
+    "actual_weekly_pct": 2.0698825593358894
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.267683506011963,
+    "score_multitask_pct": -3.5917282104492188,
+    "actual_weekly_pct": 3.9176502517350054
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "LLY",
+    "score_close_only_pct": -1.1073946952819824,
+    "score_multitask_pct": -5.852466821670532,
+    "actual_weekly_pct": -1.5446425024483346
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "META",
+    "score_close_only_pct": -0.7357597351074219,
+    "score_multitask_pct": 3.967559337615967,
+    "actual_weekly_pct": 0.14455932366530533
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.03896951675415039,
+    "score_multitask_pct": 0.755155086517334,
+    "actual_weekly_pct": 0.16407505833788694
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "MU",
+    "score_close_only_pct": 3.0991077423095703,
+    "score_multitask_pct": -3.6649882793426514,
+    "actual_weekly_pct": 37.73445109730109
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "NVDA",
+    "score_close_only_pct": 1.136791706085205,
+    "score_multitask_pct": 1.9021391868591309,
+    "actual_weekly_pct": 8.440413332114382
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.27518272399902344,
+    "score_multitask_pct": -5.847853422164917,
+    "actual_weekly_pct": 9.60288574688104
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.7253994941711426,
+    "score_multitask_pct": -0.9121537208557129,
+    "actual_weekly_pct": 3.5230162634811713
+  },
+  {
+    "week_start": "2026-05-04",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.3202676773071289,
+    "score_multitask_pct": 0.7593274116516113,
+    "actual_weekly_pct": -5.355150687909161
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.5543828010559082,
+    "score_multitask_pct": -1.1797070503234863,
+    "actual_weekly_pct": 2.3557900891743255
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "AMD",
+    "score_close_only_pct": 6.588864326477051,
+    "score_multitask_pct": -4.697448015213013,
+    "actual_weekly_pct": -6.830114055919456
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "AVGO",
+    "score_close_only_pct": 1.956164836883545,
+    "score_multitask_pct": 5.311918258666992,
+    "actual_weekly_pct": -1.1186040833938926
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 2.1747946739196777,
+    "score_multitask_pct": -0.6478011608123779,
+    "actual_weekly_pct": -1.0029913014239833
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.5228757858276367,
+    "score_multitask_pct": -2.923065423965454,
+    "actual_weekly_pct": 5.95392165916262
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "META",
+    "score_close_only_pct": -0.7194876670837402,
+    "score_multitask_pct": 3.5280704498291016,
+    "actual_weekly_pct": 0.7545520314115262
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.2505064010620117,
+    "score_multitask_pct": 2.5772452354431152,
+    "actual_weekly_pct": 1.6380849851926005
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "MU",
+    "score_close_only_pct": 5.199229717254639,
+    "score_multitask_pct": -15.118247270584106,
+    "actual_weekly_pct": -2.965951779766396
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "NVDA",
+    "score_close_only_pct": 1.082921028137207,
+    "score_multitask_pct": 0.5109548568725586,
+    "actual_weekly_pct": 4.702607118721525
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.04451274871826172,
+    "score_multitask_pct": -4.619109630584717,
+    "actual_weekly_pct": -1.4264073262704846
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.8484363555908203,
+    "score_multitask_pct": -0.24590492248535156,
+    "actual_weekly_pct": -1.7805059032923065
+  },
+  {
+    "week_start": "2026-05-11",
+    "symbol": "XOM",
+    "score_close_only_pct": -0.5739748477935791,
+    "score_multitask_pct": 1.99052095413208,
+    "actual_weekly_pct": 9.234274170566593
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.2112736701965332,
+    "score_multitask_pct": -1.1577844619750977,
+    "actual_weekly_pct": 2.8611384683597807
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "AMD",
+    "score_close_only_pct": 6.400465965270996,
+    "score_multitask_pct": 11.004316806793213,
+    "actual_weekly_pct": 10.23579416113325
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "AVGO",
+    "score_close_only_pct": 2.0808935165405273,
+    "score_multitask_pct": 5.909299850463867,
+    "actual_weekly_pct": -2.598835280585299
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 2.3155570030212402,
+    "score_multitask_pct": 2.6317834854125977,
+    "actual_weekly_pct": -3.480517566681929
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "LLY",
+    "score_close_only_pct": -0.11088848114013672,
+    "score_multitask_pct": -4.149389266967773,
+    "actual_weekly_pct": 5.9785871623188935
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "META",
+    "score_close_only_pct": -0.35566091537475586,
+    "score_multitask_pct": 2.604043483734131,
+    "actual_weekly_pct": -0.6463329419536534
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.5104541778564453,
+    "score_multitask_pct": 1.4932870864868164,
+    "actual_weekly_pct": -0.7939908032092879
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "MU",
+    "score_close_only_pct": 4.791593551635742,
+    "score_multitask_pct": 5.812931060791016,
+    "actual_weekly_pct": 3.6348118885566327
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "NVDA",
+    "score_close_only_pct": 1.5680313110351562,
+    "score_multitask_pct": 2.1619319915771484,
+    "actual_weekly_pct": -4.433696595255821
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.2549886703491211,
+    "score_multitask_pct": -0.6076693534851074,
+    "actual_weekly_pct": 0.8928617891349688
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.0123252868652344,
+    "score_multitask_pct": 2.0215392112731934,
+    "actual_weekly_pct": 0.04203855758388997
+  },
+  {
+    "week_start": "2026-05-18",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.40990114212036133,
+    "score_multitask_pct": -2.3111581802368164,
+    "actual_weekly_pct": -1.8996960706588628
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.4752626419067383,
+    "score_multitask_pct": 2.3849844932556152,
+    "actual_weekly_pct": -1.5125300447446421
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "AMD",
+    "score_close_only_pct": 8.215630054473877,
+    "score_multitask_pct": 13.303136825561523,
+    "actual_weekly_pct": -9.633786679930967
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "AVGO",
+    "score_close_only_pct": 2.9349684715270996,
+    "score_multitask_pct": 3.743588924407959,
+    "actual_weekly_pct": -13.662506329509938
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.9505858421325684,
+    "score_multitask_pct": 6.0578227043151855,
+    "actual_weekly_pct": -3.1051158627297903
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "LLY",
+    "score_close_only_pct": 0.8466601371765137,
+    "score_multitask_pct": -0.6881237030029297,
+    "actual_weekly_pct": 2.3909542031957054
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "META",
+    "score_close_only_pct": -0.40568113327026367,
+    "score_multitask_pct": 0.8439540863037109,
+    "actual_weekly_pct": -6.246543004159777
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.9135246276855469,
+    "score_multitask_pct": -2.01568603515625,
+    "actual_weekly_pct": -7.456018464545
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "MU",
+    "score_close_only_pct": 7.757139205932617,
+    "score_multitask_pct": 0.5196213722229004,
+    "actual_weekly_pct": -11.018536584384652
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "NVDA",
+    "score_close_only_pct": 1.2396454811096191,
+    "score_multitask_pct": 5.083096027374268,
+    "actual_weekly_pct": -2.8606580011333205
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.6402850151062012,
+    "score_multitask_pct": 2.218174934387207,
+    "actual_weekly_pct": -10.277887897079873
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.3709068298339844,
+    "score_multitask_pct": 3.9152979850769043,
+    "actual_weekly_pct": -0.7838448282023402
+  },
+  {
+    "week_start": "2026-06-01",
+    "symbol": "XOM",
+    "score_close_only_pct": -0.22177696228027344,
+    "score_multitask_pct": 1.517939567565918,
+    "actual_weekly_pct": 3.208043396896909
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.4037489891052246,
+    "score_multitask_pct": 4.212594032287598,
+    "actual_weekly_pct": -5.274286343537538
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "AMD",
+    "score_close_only_pct": 7.188999652862549,
+    "score_multitask_pct": 18.64790916442871,
+    "actual_weekly_pct": 9.68952398650993
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "AVGO",
+    "score_close_only_pct": 1.0823726654052734,
+    "score_multitask_pct": 9.845936298370361,
+    "actual_weekly_pct": -0.948851154399577
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.5303730964660645,
+    "score_multitask_pct": 6.822967529296875,
+    "actual_weekly_pct": -2.4014343833147933
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "LLY",
+    "score_close_only_pct": 1.077258586883545,
+    "score_multitask_pct": 1.9168972969055176,
+    "actual_weekly_pct": 0.13964363307354954
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "META",
+    "score_close_only_pct": -0.7741689682006836,
+    "score_multitask_pct": 3.71549129486084,
+    "actual_weekly_pct": -4.3878616410202405
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.27638673782348633,
+    "score_multitask_pct": 3.3433079719543457,
+    "actual_weekly_pct": -6.223155580610696
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "MU",
+    "score_close_only_pct": 6.327414512634277,
+    "score_multitask_pct": 16.945350170135498,
+    "actual_weekly_pct": 13.610950597417059
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.8643865585327148,
+    "score_multitask_pct": 6.918740272521973,
+    "actual_weekly_pct": 0.04387924681250599
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.3009796142578125,
+    "score_multitask_pct": 6.000959873199463,
+    "actual_weekly_pct": 3.9462896869005837
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.3741731643676758,
+    "score_multitask_pct": 5.917859077453613,
+    "actual_weekly_pct": 2.109973978063251
+  },
+  {
+    "week_start": "2026-06-08",
+    "symbol": "XOM",
+    "score_close_only_pct": -0.054901838302612305,
+    "score_multitask_pct": -1.1422455310821533,
+    "actual_weekly_pct": -1.9410376851993316
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.4496088027954102,
+    "score_multitask_pct": 4.263615608215332,
+    "actual_weekly_pct": -4.7750110801712875
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "AMD",
+    "score_close_only_pct": 8.451402187347412,
+    "score_multitask_pct": 14.793455600738525,
+    "actual_weekly_pct": -2.938381035565696
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "AVGO",
+    "score_close_only_pct": 2.232837677001953,
+    "score_multitask_pct": 4.7139763832092285,
+    "actual_weekly_pct": -11.262918780213871
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 2.036905288696289,
+    "score_multitask_pct": 6.0446858406066895,
+    "actual_weekly_pct": -8.325403970461064
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "LLY",
+    "score_close_only_pct": 1.6898632049560547,
+    "score_multitask_pct": 5.311572551727295,
+    "actual_weekly_pct": 9.972059512294319
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "META",
+    "score_close_only_pct": -0.16831159591674805,
+    "score_multitask_pct": 4.078280925750732,
+    "actual_weekly_pct": -4.672390435534002
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.18984079360961914,
+    "score_multitask_pct": 5.114185810089111,
+    "actual_weekly_pct": -1.694779330316909
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "MU",
+    "score_close_only_pct": 9.300637245178223,
+    "score_multitask_pct": 14.715063571929932,
+    "actual_weekly_pct": -0.14638878596665572
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "NVDA",
+    "score_close_only_pct": 1.6003727912902832,
+    "score_multitask_pct": 4.545831680297852,
+    "actual_weekly_pct": -8.619300133692743
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "TSLA",
+    "score_close_only_pct": 0.4269838333129883,
+    "score_multitask_pct": 5.73350191116333,
+    "actual_weekly_pct": -5.188643732927256
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "TSM",
+    "score_close_only_pct": 2.565169334411621,
+    "score_multitask_pct": 0.5046963691711426,
+    "actual_weekly_pct": -6.442047374756554
+  },
+  {
+    "week_start": "2026-06-22",
+    "symbol": "XOM",
+    "score_close_only_pct": -1.4724254608154297,
+    "score_multitask_pct": 1.2112736701965332,
+    "actual_weekly_pct": -0.9215617843117418
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.6867518424987793,
+    "score_multitask_pct": -1.7254412174224854,
+    "actual_weekly_pct": 2.1676448613434207
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "AMD",
+    "score_close_only_pct": 7.436227798461914,
+    "score_multitask_pct": 12.548542022705078,
+    "actual_weekly_pct": 7.738211493850211
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "AVGO",
+    "score_close_only_pct": 0.7026553153991699,
+    "score_multitask_pct": 1.1012673377990723,
+    "actual_weekly_pct": 10.964069267661113
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 1.419830322265625,
+    "score_multitask_pct": 1.8030285835266113,
+    "actual_weekly_pct": -0.7585260088772361
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.277839183807373,
+    "score_multitask_pct": 2.106046676635742,
+    "actual_weekly_pct": -2.086652009769163
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "META",
+    "score_close_only_pct": 0.16442537307739258,
+    "score_multitask_pct": -4.345971345901489,
+    "actual_weekly_pct": 14.806998446320785
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "MSFT",
+    "score_close_only_pct": 0.4422307014465332,
+    "score_multitask_pct": -1.2385308742523193,
+    "actual_weekly_pct": -1.3803130081834536
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "MU",
+    "score_close_only_pct": 8.365881443023682,
+    "score_multitask_pct": 18.597328662872314,
+    "actual_weekly_pct": 0.3833685517789398
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.8000373840332031,
+    "score_multitask_pct": 2.5798916816711426,
+    "actual_weekly_pct": 8.279014900795168
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "TSLA",
+    "score_close_only_pct": 1.1197209358215332,
+    "score_multitask_pct": 2.120649814605713,
+    "actual_weekly_pct": 3.6370560718305134
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.9832134246826172,
+    "score_multitask_pct": 3.069484233856201,
+    "actual_weekly_pct": -0.011520708984014139
+  },
+  {
+    "week_start": "2026-07-06",
+    "symbol": "XOM",
+    "score_close_only_pct": -1.444000005722046,
+    "score_multitask_pct": 1.3425946235656738,
+    "actual_weekly_pct": 1.305717844291121
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.6924619674682617,
+    "score_multitask_pct": 0.4010200500488281,
+    "actual_weekly_pct": 5.841679082297002
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "AMD",
+    "score_close_only_pct": 6.845259666442871,
+    "score_multitask_pct": 8.963549137115479,
+    "actual_weekly_pct": -11.136604572850196
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "AVGO",
+    "score_close_only_pct": 0.4743814468383789,
+    "score_multitask_pct": -3.5225391387939453,
+    "actual_weekly_pct": -7.2855500561298525
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.6284236907958984,
+    "score_multitask_pct": 2.148318290710449,
+    "actual_weekly_pct": -2.9144979773709556
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.1774768829345703,
+    "score_multitask_pct": 5.859076976776123,
+    "actual_weekly_pct": -0.7967466265003442
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "META",
+    "score_close_only_pct": 0.13118982315063477,
+    "score_multitask_pct": -12.736767530441284,
+    "actual_weekly_pct": -3.4667759664811504
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.13210773468017578,
+    "score_multitask_pct": -3.036212921142578,
+    "actual_weekly_pct": 2.264347203972572
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "MU",
+    "score_close_only_pct": 6.522762775421143,
+    "score_multitask_pct": 19.20788288116455,
+    "actual_weekly_pct": -13.3105256010168
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.6394624710083008,
+    "score_multitask_pct": -3.5383522510528564,
+    "actual_weekly_pct": -3.8632958361285996
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "TSLA",
+    "score_close_only_pct": 1.0013222694396973,
+    "score_multitask_pct": -0.01589655876159668,
+    "actual_weekly_pct": -6.601925834563238
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "TSM",
+    "score_close_only_pct": 1.1773347854614258,
+    "score_multitask_pct": 3.397214412689209,
+    "actual_weekly_pct": -8.232934380772438
+  },
+  {
+    "week_start": "2026-07-13",
+    "symbol": "XOM",
+    "score_close_only_pct": -0.5646228790283203,
+    "score_multitask_pct": -0.7829725742340088,
+    "actual_weekly_pct": 6.105987492364018
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.9334793090820312,
+    "score_multitask_pct": -3.4459710121154785,
+    "actual_weekly_pct": -0.21573717318008612
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "AMD",
+    "score_close_only_pct": 4.844784736633301,
+    "score_multitask_pct": 12.204349040985107,
+    "actual_weekly_pct": 5.282798516521692
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.6116688251495361,
+    "score_multitask_pct": -0.3722190856933594,
+    "actual_weekly_pct": 2.990596029727377
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "GOOGL",
+    "score_close_only_pct": 0.3989577293395996,
+    "score_multitask_pct": 1.3190269470214844,
+    "actual_weekly_pct": -7.794791831951519
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.2931933403015137,
+    "score_multitask_pct": 5.118966102600098,
+    "actual_weekly_pct": 1.4349843657941452
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "META",
+    "score_close_only_pct": -0.2405703067779541,
+    "score_multitask_pct": -2.4415552616119385,
+    "actual_weekly_pct": -7.866752303521807
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.5791187286376953,
+    "score_multitask_pct": -3.7910759449005127,
+    "actual_weekly_pct": -3.077546821334931
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "MU",
+    "score_close_only_pct": 5.581843852996826,
+    "score_multitask_pct": 19.642257690429688,
+    "actual_weekly_pct": 8.481064722859276
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.1692652702331543,
+    "score_multitask_pct": 1.3006091117858887,
+    "actual_weekly_pct": 1.9870809268821121
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "TSLA",
+    "score_close_only_pct": -0.06259679794311523,
+    "score_multitask_pct": 2.971017360687256,
+    "actual_weekly_pct": -17.805377116543987
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.720512866973877,
+    "score_multitask_pct": 4.419732093811035,
+    "actual_weekly_pct": 1.2651576691761868
+  },
+  {
+    "week_start": "2026-07-20",
+    "symbol": "XOM",
+    "score_close_only_pct": -0.0246584415435791,
+    "score_multitask_pct": -3.34663987159729,
+    "actual_weekly_pct": 6.50108699197558
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "AAPL",
+    "score_close_only_pct": 1.775503158569336,
+    "score_multitask_pct": 0.5478262901306152,
+    "actual_weekly_pct": -7.239801257267075
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "AMD",
+    "score_close_only_pct": 4.176652431488037,
+    "score_multitask_pct": 5.853283405303955,
+    "actual_weekly_pct": -8.77479015986311
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.3188133239746094,
+    "score_multitask_pct": -3.0411183834075928,
+    "actual_weekly_pct": 1.9271012496848705
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.6988406181335449,
+    "score_multitask_pct": 1.8713712692260742,
+    "actual_weekly_pct": 11.381127090722366
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "LLY",
+    "score_close_only_pct": 2.6938915252685547,
+    "score_multitask_pct": 4.303288459777832,
+    "actual_weekly_pct": -3.9455584158120782
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "META",
+    "score_close_only_pct": -0.9471595287322998,
+    "score_multitask_pct": 3.0063748359680176,
+    "actual_weekly_pct": -6.46515907708618
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "MSFT",
+    "score_close_only_pct": -0.9351372718811035,
+    "score_multitask_pct": 0.7615327835083008,
+    "actual_weekly_pct": 21.750061922618546
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "MU",
+    "score_close_only_pct": 5.28336763381958,
+    "score_multitask_pct": 9.676194190979004,
+    "actual_weekly_pct": -10.632497053286716
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "NVDA",
+    "score_close_only_pct": -0.20412802696228027,
+    "score_multitask_pct": -1.0504186153411865,
+    "actual_weekly_pct": -2.9443030582644636
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "TSLA",
+    "score_close_only_pct": -1.444852352142334,
+    "score_multitask_pct": 4.975605010986328,
+    "actual_weekly_pct": -0.5814162640373488
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.2904534339904785,
+    "score_multitask_pct": 2.1565675735473633,
+    "actual_weekly_pct": 0.208223973194821
+  },
+  {
+    "week_start": "2026-07-27",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.377047061920166,
+    "score_multitask_pct": -2.7410387992858887,
+    "actual_weekly_pct": -0.9557792638368423
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "AAPL",
+    "score_close_only_pct": 0.737154483795166,
+    "score_multitask_pct": 4.1792988777160645,
+    "actual_weekly_pct": 1.4308319114815449
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "AMD",
+    "score_close_only_pct": 2.5731801986694336,
+    "score_multitask_pct": 7.399189472198486,
+    "actual_weekly_pct": 1.51422693426424
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "AVGO",
+    "score_close_only_pct": -0.7126331329345703,
+    "score_multitask_pct": -1.2991786003112793,
+    "actual_weekly_pct": 9.884918595097014
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "GOOGL",
+    "score_close_only_pct": -0.6783366203308105,
+    "score_multitask_pct": -4.612082242965698,
+    "actual_weekly_pct": -0.5138620910209224
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "LLY",
+    "score_close_only_pct": 1.2971997261047363,
+    "score_multitask_pct": 4.414248466491699,
+    "actual_weekly_pct": 3.209323858337476
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "META",
+    "score_close_only_pct": -0.6343305110931396,
+    "score_multitask_pct": 4.845154285430908,
+    "actual_weekly_pct": 6.35698159122049
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "MSFT",
+    "score_close_only_pct": 1.0702013969421387,
+    "score_multitask_pct": -12.183588743209839,
+    "actual_weekly_pct": 7.589513883849719
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "MU",
+    "score_close_only_pct": 2.251613140106201,
+    "score_multitask_pct": 11.83408498764038,
+    "actual_weekly_pct": 6.626730020281024
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "NVDA",
+    "score_close_only_pct": 0.22765398025512695,
+    "score_multitask_pct": -2.144056558609009,
+    "actual_weekly_pct": 11.56164718000856
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "TSLA",
+    "score_close_only_pct": -1.7801463603973389,
+    "score_multitask_pct": 2.802300453186035,
+    "actual_weekly_pct": 5.581438769357372
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "TSM",
+    "score_close_only_pct": 0.2652764320373535,
+    "score_multitask_pct": 1.5918850898742676,
+    "actual_weekly_pct": 3.9060008769132626
+  },
+  {
+    "week_start": "2026-08-03",
+    "symbol": "XOM",
+    "score_close_only_pct": 0.06269216537475586,
+    "score_multitask_pct": -1.3765454292297363,
+    "actual_weekly_pct": -1.5440099830017262
+  }
+]

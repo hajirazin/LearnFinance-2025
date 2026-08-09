@@ -1,0 +1,23 @@
+{
+  "name": "LSTM_current_defaults",
+  "config": {
+    "input_size": 5,
+    "hidden_size": 128,
+    "num_layers": 2,
+    "dropout": 0.2,
+    "forecast_horizon": 5,
+    "sequence_length": 60,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "epochs": 100,
+    "validation_split": 0.2,
+    "use_returns": true,
+    "min_week_days": 3,
+    "gradient_clip_norm": 1.0,
+    "early_stopping_patience": 10
+  },
+  "train_loss": 0.00046425932007630104,
+  "val_loss": 0.0008896619256120175,
+  "baseline_loss": 0.0009242963860742748,
+  "note": "train_model_pytorch / build_dataset used as-is"
+}

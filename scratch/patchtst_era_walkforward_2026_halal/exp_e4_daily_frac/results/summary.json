@@ -1,0 +1,196 @@
+{
+  "y_train_stats": {
+    "n": 6720,
+    "y_mean": 0.0014180808793753386,
+    "y_std": 0.025564413517713547,
+    "y_p01": -0.06789282709360123,
+    "y_p99": 0.07557019829750089,
+    "y_min": -0.2639009356498718,
+    "y_max": 0.5229008197784424,
+    "frac_abs_gt_0_05": 0.052767857142857144,
+    "frac_abs_gt_0_10": 0.0073511904761904764
+  },
+  "train": {
+    "name": "E4_close_simple_frac",
+    "representation": "close_simple_return_fraction",
+    "example": "2% -> 0.02",
+    "num_input_channels": 1,
+    "scaling": null,
+    "lr": 0.0003,
+    "best_epoch": 10,
+    "best_val_mse": 0.0008583044060893977,
+    "baseline_mse": 0.0009515337878838181,
+    "beats_baseline_best": true,
+    "stopped_epoch": 25,
+    "ran_full_100": false,
+    "barely_trained": false
+  },
+  "walkforward": {
+    "n_rows": 1500,
+    "n_weeks": 25,
+    "mae_frac": 0.02150438819309294,
+    "mae_as_pct_points_display": 2.150438819309294,
+    "rmse_frac": 0.031128779789309627,
+    "mean_pred_frac": 0.0015394045755965635,
+    "mean_actual_frac": 0.0010776970858162901,
+    "std_pred_frac": 0.0014663630405658884,
+    "std_actual_frac": 0.031219073524308808,
+    "corr": 0.08730097851646305,
+    "dir_acc": 0.528,
+    "naive_predict0_mae_frac": 0.021582098140139654,
+    "beats_naive0": true,
+    "pred_min": -0.0005523237632587552,
+    "pred_max": 0.0035787830129265785,
+    "day1_mae_frac": 0.018774511099122034,
+    "day1_dir_acc": 0.5833333333333334,
+    "day2_mae_frac": 0.020420889335074032,
+    "day2_dir_acc": 0.4866666666666667,
+    "day3_mae_frac": 0.021911223094309352,
+    "day3_dir_acc": 0.54,
+    "day4_mae_frac": 0.023987038775030077,
+    "day4_dir_acc": 0.5733333333333334,
+    "day5_mae_frac": 0.022428278661929202,
+    "day5_dir_acc": 0.45666666666666667
+  },
+  "samples_first_week_3_symbols": [
+    {
+      "week_start": "2026-01-05",
+      "symbol": "NVDA",
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": -0.003866,
+          "pred_frac": 0.003423,
+          "actual_pct_display": -0.387,
+          "pred_pct_display": 0.342
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": -0.004678,
+          "pred_frac": 0.001033,
+          "actual_pct_display": -0.468,
+          "pred_pct_display": 0.103
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": 0.009987,
+          "pred_frac": 0.003009,
+          "actual_pct_display": 0.999,
+          "pred_pct_display": 0.301
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.021522,
+          "pred_frac": -0.000458,
+          "actual_pct_display": -2.152,
+          "pred_pct_display": -0.046
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": -0.000973,
+          "pred_frac": 0.000692,
+          "actual_pct_display": -0.097,
+          "pred_pct_display": 0.069
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "AAPL",
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": -0.013837,
+          "pred_frac": 0.003433,
+          "actual_pct_display": -1.384,
+          "pred_pct_display": 0.343
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": -0.018334,
+          "pred_frac": 0.001032,
+          "actual_pct_display": -1.833,
+          "pred_pct_display": 0.103
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": -0.007737,
+          "pred_frac": 0.003007,
+          "actual_pct_display": -0.774,
+          "pred_pct_display": 0.301
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.004955,
+          "pred_frac": -0.000464,
+          "actual_pct_display": -0.496,
+          "pred_pct_display": -0.046
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": 0.001274,
+          "pred_frac": 0.000691,
+          "actual_pct_display": 0.127,
+          "pred_pct_display": 0.069
+        }
+      ]
+    },
+    {
+      "week_start": "2026-01-05",
+      "symbol": "TSM",
+      "days": [
+        {
+          "day_i": 1,
+          "date": "2026-01-05",
+          "actual_frac": 0.00826,
+          "pred_frac": 0.003425,
+          "actual_pct_display": 0.826,
+          "pred_pct_display": 0.342
+        },
+        {
+          "day_i": 2,
+          "date": "2026-01-06",
+          "actual_frac": 0.016074,
+          "pred_frac": 0.001033,
+          "actual_pct_display": 1.607,
+          "pred_pct_display": 0.103
+        },
+        {
+          "day_i": 3,
+          "date": "2026-01-07",
+          "actual_frac": -0.026723,
+          "pred_frac": 0.003008,
+          "actual_pct_display": -2.672,
+          "pred_pct_display": 0.301
+        },
+        {
+          "day_i": 4,
+          "date": "2026-01-08",
+          "actual_frac": -0.002102,
+          "pred_frac": -0.000459,
+          "actual_pct_display": -0.21,
+          "pred_pct_display": -0.046
+        },
+        {
+          "day_i": 5,
+          "date": "2026-01-09",
+          "actual_frac": 0.017672,
+          "pred_frac": 0.000691,
+          "actual_pct_display": 1.767,
+          "pred_pct_display": 0.069
+        }
+      ]
+    }
+  ],
+  "note": "Fractions: 0.02 == +2%. Model is 1-channel close-only, RevIN off, predicts 5 next-day close simple returns. Baseline weekly_pp JSON kept."
+}

@@ -1,0 +1,2361 @@
+{
+  "metric": "pp = actual_weekly_pct - pred_weekly_pct; week_mae = mean |pp| across stocks",
+  "overall": {
+    "mae_pp_close_only": 5.0793,
+    "mae_pp_multitask": 6.6501,
+    "mean_signed_pp_close_only_actual_minus_pred": -0.3792,
+    "mean_signed_pp_multitask_actual_minus_pred": -0.534
+  },
+  "weeks": [
+    {
+      "week_start": "2026-01-05",
+      "week_end": "2026-01-09",
+      "mae_pp_close_only": 2.8886,
+      "mae_pp_multitask": 4.0587,
+      "mean_signed_pp_close_only": -0.692,
+      "mean_signed_pp_multitask": -1.111,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -4.295,
+          "pred_close_only_pct": 0.4827,
+          "pred_multitask_pct": 2.6875,
+          "pp_close_only": -4.7778,
+          "pp_multitask": -6.9825
+        },
+        "AMD": {
+          "actual_pct": -9.084,
+          "pred_close_only_pct": 0.5296,
+          "pred_multitask_pct": -1.9743,
+          "pp_close_only": -9.6136,
+          "pp_multitask": -7.1097
+        },
+        "AVGO": {
+          "actual_pct": -0.7623,
+          "pred_close_only_pct": 0.3368,
+          "pred_multitask_pct": 3.8609,
+          "pp_close_only": -1.0991,
+          "pp_multitask": -4.6232
+        },
+        "GOOGL": {
+          "actual_pct": 4.2583,
+          "pred_close_only_pct": 2.1314,
+          "pred_multitask_pct": 4.7043,
+          "pp_close_only": 2.1269,
+          "pp_multitask": -0.446
+        },
+        "LLY": {
+          "actual_pct": -1.555,
+          "pred_close_only_pct": 2.1132,
+          "pred_multitask_pct": 4.695,
+          "pp_close_only": -3.6683,
+          "pp_multitask": -6.2501
+        },
+        "META": {
+          "actual_pct": 0.4074,
+          "pred_close_only_pct": -0.724,
+          "pred_multitask_pct": -0.4,
+          "pp_close_only": 1.1314,
+          "pp_multitask": 0.8075
+        },
+        "MSFT": {
+          "actual_pct": 1.3405,
+          "pred_close_only_pct": -0.8278,
+          "pred_multitask_pct": 0.4733,
+          "pp_close_only": 2.1684,
+          "pp_multitask": 0.8673
+        },
+        "MU": {
+          "actual_pct": 9.4065,
+          "pred_close_only_pct": 4.5936,
+          "pred_multitask_pct": -1.502,
+          "pp_close_only": 4.8129,
+          "pp_multitask": 10.9085
+        },
+        "NVDA": {
+          "actual_pct": -2.1128,
+          "pred_close_only_pct": 0.2121,
+          "pred_multitask_pct": 0.4773,
+          "pp_close_only": -2.3249,
+          "pp_multitask": -2.5901
+        },
+        "TSLA": {
+          "actual_pct": 1.5842,
+          "pred_close_only_pct": 0.1486,
+          "pred_multitask_pct": 4.6005,
+          "pp_close_only": 1.4357,
+          "pp_multitask": -3.0163
+        },
+        "TSM": {
+          "actual_pct": 1.2578,
+          "pred_close_only_pct": 0.7386,
+          "pred_multitask_pct": -2.4339,
+          "pp_close_only": 0.5192,
+          "pp_multitask": 3.6917
+        },
+        "XOM": {
+          "actual_pct": 1.598,
+          "pred_close_only_pct": 0.6128,
+          "pred_multitask_pct": 0.1869,
+          "pp_close_only": 0.9852,
+          "pp_multitask": 1.4112
+        }
+      }
+    },
+    {
+      "week_start": "2026-01-12",
+      "week_end": "2026-01-16",
+      "mae_pp_close_only": 3.6742,
+      "mae_pp_multitask": 5.7712,
+      "mean_signed_pp_close_only": 0.5514,
+      "mean_signed_pp_multitask": 1.9504,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -1.4805,
+          "pred_close_only_pct": 0.403,
+          "pred_multitask_pct": 2.3696,
+          "pp_close_only": -1.8835,
+          "pp_multitask": -3.8501
+        },
+        "AMD": {
+          "actual_pct": 14.1064,
+          "pred_close_only_pct": -0.5263,
+          "pred_multitask_pct": -1.0965,
+          "pp_close_only": 14.6327,
+          "pp_multitask": 15.2029
+        },
+        "AVGO": {
+          "actual_pct": 1.9538,
+          "pred_close_only_pct": 0.0746,
+          "pred_multitask_pct": -0.8788,
+          "pp_close_only": 1.8792,
+          "pp_multitask": 2.8326
+        },
+        "GOOGL": {
+          "actual_pct": 0.4352,
+          "pred_close_only_pct": 2.4946,
+          "pred_multitask_pct": 1.4147,
+          "pp_close_only": -2.0594,
+          "pp_multitask": -0.9795
+        },
+        "LLY": {
+          "actual_pct": -2.3656,
+          "pred_close_only_pct": 2.306,
+          "pred_multitask_pct": 5.7082,
+          "pp_close_only": -4.6717,
+          "pp_multitask": -8.0739
+        },
+        "META": {
+          "actual_pct": -5.024,
+          "pred_close_only_pct": -0.6408,
+          "pred_multitask_pct": -1.8453,
+          "pp_close_only": -4.3833,
+          "pp_multitask": -3.1788
+        },
+        "MSFT": {
+          "actual_pct": -4.0519,
+          "pred_close_only_pct": -0.5521,
+          "pred_multitask_pct": -1.4075,
+          "pp_close_only": -3.4998,
+          "pp_multitask": -2.6444
+        },
+        "MU": {
+          "actual_pct": 5.1175,
+          "pred_close_only_pct": 5.3156,
+          "pred_multitask_pct": -6.1931,
+          "pp_close_only": -0.1981,
+          "pp_multitask": 11.3106
+        },
+        "NVDA": {
+          "actual_pct": 0.7411,
+          "pred_close_only_pct": 0.2602,
+          "pred_multitask_pct": -0.9534,
+          "pp_close_only": 0.4809,
+          "pp_multitask": 1.6945
+        },
+        "TSLA": {
+          "actual_pct": -1.6876,
+          "pred_close_only_pct": 0.3531,
+          "pred_multitask_pct": 2.5108,
+          "pp_close_only": -2.0407,
+          "pp_multitask": -4.1984
+        },
+        "TSM": {
+          "actual_pct": 5.7998,
+          "pred_close_only_pct": 0.7802,
+          "pred_multitask_pct": -4.0094,
+          "pp_close_only": 5.0196,
+          "pp_multitask": 9.8092
+        },
+        "XOM": {
+          "actual_pct": 4.2372,
+          "pred_close_only_pct": 0.8958,
+          "pred_multitask_pct": -1.2425,
+          "pp_close_only": 3.3414,
+          "pp_multitask": 5.4797
+        }
+      }
+    },
+    {
+      "week_start": "2026-01-26",
+      "week_end": "2026-01-30",
+      "mae_pp_close_only": 4.5307,
+      "mae_pp_multitask": 4.082,
+      "mean_signed_pp_close_only": -0.1353,
+      "mean_signed_pp_multitask": 0.6566,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 4.6122,
+          "pred_close_only_pct": -0.6496,
+          "pred_multitask_pct": 0.9063,
+          "pp_close_only": 5.2617,
+          "pp_multitask": 3.7059
+        },
+        "AMD": {
+          "actual_pct": -8.8378,
+          "pred_close_only_pct": 0.0564,
+          "pred_multitask_pct": -9.5601,
+          "pp_close_only": -8.8942,
+          "pp_multitask": 0.7223
+        },
+        "AVGO": {
+          "actual_pct": 3.5151,
+          "pred_close_only_pct": -0.9666,
+          "pred_multitask_pct": 1.5684,
+          "pp_close_only": 4.4817,
+          "pp_multitask": 1.9467
+        },
+        "GOOGL": {
+          "actual_pct": 3.0708,
+          "pred_close_only_pct": 1.6883,
+          "pred_multitask_pct": 2.4007,
+          "pp_close_only": 1.3825,
+          "pp_multitask": 0.6701
+        },
+        "LLY": {
+          "actual_pct": -2.5501,
+          "pred_close_only_pct": 2.1682,
+          "pred_multitask_pct": 4.337,
+          "pp_close_only": -4.7183,
+          "pp_multitask": -6.8871
+        },
+        "META": {
+          "actual_pct": 8.765,
+          "pred_close_only_pct": -1.044,
+          "pred_multitask_pct": -0.3898,
+          "pp_close_only": 9.809,
+          "pp_multitask": 9.1548
+        },
+        "MSFT": {
+          "actual_pct": -7.6532,
+          "pred_close_only_pct": -1.0669,
+          "pred_multitask_pct": -0.9093,
+          "pp_close_only": -6.5863,
+          "pp_multitask": -6.7439
+        },
+        "MU": {
+          "actual_pct": 3.8108,
+          "pred_close_only_pct": 5.1775,
+          "pred_multitask_pct": 0.6919,
+          "pp_close_only": -1.3666,
+          "pp_multitask": 3.1189
+        },
+        "NVDA": {
+          "actual_pct": 1.8437,
+          "pred_close_only_pct": -0.1285,
+          "pred_multitask_pct": -1.3112,
+          "pp_close_only": 1.9721,
+          "pp_multitask": 3.1548
+        },
+        "TSLA": {
+          "actual_pct": -4.1531,
+          "pred_close_only_pct": -0.0141,
+          "pred_multitask_pct": 1.2502,
+          "pp_close_only": -4.139,
+          "pp_multitask": -5.4034
+        },
+        "TSM": {
+          "actual_pct": -1.2871,
+          "pred_close_only_pct": 1.0047,
+          "pred_multitask_pct": 0.231,
+          "pp_close_only": -2.2918,
+          "pp_multitask": -1.518
+        },
+        "XOM": {
+          "actual_pct": 4.764,
+          "pred_close_only_pct": 1.2985,
+          "pred_multitask_pct": -1.1938,
+          "pp_close_only": 3.4655,
+          "pp_multitask": 5.9578
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-02",
+      "week_end": "2026-02-06",
+      "mae_pp_close_only": 5.4182,
+      "mae_pp_multitask": 6.2546,
+      "mean_signed_pp_close_only": -2.4531,
+      "mean_signed_pp_multitask": -3.6239,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 7.1836,
+          "pred_close_only_pct": -0.2814,
+          "pred_multitask_pct": -0.7684,
+          "pp_close_only": 7.465,
+          "pp_multitask": 7.952
+        },
+        "AMD": {
+          "actual_pct": -11.9503,
+          "pred_close_only_pct": -0.7083,
+          "pred_multitask_pct": 0.2417,
+          "pp_close_only": -11.2421,
+          "pp_multitask": -12.192
+        },
+        "AVGO": {
+          "actual_pct": 0.489,
+          "pred_close_only_pct": -0.6919,
+          "pred_multitask_pct": 1.8802,
+          "pp_close_only": 1.1809,
+          "pp_multitask": -1.3912
+        },
+        "GOOGL": {
+          "actual_pct": -4.4793,
+          "pred_close_only_pct": 1.503,
+          "pred_multitask_pct": 3.6744,
+          "pp_close_only": -5.9823,
+          "pp_multitask": -8.1537
+        },
+        "LLY": {
+          "actual_pct": 2.0277,
+          "pred_close_only_pct": 1.258,
+          "pred_multitask_pct": 2.9521,
+          "pp_close_only": 0.7697,
+          "pp_multitask": -0.9244
+        },
+        "META": {
+          "actual_pct": -7.6818,
+          "pred_close_only_pct": 1.0134,
+          "pred_multitask_pct": -2.4977,
+          "pp_close_only": -8.6952,
+          "pp_multitask": -5.1841
+        },
+        "MSFT": {
+          "actual_pct": -6.7745,
+          "pred_close_only_pct": -1.4829,
+          "pred_multitask_pct": 1.7243,
+          "pp_close_only": -5.2916,
+          "pp_multitask": -8.4988
+        },
+        "MU": {
+          "actual_pct": -4.8665,
+          "pred_close_only_pct": 4.9447,
+          "pred_multitask_pct": 7.2589,
+          "pp_close_only": -9.8112,
+          "pp_multitask": -12.1254
+        },
+        "NVDA": {
+          "actual_pct": -2.9927,
+          "pred_close_only_pct": -0.6193,
+          "pred_multitask_pct": 0.3078,
+          "pp_close_only": -2.3734,
+          "pp_multitask": -3.3005
+        },
+        "TSLA": {
+          "actual_pct": -4.4841,
+          "pred_close_only_pct": -0.6523,
+          "pred_multitask_pct": 3.0168,
+          "pp_close_only": -3.8318,
+          "pp_multitask": -7.5009
+        },
+        "TSM": {
+          "actual_pct": 5.533,
+          "pred_close_only_pct": 0.7143,
+          "pred_multitask_pct": 3.6867,
+          "pp_close_only": 4.8188,
+          "pp_multitask": 1.8463
+        },
+        "XOM": {
+          "actual_pct": 5.4102,
+          "pred_close_only_pct": 1.8538,
+          "pred_multitask_pct": -0.5758,
+          "pp_close_only": 3.5564,
+          "pp_multitask": 5.986
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-09",
+      "week_end": "2026-02-13",
+      "mae_pp_close_only": 2.8821,
+      "mae_pp_multitask": 3.348,
+      "mean_signed_pp_close_only": -1.4144,
+      "mean_signed_pp_multitask": -2.8551,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -8.0325,
+          "pred_close_only_pct": 0.2847,
+          "pred_multitask_pct": -3.4404,
+          "pp_close_only": -8.3172,
+          "pp_multitask": -4.5921
+        },
+        "AMD": {
+          "actual_pct": -0.5373,
+          "pred_close_only_pct": -1.2296,
+          "pred_multitask_pct": 4.6936,
+          "pp_close_only": 0.6922,
+          "pp_multitask": -5.2309
+        },
+        "AVGO": {
+          "actual_pct": -2.3279,
+          "pred_close_only_pct": -0.5543,
+          "pred_multitask_pct": -2.0272,
+          "pp_close_only": -1.7736,
+          "pp_multitask": -0.3007
+        },
+        "GOOGL": {
+          "actual_pct": -5.3088,
+          "pred_close_only_pct": 0.9278,
+          "pred_multitask_pct": 3.8827,
+          "pp_close_only": -6.2366,
+          "pp_multitask": -9.1915
+        },
+        "LLY": {
+          "actual_pct": -1.718,
+          "pred_close_only_pct": 0.8028,
+          "pred_multitask_pct": -1.1181,
+          "pp_close_only": -2.5209,
+          "pp_multitask": -0.6
+        },
+        "META": {
+          "actual_pct": -3.2791,
+          "pred_close_only_pct": 0.4212,
+          "pred_multitask_pct": 1.7926,
+          "pp_close_only": -3.7004,
+          "pp_multitask": -5.0717
+        },
+        "MSFT": {
+          "actual_pct": 0.0449,
+          "pred_close_only_pct": -1.8807,
+          "pred_multitask_pct": 1.8945,
+          "pp_close_only": 1.9255,
+          "pp_multitask": -1.8497
+        },
+        "MU": {
+          "actual_pct": 4.2996,
+          "pred_close_only_pct": 3.848,
+          "pred_multitask_pct": 11.198,
+          "pp_close_only": 0.4516,
+          "pp_multitask": -6.8984
+        },
+        "NVDA": {
+          "actual_pct": -1.4023,
+          "pred_close_only_pct": -0.5508,
+          "pred_multitask_pct": 0.4168,
+          "pp_close_only": -0.8515,
+          "pp_multitask": -1.8191
+        },
+        "TSLA": {
+          "actual_pct": 1.5397,
+          "pred_close_only_pct": -0.6145,
+          "pred_multitask_pct": 3.1316,
+          "pp_close_only": 2.1542,
+          "pp_multitask": -1.5918
+        },
+        "TSM": {
+          "actual_pct": 5.0193,
+          "pred_close_only_pct": 1.4372,
+          "pred_multitask_pct": 2.0619,
+          "pp_close_only": 3.5822,
+          "pp_multitask": 2.9574
+        },
+        "XOM": {
+          "actual_pct": -0.4026,
+          "pred_close_only_pct": 1.9762,
+          "pred_multitask_pct": -0.33,
+          "pp_close_only": -2.3787,
+          "pp_multitask": -0.0726
+        }
+      }
+    },
+    {
+      "week_start": "2026-02-23",
+      "week_end": "2026-02-27",
+      "mae_pp_close_only": 2.9349,
+      "mae_pp_multitask": 3.3698,
+      "mean_signed_pp_close_only": -1.8421,
+      "mean_signed_pp_multitask": -2.2356,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -0.1512,
+          "pred_close_only_pct": -0.189,
+          "pred_multitask_pct": -1.5505,
+          "pp_close_only": 0.0378,
+          "pp_multitask": 1.3993
+        },
+        "AMD": {
+          "actual_pct": 0.03,
+          "pred_close_only_pct": -0.079,
+          "pred_multitask_pct": 4.1929,
+          "pp_close_only": 0.109,
+          "pp_multitask": -4.1629
+        },
+        "AVGO": {
+          "actual_pct": -3.9381,
+          "pred_close_only_pct": -0.1342,
+          "pred_multitask_pct": -6.3439,
+          "pp_close_only": -3.8039,
+          "pp_multitask": 2.4058
+        },
+        "GOOGL": {
+          "actual_pct": -1.0223,
+          "pred_close_only_pct": 0.4471,
+          "pred_multitask_pct": 0.9663,
+          "pp_close_only": -1.4694,
+          "pp_multitask": -1.9886
+        },
+        "LLY": {
+          "actual_pct": 4.2069,
+          "pred_close_only_pct": -0.3585,
+          "pred_multitask_pct": 2.0247,
+          "pp_close_only": 4.5654,
+          "pp_multitask": 2.1822
+        },
+        "META": {
+          "actual_pct": -1.1408,
+          "pred_close_only_pct": 0.864,
+          "pred_multitask_pct": 2.0038,
+          "pp_close_only": -2.0048,
+          "pp_multitask": -3.1446
+        },
+        "MSFT": {
+          "actual_pct": -1.1303,
+          "pred_close_only_pct": -1.3928,
+          "pred_multitask_pct": -1.3462,
+          "pp_close_only": 0.2625,
+          "pp_multitask": 0.2158
+        },
+        "MU": {
+          "actual_pct": -3.6901,
+          "pred_close_only_pct": 6.3106,
+          "pred_multitask_pct": 8.9373,
+          "pp_close_only": -10.0007,
+          "pp_multitask": -12.6274
+        },
+        "NVDA": {
+          "actual_pct": -6.6537,
+          "pred_close_only_pct": 0.5323,
+          "pred_multitask_pct": -0.0127,
+          "pp_close_only": -7.186,
+          "pp_multitask": -6.6409
+        },
+        "TSLA": {
+          "actual_pct": -2.2607,
+          "pred_close_only_pct": 0.4758,
+          "pred_multitask_pct": 2.1038,
+          "pp_close_only": -2.7365,
+          "pp_multitask": -4.3645
+        },
+        "TSM": {
+          "actual_pct": 1.0903,
+          "pred_close_only_pct": 2.5507,
+          "pred_multitask_pct": 0.4885,
+          "pp_close_only": -1.4604,
+          "pp_multitask": 0.6018
+        },
+        "XOM": {
+          "actual_pct": 3.5443,
+          "pred_close_only_pct": 1.962,
+          "pred_multitask_pct": 4.2478,
+          "pp_close_only": 1.5823,
+          "pp_multitask": -0.7035
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-02",
+      "week_end": "2026-03-06",
+      "mae_pp_close_only": 4.8216,
+      "mae_pp_multitask": 6.4133,
+      "mean_signed_pp_close_only": -2.9484,
+      "mean_signed_pp_multitask": -4.6403,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -2.5437,
+          "pred_close_only_pct": -0.5464,
+          "pred_multitask_pct": 0.6488,
+          "pp_close_only": -1.9973,
+          "pp_multitask": -3.1925
+        },
+        "AMD": {
+          "actual_pct": -3.8859,
+          "pred_close_only_pct": -0.7015,
+          "pred_multitask_pct": 2.0983,
+          "pp_close_only": -3.1844,
+          "pp_multitask": -5.9842
+        },
+        "AVGO": {
+          "actual_pct": 3.4204,
+          "pred_close_only_pct": -1.5121,
+          "pred_multitask_pct": -0.6904,
+          "pp_close_only": 4.9326,
+          "pp_multitask": 4.1109
+        },
+        "GOOGL": {
+          "actual_pct": -4.2469,
+          "pred_close_only_pct": -0.0563,
+          "pred_multitask_pct": 1.7102,
+          "pp_close_only": -4.1905,
+          "pp_multitask": -5.9571
+        },
+        "LLY": {
+          "actual_pct": -5.8613,
+          "pred_close_only_pct": -0.0019,
+          "pred_multitask_pct": 0.1037,
+          "pp_close_only": -5.8594,
+          "pp_multitask": -5.965
+        },
+        "META": {
+          "actual_pct": -0.5122,
+          "pred_close_only_pct": 0.1342,
+          "pred_multitask_pct": 1.467,
+          "pp_close_only": -0.6464,
+          "pp_multitask": -1.9792
+        },
+        "MSFT": {
+          "actual_pct": 4.13,
+          "pred_close_only_pct": -1.7348,
+          "pred_multitask_pct": -2.3975,
+          "pp_close_only": 5.8648,
+          "pp_multitask": 6.5275
+        },
+        "MU": {
+          "actual_pct": -10.202,
+          "pred_close_only_pct": 4.681,
+          "pred_multitask_pct": 11.6806,
+          "pp_close_only": -14.883,
+          "pp_multitask": -21.8826
+        },
+        "NVDA": {
+          "actual_pct": 0.3556,
+          "pred_close_only_pct": -0.0861,
+          "pred_multitask_pct": 2.9478,
+          "pp_close_only": 0.4416,
+          "pp_multitask": -2.5923
+        },
+        "TSLA": {
+          "actual_pct": -1.436,
+          "pred_close_only_pct": -0.5091,
+          "pred_multitask_pct": 0.0459,
+          "pp_close_only": -0.9269,
+          "pp_multitask": -1.4819
+        },
+        "TSM": {
+          "actual_pct": -9.528,
+          "pred_close_only_pct": 2.265,
+          "pred_multitask_pct": 2.9404,
+          "pp_close_only": -11.793,
+          "pp_multitask": -12.4684
+        },
+        "XOM": {
+          "actual_pct": -0.8459,
+          "pred_close_only_pct": 2.2932,
+          "pred_multitask_pct": 3.9725,
+          "pp_close_only": -3.1391,
+          "pp_multitask": -4.8184
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-09",
+      "week_end": "2026-03-13",
+      "mae_pp_close_only": 2.4439,
+      "mae_pp_multitask": 2.4567,
+      "mean_signed_pp_close_only": 0.4631,
+      "mean_signed_pp_multitask": -1.7466,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -2.8509,
+          "pred_close_only_pct": -0.6084,
+          "pred_multitask_pct": 0.9505,
+          "pp_close_only": -2.2425,
+          "pp_multitask": -3.8014
+        },
+        "AMD": {
+          "actual_pct": 0.4989,
+          "pred_close_only_pct": -1.0798,
+          "pred_multitask_pct": 2.3985,
+          "pp_close_only": 1.5787,
+          "pp_multitask": -1.8996
+        },
+        "AVGO": {
+          "actual_pct": -2.5176,
+          "pred_close_only_pct": -1.5526,
+          "pred_multitask_pct": -0.886,
+          "pp_close_only": -0.965,
+          "pp_multitask": -1.6316
+        },
+        "GOOGL": {
+          "actual_pct": 1.2596,
+          "pred_close_only_pct": -0.3881,
+          "pred_multitask_pct": 1.713,
+          "pp_close_only": 1.6477,
+          "pp_multitask": -0.4535
+        },
+        "LLY": {
+          "actual_pct": -0.5301,
+          "pred_close_only_pct": -0.0134,
+          "pred_multitask_pct": 1.4865,
+          "pp_close_only": -0.5168,
+          "pp_multitask": -2.0167
+        },
+        "META": {
+          "actual_pct": -4.8305,
+          "pred_close_only_pct": -0.2401,
+          "pred_multitask_pct": 1.4597,
+          "pp_close_only": -4.5904,
+          "pp_multitask": -6.2902
+        },
+        "MSFT": {
+          "actual_pct": -3.2791,
+          "pred_close_only_pct": -1.476,
+          "pred_multitask_pct": -4.8317,
+          "pp_close_only": -1.803,
+          "pp_multitask": 1.5527
+        },
+        "MU": {
+          "actual_pct": 15.077,
+          "pred_close_only_pct": 3.5208,
+          "pred_multitask_pct": 12.8469,
+          "pp_close_only": 11.5562,
+          "pp_multitask": 2.23
+        },
+        "NVDA": {
+          "actual_pct": 1.3665,
+          "pred_close_only_pct": -0.3134,
+          "pred_multitask_pct": 2.5237,
+          "pp_close_only": 1.68,
+          "pp_multitask": -1.1572
+        },
+        "TSLA": {
+          "actual_pct": -1.3939,
+          "pred_close_only_pct": -0.8094,
+          "pred_multitask_pct": -1.8721,
+          "pp_close_only": -0.5845,
+          "pp_multitask": 0.4782
+        },
+        "TSM": {
+          "actual_pct": -0.1712,
+          "pred_close_only_pct": 1.0113,
+          "pred_multitask_pct": 6.2901,
+          "pp_close_only": -1.1824,
+          "pp_multitask": -6.4613
+        },
+        "XOM": {
+          "actual_pct": 3.2471,
+          "pred_close_only_pct": 2.2676,
+          "pred_multitask_pct": 4.7552,
+          "pp_close_only": 0.9795,
+          "pp_multitask": -1.5081
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-16",
+      "week_end": "2026-03-20",
+      "mae_pp_close_only": 3.2763,
+      "mae_pp_multitask": 4.7538,
+      "mean_signed_pp_close_only": -2.5063,
+      "mean_signed_pp_multitask": -4.1939,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -0.8516,
+          "pred_close_only_pct": -0.7317,
+          "pred_multitask_pct": 1.4357,
+          "pp_close_only": -0.1199,
+          "pp_multitask": -2.2873
+        },
+        "AMD": {
+          "actual_pct": 4.1057,
+          "pred_close_only_pct": -0.5143,
+          "pred_multitask_pct": 0.7461,
+          "pp_close_only": 4.62,
+          "pp_multitask": 3.3596
+        },
+        "AVGO": {
+          "actual_pct": -3.6162,
+          "pred_close_only_pct": -0.3994,
+          "pred_multitask_pct": 0.9815,
+          "pp_close_only": -3.2168,
+          "pp_multitask": -4.5977
+        },
+        "GOOGL": {
+          "actual_pct": -0.4234,
+          "pred_close_only_pct": -0.1354,
+          "pred_multitask_pct": 1.787,
+          "pp_close_only": -0.2881,
+          "pp_multitask": -2.2104
+        },
+        "LLY": {
+          "actual_pct": -7.9567,
+          "pred_close_only_pct": -0.5799,
+          "pred_multitask_pct": 0.4168,
+          "pp_close_only": -7.3768,
+          "pp_multitask": -8.3735
+        },
+        "META": {
+          "actual_pct": -3.267,
+          "pred_close_only_pct": -0.4061,
+          "pred_multitask_pct": 2.4704,
+          "pp_close_only": -2.8609,
+          "pp_multitask": -5.7374
+        },
+        "MSFT": {
+          "actual_pct": -3.4585,
+          "pred_close_only_pct": -1.4747,
+          "pred_multitask_pct": -2.236,
+          "pp_close_only": -1.9838,
+          "pp_multitask": -1.2224
+        },
+        "MU": {
+          "actual_pct": -0.758,
+          "pred_close_only_pct": 5.0805,
+          "pred_multitask_pct": 8.4444,
+          "pp_close_only": -5.8385,
+          "pp_multitask": -9.2024
+        },
+        "NVDA": {
+          "actual_pct": -4.1886,
+          "pred_close_only_pct": 0.2283,
+          "pred_multitask_pct": 1.848,
+          "pp_close_only": -4.4169,
+          "pp_multitask": -6.0367
+        },
+        "TSLA": {
+          "actual_pct": -5.9407,
+          "pred_close_only_pct": -1.5701,
+          "pred_multitask_pct": -0.9761,
+          "pp_close_only": -4.3706,
+          "pp_multitask": -4.9646
+        },
+        "TSM": {
+          "actual_pct": -2.681,
+          "pred_close_only_pct": 1.4054,
+          "pred_multitask_pct": 5.8841,
+          "pp_close_only": -4.0864,
+          "pp_multitask": -8.5651
+        },
+        "XOM": {
+          "actual_pct": 2.2739,
+          "pred_close_only_pct": 2.4106,
+          "pred_multitask_pct": 2.7627,
+          "pp_close_only": -0.1367,
+          "pp_multitask": -0.4888
+        }
+      }
+    },
+    {
+      "week_start": "2026-03-23",
+      "week_end": "2026-03-27",
+      "mae_pp_close_only": 4.8791,
+      "mae_pp_multitask": 6.264,
+      "mean_signed_pp_close_only": -3.7151,
+      "mean_signed_pp_multitask": -5.6026,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 0.3266,
+          "pred_close_only_pct": -0.7077,
+          "pred_multitask_pct": 1.2916,
+          "pp_close_only": 1.0344,
+          "pp_multitask": -0.965
+        },
+        "AMD": {
+          "actual_pct": 0.3278,
+          "pred_close_only_pct": -0.4731,
+          "pred_multitask_pct": -0.5867,
+          "pp_close_only": 0.8009,
+          "pp_multitask": 0.9146
+        },
+        "AVGO": {
+          "actual_pct": -3.1658,
+          "pred_close_only_pct": -0.7476,
+          "pred_multitask_pct": 0.797,
+          "pp_close_only": -2.4181,
+          "pp_multitask": -3.9628
+        },
+        "GOOGL": {
+          "actual_pct": -8.8571,
+          "pred_close_only_pct": -0.2148,
+          "pred_multitask_pct": 0.8001,
+          "pp_close_only": -8.6423,
+          "pp_multitask": -9.6572
+        },
+        "LLY": {
+          "actual_pct": -3.1389,
+          "pred_close_only_pct": -1.3731,
+          "pred_multitask_pct": 1.6827,
+          "pp_close_only": -1.7658,
+          "pp_multitask": -4.8215
+        },
+        "META": {
+          "actual_pct": -11.4443,
+          "pred_close_only_pct": -0.8574,
+          "pred_multitask_pct": 1.9771,
+          "pp_close_only": -10.5869,
+          "pp_multitask": -13.4213
+        },
+        "MSFT": {
+          "actual_pct": -6.5729,
+          "pred_close_only_pct": -1.9351,
+          "pred_multitask_pct": -1.729,
+          "pp_close_only": -4.6378,
+          "pp_multitask": -4.8439
+        },
+        "MU": {
+          "actual_pct": -15.5309,
+          "pred_close_only_pct": 3.684,
+          "pred_multitask_pct": 5.8238,
+          "pp_close_only": -19.2148,
+          "pp_multitask": -21.3546
+        },
+        "NVDA": {
+          "actual_pct": -2.9994,
+          "pred_close_only_pct": -0.4737,
+          "pred_multitask_pct": 0.9981,
+          "pp_close_only": -2.5258,
+          "pp_multitask": -3.9975
+        },
+        "TSLA": {
+          "actual_pct": -1.6659,
+          "pred_close_only_pct": -2.2993,
+          "pred_multitask_pct": 0.8766,
+          "pp_close_only": 0.6334,
+          "pp_multitask": -2.5425
+        },
+        "TSM": {
+          "actual_pct": -0.7593,
+          "pred_close_only_pct": 1.0145,
+          "pred_multitask_pct": 4.8736,
+          "pp_close_only": -1.7738,
+          "pp_multitask": -5.6329
+        },
+        "XOM": {
+          "actual_pct": 7.0896,
+          "pred_close_only_pct": 2.5741,
+          "pred_multitask_pct": 4.0358,
+          "pp_close_only": 4.5156,
+          "pp_multitask": 3.0538
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-06",
+      "week_end": "2026-04-10",
+      "mae_pp_close_only": 7.8064,
+      "mae_pp_multitask": 8.4102,
+      "mean_signed_pp_close_only": 6.2611,
+      "mean_signed_pp_multitask": 6.3775,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 1.7818,
+          "pred_close_only_pct": -0.1784,
+          "pred_multitask_pct": -0.3361,
+          "pp_close_only": 1.9603,
+          "pp_multitask": 2.1179
+        },
+        "AMD": {
+          "actual_pct": 12.6621,
+          "pred_close_only_pct": 0.1969,
+          "pred_multitask_pct": -6.2037,
+          "pp_close_only": 12.4651,
+          "pp_multitask": 18.8658
+        },
+        "AVGO": {
+          "actual_pct": 18.1211,
+          "pred_close_only_pct": -0.6922,
+          "pred_multitask_pct": 0.2212,
+          "pp_close_only": 18.8134,
+          "pp_multitask": 17.8999
+        },
+        "GOOGL": {
+          "actual_pct": 7.259,
+          "pred_close_only_pct": -0.4751,
+          "pred_multitask_pct": -2.6614,
+          "pp_close_only": 7.7342,
+          "pp_multitask": 9.9204
+        },
+        "LLY": {
+          "actual_pct": 0.4158,
+          "pred_close_only_pct": -1.0197,
+          "pred_multitask_pct": -3.4707,
+          "pp_close_only": 1.4355,
+          "pp_multitask": 3.8865
+        },
+        "META": {
+          "actual_pct": 9.6438,
+          "pred_close_only_pct": -1.11,
+          "pred_multitask_pct": 0.6079,
+          "pp_close_only": 10.7539,
+          "pp_multitask": 9.0359
+        },
+        "MSFT": {
+          "actual_pct": -0.6935,
+          "pred_close_only_pct": -2.0059,
+          "pred_multitask_pct": -1.5634,
+          "pp_close_only": 1.3124,
+          "pp_multitask": 0.8699
+        },
+        "MU": {
+          "actual_pct": 14.84,
+          "pred_close_only_pct": 0.6234,
+          "pred_multitask_pct": 4.6427,
+          "pp_close_only": 14.2166,
+          "pp_multitask": 10.1973
+        },
+        "NVDA": {
+          "actual_pct": 6.3363,
+          "pred_close_only_pct": -0.4067,
+          "pred_multitask_pct": -0.9071,
+          "pp_close_only": 6.743,
+          "pp_multitask": 7.2434
+        },
+        "TSLA": {
+          "actual_pct": -3.228,
+          "pred_close_only_pct": -1.4706,
+          "pred_multitask_pct": -0.8139,
+          "pp_close_only": -1.7574,
+          "pp_multitask": -2.4141
+        },
+        "TSM": {
+          "actual_pct": 9.3086,
+          "pred_close_only_pct": 0.338,
+          "pred_multitask_pct": 0.6193,
+          "pp_close_only": 8.9707,
+          "pp_multitask": 8.6894
+        },
+        "XOM": {
+          "actual_pct": -5.0906,
+          "pred_close_only_pct": 2.4239,
+          "pred_multitask_pct": 4.6911,
+          "pp_close_only": -7.5145,
+          "pp_multitask": -9.7817
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-13",
+      "week_end": "2026-04-17",
+      "mae_pp_close_only": 7.9513,
+      "mae_pp_multitask": 13.0312,
+      "mean_signed_pp_close_only": 6.8118,
+      "mean_signed_pp_multitask": 11.3858,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 3.7431,
+          "pred_close_only_pct": 0.0118,
+          "pred_multitask_pct": -0.1162,
+          "pp_close_only": 3.7313,
+          "pp_multitask": 3.8593
+        },
+        "AMD": {
+          "actual_pct": 13.61,
+          "pred_close_only_pct": 0.9407,
+          "pred_multitask_pct": -15.2247,
+          "pp_close_only": 12.6693,
+          "pp_multitask": 28.8347
+        },
+        "AVGO": {
+          "actual_pct": 9.4173,
+          "pred_close_only_pct": 0.4364,
+          "pred_multitask_pct": -9.8234,
+          "pp_close_only": 8.9809,
+          "pp_multitask": 19.2407
+        },
+        "GOOGL": {
+          "actual_pct": 7.7039,
+          "pred_close_only_pct": -0.4454,
+          "pred_multitask_pct": -5.5635,
+          "pp_close_only": 8.1494,
+          "pp_multitask": 13.2674
+        },
+        "LLY": {
+          "actual_pct": -1.3241,
+          "pred_close_only_pct": -1.0866,
+          "pred_multitask_pct": -1.0224,
+          "pp_close_only": -0.2375,
+          "pp_multitask": -0.3018
+        },
+        "META": {
+          "actual_pct": 9.3179,
+          "pred_close_only_pct": 0.0358,
+          "pred_multitask_pct": -6.468,
+          "pp_close_only": 9.2822,
+          "pp_multitask": 15.7859
+        },
+        "MSFT": {
+          "actual_pct": 13.9995,
+          "pred_close_only_pct": -1.9286,
+          "pred_multitask_pct": -2.3485,
+          "pp_close_only": 15.9282,
+          "pp_multitask": 16.348
+        },
+        "MU": {
+          "actual_pct": 8.198,
+          "pred_close_only_pct": 1.9208,
+          "pred_multitask_pct": -6.0288,
+          "pp_close_only": 6.2772,
+          "pp_multitask": 14.2268
+        },
+        "NVDA": {
+          "actual_pct": 6.9183,
+          "pred_close_only_pct": 0.1685,
+          "pred_multitask_pct": -6.3746,
+          "pp_close_only": 6.7498,
+          "pp_multitask": 13.2929
+        },
+        "TSLA": {
+          "actual_pct": 14.8073,
+          "pred_close_only_pct": -2.0034,
+          "pred_multitask_pct": -1.8809,
+          "pp_close_only": 16.8107,
+          "pp_multitask": 16.6882
+        },
+        "TSM": {
+          "actual_pct": -0.027,
+          "pred_close_only_pct": 0.9883,
+          "pred_multitask_pct": -4.9853,
+          "pp_close_only": -1.0152,
+          "pp_multitask": 4.9583
+        },
+        "XOM": {
+          "actual_pct": -3.9801,
+          "pred_close_only_pct": 1.6044,
+          "pred_multitask_pct": 5.5907,
+          "pp_close_only": -5.5844,
+          "pp_multitask": -9.5708
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-20",
+      "week_end": "2026-04-24",
+      "mae_pp_close_only": 4.8596,
+      "mae_pp_multitask": 10.1726,
+      "mean_signed_pp_close_only": 2.7975,
+      "mean_signed_pp_multitask": 9.4104,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 0.3071,
+          "pred_close_only_pct": 0.7591,
+          "pred_multitask_pct": -3.6847,
+          "pp_close_only": -0.4519,
+          "pp_multitask": 3.9919
+        },
+        "AMD": {
+          "actual_pct": 24.9362,
+          "pred_close_only_pct": 0.9785,
+          "pred_multitask_pct": -9.2197,
+          "pp_close_only": 23.9577,
+          "pp_multitask": 34.1559
+        },
+        "AVGO": {
+          "actual_pct": 3.9898,
+          "pred_close_only_pct": 1.828,
+          "pred_multitask_pct": -7.6562,
+          "pp_close_only": 2.1617,
+          "pp_multitask": 11.646
+        },
+        "GOOGL": {
+          "actual_pct": 0.7961,
+          "pred_close_only_pct": 0.3603,
+          "pred_multitask_pct": -10.4661,
+          "pp_close_only": 0.4357,
+          "pp_multitask": 11.2621
+        },
+        "LLY": {
+          "actual_pct": -4.646,
+          "pred_close_only_pct": -1.2098,
+          "pred_multitask_pct": -3.4786,
+          "pp_close_only": -3.4362,
+          "pp_multitask": -1.1674
+        },
+        "META": {
+          "actual_pct": -1.9635,
+          "pred_close_only_pct": 1.0213,
+          "pred_multitask_pct": -12.9944,
+          "pp_close_only": -2.9849,
+          "pp_multitask": 11.0309
+        },
+        "MSFT": {
+          "actual_pct": 0.4328,
+          "pred_close_only_pct": -0.3736,
+          "pred_multitask_pct": -8.0737,
+          "pp_close_only": 0.8064,
+          "pp_multitask": 8.5065
+        },
+        "MU": {
+          "actual_pct": 9.1524,
+          "pred_close_only_pct": 1.3923,
+          "pred_multitask_pct": -6.3669,
+          "pp_close_only": 7.7601,
+          "pp_multitask": 15.5194
+        },
+        "NVDA": {
+          "actual_pct": 3.2676,
+          "pred_close_only_pct": 0.8387,
+          "pred_multitask_pct": -5.9427,
+          "pp_close_only": 2.4289,
+          "pp_multitask": 9.2102
+        },
+        "TSLA": {
+          "actual_pct": -6.0706,
+          "pred_close_only_pct": -0.5712,
+          "pred_multitask_pct": -8.8244,
+          "pp_close_only": -5.4994,
+          "pp_multitask": 2.7538
+        },
+        "TSM": {
+          "actual_pct": 8.6262,
+          "pred_close_only_pct": 1.1152,
+          "pred_multitask_pct": -0.7956,
+          "pp_close_only": 7.511,
+          "pp_multitask": 9.4218
+        },
+        "XOM": {
+          "actual_pct": 1.6867,
+          "pred_close_only_pct": 0.8058,
+          "pred_multitask_pct": 5.0925,
+          "pp_close_only": 0.8809,
+          "pp_multitask": -3.4058
+        }
+      }
+    },
+    {
+      "week_start": "2026-04-27",
+      "week_end": "2026-05-01",
+      "mae_pp_close_only": 5.1864,
+      "mae_pp_multitask": 6.4973,
+      "mean_signed_pp_close_only": 1.5556,
+      "mean_signed_pp_multitask": 4.7504,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 3.3498,
+          "pred_close_only_pct": 0.493,
+          "pred_multitask_pct": -1.8393,
+          "pp_close_only": 2.8568,
+          "pp_multitask": 5.1891
+        },
+        "AMD": {
+          "actual_pct": 3.66,
+          "pred_close_only_pct": 2.7708,
+          "pred_multitask_pct": -11.0192,
+          "pp_close_only": 0.8892,
+          "pp_multitask": 14.6792
+        },
+        "AVGO": {
+          "actual_pct": -0.3501,
+          "pred_close_only_pct": 2.0473,
+          "pred_multitask_pct": -1.6413,
+          "pp_close_only": -2.3974,
+          "pp_multitask": 1.2913
+        },
+        "GOOGL": {
+          "actual_pct": 11.989,
+          "pred_close_only_pct": 0.2359,
+          "pred_multitask_pct": -2.0313,
+          "pp_close_only": 11.7531,
+          "pp_multitask": 14.0203
+        },
+        "LLY": {
+          "actual_pct": 8.9789,
+          "pred_close_only_pct": -1.168,
+          "pred_multitask_pct": 0.161,
+          "pp_close_only": 10.1469,
+          "pp_multitask": 8.8179
+        },
+        "META": {
+          "actual_pct": -9.8188,
+          "pred_close_only_pct": 0.1233,
+          "pred_multitask_pct": -3.5042,
+          "pp_close_only": -9.9421,
+          "pp_multitask": -6.3146
+        },
+        "MSFT": {
+          "actual_pct": -2.3974,
+          "pred_close_only_pct": -1.0052,
+          "pred_multitask_pct": -0.7321,
+          "pp_close_only": -1.3922,
+          "pp_multitask": -1.6654
+        },
+        "MU": {
+          "actual_pct": 9.1581,
+          "pred_close_only_pct": 1.1817,
+          "pred_multitask_pct": -3.5777,
+          "pp_close_only": 7.9764,
+          "pp_multitask": 12.7357
+        },
+        "NVDA": {
+          "actual_pct": -4.715,
+          "pred_close_only_pct": 0.7418,
+          "pred_multitask_pct": -2.4683,
+          "pp_close_only": -5.4569,
+          "pp_multitask": -2.2467
+        },
+        "TSLA": {
+          "actual_pct": 3.8586,
+          "pred_close_only_pct": -1.0911,
+          "pred_multitask_pct": -2.9796,
+          "pp_close_only": 4.9498,
+          "pp_multitask": 6.8382
+        },
+        "TSM": {
+          "actual_pct": -1.1902,
+          "pred_close_only_pct": 1.4066,
+          "pred_multitask_pct": -5.1052,
+          "pp_close_only": -2.5967,
+          "pp_multitask": 3.915
+        },
+        "XOM": {
+          "actual_pct": 2.5787,
+          "pred_close_only_pct": 0.699,
+          "pred_multitask_pct": 2.8335,
+          "pp_close_only": 1.8798,
+          "pp_multitask": -0.2548
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-04",
+      "week_end": "2026-05-08",
+      "mae_pp_close_only": 7.4775,
+      "mae_pp_multitask": 10.4464,
+      "mean_signed_pp_close_only": 6.3554,
+      "mean_signed_pp_multitask": 8.6916,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 4.7048,
+          "pred_close_only_pct": 0.1371,
+          "pred_multitask_pct": -1.4072,
+          "pp_close_only": 4.5677,
+          "pp_multitask": 6.1119
+        },
+        "AMD": {
+          "actual_pct": 26.2523,
+          "pred_close_only_pct": 5.0926,
+          "pred_multitask_pct": -2.2343,
+          "pp_close_only": 21.1597,
+          "pp_multitask": 28.4866
+        },
+        "AVGO": {
+          "actual_pct": 2.0699,
+          "pred_close_only_pct": 2.6901,
+          "pred_multitask_pct": 1.4815,
+          "pp_close_only": -0.6202,
+          "pp_multitask": 0.5884
+        },
+        "GOOGL": {
+          "actual_pct": 3.9177,
+          "pred_close_only_pct": 1.2677,
+          "pred_multitask_pct": -3.5917,
+          "pp_close_only": 2.65,
+          "pp_multitask": 7.5094
+        },
+        "LLY": {
+          "actual_pct": -1.5446,
+          "pred_close_only_pct": -1.1074,
+          "pred_multitask_pct": -5.8525,
+          "pp_close_only": -0.4372,
+          "pp_multitask": 4.3078
+        },
+        "META": {
+          "actual_pct": 0.1446,
+          "pred_close_only_pct": -0.7358,
+          "pred_multitask_pct": 3.9676,
+          "pp_close_only": 0.8803,
+          "pp_multitask": -3.823
+        },
+        "MSFT": {
+          "actual_pct": 0.1641,
+          "pred_close_only_pct": 0.039,
+          "pred_multitask_pct": 0.7552,
+          "pp_close_only": 0.1251,
+          "pp_multitask": -0.5911
+        },
+        "MU": {
+          "actual_pct": 37.7345,
+          "pred_close_only_pct": 3.0991,
+          "pred_multitask_pct": -3.665,
+          "pp_close_only": 34.6353,
+          "pp_multitask": 41.3994
+        },
+        "NVDA": {
+          "actual_pct": 8.4404,
+          "pred_close_only_pct": 1.1368,
+          "pred_multitask_pct": 1.9021,
+          "pp_close_only": 7.3036,
+          "pp_multitask": 6.5383
+        },
+        "TSLA": {
+          "actual_pct": 9.6029,
+          "pred_close_only_pct": -0.2752,
+          "pred_multitask_pct": -5.8479,
+          "pp_close_only": 9.8781,
+          "pp_multitask": 15.4507
+        },
+        "TSM": {
+          "actual_pct": 3.523,
+          "pred_close_only_pct": 1.7254,
+          "pred_multitask_pct": -0.9122,
+          "pp_close_only": 1.7976,
+          "pp_multitask": 4.4352
+        },
+        "XOM": {
+          "actual_pct": -5.3552,
+          "pred_close_only_pct": 0.3203,
+          "pred_multitask_pct": 0.7593,
+          "pp_close_only": -5.6754,
+          "pp_multitask": -6.1145
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-11",
+      "week_end": "2026-05-15",
+      "mae_pp_close_only": 4.7087,
+      "mae_pp_multitask": 4.4466,
+      "mean_signed_pp_close_only": -0.6141,
+      "mean_signed_pp_multitask": 2.0856,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 2.3558,
+          "pred_close_only_pct": 0.5544,
+          "pred_multitask_pct": -1.1797,
+          "pp_close_only": 1.8014,
+          "pp_multitask": 3.5355
+        },
+        "AMD": {
+          "actual_pct": -6.8301,
+          "pred_close_only_pct": 6.5889,
+          "pred_multitask_pct": -4.6974,
+          "pp_close_only": -13.419,
+          "pp_multitask": -2.1327
+        },
+        "AVGO": {
+          "actual_pct": -1.1186,
+          "pred_close_only_pct": 1.9562,
+          "pred_multitask_pct": 5.3119,
+          "pp_close_only": -3.0748,
+          "pp_multitask": -6.4305
+        },
+        "GOOGL": {
+          "actual_pct": -1.003,
+          "pred_close_only_pct": 2.1748,
+          "pred_multitask_pct": -0.6478,
+          "pp_close_only": -3.1778,
+          "pp_multitask": -0.3552
+        },
+        "LLY": {
+          "actual_pct": 5.9539,
+          "pred_close_only_pct": -0.5229,
+          "pred_multitask_pct": -2.9231,
+          "pp_close_only": 6.4768,
+          "pp_multitask": 8.877
+        },
+        "META": {
+          "actual_pct": 0.7546,
+          "pred_close_only_pct": -0.7195,
+          "pred_multitask_pct": 3.5281,
+          "pp_close_only": 1.474,
+          "pp_multitask": -2.7735
+        },
+        "MSFT": {
+          "actual_pct": 1.6381,
+          "pred_close_only_pct": 0.2505,
+          "pred_multitask_pct": 2.5772,
+          "pp_close_only": 1.3876,
+          "pp_multitask": -0.9392
+        },
+        "MU": {
+          "actual_pct": -2.966,
+          "pred_close_only_pct": 5.1992,
+          "pred_multitask_pct": -15.1182,
+          "pp_close_only": -8.1652,
+          "pp_multitask": 12.1523
+        },
+        "NVDA": {
+          "actual_pct": 4.7026,
+          "pred_close_only_pct": 1.0829,
+          "pred_multitask_pct": 0.511,
+          "pp_close_only": 3.6197,
+          "pp_multitask": 4.1917
+        },
+        "TSLA": {
+          "actual_pct": -1.4264,
+          "pred_close_only_pct": 0.0445,
+          "pred_multitask_pct": -4.6191,
+          "pp_close_only": -1.4709,
+          "pp_multitask": 3.1927
+        },
+        "TSM": {
+          "actual_pct": -1.7805,
+          "pred_close_only_pct": 0.8484,
+          "pred_multitask_pct": -0.2459,
+          "pp_close_only": -2.6289,
+          "pp_multitask": -1.5346
+        },
+        "XOM": {
+          "actual_pct": 9.2343,
+          "pred_close_only_pct": -0.574,
+          "pred_multitask_pct": 1.9905,
+          "pp_close_only": 9.8082,
+          "pp_multitask": 7.2438
+        }
+      }
+    },
+    {
+      "week_start": "2026-05-18",
+      "week_end": "2026-05-22",
+      "mae_pp_close_only": 2.8935,
+      "mae_pp_multitask": 3.9782,
+      "mean_signed_pp_close_only": -0.8581,
+      "mean_signed_pp_multitask": -1.3017,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 2.8611,
+          "pred_close_only_pct": 1.2113,
+          "pred_multitask_pct": -1.1578,
+          "pp_close_only": 1.6499,
+          "pp_multitask": 4.0189
+        },
+        "AMD": {
+          "actual_pct": 10.2358,
+          "pred_close_only_pct": 6.4005,
+          "pred_multitask_pct": 11.0043,
+          "pp_close_only": 3.8353,
+          "pp_multitask": -0.7685
+        },
+        "AVGO": {
+          "actual_pct": -2.5988,
+          "pred_close_only_pct": 2.0809,
+          "pred_multitask_pct": 5.9093,
+          "pp_close_only": -4.6797,
+          "pp_multitask": -8.5081
+        },
+        "GOOGL": {
+          "actual_pct": -3.4805,
+          "pred_close_only_pct": 2.3156,
+          "pred_multitask_pct": 2.6318,
+          "pp_close_only": -5.7961,
+          "pp_multitask": -6.1123
+        },
+        "LLY": {
+          "actual_pct": 5.9786,
+          "pred_close_only_pct": -0.1109,
+          "pred_multitask_pct": -4.1494,
+          "pp_close_only": 6.0895,
+          "pp_multitask": 10.128
+        },
+        "META": {
+          "actual_pct": -0.6463,
+          "pred_close_only_pct": -0.3557,
+          "pred_multitask_pct": 2.604,
+          "pp_close_only": -0.2907,
+          "pp_multitask": -3.2504
+        },
+        "MSFT": {
+          "actual_pct": -0.794,
+          "pred_close_only_pct": 0.5105,
+          "pred_multitask_pct": 1.4933,
+          "pp_close_only": -1.3044,
+          "pp_multitask": -2.2873
+        },
+        "MU": {
+          "actual_pct": 3.6348,
+          "pred_close_only_pct": 4.7916,
+          "pred_multitask_pct": 5.8129,
+          "pp_close_only": -1.1568,
+          "pp_multitask": -2.1781
+        },
+        "NVDA": {
+          "actual_pct": -4.4337,
+          "pred_close_only_pct": 1.568,
+          "pred_multitask_pct": 2.1619,
+          "pp_close_only": -6.0017,
+          "pp_multitask": -6.5956
+        },
+        "TSLA": {
+          "actual_pct": 0.8929,
+          "pred_close_only_pct": 0.255,
+          "pred_multitask_pct": -0.6077,
+          "pp_close_only": 0.6379,
+          "pp_multitask": 1.5005
+        },
+        "TSM": {
+          "actual_pct": 0.042,
+          "pred_close_only_pct": 1.0123,
+          "pred_multitask_pct": 2.0215,
+          "pp_close_only": -0.9703,
+          "pp_multitask": -1.9795
+        },
+        "XOM": {
+          "actual_pct": -1.8997,
+          "pred_close_only_pct": 0.4099,
+          "pred_multitask_pct": -2.3112,
+          "pp_close_only": -2.3096,
+          "pp_multitask": 0.4115
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-01",
+      "week_end": "2026-06-05",
+      "mae_pp_close_only": 8.1353,
+      "mae_pp_multitask": 8.9484,
+      "mean_signed_pp_close_only": -7.3063,
+      "mean_signed_pp_multitask": -8.1535,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -1.5125,
+          "pred_close_only_pct": 1.4753,
+          "pred_multitask_pct": 2.385,
+          "pp_close_only": -2.9878,
+          "pp_multitask": -3.8975
+        },
+        "AMD": {
+          "actual_pct": -9.6338,
+          "pred_close_only_pct": 8.2156,
+          "pred_multitask_pct": 13.3031,
+          "pp_close_only": -17.8494,
+          "pp_multitask": -22.9369
+        },
+        "AVGO": {
+          "actual_pct": -13.6625,
+          "pred_close_only_pct": 2.935,
+          "pred_multitask_pct": 3.7436,
+          "pp_close_only": -16.5975,
+          "pp_multitask": -17.4061
+        },
+        "GOOGL": {
+          "actual_pct": -3.1051,
+          "pred_close_only_pct": 1.9506,
+          "pred_multitask_pct": 6.0578,
+          "pp_close_only": -5.0557,
+          "pp_multitask": -9.1629
+        },
+        "LLY": {
+          "actual_pct": 2.391,
+          "pred_close_only_pct": 0.8467,
+          "pred_multitask_pct": -0.6881,
+          "pp_close_only": 1.5443,
+          "pp_multitask": 3.0791
+        },
+        "META": {
+          "actual_pct": -6.2465,
+          "pred_close_only_pct": -0.4057,
+          "pred_multitask_pct": 0.844,
+          "pp_close_only": -5.8409,
+          "pp_multitask": -7.0905
+        },
+        "MSFT": {
+          "actual_pct": -7.456,
+          "pred_close_only_pct": 0.9135,
+          "pred_multitask_pct": -2.0157,
+          "pp_close_only": -8.3695,
+          "pp_multitask": -5.4403
+        },
+        "MU": {
+          "actual_pct": -11.0185,
+          "pred_close_only_pct": 7.7571,
+          "pred_multitask_pct": 0.5196,
+          "pp_close_only": -18.7757,
+          "pp_multitask": -11.5382
+        },
+        "NVDA": {
+          "actual_pct": -2.8607,
+          "pred_close_only_pct": 1.2396,
+          "pred_multitask_pct": 5.0831,
+          "pp_close_only": -4.1003,
+          "pp_multitask": -7.9438
+        },
+        "TSLA": {
+          "actual_pct": -10.2779,
+          "pred_close_only_pct": 0.6403,
+          "pred_multitask_pct": 2.2182,
+          "pp_close_only": -10.9182,
+          "pp_multitask": -12.4961
+        },
+        "TSM": {
+          "actual_pct": -0.7838,
+          "pred_close_only_pct": 1.3709,
+          "pred_multitask_pct": 3.9153,
+          "pp_close_only": -2.1548,
+          "pp_multitask": -4.6991
+        },
+        "XOM": {
+          "actual_pct": 3.208,
+          "pred_close_only_pct": -0.2218,
+          "pred_multitask_pct": 1.5179,
+          "pp_close_only": 3.4298,
+          "pp_multitask": 1.6901
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-08",
+      "week_end": "2026-06-12",
+      "mae_pp_close_only": 3.4305,
+      "mae_pp_multitask": 6.2319,
+      "mean_signed_pp_close_only": -0.9693,
+      "mean_signed_pp_multitask": -6.2319,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -5.2743,
+          "pred_close_only_pct": 1.4037,
+          "pred_multitask_pct": 4.2126,
+          "pp_close_only": -6.678,
+          "pp_multitask": -9.4869
+        },
+        "AMD": {
+          "actual_pct": 9.6895,
+          "pred_close_only_pct": 7.189,
+          "pred_multitask_pct": 18.6479,
+          "pp_close_only": 2.5005,
+          "pp_multitask": -8.9584
+        },
+        "AVGO": {
+          "actual_pct": -0.9489,
+          "pred_close_only_pct": 1.0824,
+          "pred_multitask_pct": 9.8459,
+          "pp_close_only": -2.0312,
+          "pp_multitask": -10.7948
+        },
+        "GOOGL": {
+          "actual_pct": -2.4014,
+          "pred_close_only_pct": 1.5304,
+          "pred_multitask_pct": 6.823,
+          "pp_close_only": -3.9318,
+          "pp_multitask": -9.2244
+        },
+        "LLY": {
+          "actual_pct": 0.1396,
+          "pred_close_only_pct": 1.0773,
+          "pred_multitask_pct": 1.9169,
+          "pp_close_only": -0.9376,
+          "pp_multitask": -1.7773
+        },
+        "META": {
+          "actual_pct": -4.3879,
+          "pred_close_only_pct": -0.7742,
+          "pred_multitask_pct": 3.7155,
+          "pp_close_only": -3.6137,
+          "pp_multitask": -8.1034
+        },
+        "MSFT": {
+          "actual_pct": -6.2232,
+          "pred_close_only_pct": 0.2764,
+          "pred_multitask_pct": 3.3433,
+          "pp_close_only": -6.4995,
+          "pp_multitask": -9.5665
+        },
+        "MU": {
+          "actual_pct": 13.611,
+          "pred_close_only_pct": 6.3274,
+          "pred_multitask_pct": 16.9454,
+          "pp_close_only": 7.2835,
+          "pp_multitask": -3.3344
+        },
+        "NVDA": {
+          "actual_pct": 0.0439,
+          "pred_close_only_pct": 0.8644,
+          "pred_multitask_pct": 6.9187,
+          "pp_close_only": -0.8205,
+          "pp_multitask": -6.8749
+        },
+        "TSLA": {
+          "actual_pct": 3.9463,
+          "pred_close_only_pct": -0.301,
+          "pred_multitask_pct": 6.001,
+          "pp_close_only": 4.2473,
+          "pp_multitask": -2.0547
+        },
+        "TSM": {
+          "actual_pct": 2.11,
+          "pred_close_only_pct": 1.3742,
+          "pred_multitask_pct": 5.9179,
+          "pp_close_only": 0.7358,
+          "pp_multitask": -3.8079
+        },
+        "XOM": {
+          "actual_pct": -1.941,
+          "pred_close_only_pct": -0.0549,
+          "pred_multitask_pct": -1.1422,
+          "pp_close_only": -1.8861,
+          "pp_multitask": -0.7988
+        }
+      }
+    },
+    {
+      "week_start": "2026-06-22",
+      "week_end": "2026-06-26",
+      "mae_pp_close_only": 7.582,
+      "mae_pp_multitask": 10.4472,
+      "mean_signed_pp_close_only": -6.1098,
+      "mean_signed_pp_multitask": -9.6704,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -4.775,
+          "pred_close_only_pct": 1.4496,
+          "pred_multitask_pct": 4.2636,
+          "pp_close_only": -6.2246,
+          "pp_multitask": -9.0386
+        },
+        "AMD": {
+          "actual_pct": -2.9384,
+          "pred_close_only_pct": 8.4514,
+          "pred_multitask_pct": 14.7935,
+          "pp_close_only": -11.3898,
+          "pp_multitask": -17.7318
+        },
+        "AVGO": {
+          "actual_pct": -11.2629,
+          "pred_close_only_pct": 2.2328,
+          "pred_multitask_pct": 4.714,
+          "pp_close_only": -13.4958,
+          "pp_multitask": -15.9769
+        },
+        "GOOGL": {
+          "actual_pct": -8.3254,
+          "pred_close_only_pct": 2.0369,
+          "pred_multitask_pct": 6.0447,
+          "pp_close_only": -10.3623,
+          "pp_multitask": -14.3701
+        },
+        "LLY": {
+          "actual_pct": 9.9721,
+          "pred_close_only_pct": 1.6899,
+          "pred_multitask_pct": 5.3116,
+          "pp_close_only": 8.2822,
+          "pp_multitask": 4.6605
+        },
+        "META": {
+          "actual_pct": -4.6724,
+          "pred_close_only_pct": -0.1683,
+          "pred_multitask_pct": 4.0783,
+          "pp_close_only": -4.5041,
+          "pp_multitask": -8.7507
+        },
+        "MSFT": {
+          "actual_pct": -1.6948,
+          "pred_close_only_pct": 0.1898,
+          "pred_multitask_pct": 5.1142,
+          "pp_close_only": -1.8846,
+          "pp_multitask": -6.809
+        },
+        "MU": {
+          "actual_pct": -0.1464,
+          "pred_close_only_pct": 9.3006,
+          "pred_multitask_pct": 14.7151,
+          "pp_close_only": -9.447,
+          "pp_multitask": -14.8615
+        },
+        "NVDA": {
+          "actual_pct": -8.6193,
+          "pred_close_only_pct": 1.6004,
+          "pred_multitask_pct": 4.5458,
+          "pp_close_only": -10.2197,
+          "pp_multitask": -13.1651
+        },
+        "TSLA": {
+          "actual_pct": -5.1886,
+          "pred_close_only_pct": 0.427,
+          "pred_multitask_pct": 5.7335,
+          "pp_close_only": -5.6156,
+          "pp_multitask": -10.9221
+        },
+        "TSM": {
+          "actual_pct": -6.442,
+          "pred_close_only_pct": 2.5652,
+          "pred_multitask_pct": 0.5047,
+          "pp_close_only": -9.0072,
+          "pp_multitask": -6.9467
+        },
+        "XOM": {
+          "actual_pct": -0.9216,
+          "pred_close_only_pct": -1.4724,
+          "pred_multitask_pct": 1.2113,
+          "pp_close_only": 0.5509,
+          "pp_multitask": -2.1328
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-06",
+      "week_end": "2026-07-10",
+      "mae_pp_close_only": 4.7313,
+      "mae_pp_multitask": 6.0969,
+      "mean_signed_pp_close_only": 1.6742,
+      "mean_signed_pp_multitask": 0.5905,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 2.1676,
+          "pred_close_only_pct": 1.6868,
+          "pred_multitask_pct": -1.7254,
+          "pp_close_only": 0.4809,
+          "pp_multitask": 3.8931
+        },
+        "AMD": {
+          "actual_pct": 7.7382,
+          "pred_close_only_pct": 7.4362,
+          "pred_multitask_pct": 12.5485,
+          "pp_close_only": 0.302,
+          "pp_multitask": -4.8103
+        },
+        "AVGO": {
+          "actual_pct": 10.9641,
+          "pred_close_only_pct": 0.7027,
+          "pred_multitask_pct": 1.1013,
+          "pp_close_only": 10.2614,
+          "pp_multitask": 9.8628
+        },
+        "GOOGL": {
+          "actual_pct": -0.7585,
+          "pred_close_only_pct": 1.4198,
+          "pred_multitask_pct": 1.803,
+          "pp_close_only": -2.1784,
+          "pp_multitask": -2.5616
+        },
+        "LLY": {
+          "actual_pct": -2.0867,
+          "pred_close_only_pct": 2.2778,
+          "pred_multitask_pct": 2.106,
+          "pp_close_only": -4.3645,
+          "pp_multitask": -4.1927
+        },
+        "META": {
+          "actual_pct": 14.807,
+          "pred_close_only_pct": 0.1644,
+          "pred_multitask_pct": -4.346,
+          "pp_close_only": 14.6426,
+          "pp_multitask": 19.153
+        },
+        "MSFT": {
+          "actual_pct": -1.3803,
+          "pred_close_only_pct": 0.4422,
+          "pred_multitask_pct": -1.2385,
+          "pp_close_only": -1.8225,
+          "pp_multitask": -0.1418
+        },
+        "MU": {
+          "actual_pct": 0.3834,
+          "pred_close_only_pct": 8.3659,
+          "pred_multitask_pct": 18.5973,
+          "pp_close_only": -7.9825,
+          "pp_multitask": -18.214
+        },
+        "NVDA": {
+          "actual_pct": 8.279,
+          "pred_close_only_pct": 0.8,
+          "pred_multitask_pct": 2.5799,
+          "pp_close_only": 7.479,
+          "pp_multitask": 5.6991
+        },
+        "TSLA": {
+          "actual_pct": 3.6371,
+          "pred_close_only_pct": 1.1197,
+          "pred_multitask_pct": 2.1206,
+          "pp_close_only": 2.5173,
+          "pp_multitask": 1.5164
+        },
+        "TSM": {
+          "actual_pct": -0.0115,
+          "pred_close_only_pct": 1.9832,
+          "pred_multitask_pct": 3.0695,
+          "pp_close_only": -1.9947,
+          "pp_multitask": -3.081
+        },
+        "XOM": {
+          "actual_pct": 1.3057,
+          "pred_close_only_pct": -1.444,
+          "pred_multitask_pct": 1.3426,
+          "pp_close_only": 2.7497,
+          "pp_multitask": -0.0369
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-13",
+      "week_end": "2026-07-17",
+      "mae_pp_close_only": 7.5352,
+      "mae_pp_multitask": 9.4618,
+      "mean_signed_pp_close_only": -5.3325,
+      "mean_signed_pp_multitask": -4.9784,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 5.8417,
+          "pred_close_only_pct": 1.6925,
+          "pred_multitask_pct": 0.401,
+          "pp_close_only": 4.1492,
+          "pp_multitask": 5.4407
+        },
+        "AMD": {
+          "actual_pct": -11.1366,
+          "pred_close_only_pct": 6.8453,
+          "pred_multitask_pct": 8.9635,
+          "pp_close_only": -17.9819,
+          "pp_multitask": -20.1002
+        },
+        "AVGO": {
+          "actual_pct": -7.2856,
+          "pred_close_only_pct": 0.4744,
+          "pred_multitask_pct": -3.5225,
+          "pp_close_only": -7.7599,
+          "pp_multitask": -3.763
+        },
+        "GOOGL": {
+          "actual_pct": -2.9145,
+          "pred_close_only_pct": 0.6284,
+          "pred_multitask_pct": 2.1483,
+          "pp_close_only": -3.5429,
+          "pp_multitask": -5.0628
+        },
+        "LLY": {
+          "actual_pct": -0.7967,
+          "pred_close_only_pct": 2.1775,
+          "pred_multitask_pct": 5.8591,
+          "pp_close_only": -2.9742,
+          "pp_multitask": -6.6558
+        },
+        "META": {
+          "actual_pct": -3.4668,
+          "pred_close_only_pct": 0.1312,
+          "pred_multitask_pct": -12.7368,
+          "pp_close_only": -3.598,
+          "pp_multitask": 9.27
+        },
+        "MSFT": {
+          "actual_pct": 2.2643,
+          "pred_close_only_pct": -0.1321,
+          "pred_multitask_pct": -3.0362,
+          "pp_close_only": 2.3965,
+          "pp_multitask": 5.3006
+        },
+        "MU": {
+          "actual_pct": -13.3105,
+          "pred_close_only_pct": 6.5228,
+          "pred_multitask_pct": 19.2079,
+          "pp_close_only": -19.8333,
+          "pp_multitask": -32.5184
+        },
+        "NVDA": {
+          "actual_pct": -3.8633,
+          "pred_close_only_pct": 0.6395,
+          "pred_multitask_pct": -3.5384,
+          "pp_close_only": -4.5028,
+          "pp_multitask": -0.3249
+        },
+        "TSLA": {
+          "actual_pct": -6.6019,
+          "pred_close_only_pct": 1.0013,
+          "pred_multitask_pct": -0.0159,
+          "pp_close_only": -7.6032,
+          "pp_multitask": -6.586
+        },
+        "TSM": {
+          "actual_pct": -8.2329,
+          "pred_close_only_pct": 1.1773,
+          "pred_multitask_pct": 3.3972,
+          "pp_close_only": -9.4103,
+          "pp_multitask": -11.6301
+        },
+        "XOM": {
+          "actual_pct": 6.106,
+          "pred_close_only_pct": -0.5646,
+          "pred_multitask_pct": -0.783,
+          "pp_close_only": 6.6706,
+          "pp_multitask": 6.889
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-20",
+      "week_end": "2026-07-24",
+      "mae_pp_close_only": 4.5747,
+      "mae_pp_multitask": 6.5065,
+      "mean_signed_pp_close_only": -1.9367,
+      "mean_signed_pp_multitask": -3.533,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -0.2157,
+          "pred_close_only_pct": 1.9335,
+          "pred_multitask_pct": -3.446,
+          "pp_close_only": -2.1492,
+          "pp_multitask": 3.2302
+        },
+        "AMD": {
+          "actual_pct": 5.2828,
+          "pred_close_only_pct": 4.8448,
+          "pred_multitask_pct": 12.2043,
+          "pp_close_only": 0.438,
+          "pp_multitask": -6.9216
+        },
+        "AVGO": {
+          "actual_pct": 2.9906,
+          "pred_close_only_pct": -0.6117,
+          "pred_multitask_pct": -0.3722,
+          "pp_close_only": 3.6023,
+          "pp_multitask": 3.3628
+        },
+        "GOOGL": {
+          "actual_pct": -7.7948,
+          "pred_close_only_pct": 0.399,
+          "pred_multitask_pct": 1.319,
+          "pp_close_only": -8.1937,
+          "pp_multitask": -9.1138
+        },
+        "LLY": {
+          "actual_pct": 1.435,
+          "pred_close_only_pct": 2.2932,
+          "pred_multitask_pct": 5.119,
+          "pp_close_only": -0.8582,
+          "pp_multitask": -3.684
+        },
+        "META": {
+          "actual_pct": -7.8668,
+          "pred_close_only_pct": -0.2406,
+          "pred_multitask_pct": -2.4416,
+          "pp_close_only": -7.6262,
+          "pp_multitask": -5.4252
+        },
+        "MSFT": {
+          "actual_pct": -3.0775,
+          "pred_close_only_pct": -0.5791,
+          "pred_multitask_pct": -3.7911,
+          "pp_close_only": -2.4984,
+          "pp_multitask": 0.7135
+        },
+        "MU": {
+          "actual_pct": 8.4811,
+          "pred_close_only_pct": 5.5818,
+          "pred_multitask_pct": 19.6423,
+          "pp_close_only": 2.8992,
+          "pp_multitask": -11.1612
+        },
+        "NVDA": {
+          "actual_pct": 1.9871,
+          "pred_close_only_pct": 0.1693,
+          "pred_multitask_pct": 1.3006,
+          "pp_close_only": 1.8178,
+          "pp_multitask": 0.6865
+        },
+        "TSLA": {
+          "actual_pct": -17.8054,
+          "pred_close_only_pct": -0.0626,
+          "pred_multitask_pct": 2.971,
+          "pp_close_only": -17.7428,
+          "pp_multitask": -20.7764
+        },
+        "TSM": {
+          "actual_pct": 1.2652,
+          "pred_close_only_pct": 0.7205,
+          "pred_multitask_pct": 4.4197,
+          "pp_close_only": 0.5446,
+          "pp_multitask": -3.1546
+        },
+        "XOM": {
+          "actual_pct": 6.5011,
+          "pred_close_only_pct": -0.0247,
+          "pred_multitask_pct": -3.3466,
+          "pp_close_only": 6.5257,
+          "pp_multitask": 9.8477
+        }
+      }
+    },
+    {
+      "week_start": "2026-07-27",
+      "week_end": "2026-07-31",
+      "mae_pp_close_only": 7.6725,
+      "mae_pp_multitask": 8.9246,
+      "mean_signed_pp_close_only": -1.3601,
+      "mean_signed_pp_multitask": -2.716,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": -7.2398,
+          "pred_close_only_pct": 1.7755,
+          "pred_multitask_pct": 0.5478,
+          "pp_close_only": -9.0153,
+          "pp_multitask": -7.7876
+        },
+        "AMD": {
+          "actual_pct": -8.7748,
+          "pred_close_only_pct": 4.1767,
+          "pred_multitask_pct": 5.8533,
+          "pp_close_only": -12.9514,
+          "pp_multitask": -14.6281
+        },
+        "AVGO": {
+          "actual_pct": 1.9271,
+          "pred_close_only_pct": -0.3188,
+          "pred_multitask_pct": -3.0411,
+          "pp_close_only": 2.2459,
+          "pp_multitask": 4.9682
+        },
+        "GOOGL": {
+          "actual_pct": 11.3811,
+          "pred_close_only_pct": -0.6988,
+          "pred_multitask_pct": 1.8714,
+          "pp_close_only": 12.08,
+          "pp_multitask": 9.5098
+        },
+        "LLY": {
+          "actual_pct": -3.9456,
+          "pred_close_only_pct": 2.6939,
+          "pred_multitask_pct": 4.3033,
+          "pp_close_only": -6.6394,
+          "pp_multitask": -8.2488
+        },
+        "META": {
+          "actual_pct": -6.4652,
+          "pred_close_only_pct": -0.9472,
+          "pred_multitask_pct": 3.0064,
+          "pp_close_only": -5.518,
+          "pp_multitask": -9.4715
+        },
+        "MSFT": {
+          "actual_pct": 21.7501,
+          "pred_close_only_pct": -0.9351,
+          "pred_multitask_pct": 0.7615,
+          "pp_close_only": 22.6852,
+          "pp_multitask": 20.9885
+        },
+        "MU": {
+          "actual_pct": -10.6325,
+          "pred_close_only_pct": 5.2834,
+          "pred_multitask_pct": 9.6762,
+          "pp_close_only": -15.9159,
+          "pp_multitask": -20.3087
+        },
+        "NVDA": {
+          "actual_pct": -2.9443,
+          "pred_close_only_pct": -0.2041,
+          "pred_multitask_pct": -1.0504,
+          "pp_close_only": -2.7402,
+          "pp_multitask": -1.8939
+        },
+        "TSLA": {
+          "actual_pct": -0.5814,
+          "pred_close_only_pct": -1.4449,
+          "pred_multitask_pct": 4.9756,
+          "pp_close_only": 0.8634,
+          "pp_multitask": -5.557
+        },
+        "TSM": {
+          "actual_pct": 0.2082,
+          "pred_close_only_pct": 0.2905,
+          "pred_multitask_pct": 2.1566,
+          "pp_close_only": -0.0822,
+          "pp_multitask": -1.9483
+        },
+        "XOM": {
+          "actual_pct": -0.9558,
+          "pred_close_only_pct": 0.377,
+          "pred_multitask_pct": -2.741,
+          "pp_close_only": -1.3328,
+          "pp_multitask": 1.7853
+        }
+      }
+    },
+    {
+      "week_start": "2026-08-03",
+      "week_end": "2026-08-07",
+      "mae_pp_close_only": 4.688,
+      "mae_pp_multitask": 5.8816,
+      "mean_signed_pp_close_only": 4.2437,
+      "mean_signed_pp_multitask": 3.3461,
+      "per_stock_pp_error_actual_minus_pred": {
+        "AAPL": {
+          "actual_pct": 1.4308,
+          "pred_close_only_pct": 0.7372,
+          "pred_multitask_pct": 4.1793,
+          "pp_close_only": 0.6937,
+          "pp_multitask": -2.7485
+        },
+        "AMD": {
+          "actual_pct": 1.5142,
+          "pred_close_only_pct": 2.5732,
+          "pred_multitask_pct": 7.3992,
+          "pp_close_only": -1.059,
+          "pp_multitask": -5.885
+        },
+        "AVGO": {
+          "actual_pct": 9.8849,
+          "pred_close_only_pct": -0.7126,
+          "pred_multitask_pct": -1.2992,
+          "pp_close_only": 10.5976,
+          "pp_multitask": 11.1841
+        },
+        "GOOGL": {
+          "actual_pct": -0.5139,
+          "pred_close_only_pct": -0.6783,
+          "pred_multitask_pct": -4.6121,
+          "pp_close_only": 0.1645,
+          "pp_multitask": 4.0982
+        },
+        "LLY": {
+          "actual_pct": 3.2093,
+          "pred_close_only_pct": 1.2972,
+          "pred_multitask_pct": 4.4142,
+          "pp_close_only": 1.9121,
+          "pp_multitask": -1.2049
+        },
+        "META": {
+          "actual_pct": 6.357,
+          "pred_close_only_pct": -0.6343,
+          "pred_multitask_pct": 4.8452,
+          "pp_close_only": 6.9913,
+          "pp_multitask": 1.5118
+        },
+        "MSFT": {
+          "actual_pct": 7.5895,
+          "pred_close_only_pct": 1.0702,
+          "pred_multitask_pct": -12.1836,
+          "pp_close_only": 6.5193,
+          "pp_multitask": 19.7731
+        },
+        "MU": {
+          "actual_pct": 6.6267,
+          "pred_close_only_pct": 2.2516,
+          "pred_multitask_pct": 11.8341,
+          "pp_close_only": 4.3751,
+          "pp_multitask": -5.2074
+        },
+        "NVDA": {
+          "actual_pct": 11.5616,
+          "pred_close_only_pct": 0.2277,
+          "pred_multitask_pct": -2.1441,
+          "pp_close_only": 11.334,
+          "pp_multitask": 13.7057
+        },
+        "TSLA": {
+          "actual_pct": 5.5814,
+          "pred_close_only_pct": -1.7801,
+          "pred_multitask_pct": 2.8023,
+          "pp_close_only": 7.3616,
+          "pp_multitask": 2.7791
+        },
+        "TSM": {
+          "actual_pct": 3.906,
+          "pred_close_only_pct": 0.2653,
+          "pred_multitask_pct": 1.5919,
+          "pp_close_only": 3.6407,
+          "pp_multitask": 2.3141
+        },
+        "XOM": {
+          "actual_pct": -1.544,
+          "pred_close_only_pct": 0.0627,
+          "pred_multitask_pct": -1.3765,
+          "pp_close_only": -1.6067,
+          "pp_multitask": -0.1675
+        }
+      }
+    }
+  ]
+}

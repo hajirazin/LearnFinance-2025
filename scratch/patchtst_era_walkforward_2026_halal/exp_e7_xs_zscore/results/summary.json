@@ -1,0 +1,119 @@
+{
+  "y_train_stats": {
+    "n": 6744,
+    "n_anchors": 574,
+    "y_z_mean": 8.484647012751978e-11,
+    "y_z_std": 1.0,
+    "y_z_p01": -2.4462251615524293,
+    "y_z_p99": 2.657935671806335
+  },
+  "train": {
+    "name": "E7_xs_zscore",
+    "representation": "cross_sectional_z_of_daily_simple_return",
+    "input": "60d_raw_simple_return_frac",
+    "target": "next_5_xs_z_across_universe",
+    "lr": 0.0003,
+    "best_epoch": 10,
+    "best_val_mse_xs_z": 1.0028405288855236,
+    "baseline_mse_xs_z": 1.0025063753128052,
+    "beats_baseline_best": false,
+    "stopped_epoch": 25,
+    "ran_full_100": false,
+    "barely_trained": false
+  },
+  "forecast": {
+    "mae_xs_z": 0.781452843688439,
+    "n_day_rows": 1500
+  },
+  "rank_ic": {
+    "score_vs_week_return_mean": 0.027412587412587407,
+    "score_vs_week_return_std": 0.441200200033233,
+    "score_vs_week_xs_z_mean": 0.027412587412587407,
+    "score_vs_week_xs_z_std": 0.441200200033233,
+    "n_weeks": 25
+  },
+  "arms": {
+    "EW-12": {
+      "n_weeks": 25,
+      "cum_return_pct": 12.174652095913263,
+      "sharpe_ann_approx": 1.099367316816566,
+      "hit_rate": 0.56,
+      "max_drawdown_pct": -11.471657669259239,
+      "mean_weekly_frac": 0.005145219423272047
+    },
+    "HRP-252": {
+      "n_weeks": 25,
+      "cum_return_pct": 9.263203967731526,
+      "sharpe_ann_approx": 1.3773593126260648,
+      "hit_rate": 0.6,
+      "max_drawdown_pct": -7.458183278702435,
+      "mean_weekly_frac": 0.003732497562611481
+    },
+    "E7_top6_HRP": {
+      "n_weeks": 25,
+      "cum_return_pct": 8.631255259871452,
+      "sharpe_ann_approx": 0.9235599115015234,
+      "hit_rate": 0.6,
+      "max_drawdown_pct": -15.20242947996694,
+      "mean_weekly_frac": 0.0037200955155676546
+    },
+    "E7_top6_EW": {
+      "n_weeks": 25,
+      "cum_return_pct": 15.247213642744306,
+      "sharpe_ann_approx": 1.0261453785701624,
+      "hit_rate": 0.52,
+      "max_drawdown_pct": -16.624303445546996,
+      "mean_weekly_frac": 0.006742715114500024
+    }
+  },
+  "vs_hrp": {
+    "EW-12": {
+      "cum_minus_hrp_pp": 2.9114481281817373,
+      "sharpe_minus_hrp": -0.27799199580949874,
+      "beats_hrp_sharpe": false
+    },
+    "HRP-252": {
+      "cum_minus_hrp_pp": 0.0,
+      "sharpe_minus_hrp": 0.0,
+      "beats_hrp_sharpe": false
+    },
+    "E7_top6_HRP": {
+      "cum_minus_hrp_pp": -0.6319487078600741,
+      "sharpe_minus_hrp": -0.4537994011245414,
+      "beats_hrp_sharpe": false
+    },
+    "E7_top6_EW": {
+      "cum_minus_hrp_pp": 5.98400967501278,
+      "sharpe_minus_hrp": -0.3512139340559024,
+      "beats_hrp_sharpe": false
+    }
+  },
+  "prior_ptst_vs_hrp": {
+    "PTST_close_top6_HRP": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.09908489964245182,
+      "cum_return_pct": 9.908489964245181,
+      "mean_weekly_frac": 0.004115976285201998,
+      "std_weekly_frac": 0.026421369796154722,
+      "sharpe_weekly": 0.1557820929405796,
+      "sharpe_ann_approx": 1.123360647792713,
+      "hit_rate": 0.64,
+      "max_drawdown_frac": -0.1236863760768444,
+      "max_drawdown_pct": -12.368637607684441
+    },
+    "HRP-252": {
+      "n_weeks": 25,
+      "cum_return_frac": 0.09739158124853642,
+      "cum_return_pct": 9.739158124853642,
+      "mean_weekly_frac": 0.003907671184078951,
+      "std_weekly_frac": 0.019576032906794785,
+      "sharpe_weekly": 0.19961507025882702,
+      "sharpe_ann_approx": 1.439444742347095,
+      "hit_rate": 0.6,
+      "max_drawdown_frac": -0.07458183278702457,
+      "max_drawdown_pct": -7.458183278702457
+    },
+    "rank_ic_close_only_mean": 0.015664335664335668
+  },
+  "note": "Targets = cross-sectional z of daily simple returns across 12 names. Ranking score = mean of 5 predicted daily XS-z. Not production Alpha-HRP."
+}

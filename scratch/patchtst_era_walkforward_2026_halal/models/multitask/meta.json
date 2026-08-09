@@ -1,0 +1,13 @@
+{
+  "name": "multitask",
+  "loss_mode": "multitask",
+  "best_epoch": 91,
+  "best_val": 0.01966767633954684,
+  "stopped_epoch": 100,
+  "train_start": "2015-01-01",
+  "train_end": "2025-12-31",
+  "n_train": 5376,
+  "n_val": 1344,
+  "seed": 20260809,
+  "barely_trained": false
+}

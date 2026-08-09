@@ -1,0 +1,15 @@
+{
+  "name": "E4_close_simple_frac",
+  "representation": "close_simple_return_fraction",
+  "example": "2% -> 0.02",
+  "num_input_channels": 1,
+  "scaling": null,
+  "lr": 0.0003,
+  "best_epoch": 10,
+  "best_val_mse": 0.0008583044060893977,
+  "baseline_mse": 0.0009515337878838181,
+  "beats_baseline_best": true,
+  "stopped_epoch": 25,
+  "ran_full_100": false,
+  "barely_trained": false
+}

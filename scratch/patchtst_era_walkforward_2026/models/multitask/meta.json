@@ -1,0 +1,14 @@
+{
+  "name": "multitask",
+  "loss_mode": "multitask",
+  "best_epoch": 26,
+  "best_val": 0.022750571680565674,
+  "train_end": "2025-12-31",
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "JNJ"
+  ],
+  "seed": 20260809
+}

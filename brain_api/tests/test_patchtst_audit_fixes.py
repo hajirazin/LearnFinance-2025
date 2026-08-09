@@ -11,9 +11,20 @@ from brain_api.core.inference_utils import (
     DEFAULT_INDIA_EXCHANGE,
     compute_week_from_cutoff,
 )
-from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
 from brain_api.core.patchtst.dataset import _week_end_anchors, build_dataset
 from brain_api.core.patchtst.training import _chrono_train_val_split
+
+
+def test_patchtst_default_weight_decay_is_zero():
+    """E8: after close-only MSE, prod wd=1e-4 dominated Adam (wd||theta||/||g|| ~ 40).
+
+    Overfit-batch and full wd sweep (halal 10y->2026) only train at wd=0;
+    any wd>=1e-5 early-stops barely-trained. Default must stay 0.
+    training.py must keep reading config.weight_decay (not a hard-coded 1e-4).
+    """
+    assert PatchTSTConfig().weight_decay == 0.0
+    assert DEFAULT_CONFIG.weight_decay == 0.0
 
 
 def test_week_end_anchors_skip_midweek_gap():

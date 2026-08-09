@@ -43,7 +43,9 @@ class PatchTSTConfig:
     epochs: int = 100
     validation_split: float = 0.2
     early_stopping_patience: int = 15  # Stop if val_loss doesn't improve for N epochs
-    weight_decay: float = 1e-4  # L2 regularization
+    # E8: after Phase A close-only MSE, loss/grad ~100x smaller; wd=1e-4
+    # dominated Adam updates (wd||theta|| / ||g|| ~ 40). Default 0 lets the model train.
+    weight_decay: float = 0.0
     max_grad_norm: float = 1.0  # Gradient clipping
 
     # Feature engineering
