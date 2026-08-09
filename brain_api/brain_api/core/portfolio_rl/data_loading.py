@@ -227,11 +227,14 @@ def align_signals_to_weekly(
                 realized_vol_20d[week_idx] = compute_realized_vol_20d(
                     close_values, as_of_index=as_of_index
                 )
-            except MomentumSignalError as exc:
-                raise ValueError(
-                    f"Momentum computation failed for {symbol} "
-                    f"at {weekly_index[week_idx].date()}: {exc}"
-                ) from exc
+            except MomentumSignalError:
+                # Match live eligibility: insufficient history makes the
+                # symbol ineligible for that week (NaN → mask), never a
+                # silent zero-fill of the feature values.
+                momentum_1w[week_idx] = np.nan
+                momentum_4w[week_idx] = np.nan
+                momentum_12_1[week_idx] = np.nan
+                realized_vol_20d[week_idx] = np.nan
 
         symbol_signals["momentum_1w"] = momentum_1w
         symbol_signals["momentum_4w"] = momentum_4w

@@ -1,4 +1,10 @@
-"""Deterministic three-state diagonal Gaussian HMM for SAC market regime inputs."""
+"""Deterministic three-state diagonal Gaussian HMM for SAC market regime inputs.
+
+``HMM_SEED`` is part of the frozen artifact config contract. The current EM
+initialization is closed-form (volatility tertiles + fixed sticky transitions)
+and does not draw from a PRNG; the seed documents the reproducible recipe and
+is validated on load so future stochastic inits cannot silently diverge.
+"""
 
 from __future__ import annotations
 
@@ -74,6 +80,11 @@ class RegimeHMMArtifact:
     def from_dict(cls, data: dict[str, Any]) -> RegimeHMMArtifact:
         if data.get("schema_version") != 3:
             raise ValueError("legacy or missing SAC v3 HMM metadata")
+        config = data.get("config") or {}
+        if int(config.get("seed", HMM_SEED)) != HMM_SEED:
+            raise ValueError(
+                f"SAC v3 HMM artifact seed must be {HMM_SEED}, got {config.get('seed')}"
+            )
         artifact = cls(
             start_probability=np.asarray(data["start_probability"], dtype=float),
             transition=np.asarray(data["transition"], dtype=float),

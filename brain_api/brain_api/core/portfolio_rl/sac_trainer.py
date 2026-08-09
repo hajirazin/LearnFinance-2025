@@ -331,7 +331,9 @@ class SACTrainer:
 
             # Select action
             if self.total_steps < self.config.warmup_steps:
-                action = np.random.randn(self.action_dim)
+                # Match the actor's tanh-bounded logits so warmup softmax
+                # concentration stays in the same family as trained actions.
+                action = np.tanh(np.random.randn(self.action_dim))
                 mask = state[LEARNED_STATE_DIM:] > 0.5
                 action[:MAX_ASSETS][~mask] = 0.0
             else:

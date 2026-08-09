@@ -89,46 +89,11 @@ def mock_symbols() -> list[str]:
     ]
 
 
-# Signal keys must match `RealTimeSignalBuilder.SIGNAL_KEYS` so the SAC
-# state vector built downstream of `/inference/sac` has the same shape
-# as in production. Values are deterministic stubs; the SAC inference
-# tests assert on actor outputs (weight bounds), not on signal values.
-_MOCK_SIGNAL_KEYS: tuple[str, ...] = (
-    "news_sentiment",
-    "momentum_1w",
-    "momentum_4w",
-    "momentum_12_1",
-    "realized_vol_20d",
-)
-
-
-def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
-    """Deterministic stand-in for ``build_current_signals``.
-
-    Returns a non-zero per-symbol dict so the SAC actor's input is in
-    the same numerical neighbourhood as production (zeros would still
-    work mathematically but the LSTM/PatchTST training tests use the
-    same convention of plausible-but-fixed values).
-    """
-    return {
-        symbol: {
-            "news_sentiment": 0.1,
-            "momentum_1w": 0.01,
-            "momentum_4w": 0.02,
-            "momentum_12_1": 0.10,
-            "realized_vol_20d": 0.20,
-        }
-        for symbol in symbols
-    }
-
-
-def _mock_forecasts(symbols, forecaster_type, as_of_date) -> dict[str, float]:
-    """Deterministic stand-in for ``build_current_forecasts``.
-
-    Returns the same constant for both ``lstm`` and ``patchtst`` -- SAC
-    inference tests only validate weight constraints, never the
-    forecast values themselves.
-    """
+def _mock_forecasts(
+    symbols, forecaster_type="patchtst", as_of_date=None
+) -> dict[str, float]:
+    """Deterministic PatchTST stubs for SAC inference feature bundles."""
+    del forecaster_type, as_of_date
     return dict.fromkeys(symbols, 0.01)
 
 
@@ -142,7 +107,7 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
         },
         "news_sentiment": dict.fromkeys(symbols, 0.1),
         "news_article_counts": dict.fromkeys(symbols, 1),
-        "patchtst_forecasts": _mock_forecasts(symbols, "patchtst", None),
+        "patchtst_forecasts": _mock_forecasts(symbols),
         "execution_prices": dict.fromkeys(symbols, 125.2),
         "market_history": [
             {
@@ -154,25 +119,6 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
         ],
         "provenance": {"test": True},
     }
-
-
-def _patch_sac_inference_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace the side-effecting signal + forecast helpers used by
-    ``/inference/sac``.
-
-    Without this patch the route hits real ``yfinance`` + the
-    production ``data/models/lstm_halal_new`` and ``patchtst_halal_new``
-    paths via the module-level singletons in
-    ``brain_api.routes.inference.helpers`` -- adding ~5s per SAC
-    inference test when the suite runs another file before
-    ``test_sac.py``. Mocks preserve the signal/forecast contract so
-    ``run_sac_inference`` runs end-to-end (per AGENTS.md "side effects
-    must be mocked, not skipped").
-    """
-    from brain_api.routes.inference import helpers as inference_helpers
-
-    monkeypatch.setattr(inference_helpers, "build_current_signals", _mock_signals)
-    monkeypatch.setattr(inference_helpers, "build_current_forecasts", _mock_forecasts)
 
 
 def mock_config() -> SACConfig:
@@ -348,7 +294,6 @@ def inference_client(trained_model_storage, monkeypatch):
         )
 
     _override_sac_bucket(monkeypatch, trained_model_storage, _trained_symbols)
-    _patch_sac_inference_helpers(monkeypatch)
 
     client = TestClient(app)
     yield client
@@ -469,6 +414,10 @@ class TestSACLSTMInference:
                 "reason": "outside_active_sac_symbol_set",
             }
         ]
+        # True portfolio was 50% AAPL / 50% NFLX / 0% cash. Target sets NFLX
+        # to 0, so turnover must include that forced sell (folded cash view
+        # alone understates churn whenever cash also moves).
+        assert data["turnover"] >= 0.25
 
     def test_inference_without_model_returns_503(self, temp_storage, monkeypatch):
         """Test that inference without a trained model returns 503.

@@ -15,6 +15,7 @@ from brain_api.core.model_buckets import (
     get_bucket,
     list_universes_for,
 )
+from brain_api.core.portfolio_rl.constraints import compute_turnover_from_allocations
 from brain_api.core.sac import run_sac_inference
 from brain_api.core.sac.decision_context import (
     SACDecisionContext,
@@ -134,6 +135,24 @@ def infer_sac(
     ]
 
     forced_liquidation_value = sum(audit.market_value for audit in forced_liquidations)
+    total_portfolio_value = cash_value + sum(position_values.values())
+    if total_portfolio_value <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="portfolio cash + positions must be positive for SAC inference",
+        )
+
+    # True pre-decision sleeve weights (off-slate included) for turnover.
+    true_current_allocation = {
+        symbol: market_value / total_portfolio_value
+        for symbol, market_value in position_values.items()
+        if market_value > 0
+    }
+    true_current_allocation["CASH"] = cash_value / total_portfolio_value
+
+    # Observation / actor view folds off-slate MV into CASH so the simplex
+    # matches the active model slate (same pattern as in-universe ineligible
+    # folding inside build_state_vector).
     effective_cash_value = cash_value + forced_liquidation_value
     allocatable_value = effective_cash_value + sum(
         position_values.get(symbol, 0.0) for symbol in artifacts.symbol_order
@@ -191,6 +210,15 @@ def infer_sac(
         )
     except (SACDecisionContextError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    true_target_allocation = {
+        **result.allocation,
+        **{audit.symbol: 0.0 for audit in forced_liquidations},
+    }
+    turnover = compute_turnover_from_allocations(
+        true_current_allocation, true_target_allocation
+    )
+
     decision_state = SACDecisionState.create(
         vector=result.state_vector,
         context=decision_context,
@@ -218,13 +246,11 @@ def infer_sac(
     )
 
     t_total = time.time() - t_start
-    logger.info(
-        f"[SAC] Inference complete in {t_total:.2f}s, turnover={result.turnover:.4f}"
-    )
+    logger.info(f"[SAC] Inference complete in {t_total:.2f}s, turnover={turnover:.4f}")
 
     return SACInferenceResponse(
         target_weights=result.allocation,
-        turnover=result.turnover,
+        turnover=turnover,
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
         model_version=result.model_version,

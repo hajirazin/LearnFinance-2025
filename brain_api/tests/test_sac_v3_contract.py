@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import torch
 
+from brain_api.core.portfolio_rl.constraints import compute_turnover_from_allocations
 from brain_api.core.portfolio_rl.env import PortfolioEnv
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import MEDIAN_GLOBAL_INDEX, PortfolioScaler
@@ -68,6 +69,50 @@ def test_state_ranks_ties_and_preserves_raw_patch_globals() -> None:
     unpacked = unpack_state(build_state_vector(signals, forecasts, weights, symbols))
     np.testing.assert_allclose(unpacked.globals[:2], [0.02, 0.75])
     assert np.all(unpacked.asset_features[4:] == 0.0)
+
+
+def test_ineligible_held_weight_folds_into_cash_in_observation() -> None:
+    symbols = [f"S{index:02d}" for index in range(12)]
+    signals = {
+        symbol: {
+            "momentum_1w": 0.01 + index * 0.001,
+            "momentum_4w": 0.02,
+            "momentum_12_1": 0.03,
+            "news_sentiment": 0.0,
+            "realized_vol_20d": 0.2,
+        }
+        for index, symbol in enumerate(symbols)
+    }
+    forecasts = dict.fromkeys(symbols, 0.01)
+    weights = np.zeros(ACTION_DIM)
+    weights[0] = 0.25
+    weights[1:12] = 0.05
+    weights[-1] = 0.20
+    mask = np.zeros(MAX_ASSETS, dtype=bool)
+    mask[1:12] = True
+    unpacked = unpack_state(
+        build_state_vector(
+            signals,
+            forecasts,
+            weights,
+            symbols,
+            asset_mask=mask,
+            regime_probabilities=(0.4, 0.3),
+        )
+    )
+    visible = float(
+        unpacked.asset_features[unpacked.asset_mask, 6].sum() + unpacked.globals[-1]
+    )
+    assert visible == pytest.approx(1.0)
+    assert unpacked.globals[-1] == pytest.approx(0.45)
+    assert unpacked.asset_features[0, 6] == 0.0
+
+
+def test_turnover_from_allocations_includes_forced_sells() -> None:
+    current = {"AAPL": 0.5, "NFLX": 0.3, "CASH": 0.2}
+    target = {"AAPL": 0.6, "CASH": 0.4, "NFLX": 0.0}
+    # 0.5 * (|0.6-0.5| + |0-0.3| + |0.4-0.2|) = 0.5 * 0.6 = 0.3
+    assert compute_turnover_from_allocations(current, target) == pytest.approx(0.3)
 
 
 def test_scaler_changes_only_raw_patchtst_median() -> None:

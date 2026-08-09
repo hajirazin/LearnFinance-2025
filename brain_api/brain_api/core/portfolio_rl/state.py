@@ -221,6 +221,17 @@ def build_state_vector(
     if not np.any(mask):
         raise ValueError("at least one asset must be eligible")
 
+    # Ineligible held mass is mechanically liquidated. Fold it into CASH for
+    # the observation so visible token weights + cash still form a simplex,
+    # matching off-slate forced-liquidation accounting at inference.
+    observation_weights = weights.copy()
+    ineligible_held = float(observation_weights[:MAX_ASSETS][~mask].sum())
+    if ineligible_held > 0.0:
+        observation_weights[:MAX_ASSETS][~mask] = 0.0
+        observation_weights[-1] += ineligible_held
+    if not np.isclose(observation_weights.sum(), 1.0, atol=1e-8):
+        raise ValueError("observation weights must remain a simplex after folding")
+
     valid_indices = np.flatnonzero(mask)
     raw = np.empty((len(valid_indices), 6), dtype=np.float64)
     for row, index in enumerate(valid_indices):
@@ -241,12 +252,18 @@ def build_state_vector(
     assets = np.zeros((MAX_ASSETS, ASSET_FEATURES), dtype=np.float64)
     for column in range(6):
         assets[valid_indices, column] = cross_sectional_rank(raw[:, column])
-    assets[valid_indices, 6] = weights[valid_indices]
+    assets[valid_indices, 6] = observation_weights[valid_indices]
     p_calm, p_stress = map(float, regime_probabilities)
     if min(p_calm, p_stress) < 0 or p_calm + p_stress > 1.0 + 1e-8:
         raise ValueError("regime probabilities must be nonnegative and sum to <= 1")
     globals_ = np.asarray(
-        [np.median(raw[:, 0]), np.mean(raw[:, 0] > 0), p_calm, p_stress, weights[-1]],
+        [
+            np.median(raw[:, 0]),
+            np.mean(raw[:, 0] > 0),
+            p_calm,
+            p_stress,
+            observation_weights[-1],
+        ],
         dtype=np.float64,
     )
     return pack_state(assets, globals_, mask)

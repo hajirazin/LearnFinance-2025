@@ -1,7 +1,7 @@
-"""Real-time signal building for RL inference.
+"""Real-time forecast helpers for RL inference.
 
-This module provides classes to fetch real-time signals and forecasts
-for RL policy inference, matching the format used during training.
+SAC Monday inference builds features from Temporal-supplied raw evidence
+inside Brain; it does not use a parallel realtime signal builder.
 """
 
 from brain_api.core.realtime_signals.forecasters import (
@@ -9,11 +9,9 @@ from brain_api.core.realtime_signals.forecasters import (
     LSTMForecaster,
     PatchTSTForecaster,
 )
-from brain_api.core.realtime_signals.signal_builder import RealTimeSignalBuilder
 
 __all__ = [
     "BaseForecaster",
     "LSTMForecaster",
     "PatchTSTForecaster",
-    "RealTimeSignalBuilder",
 ]

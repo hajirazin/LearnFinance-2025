@@ -23,6 +23,7 @@ from brain_api.core.portfolio_rl.config import DEFAULT_RL_BASE_CONFIG, RLBaseCon
 from brain_api.core.portfolio_rl.constraints import (
     apply_softmax_to_weights,
     compute_turnover,
+    compute_turnover_from_allocations,
     enforce_constraints,
 )
 from brain_api.core.portfolio_rl.data_loading import (
@@ -90,6 +91,7 @@ __all__ = [
     "compute_sharpe_ratio",
     "compute_transaction_cost",
     "compute_turnover",
+    "compute_turnover_from_allocations",
     "enforce_constraints",
     "evaluate_policy",
     "load_historical_news_sentiment",

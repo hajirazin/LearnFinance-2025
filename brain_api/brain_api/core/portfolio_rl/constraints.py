@@ -1,9 +1,12 @@
 """Portfolio constraint enforcement.
 
 Handles:
-- Long-only simplex weights (sum to 1, all >= 0)
-- Cash buffer (CASH >= 2%)
-- Max position size (each stock <= 20%)
+- Long-only simplex weights (sum to 1, all >= 0) via masked softmax
+- Cash buffer (CASH >= cash_buffer, default 2%)
+
+Position-size caps are not enforced here; concentration is shaped by the
+masked tanh actor, entropy target ``-(n_valid + 1)``, and the HHI penalty
+in the reward.
 """
 
 from __future__ import annotations
@@ -14,23 +17,24 @@ import numpy as np
 def apply_softmax_to_weights(
     logits: np.ndarray, asset_mask: np.ndarray | None = None
 ) -> np.ndarray:
-    """Apply softmax to convert raw logits to portfolio weights.
+    """Apply masked softmax to convert raw logits to portfolio weights.
 
     This enforces:
     - All weights >= 0
     - Weights sum to 1.0
+    - Masked/padded stock slots receive exactly weight 0
+    - CASH is always a valid destination
 
     Args:
         logits: Raw policy outputs, shape (n_assets,) or (batch, n_assets)
-                Last dimension is CASH.
+                Last dimension is CASH. Actor outputs are tanh-bounded to
+                ``[-1, 1]``; warmup paths should match that bound.
+        asset_mask: Optional boolean mask over stock slots only (excluding
+                CASH). Shape ``(n_stocks,)`` or ``(batch, n_stocks)``.
 
     Returns:
         Weights on the simplex, same shape as input.
     """
-    # Raw logits are bounded to [-1, 1] by tanh in the actor.
-    # This naturally limits the maximum softmax concentration to ~33% for 16 dims,
-    # preventing pathological concentration exploits mathematically.
-
     values = np.asarray(logits, dtype=np.float64)
     single = values.ndim == 1
     batch = values.reshape(1, -1) if single else values
@@ -61,18 +65,20 @@ def enforce_constraints(
     weights: np.ndarray,
     cash_buffer: float = 0.02,
 ) -> np.ndarray:
-    """Enforce portfolio constraints via post-processing.
+    """Enforce the cash-buffer constraint via clipping and renormalization.
 
     Constraints:
-    1. All weights >= 0 (already guaranteed by softmax)
-    2. Weights sum to 1.0 (already guaranteed by softmax)
+    1. All weights >= 0 (already guaranteed by masked softmax)
+    2. Weights sum to 1.0 (already guaranteed by masked softmax)
     3. Cash weight >= cash_buffer
 
-    The enforcement is done via clipping and renormalization.
+    Masked stock zeros stay zero because stock mass is only rescaled
+    proportionally. There is no per-name max-weight clip here.
 
     Args:
         weights: Portfolio weights with CASH as last element.
-                 Shape (n_assets,) where n_assets = n_stocks + 1.
+                 Shape ``(ACTION_DIM,)`` = 30 stock slots + CASH, or a
+                 shorter ``(n_stocks + 1,)`` vector in legacy helpers.
         cash_buffer: Minimum cash weight (default 0.02 = 2%).
 
     Returns:
@@ -138,7 +144,32 @@ def compute_turnover(
     Returns:
         Turnover as a decimal (0 to 1).
     """
-    return 0.5 * np.sum(np.abs(target_weights - current_weights))
+    current = np.asarray(current_weights, dtype=np.float64)
+    target = np.asarray(target_weights, dtype=np.float64)
+    if current.shape != target.shape:
+        raise ValueError("current_weights and target_weights must share a shape")
+    return float(0.5 * np.sum(np.abs(target - current)))
+
+
+def compute_turnover_from_allocations(
+    current_allocation: dict[str, float],
+    target_allocation: dict[str, float],
+) -> float:
+    """Turnover over the union of named sleeves (including forced liquidations).
+
+    Off-slate names that must be sold to weight 0 participate explicitly, so
+    reported turnover matches broker churn rather than a cash-folded view.
+    """
+    symbols = sorted(set(current_allocation) | set(target_allocation))
+    current = np.asarray(
+        [float(current_allocation.get(symbol, 0.0)) for symbol in symbols],
+        dtype=np.float64,
+    )
+    target = np.asarray(
+        [float(target_allocation.get(symbol, 0.0)) for symbol in symbols],
+        dtype=np.float64,
+    )
+    return compute_turnover(current, target)
 
 
 def normalize_portfolio_from_values(
