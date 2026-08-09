@@ -42,16 +42,16 @@ def sample_full_state():
             "AAPL": {
                 "news_sentiment": 0.3,
                 "news_coverage": 1.0,
-                "gross_margin": 0.4,
-                "debt_to_equity": 0.5,
-                "fundamental_age": 7.0,
+                "momentum_1w": 0.01,
+                "momentum_4w": 0.02,
+                "momentum_12_1": 0.10,
             },
             "MSFT": {
                 "news_sentiment": 0.5,
                 "news_coverage": 0.67,
-                "gross_margin": 0.6,
-                "debt_to_equity": 0.2,
-                "fundamental_age": 14.0,
+                "momentum_1w": 0.02,
+                "momentum_4w": 0.03,
+                "momentum_12_1": 0.12,
             },
         },
         "patchtst_forecasts": {"AAPL": 0.015, "MSFT": -0.003},
@@ -196,8 +196,13 @@ class TestExperienceFullStateSAC:
         if isinstance(state, dict):
             assert "signals" in state
             assert "MSFT" in state["signals"]
-            assert "gross_margin" in state["signals"]["MSFT"]
-            assert "debt_to_equity" in state["signals"]["MSFT"]
+            assert set(state["signals"]["MSFT"]) == {
+                "news_sentiment",
+                "news_coverage",
+                "momentum_1w",
+                "momentum_4w",
+                "momentum_12_1",
+            }
 
     def test_sac_state_includes_patchtst_forecasts(
         self, temp_storage, sample_full_state, sample_intended_action

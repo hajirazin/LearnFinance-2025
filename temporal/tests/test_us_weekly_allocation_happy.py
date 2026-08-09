@@ -21,7 +21,6 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         sac_portfolio_no_open,
         patchtst_resp,
         news_resp,
-        fundamentals_resp,
         sac_alloc,
         buy_only_orders,
         sac_submit_resp,
@@ -37,7 +36,6 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         activities = make_sac_only_activities(
             active_symbols=active_symbols,
             sac_portfolio=sac_portfolio_no_open,
-            fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             patchtst_resp=patchtst_resp,
             sac_alloc=sac_alloc,

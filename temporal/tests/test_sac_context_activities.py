@@ -1,4 +1,4 @@
-"""Tests for the canonical SAC feature/state handoff."""
+"""Tests for the canonical five-signal SAC feature/state handoff."""
 
 import pytest
 
@@ -8,7 +8,6 @@ from activities.sac_context import build_sac_feature_bundle
 from models import (
     AlpacaPortfolioResponse,
     ClosesResponse,
-    FundamentalsResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
     SACInferenceResponse,
@@ -30,24 +29,6 @@ def _canonical_inputs():
             }
         ],
     )
-    fundamentals = FundamentalsResponse(
-        as_of_date="2026-02-05",
-        per_symbol=[
-            {
-                "symbol": "AAPL",
-                "ratios": {
-                    "gross_margin": 0.42,
-                    "net_margin": 0.24,
-                    "debt_to_equity": 0.3,
-                    "eps_diluted": 6.0,
-                    "filing_available_date": "2026-01-30",
-                    "filing_accession_number": "0001",
-                    "filing_form": "10-Q",
-                    "filing_source": "sec_submissions",
-                },
-            }
-        ],
-    )
     patchtst = PatchTSTInferenceResponse(
         predictions=[
             {
@@ -60,76 +41,55 @@ def _canonical_inputs():
         model_version="patch-v1",
         as_of_date="2026-02-05",
     )
-    return symbols, news, fundamentals, patchtst
+    return symbols, news, patchtst
 
 
 def _canonical_closes(symbols: list[str]) -> dict[str, list[float]]:
-    """253 daily closes per symbol -- MOM_12_1_LOOKBACK_BARS(252) + 1."""
     return {symbol: [100.0 + i * 0.1 for i in range(253)] for symbol in symbols}
 
 
-def test_confirmed_zero_news_is_neutral_with_zero_coverage():
-    symbols, news, fundamentals, patchtst = _canonical_inputs()
+def test_feature_bundle_uses_exact_five_signal_order():
+    symbols, news, patchtst = _canonical_inputs()
 
     bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date="2026-02-05",
         news=news,
-        fundamentals=fundamentals,
         patchtst=patchtst,
         closes=_canonical_closes(symbols),
     )
 
+    assert list(bundle["signals"]["AAPL"]) == [
+        "news_sentiment",
+        "news_coverage",
+        "momentum_1w",
+        "momentum_4w",
+        "momentum_12_1",
+    ]
     assert bundle["signals"]["AAPL"]["news_sentiment"] == 0.0
     assert bundle["signals"]["AAPL"]["news_coverage"] == 0.0
-    assert bundle["signals"]["AAPL"]["fundamental_age"] == 6.0
-    assert "gross_margin" in bundle["signals"]["AAPL"]
-    assert "momentum_1w" in bundle["signals"]["AAPL"]
-    assert "earnings_yield" in bundle["signals"]["AAPL"]
-    assert "lstm_forecasts" not in bundle
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
+    assert set(bundle["provenance"]) == {"as_of_date", "news", "patchtst"}
 
 
-def test_fundamentals_activity_forwards_decision_date():
-    fake = FakeClient(
-        {
-            "/signals/fundamentals": {
-                "as_of_date": "2026-02-05",
-                "per_symbol": [],
-            }
-        }
-    )
-    with patch_client(inference_module, fake):
-        inference_module.get_fundamentals(["AAPL"], "2026-02-05")
-
-    assert fake.calls[0]["json"] == {
-        "symbols": ["AAPL"],
-        "as_of_date": "2026-02-05",
-    }
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    ["missing_fundamentals", "fundamental_error", "missing_forecast"],
-)
+@pytest.mark.parametrize("mutation", ["missing_news", "missing_forecast", "closes"])
 def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
-    symbols, news, fundamentals, patchtst = _canonical_inputs()
-    if mutation == "missing_fundamentals":
-        fundamentals.per_symbol = []
-    elif mutation == "fundamental_error":
-        fundamentals.per_symbol[0].ratios = None
-        fundamentals.per_symbol[0].error = "provider unavailable"
-    else:
+    symbols, news, patchtst = _canonical_inputs()
+    closes = _canonical_closes(symbols)
+    if mutation == "missing_news":
+        news.per_symbol = []
+    elif mutation == "missing_forecast":
         patchtst.predictions = []
+    else:
+        closes.clear()
 
     with pytest.raises(ValueError):
         build_sac_feature_bundle(
             symbols=symbols,
             as_of_date="2026-02-05",
             news=news,
-            fundamentals=fundamentals,
             patchtst=patchtst,
-            closes=_canonical_closes(symbols),
+            closes=closes,
         )
 
 
@@ -147,7 +107,7 @@ class _InferenceClient(FakeClient):
 
 
 def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
-    symbols, news, fundamentals, patchtst = _canonical_inputs()
+    symbols, news, patchtst = _canonical_inputs()
     decision_state = {
         "vector": [0.0],
         "context": {"as_of_date": "2026-02-05"},
@@ -177,7 +137,6 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
             universe="halal_filtered",
             symbols=symbols,
             news=news,
-            fundamentals=fundamentals,
             patchtst=patchtst,
             closes=ClosesResponse(
                 as_of_date="2026-02-05", closes=_canonical_closes(symbols)
@@ -185,8 +144,13 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state():
         )
 
     payload = fake.calls[0]["json"]
-    assert payload["feature_bundle"]["signals"]["AAPL"]["fundamental_age"] == 6.0
-    assert "lstm_forecasts" not in payload["feature_bundle"]
+    assert list(payload["feature_bundle"]["signals"]["AAPL"]) == [
+        "news_sentiment",
+        "news_coverage",
+        "momentum_1w",
+        "momentum_4w",
+        "momentum_12_1",
+    ]
     assert result.decision_state == decision_state
     assert result.state_digest == "abc123"
     assert result.forced_liquidations[0].symbol == "OLD"

@@ -51,7 +51,6 @@ def make_sac_only_activities(
     *,
     active_symbols,
     sac_portfolio,
-    fundamentals_resp,
     news_resp,
     patchtst_resp,
     sac_alloc,
@@ -104,10 +103,6 @@ def make_sac_only_activities(
         _forbid("submit_orders_hrp")
         return SkippedSubmitResponse(account="hrp")
 
-    @activity.defn(name="get_fundamentals")
-    def mock_get_fundamentals(symbols, as_of_date):
-        return fundamentals_resp
-
     @activity.defn(name="get_news_sentiment")
     def mock_get_news_sentiment(symbols, as_of_date, run_id):
         return news_resp
@@ -138,7 +133,6 @@ def make_sac_only_activities(
         universe,
         symbols,
         news,
-        fundamentals,
         patchtst,
         closes,
     ):
@@ -222,9 +216,7 @@ def make_sac_only_activities(
         return None
 
     @activity.defn(name="generate_summary")
-    def mock_generate_summary(
-        patchtst, news, fundamentals, sac, universe
-    ) -> WeeklySummaryResponse:
+    def mock_generate_summary(patchtst, news, sac, universe) -> WeeklySummaryResponse:
         if summary_calls is not None:
             summary_calls.append(
                 {
@@ -259,7 +251,6 @@ def make_sac_only_activities(
         mock_get_hrp_portfolio,
         mock_allocate_hrp,
         mock_submit_orders_hrp,
-        mock_get_fundamentals,
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,

@@ -12,9 +12,8 @@ from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
 from models import (
-    RefreshTrainingDataRequest,
-    RefreshTrainingDataResponse,
     SACTrainingReadiness,
+    SentimentGapFillResponse,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -41,28 +40,69 @@ def preflight_sac_training(universe: str, force: bool = False) -> SACTrainingRea
 
 
 @activity.defn
-def refresh_training_data(universe: str) -> RefreshTrainingDataResponse:
-    """Refresh sentiment gaps and stale fundamentals for ``universe``.
-
-    ``universe`` selects the registered ETL universe at the brain_api
-    side so two parallel SAC workflows (e.g. ``halal_filtered`` and a
-    future ``halal``) can each refresh their own slate.
-    """
-    logger.info("Refreshing training data for universe=%s ...", universe)
-    request = RefreshTrainingDataRequest(universe=universe)
+def run_sentiment_gap_fill(
+    universe: str,
+    poll_interval: float = 60.0,
+) -> SentimentGapFillResponse:
+    """Start, poll, and require publication of one sentiment-gap job."""
+    logger.info("Starting sentiment gap fill for universe=%s ...", universe)
     with get_training_client() as client:
         response = client.post(
-            "/etl/refresh-training-data",
-            json=request.model_dump(exclude_none=True),
+            "/etl/sentiment-gaps",
+            json={"universe": universe},
         )
         response.raise_for_status()
-    result = RefreshTrainingDataResponse(**response.json())
-    logger.info(
-        f"Refresh complete in {result.duration_seconds:.1f}s: "
-        f"{result.sentiment_gaps_filled} sentiment gaps filled, "
-        f"{len(result.fundamentals_refreshed)} fundamentals refreshed"
-    )
-    return result
+        job_id = response.json()["job_id"]
+
+        while True:
+            activity.heartbeat(job_id)
+            time.sleep(poll_interval)
+            status_response = client.get(f"/etl/sentiment-gaps/{job_id}")
+            if status_response.status_code == 404:
+                raise ApplicationError(
+                    f"Sentiment gap job {job_id} was lost",
+                    type="SentimentGapJobLost",
+                )
+            status_response.raise_for_status()
+            job = status_response.json()
+            status = job["status"]
+            if status in {"pending", "running"}:
+                continue
+            if status == "failed":
+                raise ApplicationError(
+                    f"Sentiment gap job {job_id} failed: {job.get('error')}",
+                    type="SentimentGapJobFailed",
+                )
+            if status != "completed" or not job.get("result"):
+                raise ApplicationError(
+                    f"Sentiment gap job {job_id} returned invalid status {status!r}",
+                    type="SentimentGapJobInvalid",
+                )
+
+            result = job["result"]
+            hf_url = result.get("hf_url")
+            if not hf_url:
+                raise ApplicationError(
+                    f"Sentiment gap job {job_id} completed without HF publication",
+                    type="SentimentGapPublicationMissing",
+                )
+            progress = result.get("progress") or {}
+            completed = SentimentGapFillResponse(
+                rows_added=progress.get("rows_added", 0),
+                remaining_gaps=progress.get("remaining_gaps", 0),
+                gaps_pre_api_date=progress.get("gaps_pre_api_date", 0),
+                duration_seconds=result.get("duration_seconds", 0.0),
+                hf_url=hf_url,
+                published=True,
+            )
+            logger.info(
+                "Sentiment gap fill complete in %.1fs: rows=%d remaining=%d hf=%s",
+                completed.duration_seconds,
+                completed.rows_added,
+                completed.remaining_gaps,
+                completed.hf_url,
+            )
+            return completed
 
 
 @activity.defn

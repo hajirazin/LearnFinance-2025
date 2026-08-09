@@ -22,7 +22,6 @@ class TestUSWeeklyAllocationSACSkip:
         sac_portfolio_with_open,
         patchtst_resp,
         news_resp,
-        fundamentals_resp,
         sac_alloc,
         sac_submit_resp,
         sac_summary_resp,
@@ -32,7 +31,6 @@ class TestUSWeeklyAllocationSACSkip:
         activities = make_sac_only_activities(
             active_symbols=active_symbols,
             sac_portfolio=sac_portfolio_with_open,
-            fundamentals_resp=fundamentals_resp,
             news_resp=news_resp,
             patchtst_resp=patchtst_resp,
             sac_alloc=sac_alloc,

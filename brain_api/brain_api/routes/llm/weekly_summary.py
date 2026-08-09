@@ -40,7 +40,7 @@ def generate_sac_weekly_summary(
     """Generate an LLM summary of the SAC-only weekly run.
 
     Takes PatchTST forecaster predictions, the SAC allocator result,
-    and signals (news, fundamentals), and generates a summary using
+    and news/momentum signals, and generates a summary using
     the configured LLM provider (OpenAI or OLLAMA). HRP weekly
     reporting lives in ``/llm/us-alpha-hrp-summary``.
 
@@ -72,7 +72,6 @@ def generate_sac_weekly_summary(
     prompt = template.render(
         patchtst=request.patchtst.model_dump(),
         news=request.news.model_dump(),
-        fundamentals=request.fundamentals.model_dump(),
         sac=request.sac.model_dump(),
         universe=request.universe,
     )

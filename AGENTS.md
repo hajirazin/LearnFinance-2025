@@ -31,11 +31,11 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - US Double HRP workflow (`USDoubleHRPWorkflow`): halal_new universe -> Stage 1 HRP (lookback=756d) -> sticky top 15 (`halal_new` partition in `stage1_weight_history`, K_in=15, stickiness threshold 1.0pp) -> Stage 2 HRP (lookback=252d) on the chosen 15 -> record final weights -> sell-wait-buy via the dedicated `dhrp` Alpaca account (orders tagged `algorithm='dhrp'`) -> AI summary -> email.
   - India Double HRP workflow (`IndiaDoubleHRPWorkflow`): full Nifty Shariah 500 universe -> Stage 1 HRP (lookback=756d) -> weight-band sticky top 15 (`halal_india_double_hrp` partition in `stage1_weight_history`, K_in=15, stickiness threshold 1.0pp) -> Stage 2 HRP (lookback=252d) on the chosen 15 -> record final weights -> AI summary -> email (paper-only, no broker). Mirrors `USDoubleHRPWorkflow` minus the Alpaca order-execution legs; the strategy-named partition keeps its carry-set isolated from `halal_india_alpha` (rank-band, sister India strategy) and from `halal_new` (US Double HRP).
   - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
-  - US SAC training workflow (`USSACTrainingWorkflow`): runs 6 hours after the forecasters workflow on the same first-Sunday-of-month slot (06:01 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> refresh signals -> train SAC -> SAC-only LLM summary -> SAC-only email. Serialization guarantee: the Mac training worker runs with `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`, so even if the forecasters run overshoots 6h this activity waits for it to finish rather than starting in parallel.
-  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 6 hours later on the same first-Sunday-of-month slot (12:01 UTC) on the legacy yfinance halal universe (variable size, ~12-15 stocks); refresh signals -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`. Same single-activity serialization applies via the training worker's concurrency cap.
+  - US SAC training workflow (`USSACTrainingWorkflow`): runs 6 hours after the forecasters workflow on the same first-Sunday-of-month slot (06:01 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> fill sentiment gaps with mandatory Hugging Face publication -> train SAC -> SAC-only LLM summary -> SAC-only email. Serialization guarantee: the Mac training worker runs with `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`, so even if the forecasters run overshoots 6h this activity waits for it to finish rather than starting in parallel.
+  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 6 hours later on the same first-Sunday-of-month slot (12:01 UTC) on the legacy yfinance halal universe (variable size, ~12-15 stocks); fill sentiment gaps with mandatory Hugging Face publication -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`. Same single-activity serialization applies via the training worker's concurrency cap.
 - **brain_api (Python brain)** owns:
   - universe build + screening
-  - signal collection (news, fundamentals)
+  - signal collection (news + price momentum)
   - price forecasting (LSTM pure-price, PatchTST OHLCV 5-channel)
   - portfolio allocation (HRP math baseline, SAC variants)
   - order generation (convert weights to limit orders with idempotent IDs)
@@ -132,8 +132,6 @@ temporal/                         # Temporal workflow orchestration
 |----------|---------|
 | `POST /signals/news` | News sentiment (FinBERT, real-time) |
 | `POST /signals/news/historical` | News sentiment (historical) |
-| `POST /signals/fundamentals` | Financial ratios (gross margin, debt-to-equity, `eps_diluted` for SAC's `earnings_yield`, etc.) |
-| `POST /signals/fundamentals/historical` | Historical fundamentals |
 | `POST /signals/prices` | Raw daily closes for SAC's `momentum_1w`/`momentum_4w`/`momentum_12_1` (Temporal's `get_closes` activity) |
 
 **Training** (called by Saturday/Sunday cron or manual):
@@ -181,7 +179,6 @@ temporal/                         # Temporal workflow orchestration
 | `GET /models/active-symbols` | Active symbols from SAC model metadata; `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
-| `POST /etl/refresh-training-data` | Refresh training data; symbols resolved from `universe` field via the ETL universe registry |
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |
@@ -252,21 +249,17 @@ Invariants:
 
 SAC consumes a flat state vector composed of **per-stock signals**, a **per-stock PatchTST forecast**, and **portfolio-level features**. Source of truth: `SAC_SIGNAL_NAMES` in [brain_api/brain_api/core/sac/decision_context.py](brain_api/brain_api/core/sac/decision_context.py) and `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
 
-**Per-stock signals (9 per stock, x `n_stocks`, from `SAC_SIGNAL_NAMES`):**
+**Per-stock signals (5 per stock, x `n_stocks`, from `SAC_SIGNAL_NAMES`):**
 
 | Feature | Source |
 |---------|--------|
 | News sentiment score | `/signals/news` (FinBERT) |
 | News coverage | `/signals/news` (article count scaled to [0, 1]) |
-| Gross margin | `/signals/fundamentals` |
-| Debt to equity | `/signals/fundamentals` |
-| Fundamental data age | Days since last fundamentals update |
 | Momentum 1w (`P[t]/P[t-5] - 1`, 5 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
 | Momentum 4w (`P[t]/P[t-20] - 1`, 20 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
 | Momentum 12-1 (`P[t-21]/P[t-252] - 1`, skip 21 bars then 252-bar lookback) | Daily closes (yfinance train / `/signals/prices` infer) |
-| Earnings yield (`eps_diluted / as_of_close`) | SEC point-in-time diluted EPS (`/signals/fundamentals`, Basic fallback) / as-of close. Never raw P/E, never `stock_filter` EBIT/EV. |
 
-**Per-stock forecast feature (1 per stock, x `n_stocks`, separate from the 9 signals above):**
+**Per-stock forecast feature (1 per stock, x `n_stocks`, separate from the 5 signals above):**
 
 | Feature | Source |
 |---------|--------|
@@ -279,13 +272,13 @@ SAC consumes a flat state vector composed of **per-stock signals**, a **per-stoc
 | Current weight per stock | Portfolio state |
 | Current cash weight (CASH slot) | Portfolio state |
 
-For `n_stocks = 15` -> `state_dim = 15*9 + 15*1 + 16 = 166`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. Momentum and earnings yield are fail-loud (no silent zero-fill for insufficient price history, missing/non-finite EPS, or `P<=0`); train (`portfolio_rl.data_loading`) and Monday infer (`temporal/activities/sac_context.py`) duplicate the same bar counts (5/20/21/252) and encodings to avoid train/infer skew across the two independent deployables. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
+For `n_stocks = 15` -> `state_dim = 15*5 + 15*1 + 16 = 106`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. Momentum is fail-loud (no silent zero-fill for insufficient price history or `P<=0`); train (`portfolio_rl.data_loading`) and Monday infer (`temporal/activities/sac_context.py`) duplicate the same bar counts (5/20/21/252) and encodings to avoid train/infer skew across the two independent deployables. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
 - **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
 - **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
-- **SAC** = RL allocator that receives the 8-per-stock features (7 signals + PatchTST forecast) plus portfolio weights, US only
+- **SAC** = RL allocator that receives 5 signals + PatchTST forecast per stock plus portfolio weights, US only
 
 ## Data storage rules
 
@@ -352,8 +345,8 @@ core training functions -- there is **no env-var-driven universe
 selection** for forecasters, SAC, or ETL. ETL has its own sibling
 registry at
 [brain_api/brain_api/etl/universe_registry.py](brain_api/brain_api/etl/universe_registry.py)
-keyed only on the universe string (no model dimension); the three
-`/etl/*` endpoints take `{"universe": "<name>"}` in the request body
+keyed only on the universe string (no model dimension); the two
+`/etl/*` job endpoints take `{"universe": "<name>"}` in the request body
 and 422 on unknown values. This keeps two parallel SAC workflows
 (e.g. `halal_filtered` and a future `halal`) from racing on a single
 process-wide env var when each refreshes its own slate.
@@ -524,7 +517,7 @@ Key configuration:
 - **Parallel execution**: `asyncio.gather()` for concurrent activity execution within workflows
 - **Pydantic data converter**: `pydantic_data_converter` used for correct Pydantic v2 serialization
 - **Sell-wait-buy**: Single workflow with a market-aware durable polling loop. After submitting sells, the helper fetches the Alpaca market clock once (`GET /alpaca/clock`); if the market is closed it sleeps until exactly the advertised `next_open` (no lead-time fudge), then polls `check_order_statuses` every `POLL_INTERVAL = 1 min` until all sells reach a terminal status or the 48h `SELL_DEADLINE` is hit. Replaces the legacy flat 15-min poll cadence.
-- **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL-ish activities inside training workflows (e.g. `refresh_training_data`) automatically land on the training worker.
+- **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL activities inside training workflows (e.g. `run_sentiment_gap_fill`) automatically land on the training worker.
 - **Activity concurrency cap** (per worker): `TEMPORAL_MAX_CONCURRENT_ACTIVITIES` env (default `10`) drives BOTH `Worker(max_concurrent_activities=N)` and the `ThreadPoolExecutor(max_workers=N)`. The Mac training worker sets this to `1` so heavy training activities are serialized; Pi inference keeps the default `10` so fast allocation activities run in parallel.
 
 **Host topology** (current production deployment):

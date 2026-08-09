@@ -34,13 +34,9 @@ def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
         "AAA": {
             "news_sentiment": 0.1,
             "news_coverage": 0.5,
-            "gross_margin": 0.5,
-            "debt_to_equity": 0.3,
-            "fundamental_age": 12.0,
             "momentum_1w": 0.01,
             "momentum_4w": 0.02,
             "momentum_12_1": 0.10,
-            "earnings_yield": 0.05,
         }
     }
     return signals, {"AAA": 0.03}
@@ -51,8 +47,8 @@ def test_state_schema_dimension_and_strict_construction() -> None:
     state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
     assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
-    assert StateSchema(n_stocks=15).state_dim == 166
-    assert state.shape == (12,)
+    assert StateSchema(n_stocks=15).state_dim == 106
+    assert state.shape == (8,)
     assert state[1] == pytest.approx(0.5)
 
 
@@ -127,8 +123,8 @@ def test_training_data_requires_complete_inputs_and_uses_trade_time_price() -> N
     assert data.symbol_returns[:, 0] == pytest.approx([0.10, -0.10])
 
     broken = dict(signal_arrays["AAA"])
-    broken.pop("gross_margin")
-    with pytest.raises(ValueError, match="gross_margin"):
+    broken.pop("momentum_4w")
+    with pytest.raises(ValueError, match="momentum_4w"):
         build_training_data(
             {"AAA": np.array([100.0, 110.0, 99.0])},
             {"AAA": broken},

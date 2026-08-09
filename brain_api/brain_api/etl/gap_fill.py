@@ -22,6 +22,9 @@ from brain_api.core.finbert import FinBERTScorer, SentimentScore
 from brain_api.core.news_api.alpaca import ALPACA_EARLIEST_DATE, AlpacaNewsClient
 from brain_api.etl.gap_detection import categorize_gaps, find_gaps, get_gap_statistics
 from brain_api.etl.parquet_writer import OUTPUT_SCHEMA
+from brain_api.etl.publication import (
+    publish_sentiment_parquet as _publish_sentiment_parquet,
+)
 from brain_api.etl.universe_registry import (
     UnknownETLUniverseError,
     get_etl_symbols,
@@ -322,19 +325,26 @@ def fill_sentiment_gaps(
 
         if not fillable_gaps:
             logger.info("No fillable gaps found (all gaps are pre-2015)")
-            progress.status = "completed"
-            progress.current_phase = "done"
             progress.remaining_gaps = 0
+            progress.current_phase = "publishing"
             update_progress()
 
             statistics = get_gap_statistics(
                 symbols, start_date, end_date, parquet_path, ALPACA_EARLIEST_DATE
             )
+            hf_url = _publish_sentiment_parquet(
+                parquet_path=parquet_path,
+                local_only=local_only,
+            )
+            progress.status = "completed"
+            progress.current_phase = "done"
+            update_progress()
             return GapFillResult(
                 success=True,
                 progress=progress,
                 statistics=statistics,
                 parquet_updated=False,
+                hf_url=hf_url,
             )
 
         # Phase 3: Fetch news from Alpaca and score
@@ -510,15 +520,15 @@ def fill_sentiment_gaps(
         if was_cancelled:
             progress.status = "cancelled"
             progress.current_phase = "cancelled"
+            progress.error = "Cancelled by server shutdown"
             logger.warning(
                 f"Gap fill cancelled by shutdown: {progress.rows_added} rows saved, "
                 f"{progress.remaining_gaps:,} gaps still remaining"
             )
         else:
-            progress.status = "completed"
-            progress.current_phase = "done"
+            progress.current_phase = "publishing"
             logger.info(
-                f"Gap fill completed: {rows_added} rows added, "
+                f"Gap fill scan completed: {rows_added} rows added, "
                 f"{progress.api_calls_made} API calls made, "
                 f"{progress.remaining_gaps:,} gaps remaining"
             )
@@ -528,10 +538,27 @@ def fill_sentiment_gaps(
             symbols, start_date, end_date, parquet_path, ALPACA_EARLIEST_DATE
         )
 
-        # Upload to HuggingFace if configured and not local_only
-        hf_url = None
-        if not local_only and rows_added > 0:
-            hf_url = _upload_to_huggingface(parquet_path)
+        if was_cancelled:
+            return GapFillResult(
+                success=False,
+                progress=progress,
+                statistics=statistics,
+                parquet_updated=progress.rows_added > 0,
+            )
+
+        # Every non-local scan publishes the current local parquet, even when
+        # this run added zero rows. This heals divergence left by older
+        # local-only runs and prevents downstream workers from training on
+        # unpublished state.
+        hf_url = _publish_sentiment_parquet(
+            parquet_path=parquet_path,
+            local_only=local_only,
+        )
+
+        if not was_cancelled:
+            progress.status = "completed"
+            progress.current_phase = "done"
+            update_progress()
 
         return GapFillResult(
             success=True,
@@ -547,49 +574,3 @@ def fill_sentiment_gaps(
         progress.error = str(e)
         update_progress()
         return GapFillResult(success=False, progress=progress)
-
-
-def _upload_to_huggingface(parquet_path: Path) -> str | None:
-    """Upload parquet file to HuggingFace.
-
-    Args:
-        parquet_path: Path to the parquet file
-
-    Returns:
-        URL of the uploaded file, or None if upload failed or not configured
-    """
-    from brain_api.etl.config import get_hf_news_sentiment_repo
-
-    hf_repo = get_hf_news_sentiment_repo()
-    if not hf_repo:
-        logger.info("HuggingFace upload skipped (HF_NEWS_SENTIMENT_REPO not set)")
-        return None
-
-    try:
-        from huggingface_hub import HfApi
-
-        logger.info(f"Uploading to HuggingFace: {hf_repo}")
-        api = HfApi()
-
-        # Create repo if it doesn't exist
-        try:
-            api.repo_info(repo_id=hf_repo, repo_type="dataset")
-        except Exception:
-            logger.info(f"Creating HuggingFace repository: {hf_repo}")
-            api.create_repo(repo_id=hf_repo, repo_type="dataset", exist_ok=True)
-
-        # Upload parquet file
-        api.upload_file(
-            path_or_fileobj=str(parquet_path),
-            path_in_repo="daily_sentiment.parquet",
-            repo_id=hf_repo,
-            repo_type="dataset",
-        )
-
-        hf_url = f"https://huggingface.co/datasets/{hf_repo}"
-        logger.info(f"Uploaded to {hf_url}")
-        return hf_url
-
-    except Exception as e:
-        logger.error(f"HuggingFace upload failed: {e}")
-        return None

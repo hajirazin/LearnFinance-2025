@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from brain_api.core.config import resolve_training_window
-from brain_api.core.fundamentals import (
-    FundamentalsCacheError,
-    load_historical_fundamentals_from_cache,
-)
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, UnknownBucketError, get_bucket
 from brain_api.core.news_sentiment import NewsObservationError
@@ -83,17 +78,6 @@ def assess_sac_training_readiness(
     start_date, end_date = resolve_training_window()
     missing: list[SACReadinessIssue] = []
     errors: list[SACReadinessIssue] = []
-    if not os.environ.get("SEC_USER_AGENT", "").strip():
-        errors.append(
-            SACReadinessIssue(
-                "sec_filing_enrichment",
-                (
-                    "SEC_USER_AGENT is required for point-in-time fundamentals "
-                    "enrichment; set it to an application name and contact email"
-                ),
-                retryable=False,
-            )
-        )
     trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
     weekly_cutoffs = trade_clock.transition_actor_cutoffs
 
@@ -158,61 +142,11 @@ def assess_sac_training_readiness(
                 SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
             )
 
-        fundamentals = None
-        try:
-            fundamentals = load_historical_fundamentals_from_cache(
-                [symbol], start_date=date.min, end_date=end_date
-            )
-            if symbol not in fundamentals or fundamentals[symbol].empty:
-                missing.append(
-                    SACReadinessIssue(
-                        "fundamentals",
-                        "No complete SEC-filing-date-enriched periods available",
-                        symbol=symbol,
-                        retryable=True,
-                    )
-                )
-                fundamentals = None
-        except FundamentalsCacheError as exc:
-            errors.append(
-                SACReadinessIssue(
-                    "fundamentals", str(exc), symbol=symbol, retryable=False
-                )
-            )
-        except Exception as exc:
-            errors.append(
-                SACReadinessIssue(
-                    "fundamentals", str(exc), symbol=symbol, retryable=False
-                )
-            )
-
-        if (
-            price_ready
-            and news is not None
-            and fundamentals is not None
-            and symbol in fundamentals
-        ):
-            fundamental_frame = fundamentals[symbol]
-            first_available = fundamental_frame.index.min()
-            first_cutoff = weekly_cutoffs.min()
-            if first_available > first_cutoff:
-                missing.append(
-                    SACReadinessIssue(
-                        "fundamentals",
-                        (
-                            "No filing was available before every SAC training "
-                            f"cutoff for {symbol}"
-                        ),
-                        symbol=symbol,
-                        retryable=True,
-                    )
-                )
-                continue
+        if price_ready and news is not None:
             try:
                 align_signals_to_weekly(
                     {symbol: price_frame},
                     news,
-                    fundamentals,
                     [symbol],
                     weekly_cutoffs=weekly_cutoffs,
                 )
@@ -221,13 +155,9 @@ def assess_sac_training_readiness(
                     SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
                 )
             except ValueError as exc:
-                issue = SACReadinessIssue(
-                    "fundamentals",
-                    str(exc),
-                    symbol=symbol,
-                    retryable="missing columns" not in str(exc).lower(),
+                missing.append(
+                    SACReadinessIssue("prices", str(exc), symbol=symbol, retryable=True)
                 )
-                (missing if issue.retryable else errors).append(issue)
 
     for forecaster_type in ("patchtst",):
         storage = SnapshotLocalStorage(forecaster_type)

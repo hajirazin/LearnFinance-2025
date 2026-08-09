@@ -149,5 +149,5 @@ class TestUSForecastersTrainingWorkflow:
             # No SAC, refresh, or filtered-fetch activities should be
             # invoked from the forecasters workflow.
             assert "train_sac" not in call_log
-            assert "refresh_training_data" not in call_log
+            assert "run_sentiment_gap_fill" not in call_log
             assert "fetch_halal_filtered_universe" not in call_log

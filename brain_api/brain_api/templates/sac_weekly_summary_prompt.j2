@@ -29,10 +29,10 @@ Top 5 Allocations:
 - {{ sym }}: {{ "%.1f" | format(wt * 100) }}%
 {% endif %}{% endfor %}
 
-### Momentum & Earnings Yield (Top Allocations)
+### Momentum (Top Allocations)
 {% set sac_signals = sac.decision_state.context.feature_bundle.signals if sac.decision_state else None %}
 {% if sac_signals %}{% for sym, wt in sac.target_weights.items() | sort(attribute='1', reverse=true) %}{% if loop.index <= 5 and sym != 'CASH' and sym in sac_signals %}
-- {{ sym }}: momentum_1w={{ "%.1f" | format(sac_signals[sym].momentum_1w * 100) }}%, momentum_4w={{ "%.1f" | format(sac_signals[sym].momentum_4w * 100) }}%, momentum_12_1={{ "%.1f" | format(sac_signals[sym].momentum_12_1 * 100) }}%, earnings_yield={{ "%.1f" | format(sac_signals[sym].earnings_yield * 100) }}%
+- {{ sym }}: momentum_1w={{ "%.1f" | format(sac_signals[sym].momentum_1w * 100) }}%, momentum_4w={{ "%.1f" | format(sac_signals[sym].momentum_4w * 100) }}%, momentum_12_1={{ "%.1f" | format(sac_signals[sym].momentum_12_1 * 100) }}%
 {% endif %}{% endfor %}{% else %}
 - Not available (SAC allocator was skipped this run).
 {% endif %}
@@ -42,18 +42,12 @@ Top 5 Allocations:
 - {{ item.symbol }}: sentiment={{ "%.2f" | format(item.sentiment_score) }}{% if item.top_k_articles %} ({{ item.top_k_articles[0].title[:50] }}...){% endif %}
 {% endfor %}
 
-## Fundamentals (Financial Ratios)
-{% for item in fundamentals.per_symbol[:10] %}
-- {{ item.symbol }}: {% if item.ratios %}gross={{ "%.0f" | format((item.ratios.gross_margin or 0) * 100) }}%{% else %}N/A{% endif %}
-{% endfor %}
-
 ## Instructions
 
 Provide a concise analysis. Respond with JSON only:
 {
     "para_1_overall_summary": "<3 sentences: overall market outlook and key themes>",
-    "para_2_sac": "<3 sentences: SAC allocator insights and notable positions, referencing momentum and earnings yield for the top allocations when available>",
+    "para_2_sac": "<3 sentences: SAC allocator insights and notable positions, referencing momentum for the top allocations when available>",
     "para_3_patchtst_forecast": "<3 sentences: PatchTST predictions and signal analysis>",
-    "para_4_news_sentiment": "<3 sentences: overall news sentiment themes>",
-    "para_5_fundamentals": "<3 sentences: fundamental strength of top picks>"
+    "para_4_news_sentiment": "<3 sentences: overall news sentiment themes>"
 }

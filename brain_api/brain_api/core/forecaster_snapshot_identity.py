@@ -2,9 +2,9 @@
 
 Monthly forecaster snapshots for year-end cutoffs use the extended backfill
 price window start (matching ``_backfill_lstm_snapshots`` /
-``_backfill_patchtst_snapshots``). SAC dual-forecast generation only consumes
-those Dec-31 checkpoints from the ``lstm_halal_new`` and ``patchtst_halal_new``
-buckets via :func:`~brain_api.storage.policy.ensure_snapshot_for_bucket`.
+``_backfill_patchtst_snapshots``). SAC forecast generation consumes the
+PatchTST Dec-31 checkpoints from the ``patchtst_halal_new`` bucket via
+:func:`~brain_api.storage.policy.ensure_snapshot_for_bucket`.
 
 This module is also the read-side mirror of the snapshot backfill loops:
 :func:`count_missing_snapshots` answers "which snapshots would the backfill
@@ -83,7 +83,7 @@ def expected_dec31_walkforward_snapshot_hash(
 
 
 def lstm_walkforward_expectation_bundle() -> tuple[str, list[str], dict]:
-    """(bucket_name, resolver_symbols, default_lstm_config_dict) for SAC LSTM snaps."""
+    """Return the identity inputs for standalone LSTM walk-forward snapshots."""
     return (
         "lstm_halal_new",
         halal_new_lstm_resolver_symbols(),

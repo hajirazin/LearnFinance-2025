@@ -4,7 +4,7 @@ A **learning-focused** weekly portfolio system (paper by default, per-account li
 
 ## What it does
 
-Each Monday the system runs five independent Temporal workflows that each pick 15 halal stocks and allocate weights using a different strategy. Across all workflows, the brain_api collects the same building blocks (universe scrape, news/fundamentals signals, LSTM + PatchTST price forecasters, HRP/SAC/Alpha-HRP/Double-HRP allocators) and emails a per-strategy report so you can compare outcomes over time.
+Each Monday the system runs independent Temporal workflows that allocate halal portfolios using different strategies. Across the workflows, brain_api owns universe scraping, news and momentum signals, LSTM + PatchTST price forecasters, HRP/SAC/Alpha-HRP/Double-HRP allocators, and per-strategy reports.
 
 ### What it does NOT do
 
@@ -23,7 +23,7 @@ Each Monday the system runs five independent Temporal workflows that each pick 1
 
 | Workflow | Schedule (UTC / IST) | Market | Strategy | Key brain_api endpoints |
 |----------|----------------------|--------|----------|-------------------------|
-| `us-weekly-allocate` (`USWeeklyAllocationWorkflow`) | Mon 11:00 UTC / 18:00 IST | US | SAC (RL with LSTM + PatchTST forecasts) | `/universe/halal_filtered`, `/alpaca/portfolio`, `/signals/{news,fundamentals}`, `/inference/{lstm,patchtst,sac}`, `/orders/generate`, `/alpaca/submit-orders`, `/llm/sac-weekly-summary`, `/email/sac-weekly-report` |
+| `us-weekly-allocate` (`USWeeklyAllocationWorkflow`) | Mon 11:00 UTC / 18:00 IST | US | SAC (news + momentum + PatchTST) | `/universe/halal_filtered`, `/alpaca/portfolio`, `/signals/{news,prices}`, `/inference/{patchtst,sac}`, `/orders/generate`, `/alpaca/submit-orders`, `/llm/sac-weekly-summary`, `/email/sac-weekly-report` |
 | `us-double-hrp` (`USDoubleHRPWorkflow`) | Mon 11:30 UTC / 17:00 IST | US | Stage-1 HRP on `halal_new` -> sticky top-15 -> Stage-2 HRP | `/universe/halal_new`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/us-double-hrp-summary`, `/email/us-double-hrp-report` |
 | `us-alpha-hrp` (`USAlphaHRPWorkflow`) | Mon 12:00 UTC / 17:30 IST | US | PatchTST alpha screen -> rank-band sticky top-15 -> HRP | `/universe/halal_new`, `/inference/patchtst/score-batch`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/us-alpha-hrp-summary`, `/email/us-alpha-hrp-report` |
 | `india-weekly-allocate` (`IndiaWeeklyAllocationWorkflow`) | Mon 03:30 UTC / 09:00 IST | India | PatchTST alpha screen -> rank-band sticky top-15 -> HRP (paper-only, no broker) | `/universe/nifty_shariah_500`, `/inference/patchtst/score-batch?market=india`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/india-alpha-hrp-summary`, `/email/india-alpha-hrp-report` |
@@ -47,8 +47,8 @@ This repo compares multiple approaches at each stage:
 | Model | Input | Status |
 |-------|-------|--------|
 | HRP | Covariance matrix | ✅ Active |
-| ~~PPO~~ | ~~State vector + dual forecasts (LSTM + PatchTST)~~ | Retired |
-| SAC | State vector + dual forecasts (LSTM + PatchTST) | ✅ Active |
+| ~~PPO~~ | ~~Legacy state vector~~ | Retired |
+| SAC | State vector + PatchTST forecast | ✅ Active |
 
 > **Note:** After 3 months of paper-trading experimentation, HRP and SAC consistently outperformed PPO. PPO has been retired from the codebase.
 
@@ -58,24 +58,20 @@ This repo compares multiple approaches at each stage:
 |--------|--------|----------|
 | News sentiment (FinBERT) | ✅ Active | `/signals/news` |
 | News sentiment (historical) | ✅ Active | `/signals/news/historical` |
-| Fundamentals (5 ratios) | ✅ Active | `/signals/fundamentals` |
-| Fundamentals (historical) | ✅ Active | `/signals/fundamentals/historical` |
+| Price momentum (1w, 4w, 12-1) | ✅ Active | `/signals/prices` |
 | Twitter/Social sentiment | 🔜 To build | — |
 
 ### Signal state vector (for SAC allocator)
 
-**9 features per stock** (x15 stocks selected by `halal_filtered`) = 7 signals + 2 forecasts:
+**6 features per stock** (x15 stocks selected by `halal_filtered`) = 5 signals + 1 forecast:
 
 | Feature | Source |
 |---------|--------|
 | News sentiment score | `/signals/news` (FinBERT) |
-| Gross margin | `/signals/fundamentals` |
-| Operating margin | `/signals/fundamentals` |
-| Net margin | `/signals/fundamentals` |
-| Current ratio | `/signals/fundamentals` |
-| Debt to equity | `/signals/fundamentals` |
-| Fundamental data age | Days since last fundamentals update |
-| LSTM predicted return | `/inference/lstm` (re-run on the chosen 15) |
+| News coverage | `/signals/news` |
+| Momentum 1w | Daily closes from `/signals/prices` |
+| Momentum 4w | Daily closes from `/signals/prices` |
+| Momentum 12-1 | Daily closes from `/signals/prices` |
 | PatchTST predicted return | `/inference/patchtst` (re-run on the chosen 15) |
 
 Plus portfolio-level features:
@@ -85,12 +81,12 @@ Plus portfolio-level features:
 | Current weight per stock (15) | Portfolio state |
 | Current cash weight | Portfolio state (CASH slot in weight vector) |
 
-Total state dimension for 15 stocks: 15 stocks × 9 = 135 stock features + 16 portfolio weights (15 stocks + CASH) = **151** (see [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py)).
+Total state dimension for 15 stocks: 15 stocks × 6 = 90 stock features + 16 portfolio weights (15 stocks + CASH) = **106** (see [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py)).
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
 - **PatchTST** = OHLCV forecaster (5-channel log returns, direct 5-day prediction)
-- **SAC** = RL allocator (receive signals + both LSTM and PatchTST return forecasts)
+- **SAC** = RL allocator (receives five news/momentum signals + PatchTST return forecast)
 
 ## Prerequisites
 
@@ -164,7 +160,7 @@ Create 2 paper trading accounts at [Alpaca](https://alpaca.markets/) and get API
 
 | Account | Algorithm | Description |
 |---------|-----------|-------------|
-| SAC | SAC | Off-policy RL with dual forecasts (LSTM + PatchTST) |
+| SAC | SAC | Off-policy RL with PatchTST forecast features |
 | HRP | Alpha-HRP | PatchTST alpha screen on `halal_new` -> rank-band sticky top 15 -> HRP (replaces retired naive HRP allocator on the same `hrp` Alpaca account) |
 
 **OpenAI (for LLM summaries):**
@@ -237,12 +233,12 @@ sequenceDiagram
   participant Email as Gmail_SMTP
 
   Temporal->>Brain: GET /universe/halal
-  Temporal->>Brain: GET /alpaca/portfolio (SAC, HRP)
+  Temporal->>Brain: GET /alpaca/portfolio (SAC)
   Brain->>Alpaca: Fetch positions and cash
-  Temporal->>Brain: POST /signals/fundamentals, /signals/news
-  Temporal->>Brain: POST /inference/lstm, /inference/patchtst
-  Temporal->>Brain: POST /inference/sac, /allocation/hrp
-  Temporal->>Brain: POST /orders/generate (for each algorithm)
+  Temporal->>Brain: POST /signals/news, /signals/prices
+  Temporal->>Brain: POST /inference/patchtst
+  Temporal->>Brain: POST /inference/sac
+  Temporal->>Brain: POST /orders/generate (SAC)
   Temporal->>Brain: POST /alpaca/submit-orders
   Brain->>Alpaca: Submit limit orders
   Temporal->>Brain: POST /llm/sac-weekly-summary
@@ -252,46 +248,41 @@ sequenceDiagram
 
 ### 7-Phase execution architecture (US SAC weekly workflow)
 
-This 7-phase shape applies to the SAC US workflow only. Alpha-HRP / Double-HRP variants compress these into fewer phases (no SAC inference, no LSTM, sticky selection inserted between Stage 1 and Stage 2). The Temporal workflow executes in 7 phases with parallel tasks where possible:
+This 7-phase shape applies to the SAC US workflow only. LSTM training/inference and all HRP strategies run in separate workflows. The Temporal workflow executes in 7 phases with parallel tasks where possible:
 
 ```mermaid
 flowchart TD
     Trigger[Monday_18_IST] --> Phase0
 
-    subgraph Phase0[Phase 0 - Universe and Portfolios]
+    subgraph Phase0[Phase 0 - Universe and Portfolio]
         GetUniverse[GET Universe]
         GetSAC[GET SAC Portfolio]
-        GetHRP[GET HRP Portfolio]
     end
 
     Phase0 --> Phase1
 
     subgraph Phase1[Phase 1 - Signals and Forecasts]
-        Fundamentals[POST Fundamentals]
+        Prices[POST Price History]
         NewsSentiment[POST News Sentiment]
-        LSTMForecast[POST LSTM Forecast]
         PatchTSTForecast[POST PatchTST Forecast]
     end
 
     Phase1 --> Phase2
 
-    subgraph Phase2[Phase 2 - Allocators]
+    subgraph Phase2[Phase 2 - Allocator]
         SAC[POST SAC Inference]
-        HRP[POST HRP Allocation]
     end
 
     Phase2 --> Phase3
 
     subgraph Phase3[Phase 3 - Generate Orders]
         OrdersSAC[Generate SAC Orders]
-        OrdersHRP[Generate HRP Orders]
     end
 
     Phase3 --> Phase4
 
     subgraph Phase4[Phase 4 - Submit Orders]
         SubmitSAC[Submit SAC to Alpaca]
-        SubmitHRP[Submit HRP to Alpaca]
     end
 
     Phase4 --> Phase5
@@ -429,8 +420,8 @@ The system maintains five universe tiers — two base universes (raw scrapes), t
 Notes:
 
 - **No factor scoring is used.** Both `halal_filtered` (US) and `halal_india` (India) are produced by PatchTST predicted weekly return + rank-band sticky selection (after a min-history filter), in distinct partitions (`halal_filtered_alpha` and `halal_india_filtered_alpha`) of the `screening_history` table. There is no momentum/quality/value blend, no ROE/Beta/SMA rule.
-- RL/SAC requires exactly 15 stocks, so `halal_filtered` (US) and `halal_india` (India) are the only RL-eligible universes today; `halal` happens to also be ~14 but is legacy-only.
-- After top-15 selection, both LSTM and PatchTST run **again** on those 15 symbols to produce SAC's per-stock dual-forecast features.
+- SAC resizes `n_stocks` from its universe at training time. The `halal_filtered` bucket is fixed at 15 stocks, while the parallel `halal` bucket uses its variable legacy slate (typically 12-15 stocks).
+- After top-15 selection, PatchTST runs **again** on those 15 symbols to produce SAC's per-stock forecast feature. LSTM remains a standalone forecaster and is not an SAC input.
 - Results are cached monthly (one fetch per calendar month) to avoid redundant external API calls. Cache files live under `brain_api/data/cache/universe/<name>_YYYY-MM.json`.
 
 ### RL reward design
@@ -492,7 +483,7 @@ We store three kinds of data:
 | `POST /inference/patchtst/india` | PatchTST 5-day return predictions (India, OHLCV 5-channel, `PatchTSTIndiaModelStorage`) |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST alpha screen (US or India via `market` param) -> `{symbol -> predicted_weekly_return_pct}` |
 | ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ (Retired) |
-| `POST /inference/sac` | SAC allocation (dual LSTM + PatchTST forecasts on the chosen 15 stocks) |
+| `POST /inference/sac` | SAC allocation (PatchTST forecasts on the chosen stock slate) |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 | `POST /allocation/sticky-top-n` | Persist Stage 1 weights and select top-N with rank-band sticky retention |
 | `POST /allocation/record-final-weights` | Record Stage 2 final weights for the just-completed week |
@@ -509,8 +500,7 @@ We store three kinds of data:
 |----------|---------|
 | `POST /signals/news` | News sentiment (FinBERT, real-time) |
 | `POST /signals/news/historical` | News sentiment (historical) |
-| `POST /signals/fundamentals` | Financial ratios (5 metrics) |
-| `POST /signals/fundamentals/historical` | Historical fundamentals |
+| `POST /signals/prices` | Raw closes for SAC momentum signals |
 
 ### Training endpoints
 
@@ -519,7 +509,7 @@ We store three kinds of data:
 | `POST /train/lstm` | Full LSTM retrain (US) | Monthly (manual) |
 | `POST /train/patchtst` | Full PatchTST retrain (US) | Monthly (manual) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) | Weekly (cron, beefier host only) |
-| ~~`POST /train/ppo/full`~~ | ~~Full PPO retrain (dual forecasts)~~ | ~~Monthly (manual)~~ |
+| ~~`POST /train/ppo/full`~~ | ~~Full PPO retrain~~ | ~~Monthly (manual)~~ |
 | ~~`POST /train/ppo/finetune`~~ | ~~PPO fine-tune on experience buffer~~ | ~~Weekly (cron)~~ |
 | `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts) | Monthly (manual) |
 
@@ -576,7 +566,6 @@ We store three kinds of data:
 | `GET /etl/news-sentiment/{job_id}` | Get ETL job status |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill |
 | `GET /etl/sentiment-gaps/{job_id}` | Get gap-fill job status |
-| `POST /etl/refresh-training-data` | Refresh training data (sentiment gaps + fundamentals) |
 
 ### Experience endpoints
 
@@ -767,7 +756,6 @@ brain_api/brain_api/
 │   ├── patchtst/             # dataset, data_loaders, inference, training
 │   ├── sac/                  # training, inference
 │   ├── portfolio_rl/         # env, rewards, state, constraints, scaler, sac_networks
-│   ├── fundamentals/         # fetcher, parser, storage, loader
 │   ├── news_sentiment/       # processor, fetcher, aggregation, persistence
 │   ├── hrp.py
 │   ├── orders.py

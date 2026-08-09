@@ -13,7 +13,6 @@ import pytest
 from models import (
     ActiveSymbolsResponse,
     AlpacaPortfolioResponse,
-    FundamentalsResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
@@ -317,14 +316,6 @@ def patchtst_resp():
 def news_resp():
     return NewsSignalResponse(
         per_symbol=[{"symbol": "AAPL", "sentiment_score": 0.5, "article_count": 10}],
-        as_of_date="2026-02-05",
-    )
-
-
-@pytest.fixture
-def fundamentals_resp():
-    return FundamentalsResponse(
-        per_symbol=[{"symbol": "AAPL", "ratios": {"gross_margin": 0.42}}],
         as_of_date="2026-02-05",
     )
 

@@ -15,17 +15,10 @@ import numpy as np
 SAC_SIGNAL_NAMES = (
     "news_sentiment",
     "news_coverage",
-    "gross_margin",
-    "debt_to_equity",
-    "fundamental_age",
     "momentum_1w",
     "momentum_4w",
     "momentum_12_1",
-    "earnings_yield",
 )
-
-# Backward-compatible alias for callers/tests still importing the old name.
-SAC_V2_SIGNAL_NAMES = SAC_SIGNAL_NAMES
 
 
 class SACDecisionContextError(ValueError):

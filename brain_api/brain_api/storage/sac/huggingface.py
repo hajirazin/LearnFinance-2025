@@ -445,7 +445,7 @@ tags:
 - reinforcement-learning
 - portfolio-optimization
 - finance
-- dual-forecasts
+- patchtst-forecasts
 - learnfinance
 ---
 

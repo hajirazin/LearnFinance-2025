@@ -1,7 +1,7 @@
 """Data loading utilities for portfolio RL training.
 
-Provides functions to load historical signals (news, fundamentals) and
-align them to weekly frequency for SAC training.
+Provides functions to load historical news and align news plus price momentum
+to weekly frequency for SAC training.
 """
 
 from datetime import date, timedelta
@@ -10,10 +10,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from brain_api.core.fundamentals import (
-    get_default_data_path,
-    load_historical_fundamentals_from_cache,
-)
 from brain_api.core.news_sentiment import (
     DailyNewsObservation,
     NewsObservationError,
@@ -21,14 +17,10 @@ from brain_api.core.news_sentiment import (
 )
 from brain_api.core.sac.momentum_signals import (
     MomentumSignalError,
-    compute_earnings_yield,
     compute_momentum_1w,
     compute_momentum_4w,
     compute_momentum_12_1,
 )
-
-# Alias for backward compatibility
-load_historical_fundamentals = load_historical_fundamentals_from_cache
 
 
 def load_historical_news_sentiment(
@@ -49,7 +41,12 @@ def load_historical_news_sentiment(
         Dict mapping symbol -> provider-checked daily observation DataFrame.
     """
     if parquet_path is None:
-        parquet_path = get_default_data_path() / "output" / "daily_sentiment.parquet"
+        parquet_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "data"
+            / "output"
+            / "daily_sentiment.parquet"
+        )
 
     sentiment: dict[str, pd.DataFrame] = {}
 
@@ -119,16 +116,14 @@ def load_historical_news_sentiment(
 def align_signals_to_weekly(
     prices_dict: dict[str, pd.DataFrame],
     news_sentiment: dict[str, pd.DataFrame],
-    fundamentals: dict[str, pd.DataFrame],
     symbols: list[str],
     weekly_cutoffs: pd.DatetimeIndex | None = None,
 ) -> dict[str, dict[str, np.ndarray]]:
-    """Align news and fundamentals signals to weekly frequency.
+    """Align news and price-momentum signals to weekly frequency.
 
     Args:
         prices_dict: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
         news_sentiment: Dict of symbol -> sentiment DataFrame
-        fundamentals: Dict of symbol -> fundamentals DataFrame
         symbols: Ordered list of symbols
 
     Returns:
@@ -159,9 +154,6 @@ def align_signals_to_weekly(
 
         if symbol not in news_sentiment:
             raise NewsObservationError(f"Missing news observations for {symbol}")
-        if symbol not in fundamentals:
-            raise ValueError(f"Missing point-in-time fundamentals for {symbol}")
-
         sentiment_df = news_sentiment[symbol]
         if sentiment_df.index.tz is not None:
             sentiment_df = sentiment_df.copy()
@@ -198,51 +190,6 @@ def align_signals_to_weekly(
             ),
         }
 
-        # Align fundamentals (forward-fill quarterly to weekly)
-        fund_df = fundamentals[symbol]
-        if fund_df.index.tz is not None:
-            fund_df = fund_df.copy()
-            fund_df.index = fund_df.index.tz_localize(None)
-        fund_aligned = fund_df.reindex(weekly_index, method="ffill")
-        ratio_columns = [
-            "gross_margin",
-            "debt_to_equity",
-        ]
-        missing_ratio_columns = set(ratio_columns).difference(fund_aligned.columns)
-        if missing_ratio_columns:
-            raise ValueError(
-                f"Fundamentals missing columns for {symbol}: "
-                f"{sorted(missing_ratio_columns)}"
-            )
-        if fund_aligned[ratio_columns].isna().any().any():
-            raise ValueError(f"Missing point-in-time fundamental ratios for {symbol}")
-        for column in ratio_columns:
-            symbol_signals[column] = fund_aligned[column].to_numpy(dtype=float)
-
-        fund_dates = fund_df.index.values
-        positions = np.searchsorted(fund_dates, weekly_index.values, side="right")
-        if np.any(positions == 0):
-            raise ValueError(
-                f"No filing was available before a training week for {symbol}"
-            )
-        last_updates = fund_dates[positions - 1]
-        symbol_signals["fundamental_age"] = (
-            (weekly_index.values - last_updates).astype("timedelta64[D]").astype(float)
-        )
-
-        # earnings_yield = eps_diluted / as_of_close (SEC diluted EPS,
-        # Basic fallback -- a distinct metric from the universe screening
-        # module's operating-income-over-enterprise-value ratio; see
-        # AGENTS.md universe pipeline invariants for that unrelated usage).
-        # eps_diluted is optional on the fundamentals frame (does not
-        # gate gross_margin/debt_to_equity), so it is validated here,
-        # separately from `ratio_columns` above.
-        if "eps_diluted" not in fund_aligned.columns:
-            raise ValueError(f"Fundamentals missing eps_diluted for {symbol}")
-        if fund_aligned["eps_diluted"].isna().any():
-            raise ValueError(f"Missing point-in-time eps_diluted for {symbol}")
-        eps_diluted_values = fund_aligned["eps_diluted"].to_numpy(dtype=float)
-
         # momentum_1w = P_t/P_t-5-1 (5 trading bars); momentum_4w =
         # P_t/P_t-20-1 (20 trading bars); momentum_12_1 = P_t-21/P_t-252-1
         # (skip 21 bars, then 252-bar/~12-month lookback). Same daily
@@ -266,7 +213,6 @@ def align_signals_to_weekly(
         momentum_1w = np.empty(n_weeks)
         momentum_4w = np.empty(n_weeks)
         momentum_12_1 = np.empty(n_weeks)
-        earnings_yield = np.empty(n_weeks)
         for week_idx, close_position in enumerate(close_positions):
             as_of_index = int(close_position)
             try:
@@ -279,20 +225,15 @@ def align_signals_to_weekly(
                 momentum_12_1[week_idx] = compute_momentum_12_1(
                     close_values, as_of_index=as_of_index
                 )
-                earnings_yield[week_idx] = compute_earnings_yield(
-                    eps_diluted=float(eps_diluted_values[week_idx]),
-                    as_of_close=float(close_values[as_of_index]),
-                )
             except MomentumSignalError as exc:
                 raise ValueError(
-                    f"Momentum/earnings-yield computation failed for {symbol} "
+                    f"Momentum computation failed for {symbol} "
                     f"at {weekly_index[week_idx].date()}: {exc}"
                 ) from exc
 
         symbol_signals["momentum_1w"] = momentum_1w
         symbol_signals["momentum_4w"] = momentum_4w
         symbol_signals["momentum_12_1"] = momentum_12_1
-        symbol_signals["earnings_yield"] = earnings_yield
 
         signals[symbol] = symbol_signals
 
@@ -333,15 +274,10 @@ def build_rl_training_signals(
     )
     print(f"[PortfolioRL] Loaded news sentiment for {len(news_sentiment)} symbols")
 
-    # Load fundamentals
-    fundamentals = load_historical_fundamentals(symbols, date.min, news_end)
-    print(f"[PortfolioRL] Loaded fundamentals for {len(fundamentals)} symbols")
-
     # Align to weekly
     signals = align_signals_to_weekly(
         prices_dict,
         news_sentiment,
-        fundamentals,
         symbols,
         weekly_cutoffs=weekly_cutoffs,
     )

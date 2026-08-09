@@ -70,7 +70,7 @@ def train_sac_endpoint(
     background_tasks: BackgroundTasks,
     request: SACTrainRequest = SACTrainRequest(),
 ) -> SACTrainResponse | JSONResponse:
-    """Train SAC portfolio allocator using dual forecasts.
+    """Train the SAC portfolio allocator using PatchTST forecast features.
 
     Resolves the universe-specific config + storage via the bucket
     registry, so two parallel A/B workflows

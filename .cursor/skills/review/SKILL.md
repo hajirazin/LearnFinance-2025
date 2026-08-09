@@ -132,7 +132,7 @@ Evaluate every change across these dimensions, in priority order:
 - [ ] Storage abstraction is used (not hardcoded paths)
 - [ ] LSTM remains pure-price (no signals in input)
 - [ ] PatchTST receives OHLCV 5-channel input
-- [ ] PPO/SAC receive correct signal state vector with dual forecasts
+- [ ] SAC receives the exact five-signal state vector with PatchTST forecast features
 
 ### Operational requirements
 

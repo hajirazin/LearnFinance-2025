@@ -1,19 +1,16 @@
-"""Shared momentum + earnings-yield math for SAC per-stock signals.
+"""Shared momentum math for SAC per-stock signals.
 
 Single source of truth so SAC train (``portfolio_rl.data_loading``) and
 Monday inference (``temporal/activities/sac_context.py``) cannot drift on
 encoding. Per AGENTS.md "no silent fallbacks", every function here raises
 :class:`MomentumSignalError` on insufficient bars, missing/non-finite
-prices, or missing/non-finite EPS -- callers must not zero-fill.
+prices -- callers must not zero-fill.
 
 Encodings (index ``t`` is "as of" -- the most recent bar available):
 - ``momentum_1w``   = P[t] / P[t-5]   - 1  (5 trading-day lookback)
 - ``momentum_4w``   = P[t] / P[t-20]  - 1  (20 trading-day lookback)
 - ``momentum_12_1`` = P[t-21] / P[t-252] - 1  (skip the most recent ~month,
   look back ~12 months -- the classic Jegadeesh/Titman "12-1" horizon)
-- ``earnings_yield`` = eps_diluted / as_of_close (never raw P/E, never
-  EBIT/EV -- those live under ``universe/stock_filter.py`` for a
-  different, unrelated purpose)
 """
 
 from __future__ import annotations
@@ -36,7 +33,7 @@ MOM_12_1_CALENDAR_BUFFER_DAYS = 420
 
 
 class MomentumSignalError(ValueError):
-    """Raised when momentum/earnings-yield inputs are insufficient or invalid."""
+    """Raised when momentum inputs are insufficient or invalid."""
 
 
 def _price_at(closes: Sequence[float], index: int, *, field: str) -> float:
@@ -88,23 +85,3 @@ def compute_momentum_12_1(closes: Sequence[float], *, as_of_index: int) -> float
         field="momentum_12_1.P_t-252",
     )
     return p_skip / p_lookback - 1.0
-
-
-def compute_earnings_yield(*, eps_diluted: float, as_of_close: float) -> float:
-    """Earnings yield: eps_diluted / as_of_close.
-
-    ``eps_diluted`` must come from SEC point-in-time diluted EPS
-    (``EarningsPerShareDiluted``, Basic fallback) -- never raw P/E and
-    never the universe ``stock_filter`` EBIT/EV earnings yield, which
-    is a different metric for a different purpose (see AGENTS.md
-    universe pipeline invariants).
-    """
-    if eps_diluted is None or not math.isfinite(eps_diluted):
-        raise MomentumSignalError(
-            f"earnings_yield requires a finite eps_diluted, got {eps_diluted!r}"
-        )
-    if as_of_close is None or not math.isfinite(as_of_close) or as_of_close <= 0:
-        raise MomentumSignalError(
-            f"earnings_yield requires a positive finite close, got {as_of_close!r}"
-        )
-    return eps_diluted / as_of_close

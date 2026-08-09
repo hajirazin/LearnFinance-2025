@@ -495,7 +495,6 @@ def mock_weekly_report_email_request():
             "para_2_sac": "SAC allocator favors tech stocks.",
             "para_3_patchtst_forecast": "PatchTST predicts positive returns.",
             "para_4_news_sentiment": "News sentiment is positive.",
-            "para_5_fundamentals": "Fundamentals remain strong.",
         },
         "order_results": {
             "sac": {"orders_submitted": 6, "orders_failed": 1, "skipped": False},

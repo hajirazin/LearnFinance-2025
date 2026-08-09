@@ -6,14 +6,15 @@ import pytest
 from temporalio import activity, workflow
 from temporalio.client import WorkflowFailureError
 from temporalio.contrib.pydantic import pydantic_data_converter
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from activities import training as training_module
 from models import (
-    RefreshTrainingDataResponse,
     SACReadinessIssue,
     SACTrainingReadiness,
+    SentimentGapFillResponse,
 )
 from tests._fake_client import FakeClient
 from workflows._sac_training_readiness import await_sac_training_readiness
@@ -42,6 +43,97 @@ def test_preflight_activity_forwards_universe_and_force():
     assert fake.calls[0]["json"] == {"universe": "halal", "force": True}
 
 
+def test_sentiment_gap_activity_polls_and_requires_published_result(monkeypatch):
+    fake = FakeClient(
+        {
+            "/etl/sentiment-gaps": {"job_id": "gap-1", "status": "pending"},
+            "/etl/sentiment-gaps/gap-1": {
+                "job_id": "gap-1",
+                "status": "completed",
+                "result": {
+                    "hf_url": "https://huggingface.co/datasets/example/news",
+                    "duration_seconds": 12.5,
+                    "progress": {
+                        "rows_added": 4,
+                        "remaining_gaps": 2,
+                        "gaps_pre_api_date": 11,
+                    },
+                },
+            },
+        }
+    )
+    heartbeats = []
+    monkeypatch.setattr(training_module.activity, "heartbeat", heartbeats.append)
+    monkeypatch.setattr(training_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
+
+    result = training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
+
+    assert fake.calls[0] == {
+        "method": "POST",
+        "path": "/etl/sentiment-gaps",
+        "json": {"universe": "halal"},
+    }
+    assert heartbeats == ["gap-1"]
+    assert result.rows_added == 4
+    assert result.gaps_pre_api_date == 11
+    assert result.published is True
+
+
+def test_sentiment_gap_activity_retries_completed_job_without_hf_url(monkeypatch):
+    fake = FakeClient(
+        {
+            "/etl/sentiment-gaps": {"job_id": "gap-2", "status": "pending"},
+            "/etl/sentiment-gaps/gap-2": {
+                "job_id": "gap-2",
+                "status": "completed",
+                "result": {"hf_url": None, "progress": {}},
+            },
+        }
+    )
+    monkeypatch.setattr(training_module.activity, "heartbeat", lambda _job_id: None)
+    monkeypatch.setattr(training_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
+
+    with pytest.raises(ApplicationError, match="without HF publication") as exc_info:
+        training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
+
+    assert exc_info.value.non_retryable is False
+
+
+@pytest.mark.parametrize(
+    ("status_code", "job_status", "message"),
+    [
+        (404, "running", "was lost"),
+        (200, "failed", "failed: provider denied"),
+    ],
+)
+def test_sentiment_gap_activity_surfaces_retryable_lost_or_failed_jobs(
+    monkeypatch, status_code, job_status, message
+):
+    job_id = "gap-failed"
+    status_path = f"/etl/sentiment-gaps/{job_id}"
+    fake = FakeClient(
+        {
+            "/etl/sentiment-gaps": {"job_id": job_id, "status": "pending"},
+            status_path: {
+                "job_id": job_id,
+                "status": job_status,
+                "error": "provider denied",
+            },
+        },
+        statuses={status_path: status_code},
+    )
+    monkeypatch.setattr(training_module.activity, "heartbeat", lambda _job_id: None)
+    monkeypatch.setattr(training_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
+
+    with pytest.raises(ApplicationError, match=message) as exc_info:
+        training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
+
+    assert exc_info.value.non_retryable is False
+
+
 @workflow.defn(sandboxed=False)
 class _ReadinessDeadlineWorkflow:
     @workflow.run
@@ -62,24 +154,23 @@ async def test_readiness_deadline_surfaces_exact_issues_after_seven_days():
             ready=False,
             missing=[
                 SACReadinessIssue(
-                    source="fundamentals",
+                    source="news",
                     symbol="AAPL",
-                    detail="SEC filing availability unresolved",
+                    detail="provider observations incomplete",
                     retryable=True,
                 )
             ],
         )
 
-    @activity.defn(name="refresh_training_data")
+    @activity.defn(name="run_sentiment_gap_fill")
     def mock_refresh(universe: str):
         calls["refresh"] += 1
-        return RefreshTrainingDataResponse(
-            sentiment_gaps_filled=0,
-            sentiment_gaps_remaining=1,
-            fundamentals_refreshed=[],
-            fundamentals_skipped=[],
-            fundamentals_failed=["AAPL"],
+        return SentimentGapFillResponse(
+            rows_added=0,
+            remaining_gaps=1,
+            gaps_pre_api_date=0,
             duration_seconds=1.0,
+            hf_url="https://huggingface.co/datasets/example/news",
         )
 
     async with (
@@ -102,7 +193,7 @@ async def test_readiness_deadline_surfaces_exact_issues_after_seven_days():
             )
 
     assert calls == {"preflight": 7, "refresh": 6}
-    assert "SEC filing availability unresolved" in str(exc_info.value.cause)
+    assert "provider observations incomplete" in str(exc_info.value.cause)
 
 
 @workflow.defn(sandboxed=False)
@@ -125,15 +216,15 @@ async def test_non_retryable_readiness_error_fails_without_refresh_or_sleep():
             ready=False,
             errors=[
                 SACReadinessIssue(
-                    source="fundamentals",
+                    source="news",
                     symbol="AAPL",
-                    detail="Malformed fundamentals cache",
+                    detail="Malformed news parquet",
                     retryable=False,
                 )
             ],
         )
 
-    @activity.defn(name="refresh_training_data")
+    @activity.defn(name="run_sentiment_gap_fill")
     def mock_refresh(universe: str):
         calls["refresh"] += 1
         raise AssertionError("non-retryable readiness must not refresh")
@@ -158,4 +249,4 @@ async def test_non_retryable_readiness_error_fails_without_refresh_or_sleep():
             )
 
     assert calls == {"preflight": 1, "refresh": 0}
-    assert "Malformed fundamentals cache" in str(exc_info.value.cause)
+    assert "Malformed news parquet" in str(exc_info.value.cause)

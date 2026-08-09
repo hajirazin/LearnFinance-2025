@@ -1,8 +1,8 @@
 """ETL universe registry: maps a universe string to a symbol resolver.
 
 Mirrors :mod:`brain_api.core.model_buckets` for the ETL surface. The
-ETL endpoints (`/etl/news-sentiment`, `/etl/sentiment-gaps`,
-`/etl/refresh-training-data`) take ``universe`` in the request body
+ETL endpoints (`/etl/news-sentiment`, `/etl/sentiment-gaps`) take
+``universe`` in the request body
 instead of reading the ``ETL_UNIVERSE`` env var, so two parallel
 Temporal workflows can refresh different slates against the same
 brain_api deployment without env-var contention.

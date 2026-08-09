@@ -116,7 +116,6 @@ def _make_sac_halal_activities(
     sac_portfolio: AlpacaPortfolioResponse,
     patchtst_resp,
     news_resp,
-    fundamentals_resp,
     captured_calls: dict,
 ):
     """Mock activities matching the new ``USSACHalalAllocationWorkflow`` shape.
@@ -173,11 +172,6 @@ def _make_sac_halal_activities(
         captured_calls["forbidden_get_sac_portfolio"] = True
         return AlpacaPortfolioResponse(cash=0.0, positions=[], open_orders_count=0)
 
-    @activity.defn(name="get_fundamentals")
-    def mock_get_fundamentals(symbols, as_of_date):
-        captured_calls["fundamentals_symbols_count"] = len(symbols)
-        return fundamentals_resp
-
     @activity.defn(name="get_news_sentiment")
     def mock_get_news_sentiment(symbols, as_of_date, run_id):
         return news_resp
@@ -208,7 +202,6 @@ def _make_sac_halal_activities(
         universe,
         symbols,
         news,
-        fundamentals,
         patchtst,
         closes,
     ):
@@ -300,9 +293,7 @@ def _make_sac_halal_activities(
         return None
 
     @activity.defn(name="generate_summary")
-    def mock_generate_summary(
-        patchtst, news, fundamentals, sac, universe
-    ) -> WeeklySummaryResponse:
+    def mock_generate_summary(patchtst, news, sac, universe) -> WeeklySummaryResponse:
         captured_calls["summary_universe"] = universe
         return WeeklySummaryResponse(
             summary={"overview": "halal A/B summary"},
@@ -341,7 +332,6 @@ def _make_sac_halal_activities(
         mock_get_ibkr_sac_halal_portfolio,
         mock_get_sac_halal_portfolio,
         mock_get_sac_portfolio,
-        mock_get_fundamentals,
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
@@ -373,7 +363,6 @@ class TestUSSACHalalAllocationHappyPath:
         n_symbols,
         patchtst_resp,
         news_resp,
-        fundamentals_resp,
     ):
         """halal SAC pipeline propagates universe + n_stocks end-to-end.
 
@@ -401,7 +390,6 @@ class TestUSSACHalalAllocationHappyPath:
             sac_portfolio=sac_portfolio,
             patchtst_resp=patchtst_resp,
             news_resp=news_resp,
-            fundamentals_resp=fundamentals_resp,
             captured_calls=captured,
         )
 
@@ -508,7 +496,6 @@ class TestUSSACHalalAllocationHappyPath:
         self,
         patchtst_resp,
         news_resp,
-        fundamentals_resp,
     ):
         """Open orders on sac_halal account -> SAC step is skipped.
 
@@ -527,7 +514,6 @@ class TestUSSACHalalAllocationHappyPath:
             sac_portfolio=sac_portfolio,
             patchtst_resp=patchtst_resp,
             news_resp=news_resp,
-            fundamentals_resp=fundamentals_resp,
             captured_calls=captured,
         )
 

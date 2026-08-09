@@ -11,7 +11,7 @@ MAX_ARTICLES_PER_SYMBOL = 30
 MAX_RETURN_TOP_K = 10
 DEFAULT_MAX_ARTICLES = 30
 DEFAULT_RETURN_TOP_K = 10
-MAX_FUNDAMENTALS_SYMBOLS = 20
+MAX_PRICE_SYMBOLS = 20
 MAX_HISTORICAL_SENTIMENT_SYMBOLS = 20
 
 
@@ -135,129 +135,6 @@ class HistoricalNewsSentimentResponse(BaseModel):
 
 
 # ============================================================================
-# Fundamentals models
-# ============================================================================
-
-
-class FundamentalsRequest(BaseModel):
-    """Request model for point-in-time fundamentals."""
-
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        max_length=MAX_FUNDAMENTALS_SYMBOLS,
-        description=f"List of ticker symbols (1-{MAX_FUNDAMENTALS_SYMBOLS})",
-    )
-    as_of_date: str | None = Field(
-        default=None,
-        description="Decision date (YYYY-MM-DD). Defaults to today.",
-    )
-
-
-class HistoricalFundamentalsRequest(BaseModel):
-    """Request model for historical fundamentals endpoint (reads from cache only)."""
-
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        max_length=MAX_FUNDAMENTALS_SYMBOLS,
-        description=f"List of ticker symbols (1-{MAX_FUNDAMENTALS_SYMBOLS})",
-    )
-    start_date: str = Field(
-        ...,
-        description="Start date for historical range (YYYY-MM-DD)",
-    )
-    end_date: str = Field(
-        ...,
-        description="End date for historical range (YYYY-MM-DD)",
-    )
-
-
-class RefreshFundamentalsRequest(BaseModel):
-    """Request model for PUT fundamentals refresh endpoint."""
-
-    symbols: list[str] = Field(
-        ...,
-        min_length=1,
-        max_length=MAX_FUNDAMENTALS_SYMBOLS,
-        description=f"List of ticker symbols to refresh (1-{MAX_FUNDAMENTALS_SYMBOLS})",
-    )
-
-
-class RatiosResponse(BaseModel):
-    """Financial ratios for a symbol at a point in time.
-
-    3 core ratios for RL allocators:
-    - Profitability: gross_margin
-    - Leverage: debt_to_equity
-
-    ``eps_diluted`` is a raw per-share figure (SEC diluted EPS, Basic
-    fallback) used to derive SAC's ``earnings_yield`` signal. It is
-    optional here; earnings_yield consumers fail loud when it is absent.
-    """
-
-    symbol: str
-    as_of_date: str
-    gross_margin: float | None
-    debt_to_equity: float | None
-    eps_diluted: float | None = None
-    fiscal_period_end: str | None = None
-    filing_available_date: str | None = None
-    filing_accession_number: str | None = None
-    filing_form: str | None = None
-    filing_source: str | None = None
-
-
-class CurrentRatiosResponse(BaseModel):
-    """Per-symbol point-in-time fundamentals response."""
-
-    symbol: str
-    ratios: RatiosResponse | None
-    error: str | None = None
-
-
-class ApiStatusResponse(BaseModel):
-    """API usage status (for Alpha Vantage historical endpoint)."""
-
-    calls_today: int
-    daily_limit: int
-    remaining: int
-
-
-class FundamentalsResponse(BaseModel):
-    """Response model for point-in-time fundamentals endpoint."""
-
-    as_of_date: str
-    per_symbol: list[CurrentRatiosResponse]
-
-
-class HistoricalFundamentalsResponse(BaseModel):
-    """Response model for historical fundamentals endpoint (n symbols x m dates)."""
-
-    start_date: str
-    end_date: str
-    data: list[RatiosResponse]
-
-
-class PendingFilingResponse(BaseModel):
-    """Ops visibility for a symbol waiting on a newer SEC filing head."""
-
-    symbol: str
-    first_pending_at: str
-    age_days: int
-
-
-class RefreshFundamentalsResponse(BaseModel):
-    """Response model for PUT fundamentals refresh endpoint."""
-
-    refreshed: list[str]  # Symbols that were refreshed
-    skipped: list[str]  # Fresh vs filing head (or pending_new_filing)
-    failed: list[str]  # API / provider errors
-    pending_new_filing: list[PendingFilingResponse] = []
-    api_status: ApiStatusResponse
-
-
-# ============================================================================
 # Prices (closes) models -- SAC momentum_1w/4w/12_1
 # ============================================================================
 
@@ -270,8 +147,8 @@ class ClosesRequest(BaseModel):
     symbols: list[str] = Field(
         ...,
         min_length=1,
-        max_length=MAX_FUNDAMENTALS_SYMBOLS,
-        description=f"List of ticker symbols (1-{MAX_FUNDAMENTALS_SYMBOLS})",
+        max_length=MAX_PRICE_SYMBOLS,
+        description=f"List of ticker symbols (1-{MAX_PRICE_SYMBOLS})",
     )
     as_of_date: str = Field(
         ...,

@@ -20,7 +20,7 @@ from brain_api.storage.patchtst.huggingface import (
     PatchTSTNiftyShariah500HuggingFaceModelStorage,
 )
 
-# SAC HuggingFace storage (unified with dual forecasts)
+# SAC HuggingFace storage (PatchTST forecast features)
 from brain_api.storage.sac.huggingface import (
     SACHuggingFaceModelStorage,
 )
@@ -36,6 +36,6 @@ __all__ = [
     "PatchTSTHuggingFaceModelStorage",  # Backward compatibility alias
     "PatchTSTIndiaHuggingFaceModelStorage",  # Backward compatibility alias
     "PatchTSTNiftyShariah500HuggingFaceModelStorage",
-    # SAC (unified with dual forecasts)
+    # SAC (PatchTST forecast features)
     "SACHuggingFaceModelStorage",
 ]

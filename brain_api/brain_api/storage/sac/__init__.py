@@ -1,4 +1,4 @@
-"""SAC model storage (unified with dual forecasts)."""
+"""SAC model storage for the PatchTST-featured allocator."""
 
 from brain_api.storage.sac.huggingface import (
     HFModelInfo,

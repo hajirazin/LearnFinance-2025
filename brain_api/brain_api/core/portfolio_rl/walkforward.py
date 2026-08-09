@@ -346,7 +346,7 @@ def _run_patchtst_snapshot_inference(
 ) -> list[float]:
     """Run PatchTST snapshot inference for a symbol.
 
-    Loads daily OHLCV data only (no news/fundamentals -- PatchTST uses
+    Loads daily OHLCV data only (no external signals -- PatchTST uses
     5-channel OHLCV input). Single forward pass per week produces
     direct 5-day predictions.
 
@@ -544,42 +544,6 @@ def build_forecast_features(
 
     print(f"[PortfolioRL] Generated forecasts for {len(forecasts)} symbols")
     return forecasts
-
-
-def build_dual_forecast_features(
-    weekly_prices: dict[str, np.ndarray],
-    weekly_dates: pd.DatetimeIndex,
-    symbols: list[str],
-    shutdown_event: threading.Event | None = None,
-    target_dates: pd.DatetimeIndex | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
-    """Build both LSTM and PatchTST forecast features.
-
-    Kept for non-SAC callers that still need dual walk-forward series.
-    SAC training uses :func:`build_patchtst_forecast_features` only.
-    """
-    print("[PortfolioRL] Generating dual walk-forward forecasts (LSTM + PatchTST)...")
-
-    lstm_forecasts = build_forecast_features(
-        weekly_prices,
-        weekly_dates,
-        symbols,
-        forecaster_type="lstm",
-        shutdown_event=shutdown_event,
-        target_dates=target_dates,
-    )
-
-    patchtst_forecasts = build_forecast_features(
-        weekly_prices,
-        weekly_dates,
-        symbols,
-        forecaster_type="patchtst",
-        shutdown_event=shutdown_event,
-        target_dates=target_dates,
-    )
-
-    print(f"[PortfolioRL] Generated dual forecasts for {len(lstm_forecasts)} symbols")
-    return (lstm_forecasts, patchtst_forecasts)
 
 
 def build_patchtst_forecast_features(

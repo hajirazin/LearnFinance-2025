@@ -97,7 +97,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.inference import (
         get_closes,
-        get_fundamentals,
         get_news_sentiment,
         get_patchtst_forecast,
         infer_sac,
@@ -174,13 +173,7 @@ class USSACHalalAllocationWorkflow:
         # Phase 1: Get signals + PatchTST forecast (parallel) on the
         # halal slate. PatchTST is called per-symbol; any missing
         # forecast fails canonical SAC context construction.
-        fundamentals, news, patchtst, closes = await asyncio.gather(
-            workflow.execute_activity(
-                get_fundamentals,
-                args=[symbols, as_of_date],
-                start_to_close_timeout=INFERENCE_TIMEOUT,
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            ),
+        news, patchtst, closes = await asyncio.gather(
             workflow.execute_activity(
                 get_news_sentiment,
                 args=[symbols, as_of_date, run_id],
@@ -214,7 +207,6 @@ class USSACHalalAllocationWorkflow:
                     UNIVERSE,
                     symbols,
                     news,
-                    fundamentals,
                     patchtst,
                     closes,
                 ],
@@ -290,7 +282,7 @@ class USSACHalalAllocationWorkflow:
         # Phase 6: Generate summary + send email tagged universe='halal'.
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[patchtst, news, fundamentals, sac_alloc, UNIVERSE],
+            args=[patchtst, news, sac_alloc, UNIVERSE],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 

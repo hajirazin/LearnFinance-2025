@@ -35,7 +35,7 @@ services:
       # Critical: allocation/sticky_history.db (weekly HRP carry-set),
       # ibkr/submitted_orders.db (IBKR dedup), experience/, raw/features/output audits.
       # Nice-to-have: models/ (HF lazy-download when STORAGE_BACKEND=hf_first),
-      # cache/universe/, sentiment + fundamentals caches.
+      # cache/universe/ and sentiment caches.
       # Override BRAIN_DATA_DIR for other hosts. Default assumes Pi user 'razin'. Create once:
       #   mkdir -p ~/learnfinance/brain-data && chmod 777 ~/learnfinance/brain-data
       - ${BRAIN_DATA_DIR:-/home/razin/learnfinance/brain-data}:/app/data

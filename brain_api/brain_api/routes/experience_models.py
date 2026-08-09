@@ -11,7 +11,9 @@ class ExperienceState(BaseModel):
     # Per-stock signals
     signals: dict[str, dict[str, float]] = Field(
         default_factory=dict,
-        description="Signals per symbol: {AAPL: {news_sentiment: 0.3, gross_margin: 0.42, ...}}",
+        description=(
+            "Signals per symbol: {AAPL: {news_sentiment: 0.3, momentum_4w: 0.05, ...}}"
+        ),
     )
 
     # Forecaster predictions

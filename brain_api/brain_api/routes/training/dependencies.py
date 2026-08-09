@@ -154,7 +154,7 @@ def get_patchtst_india_storage() -> PatchTSTNiftyShariah500ModelStorage:
 
 
 # ============================================================================
-# SAC dependencies (unified with dual forecasts)
+# SAC dependencies (PatchTST forecast features)
 # ============================================================================
 
 

@@ -1,20 +1,199 @@
 """Tests for news sentiment ETL endpoints."""
 
+import threading
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from brain_api.etl.gap_fill import (
     MAX_ARTICLES_FOR_ZERO_FILL,
     MAX_GAP_SYMBOLS_FOR_ZERO_FILL,
+    GapFillProgress,
+    GapFillResult,
     _allow_zero_article_fill,
     _create_zero_article_rows,
+    fill_sentiment_gaps,
 )
+from brain_api.etl.publication import publish_sentiment_parquet, upload_to_huggingface
 from brain_api.main import app
+from brain_api.routes import etl as etl_routes
 
 client = TestClient(app)
+
+
+def test_non_local_gap_scan_publishes_existing_parquet_even_with_no_new_rows(
+    tmp_path,
+):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+
+    with patch(
+        "brain_api.etl.publication.upload_to_huggingface",
+        return_value="https://huggingface.co/datasets/example/news",
+    ) as upload:
+        hf_url = publish_sentiment_parquet(
+            parquet_path=parquet_path,
+            local_only=False,
+        )
+
+    assert hf_url == "https://huggingface.co/datasets/example/news"
+    upload.assert_called_once_with(parquet_path)
+
+
+def test_cancelled_gap_scan_fails_without_publishing_partial_data(tmp_path):
+    shutdown_event = threading.Event()
+    shutdown_event.set()
+    gap = (date(2025, 1, 2), "AAPL")
+
+    with (
+        patch("brain_api.etl.gap_fill.get_etl_symbols", return_value=["AAPL"]),
+        patch("brain_api.etl.gap_fill.find_gaps", return_value=[gap]),
+        patch(
+            "brain_api.etl.gap_fill.categorize_gaps",
+            return_value=([gap], []),
+        ),
+        patch("brain_api.etl.gap_fill.AlpacaNewsClient"),
+        patch("brain_api.etl.gap_fill.FinBERTScorer"),
+        patch("brain_api.etl.gap_fill.get_gap_statistics", return_value={}),
+        patch("brain_api.etl.gap_fill._publish_sentiment_parquet") as publish,
+    ):
+        result = fill_sentiment_gaps(
+            universe="halal_filtered",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 2),
+            parquet_path=tmp_path / "daily_sentiment.parquet",
+            local_only=False,
+            shutdown_event=shutdown_event,
+        )
+
+    assert not result.success
+    assert result.progress.status == "cancelled"
+    assert result.hf_url is None
+    publish.assert_not_called()
+
+
+def test_non_local_gap_scan_fails_when_parquet_is_missing(tmp_path):
+    with pytest.raises(FileNotFoundError, match="parquet not found"):
+        publish_sentiment_parquet(
+            parquet_path=tmp_path / "missing.parquet",
+            local_only=False,
+        )
+
+
+def test_local_only_gap_scan_does_not_require_publication(tmp_path):
+    assert (
+        publish_sentiment_parquet(
+            parquet_path=tmp_path / "missing.parquet",
+            local_only=True,
+        )
+        is None
+    )
+
+
+def test_non_local_gap_scan_propagates_upload_failure(tmp_path):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+    with (
+        patch(
+            "brain_api.etl.publication.upload_to_huggingface",
+            side_effect=RuntimeError("upload denied"),
+        ),
+        pytest.raises(RuntimeError, match="upload denied"),
+    ):
+        publish_sentiment_parquet(
+            parquet_path=parquet_path,
+            local_only=False,
+        )
+
+
+def test_non_local_gap_scan_fails_when_hf_repo_is_not_configured(tmp_path, monkeypatch):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+    monkeypatch.delenv("HF_NEWS_SENTIMENT_REPO", raising=False)
+
+    with pytest.raises(RuntimeError, match="HF_NEWS_SENTIMENT_REPO is required"):
+        upload_to_huggingface(parquet_path)
+
+
+def test_non_local_gap_scan_wraps_hf_authentication_failure(tmp_path, monkeypatch):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+    monkeypatch.setenv("HF_NEWS_SENTIMENT_REPO", "example/news")
+
+    with (
+        patch("huggingface_hub.HfApi", side_effect=RuntimeError("401 unauthorized")),
+        pytest.raises(RuntimeError, match="HuggingFace upload failed: 401"),
+    ):
+        upload_to_huggingface(parquet_path)
+
+
+def test_non_local_gap_scan_replaces_canonical_hf_parquet(tmp_path, monkeypatch):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+    monkeypatch.setenv("HF_NEWS_SENTIMENT_REPO", "example/news")
+
+    with patch("huggingface_hub.HfApi") as api_type:
+        hf_url = upload_to_huggingface(parquet_path)
+
+    assert hf_url == "https://huggingface.co/datasets/example/news"
+    api_type.return_value.upload_file.assert_called_once_with(
+        path_or_fileobj=str(parquet_path),
+        path_in_repo="data/daily_sentiment.parquet",
+        repo_id="example/news",
+        repo_type="dataset",
+    )
+
+
+def test_zero_gap_non_local_fill_still_publishes_existing_parquet(tmp_path):
+    parquet_path = tmp_path / "daily_sentiment.parquet"
+    parquet_path.write_bytes(b"existing")
+    hf_url = "https://huggingface.co/datasets/example/news"
+
+    with (
+        patch("brain_api.etl.gap_fill.get_etl_symbols", return_value=["AAPL"]),
+        patch("brain_api.etl.gap_fill.find_gaps", return_value=[]),
+        patch("brain_api.etl.gap_fill.get_gap_statistics", return_value={}),
+        patch(
+            "brain_api.etl.gap_fill._publish_sentiment_parquet",
+            return_value=hf_url,
+        ) as publish,
+    ):
+        result = fill_sentiment_gaps(
+            universe="halal_filtered",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 2),
+            parquet_path=parquet_path,
+            local_only=False,
+        )
+
+    assert result.success is True
+    assert result.parquet_updated is False
+    assert result.hf_url == hf_url
+    publish.assert_called_once_with(parquet_path=parquet_path, local_only=False)
+
+
+def test_deleted_combined_refresh_route_is_not_exposed():
+    response = client.post(
+        "/etl/refresh-training-data",
+        json={"universe": "halal_filtered"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/signals/fundamentals"),
+        ("post", "/signals/fundamentals/historical"),
+        ("put", "/signals/fundamentals/historical"),
+    ],
+)
+def test_deleted_fundamentals_routes_are_not_exposed(method, path):
+    response = getattr(client, method)(path, json={"symbols": ["AAPL"]})
+    assert response.status_code == 404
 
 
 class TestETLNewsEndpoints:
@@ -436,6 +615,7 @@ class TestGapFillUnmatchedSymbols:
                 start_date=date(2024, 1, 1),
                 end_date=date(2024, 12, 31),
                 parquet_path=parquet_path,
+                local_only=True,
             )
 
             assert result.success
@@ -702,153 +882,6 @@ class TestZeroFillDualGate:
         assert df.loc["MSFT", "sentiment_score"] == 0.0
 
 
-class TestRefreshTrainingDataEndpoint:
-    """Tests for /etl/refresh-training-data endpoint.
-
-    Symbols are resolved via the ETL universe registry, so we mock
-    ``brain_api.routes.etl_training_refresh.get_etl_symbols`` to avoid real API calls.
-    """
-
-    def test_refresh_training_data_returns_200(self):
-        """POST /etl/refresh-training-data should return 200."""
-        with (
-            patch(
-                "brain_api.routes.etl_training_refresh.get_etl_symbols",
-                return_value=["AAPL", "MSFT"],
-            ),
-            patch(
-                "brain_api.routes.etl_training_refresh.ensure_fresh_training_data"
-            ) as mock_refresh,
-        ):
-            from brain_api.core.data_freshness import DataFreshnessResult
-
-            mock_refresh.return_value = DataFreshnessResult(
-                sentiment_gaps_filled=5,
-                sentiment_gaps_remaining=2,
-                fundamentals_refreshed=["AAPL"],
-                fundamentals_skipped_today=["MSFT"],
-                fundamentals_failed=[],
-                duration_seconds=1.5,
-            )
-
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={
-                    "universe": "halal_filtered",
-                    "start_date": "2020-01-01",
-                    "end_date": "2025-01-01",
-                },
-            )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "sentiment_gaps_filled" in data
-        assert "sentiment_gaps_remaining" in data
-        assert "fundamentals_refreshed" in data
-        assert "fundamentals_skipped" in data
-        assert "fundamentals_failed" in data
-        assert "duration_seconds" in data
-        # Universe must be forwarded into ensure_fresh_training_data
-        assert mock_refresh.call_args.kwargs["universe"] == "halal_filtered"
-
-    def test_refresh_training_data_with_defaults(self):
-        """POST /etl/refresh-training-data with only universe uses default dates."""
-        from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
-
-        with (
-            patch(
-                "brain_api.routes.etl_training_refresh.get_etl_symbols",
-                return_value=["AAPL"],
-            ),
-            patch(
-                "brain_api.routes.etl_training_refresh.ensure_fresh_training_data"
-            ) as mock_refresh,
-        ):
-            from brain_api.core.data_freshness import DataFreshnessResult
-
-            mock_refresh.return_value = DataFreshnessResult(
-                sentiment_gaps_filled=0,
-                sentiment_gaps_remaining=0,
-                fundamentals_refreshed=[],
-                fundamentals_skipped_today=["AAPL"],
-                fundamentals_failed=[],
-                duration_seconds=0.5,
-            )
-
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={"universe": "halal_filtered"},
-            )
-
-        assert response.status_code == 200
-        mock_refresh.assert_called_once()
-        call_args = mock_refresh.call_args
-        assert call_args.kwargs["end_date"] == date.today()
-        assert call_args.kwargs["start_date"] == date(
-            date.today().year - DEFAULT_LOOKBACK_YEARS, 1, 1
-        )
-
-    def test_refresh_training_data_missing_universe_returns_422(self):
-        """POST without universe should return 422 (required field)."""
-        response = client.post("/etl/refresh-training-data", json={})
-        assert response.status_code == 422
-
-    def test_refresh_training_data_unknown_universe_returns_422(self):
-        """POST with an unregistered universe should return 422."""
-        response = client.post(
-            "/etl/refresh-training-data",
-            json={"universe": "totally_made_up"},
-        )
-        assert response.status_code == 422
-        assert "totally_made_up" in response.json()["detail"]
-
-    def test_refresh_training_data_invalid_start_date(self):
-        """POST with invalid start_date should return 400."""
-        with patch(
-            "brain_api.routes.etl_training_refresh.get_etl_symbols",
-            return_value=["AAPL"],
-        ):
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={
-                    "universe": "halal_filtered",
-                    "start_date": "not-a-date",
-                },
-            )
-        assert response.status_code == 400
-
-    def test_refresh_training_data_invalid_end_date(self):
-        """POST with invalid end_date should return 400."""
-        with patch(
-            "brain_api.routes.etl_training_refresh.get_etl_symbols",
-            return_value=["AAPL"],
-        ):
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={
-                    "universe": "halal_filtered",
-                    "end_date": "not-a-date",
-                },
-            )
-        assert response.status_code == 400
-
-    def test_refresh_training_data_start_after_end(self):
-        """POST with start_date after end_date should return 400."""
-        with patch(
-            "brain_api.routes.etl_training_refresh.get_etl_symbols",
-            return_value=["AAPL"],
-        ):
-            response = client.post(
-                "/etl/refresh-training-data",
-                json={
-                    "universe": "halal_filtered",
-                    "start_date": "2025-01-01",
-                    "end_date": "2020-01-01",
-                },
-            )
-        assert response.status_code == 400
-
-
 class TestSentimentGapsEndpoint:
     """Tests for /etl/sentiment-gaps endpoint."""
 
@@ -882,6 +915,110 @@ class TestSentimentGapsEndpoint:
             )
 
         assert response.status_code == 202
+
+    def test_completed_job_result_includes_duration_and_hf_url(self):
+        completed = GapFillResult(
+            success=True,
+            progress=GapFillProgress(
+                rows_added=0,
+                remaining_gaps=0,
+                gaps_pre_api_date=5,
+                status="completed",
+            ),
+            hf_url="https://huggingface.co/datasets/example/news",
+        )
+        with patch("brain_api.routes.etl.fill_sentiment_gaps", return_value=completed):
+            response = client.post(
+                "/etl/sentiment-gaps",
+                json={"universe": "halal_filtered"},
+            )
+
+        job_id = response.json()["job_id"]
+        status = client.get(f"/etl/sentiment-gaps/{job_id}").json()
+        assert status["status"] == "completed"
+        assert status["result"]["hf_url"] == completed.hf_url
+        assert status["result"]["duration_seconds"] >= 0
+
+    def test_progress_callback_cannot_publish_completion_without_final_result(self):
+        job_id = "publication-race"
+        etl_routes._jobs[job_id] = etl_routes.ETLJob(
+            job_id=job_id,
+            status="running",
+            started_at=datetime.now(UTC),
+        )
+
+        etl_routes._update_gap_fill_progress(
+            job_id,
+            GapFillProgress(status="completed", current_phase="done"),
+        )
+
+        job = etl_routes._jobs[job_id]
+        assert job.status == "running"
+        assert job.completed_at is None
+        assert job.result is None
+
+    def test_runner_publishes_completed_status_after_result(self, tmp_path):
+        class CompletionOrderJob:
+            def __init__(self):
+                self._status = "pending"
+                self.completed_at = None
+                self.progress = {}
+                self.error = None
+                self.result = None
+
+            @property
+            def status(self):
+                return self._status
+
+            @status.setter
+            def status(self, value):
+                if value == "completed":
+                    assert self.result is not None
+                    assert self.result["hf_url"]
+                self._status = value
+
+        job_id = "completion-order"
+        job = CompletionOrderJob()
+        etl_routes._jobs[job_id] = job
+        completed = GapFillResult(
+            success=True,
+            progress=GapFillProgress(status="completed"),
+            hf_url="https://huggingface.co/datasets/example/news",
+        )
+
+        with (
+            patch("brain_api.routes.etl.fill_sentiment_gaps", return_value=completed),
+            patch("brain_api.routes.etl._get_shutdown_event"),
+        ):
+            etl_routes._run_gap_fill_job(
+                job_id=job_id,
+                universe="halal_filtered",
+                start_date=date(2025, 1, 1),
+                end_date=date(2025, 1, 2),
+                parquet_path=tmp_path / "daily_sentiment.parquet",
+            )
+
+        assert job.status == "completed"
+
+    def test_failed_job_exposes_error_and_duration(self):
+        failed = GapFillResult(
+            success=False,
+            progress=GapFillProgress(
+                status="failed",
+                error="HuggingFace upload failed: denied",
+            ),
+        )
+        with patch("brain_api.routes.etl.fill_sentiment_gaps", return_value=failed):
+            response = client.post(
+                "/etl/sentiment-gaps",
+                json={"universe": "halal_filtered"},
+            )
+
+        job_id = response.json()["job_id"]
+        status = client.get(f"/etl/sentiment-gaps/{job_id}").json()
+        assert status["status"] == "failed"
+        assert status["error"] == "HuggingFace upload failed: denied"
+        assert status["result"]["duration_seconds"] >= 0
 
     def test_get_sentiment_gaps_status_not_found(self):
         """GET /etl/sentiment-gaps/{job_id} returns 404 for unknown job."""
@@ -926,13 +1063,23 @@ class TestSentimentGapsEndpoint:
         assert response.status_code == 400
 
     def test_sentiment_gaps_missing_start_date(self):
-        """POST without start_date should return 422."""
-        response = client.post(
-            "/etl/sentiment-gaps",
-            json={"universe": "halal_filtered"},
-        )
+        """POST without start_date uses the configured lookback window."""
+        from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
 
-        assert response.status_code == 422
+        with patch("brain_api.routes.etl._run_gap_fill_job"):
+            response = client.post(
+                "/etl/sentiment-gaps",
+                json={"universe": "halal_filtered"},
+            )
+
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+        status = client.get(f"/etl/sentiment-gaps/{job_id}").json()
+        assert status["config"]["end_date"] == date.today().isoformat()
+        assert (
+            status["config"]["start_date"]
+            == date(date.today().year - DEFAULT_LOOKBACK_YEARS, 1, 1).isoformat()
+        )
 
     def test_sentiment_gaps_missing_universe_returns_422(self):
         """POST without universe should return 422 (required field)."""

@@ -1,9 +1,9 @@
-You are a financial ML training analyst. Analyze and summarize the following US SAC (Soft Actor-Critic) training result for a weekly portfolio management system. The LSTM and PatchTST forecasters are trained on a separate schedule (the day before) and are summarised in their own report; SAC consumes whatever forecaster ``current`` pointers are live at trigger time.
+You are a financial ML training analyst. Analyze and summarize the following US SAC (Soft Actor-Critic) training result for a weekly portfolio management system. The LSTM and PatchTST forecasters are trained on a separate schedule (the day before) and are summarised in their own report; SAC consumes the PatchTST snapshots available at trigger time.
 
 ## Training Results
 
 ### SAC (Reinforcement Learning Allocator)
-This model learns portfolio allocation strategies using Soft Actor-Critic with dual forecasts (LSTM + PatchTST) plus per-stock signals (news sentiment, fundamentals).
+This model learns portfolio allocation strategies using Soft Actor-Critic with PatchTST forecasts plus per-stock news and momentum signals.
 
 - **Version**: {{ sac.version }}
 - **Data Window**: {{ sac.data_window_start }} to {{ sac.data_window_end }}

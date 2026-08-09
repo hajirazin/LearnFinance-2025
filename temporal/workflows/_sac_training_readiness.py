@@ -7,11 +7,12 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
-    from activities.training import preflight_sac_training, refresh_training_data
-    from models import RefreshTrainingDataResponse, SACTrainingReadiness
+    from activities.training import preflight_sac_training, run_sentiment_gap_fill
+    from models import SACTrainingReadiness, SentimentGapFillResponse
 
 PREFLIGHT_TIMEOUT = timedelta(minutes=5)
 REFRESH_TIMEOUT = timedelta(hours=10)
+REFRESH_HEARTBEAT_TIMEOUT = timedelta(minutes=5)
 READINESS_RETRY_DAYS = 7
 
 
@@ -19,7 +20,7 @@ async def await_sac_training_readiness(
     universe: str,
     *,
     force: bool,
-) -> tuple[SACTrainingReadiness, RefreshTrainingDataResponse | None, int]:
+) -> tuple[SACTrainingReadiness, SentimentGapFillResponse | None, int]:
     """Wait durably for a complete SAC training dataset, for at most seven days."""
     latest_refresh = None
     retry_policy = RetryPolicy(maximum_attempts=2)
@@ -53,9 +54,10 @@ async def await_sac_training_readiness(
                 non_retryable=True,
             )
         latest_refresh = await workflow.execute_activity(
-            refresh_training_data,
+            run_sentiment_gap_fill,
             args=[universe],
             start_to_close_timeout=REFRESH_TIMEOUT,
+            heartbeat_timeout=REFRESH_HEARTBEAT_TIMEOUT,
             retry_policy=retry_policy,
         )
         await workflow.sleep(timedelta(days=1))

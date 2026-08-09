@@ -808,21 +808,6 @@ def mock_weekly_summary_request():
                 },
             ],
         },
-        "fundamentals": {
-            "as_of_date": "2026-02-03",
-            "per_symbol": [
-                {
-                    "symbol": "AAPL",
-                    "ratios": {
-                        "symbol": "AAPL",
-                        "as_of_date": "2026-02-03",
-                        "gross_margin": 0.43,
-                        "debt_to_equity": 0.3,
-                    },
-                    "error": None,
-                },
-            ],
-        },
         "sac": {
             "target_weights": {"AAPL": 0.12, "MSFT": 0.10, "CASH": 0.05},
             "turnover": 0.15,
@@ -843,7 +828,6 @@ def mock_weekly_llm_json_response():
         "para_2_sac": "SAC allocator favors AAPL and MSFT with moderate turnover.",
         "para_3_patchtst_forecast": "PatchTST predicts positive returns for tech sector.",
         "para_4_news_sentiment": "News sentiment is generally positive for holdings.",
-        "para_5_fundamentals": "Fundamentals remain strong with solid margins.",
     }
 
 

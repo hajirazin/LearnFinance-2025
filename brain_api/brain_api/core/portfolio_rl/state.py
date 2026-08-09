@@ -1,8 +1,7 @@
 """State building for portfolio RL.
 
 The state vector contains:
-- Market signals (news sentiment, coverage, fundamentals, fundamental_age,
-  momentum_1w/4w/12_1, earnings_yield)
+- Market signals (news sentiment, coverage, momentum_1w/4w/12_1)
 - Forecast features (PatchTST predicted weekly returns only)
 - Current portfolio state (weights including CASH)
 """
@@ -56,9 +55,8 @@ class StateSchema:
     2. Per-stock PatchTST forecast return (n_stocks * 1)
     3. Current portfolio weights (n_stocks + 1 for CASH)
 
-    For n_stocks=15: 15*9 + 15*1 + 16 = 166 (9 signals: news_sentiment,
-    news_coverage, gross_margin, debt_to_equity, fundamental_age,
-    momentum_1w, momentum_4w, momentum_12_1, earnings_yield -- see
+    For n_stocks=15: 15*5 + 15*1 + 16 = 106 (5 signals: news_sentiment,
+    news_coverage, momentum_1w, momentum_4w, momentum_12_1 -- see
     ``brain_api.core.sac.decision_context.SAC_SIGNAL_NAMES``).
     """
 

@@ -24,7 +24,7 @@ from brain_api.storage.patchtst.local import (
     PatchTSTNiftyShariah500ModelStorage,
 )
 
-# SAC storage (unified with dual forecasts)
+# SAC storage (PatchTST forecast features)
 from brain_api.storage.sac.local import (
     SACArtifacts,
     SACHalalFilteredModelStorage,
@@ -47,7 +47,7 @@ __all__ = [
     "PatchTSTIndiaModelStorage",  # Backward compatibility alias
     "PatchTSTModelStorage",  # Backward compatibility alias
     "PatchTSTNiftyShariah500ModelStorage",
-    # SAC (unified with dual forecasts)
+    # SAC (PatchTST forecast features)
     "SACArtifacts",
     "SACHalalFilteredModelStorage",
     "SACHalalModelStorage",

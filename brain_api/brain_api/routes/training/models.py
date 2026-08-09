@@ -60,7 +60,7 @@ class PatchTSTTrainResponse(BaseModel):
 
 
 class SACTrainResponse(BaseModel):
-    """Response model for SAC training endpoint (unified with dual forecasts)."""
+    """Response model for the PatchTST-featured SAC training endpoint."""
 
     version: str
     data_window_start: str

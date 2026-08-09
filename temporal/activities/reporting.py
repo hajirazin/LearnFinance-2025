@@ -6,7 +6,6 @@ from temporalio import activity
 
 from activities.client import get_client
 from models import (
-    FundamentalsResponse,
     HRPAllocationResponse,
     NewsSignalResponse,
     OrderDetail,
@@ -72,7 +71,6 @@ def _submit_to_dict(submit, order_details: list[OrderDetail] | None = None) -> d
 def generate_summary(
     patchtst: PatchTSTInferenceResponse,
     news: NewsSignalResponse,
-    fundamentals: FundamentalsResponse,
     sac: SACInferenceResponse | SkippedAllocation,
     universe: str,
 ) -> WeeklySummaryResponse:
@@ -88,7 +86,6 @@ def generate_summary(
             json={
                 "patchtst": patchtst.model_dump(),
                 "news": news.model_dump(),
-                "fundamentals": fundamentals.model_dump(),
                 "sac": _alloc_to_dict(sac),
                 "universe": universe,
             },

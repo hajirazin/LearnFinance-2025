@@ -569,7 +569,7 @@ def build_common_train_response_kwargs(
 
 
 # ---------------------------------------------------------------------------
-# Snapshots: ensure-available helper (used by SAC walk-forward training)
+# Snapshots: ensure-available helper for generic forecaster walk-forward loading
 # ---------------------------------------------------------------------------
 
 
@@ -600,7 +600,7 @@ def ensure_snapshot_for_bucket(
         identity_bucket, wf_symbols, wf_cfg = patchtst_walkforward_expectation_bundle()
     else:
         raise StoragePolicyError(
-            f"SAC snapshot ensure is wired only for lstm_halal_new and "
+            f"Walk-forward snapshot ensure is wired only for lstm_halal_new and "
             f"patchtst_halal_new; got {bucket_type!r}"
         )
 

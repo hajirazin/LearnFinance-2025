@@ -56,8 +56,7 @@ def build_current_signals(
 
     Delegates to RealTimeSignalBuilder for fetching:
     - News sentiment: yfinance news + FinBERT scoring
-    - Fundamentals: yfinance ticker.info (gross_margin, current_ratio, etc.)
-    - Returns: close price returns
+    - Momentum: close-price returns
 
     Args:
         symbols: List of stock ticker symbols

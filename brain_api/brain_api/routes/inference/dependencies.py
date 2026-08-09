@@ -83,7 +83,7 @@ def get_sentiment_parquet_path() -> Path:
 
 
 # ============================================================================
-# SAC dependencies (unified with dual forecasts)
+# SAC dependencies (PatchTST forecast features)
 # ============================================================================
 
 

@@ -215,37 +215,6 @@ class NewsSignalResponse(BaseModel):
     as_of_date: str
 
 
-class FundamentalRatios(BaseModel):
-    """Financial ratios for a stock."""
-
-    symbol: str = ""
-    as_of_date: str = ""
-    gross_margin: float | None = None
-    current_ratio: float | None = None
-    debt_to_equity: float | None = None
-    eps_diluted: float | None = None
-    fiscal_period_end: str | None = None
-    filing_available_date: str | None = None
-    filing_accession_number: str | None = None
-    filing_form: str | None = None
-    filing_source: str | None = None
-
-
-class PerSymbolFundamentals(BaseModel):
-    """Fundamentals for a single symbol."""
-
-    symbol: str
-    ratios: FundamentalRatios | None = None
-    error: str | None = None
-
-
-class FundamentalsResponse(BaseModel):
-    """Response from POST /signals/fundamentals."""
-
-    per_symbol: list[PerSymbolFundamentals]
-    as_of_date: str
-
-
 class ClosesResponse(BaseModel):
     """Response from POST /signals/prices -- raw daily closes for SAC momentum."""
 

@@ -2,12 +2,11 @@
 
 from models.alpha_screen import PatchTSTBatchScores
 from models.email import TrainingSummaryEmailResponse
-from models.etl import RefreshTrainingDataRequest, RefreshTrainingDataResponse
+from models.etl import SentimentGapFillResponse
 from models.forecast_email import (
     AllocationDetailModel,
     AlpacaPortfolioResponse,
     ClosesResponse,
-    FundamentalsResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
@@ -52,8 +51,7 @@ __all__ = [
     # Models
     "ActiveSymbolsResponse",
     # ETL
-    "RefreshTrainingDataRequest",
-    "RefreshTrainingDataResponse",
+    "SentimentGapFillResponse",
     # Training
     "TrainingResponse",
     "SACReadinessIssue",
@@ -65,7 +63,6 @@ __all__ = [
     "AlpacaPortfolioResponse",
     "AllocationDetailModel",
     "ClosesResponse",
-    "FundamentalsResponse",
     "GenerateOrdersResponse",
     "HRPAllocationResponse",
     "LSTMInferenceResponse",

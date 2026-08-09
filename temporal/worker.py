@@ -25,7 +25,6 @@ from activities.execution import (
 from activities.inference import (
     allocate_hrp,
     get_closes,
-    get_fundamentals,
     get_lstm_forecast,
     get_news_sentiment,
     get_patchtst_forecast,
@@ -76,7 +75,7 @@ from activities.training import (
     generate_india_training_summary,
     generate_sac_training_summary,
     preflight_sac_training,
-    refresh_training_data,
+    run_sentiment_gap_fill,
     send_forecasters_training_email,
     send_india_training_email,
     send_sac_training_email,
@@ -120,7 +119,6 @@ ALL_WORKFLOWS = [
 
 ALL_ACTIVITIES = [
     # Inference / signals / allocators
-    get_fundamentals,
     get_news_sentiment,
     get_lstm_forecast,
     get_patchtst_forecast,
@@ -174,7 +172,7 @@ ALL_ACTIVITIES = [
     fetch_halal_universe,
     fetch_nifty_shariah_500_universe,
     fetch_halal_india_universe_training,
-    refresh_training_data,
+    run_sentiment_gap_fill,
     preflight_sac_training,
     train_lstm,
     train_patchtst,

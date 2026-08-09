@@ -12,7 +12,6 @@ from activities.sac_context import (
 from models import (
     AlpacaPortfolioResponse,
     ClosesResponse,
-    FundamentalsResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
     NewsSignalResponse,
@@ -52,21 +51,6 @@ def get_closes(
         response.raise_for_status()
     result = ClosesResponse(**response.json())
     logger.info(f"Got closes for {len(result.closes)} symbols")
-    return result
-
-
-@activity.defn
-def get_fundamentals(symbols: list[str], as_of_date: str) -> FundamentalsResponse:
-    """Fetch fundamental data for symbols."""
-    logger.info(f"Fetching fundamentals for {len(symbols)} symbols...")
-    with get_client() as client:
-        response = client.post(
-            "/signals/fundamentals",
-            json={"symbols": symbols, "as_of_date": as_of_date},
-        )
-        response.raise_for_status()
-    result = FundamentalsResponse(**response.json())
-    logger.info(f"Got fundamentals for {len(result.per_symbol)} symbols")
     return result
 
 
@@ -259,7 +243,6 @@ def infer_sac(
     universe: str,
     symbols: list[str],
     news: NewsSignalResponse,
-    fundamentals: FundamentalsResponse,
     patchtst: PatchTSTInferenceResponse,
     closes: ClosesResponse,
 ) -> SACInferenceResponse:
@@ -276,7 +259,6 @@ def infer_sac(
         symbols=symbols,
         as_of_date=as_of_date,
         news=news,
-        fundamentals=fundamentals,
         patchtst=patchtst,
         closes=closes.closes,
     )

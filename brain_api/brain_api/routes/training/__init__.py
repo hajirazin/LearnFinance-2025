@@ -3,7 +3,7 @@
 This module provides training endpoints for various model types:
 - LSTM: Pure price-based weekly return prediction
 - PatchTST: OHLCV 5-channel weekly return prediction
-- SAC: Portfolio allocator using dual forecasts (LSTM + PatchTST)
+- SAC: Portfolio allocator using PatchTST forecast features
 """
 
 from fastapi import APIRouter, HTTPException

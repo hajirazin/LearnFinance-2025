@@ -49,7 +49,7 @@ class FakeClient:
         self.calls.append({"method": "GET", "path": path, "json": None})
         if path not in self._responses:
             raise AssertionError(f"Unexpected GET {path}")
-        return FakeResponse(self._responses[path])
+        return FakeResponse(self._responses[path], status=self._statuses.get(path, 200))
 
     def __enter__(self) -> FakeClient:
         return self

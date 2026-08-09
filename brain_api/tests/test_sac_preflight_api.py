@@ -5,7 +5,6 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from brain_api.core.fundamentals import FundamentalsCacheError
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
 from brain_api.main import app
 from brain_api.routes.training.sac import full as full_module
@@ -18,7 +17,6 @@ client = TestClient(app)
 def strict_preflight_dependencies(monkeypatch):
     """Provide complete inputs so each test can break one readiness contract."""
     symbols = ["AAA"]
-    monkeypatch.setenv("SEC_USER_AGENT", "LearnFinance test@example.com")
     monkeypatch.setattr(
         preflight_module,
         "get_bucket",
@@ -75,21 +73,7 @@ def strict_preflight_dependencies(monkeypatch):
         lambda requested_symbols, start_date, end_date: news,
     )
 
-    fundamentals = {
-        "AAA": pd.DataFrame(
-            {
-                "gross_margin": [0.4],
-                "debt_to_equity": [0.4],
-            },
-            index=pd.DatetimeIndex(["2023-01-01"]),
-        )
-    }
-    monkeypatch.setattr(
-        preflight_module,
-        "load_historical_fundamentals_from_cache",
-        lambda requested_symbols, start_date, end_date: fundamentals,
-    )
-    return prices, fundamentals
+    return prices
 
 
 def test_sac_preflight_returns_exact_missing_and_errors(monkeypatch):
@@ -98,9 +82,9 @@ def test_sac_preflight_returns_exact_missing_and_errors(monkeypatch):
         symbols=["AAA"],
         missing=[
             SACReadinessIssue(
-                source="fundamentals",
+                source="prices",
                 symbol="AAA",
-                detail="filing availability unresolved",
+                detail="price history incomplete",
                 retryable=True,
             )
         ],
@@ -127,8 +111,8 @@ def test_sac_preflight_returns_exact_missing_and_errors(monkeypatch):
         "ready": False,
         "missing": [
             {
-                "source": "fundamentals",
-                "detail": "filing availability unresolved",
+                "source": "prices",
+                "detail": "price history incomplete",
                 "symbol": "AAA",
                 "retryable": True,
             }
@@ -178,91 +162,6 @@ def test_sac_preflight_reports_missing_price_history(
     ]
 
 
-def test_sac_preflight_rejects_filing_history_that_starts_after_first_cutoff(
-    monkeypatch,
-    strict_preflight_dependencies,
-):
-    _, fundamentals = strict_preflight_dependencies
-    fundamentals["AAA"].index = pd.DatetimeIndex(["2024-01-15"])
-
-    response = client.post(
-        "/train/sac/preflight",
-        json={"universe": "halal_filtered", "force": True},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ready"] is False
-    assert payload["missing"] == [
-        {
-            "source": "fundamentals",
-            "detail": (
-                "No filing was available before every SAC training cutoff for AAA"
-            ),
-            "symbol": "AAA",
-            "retryable": True,
-        }
-    ]
-
-
-def test_sac_preflight_reports_corrupt_fundamentals_cache_as_non_retryable_error(
-    monkeypatch,
-    strict_preflight_dependencies,
-):
-    def raise_corrupt_cache(requested_symbols, start_date, end_date):
-        raise FundamentalsCacheError(
-            "Malformed fundamentals cache for AAA: invalid JSON"
-        )
-
-    monkeypatch.setattr(
-        preflight_module,
-        "load_historical_fundamentals_from_cache",
-        raise_corrupt_cache,
-    )
-
-    response = client.post(
-        "/train/sac/preflight",
-        json={"universe": "halal_filtered", "force": True},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ready"] is False
-    assert payload["errors"] == [
-        {
-            "source": "fundamentals",
-            "detail": "Malformed fundamentals cache for AAA: invalid JSON",
-            "symbol": "AAA",
-            "retryable": False,
-        }
-    ]
-
-
-def test_sac_preflight_reports_missing_sec_user_agent_before_training(
-    monkeypatch,
-    strict_preflight_dependencies,
-):
-    monkeypatch.delenv("SEC_USER_AGENT")
-
-    response = client.post(
-        "/train/sac/preflight",
-        json={"universe": "halal_filtered", "force": True},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ready"] is False
-    assert {
-        "source": "sec_filing_enrichment",
-        "detail": (
-            "SEC_USER_AGENT is required for point-in-time fundamentals "
-            "enrichment; set it to an application name and contact email"
-        ),
-        "symbol": None,
-        "retryable": False,
-    } in payload["errors"]
-
-
 @pytest.mark.parametrize(
     ("issue_field", "expected_status"),
     [("missing", 409), ("errors", 503)],
@@ -280,8 +179,8 @@ def test_sac_full_rejects_unready_inputs_before_creating_job(
         local_storage_class=object,
     )
     issue = SACReadinessIssue(
-        source="fundamentals",
-        detail="filing availability unresolved",
+        source="news",
+        detail="provider observations incomplete",
         symbol="AAA",
         retryable=issue_field == "missing",
     )

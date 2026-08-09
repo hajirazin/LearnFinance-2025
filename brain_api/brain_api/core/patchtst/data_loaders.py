@@ -7,11 +7,7 @@ import numpy as np
 import pandas as pd
 
 from brain_api.core.features import compute_ohlcv_log_returns
-from brain_api.core.fundamentals import load_historical_fundamentals_from_cache
 from brain_api.core.patchtst.config import PatchTSTConfig
-
-# Alias for backward compatibility
-load_historical_fundamentals = load_historical_fundamentals_from_cache
 
 
 def load_historical_news_sentiment(

@@ -1,7 +1,7 @@
 """Halal stock universe from ETF holdings.
 
 Fetches top holdings from halal ETFs (SPUS, HLAL, SPTE) and filters to
-US-listed stocks with Alpha Vantage fundamentals data available.
+US-listed stocks held by the legacy halal ETF slate.
 Results are cached monthly (see cache.py).
 """
 
@@ -19,7 +19,7 @@ HALAL_ETFS = ["SPUS", "HLAL", "SPTE"]
 
 # Tickers to exclude
 # - GOOG: Alphabet Class C (duplicate of GOOGL Class A)
-# - ATEYY: Advantest OTC ADR (no Alpha Vantage data)
+# - ATEYY: Advantest OTC ADR
 EXCLUDED_TICKERS = {"GOOG", "ATEYY"}
 
 

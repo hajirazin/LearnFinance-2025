@@ -6,7 +6,7 @@ This module provides the shared components for RL-based portfolio allocation:
 - Constraint enforcement (long-only simplex and cash buffer)
 - State/feature building with PatchTST forecast features
 - Evaluation helpers (walk-forward, metrics)
-- Data loading (news sentiment, fundamentals)
+- Data loading (news sentiment and momentum)
 - Walk-forward forecast generation
 
 Used by `sac` unified agent.
@@ -28,7 +28,6 @@ from brain_api.core.portfolio_rl.constraints import (
 from brain_api.core.portfolio_rl.data_loading import (
     align_signals_to_weekly,
     build_rl_training_signals,
-    load_historical_fundamentals,
     load_historical_news_sentiment,
 )
 from brain_api.core.portfolio_rl.env import PortfolioEnv
@@ -56,7 +55,6 @@ from brain_api.core.portfolio_rl.state import (
 from brain_api.core.portfolio_rl.walkforward import (
     SnapshotInferenceError,
     SnapshotUnavailableError,
-    build_dual_forecast_features,
     build_forecast_features,
     build_patchtst_forecast_features,
 )
@@ -76,7 +74,6 @@ __all__ = [
     "StateSchema",
     "align_signals_to_weekly",
     "apply_softmax_to_weights",
-    "build_dual_forecast_features",
     "build_forecast_features",
     "build_patchtst_forecast_features",
     "build_rl_training_signals",
@@ -95,6 +92,5 @@ __all__ = [
     "compute_turnover",
     "enforce_constraints",
     "evaluate_policy",
-    "load_historical_fundamentals",
     "load_historical_news_sentiment",
 ]

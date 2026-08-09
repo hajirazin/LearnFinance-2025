@@ -48,8 +48,7 @@ uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 | POST | `/inference/lstm` | LSTM weekly return predictions (Monday run). Returns predictions sorted highest gain → highest loss, with insufficient-history symbols at the end. |
 | POST | `/signals/news` | **Current** news sentiment for inference. Uses **yfinance + FinBERT**. Returns recency-weighted sentiment scores per symbol. |
 | POST | `/signals/news/historical` | **Historical** news sentiment for training. Uses **parquet file** (no rate limits). Takes date range, returns daily sentiment for all (date, symbol) combos. Missing data returns neutral (0.0). |
-| POST | `/signals/fundamentals` | **Current** fundamentals for inference. Uses **yfinance** (no rate limits). |
-| POST | `/signals/fundamentals/historical` | **Historical** fundamentals for training. **SEC-first**: CompanyFacts for SEC-eligible US (CIK + majority 10-K/10-Q); Alpha Vantage + SEC enrichment for non-eligible. Filing-head freshness (not fetch-today). |
+| POST | `/signals/prices` | Raw daily closes for SAC momentum inputs. |
 
 ## Environment Variables
 
@@ -67,8 +66,6 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `STORAGE_BACKEND` | Read policy: `local_first` (try local, fall back to HF) or `hf_first` (check HF main, short-circuit to local on version match). Writes always go to local AND HF whenever the bucket has an HF repo configured. | `local_first` |
 | `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
 | `ALPACA_API_SECRET` | Alpaca News API secret | None |
-| `ALPHA_VANTAGE_API_KEY` | Alpha Vantage API key (for non-SEC-eligible historical fundamentals) | None |
-| `SEC_USER_AGENT` | Required for **every** historical fundamentals refresh pass (eligibility, CompanyFacts, filing-head freshness, and AV period enrichment). Set an application name and contact email, such as `LearnFinance you@example.com`. | None |
 | `LSTM_TRAIN_LOOKBACK_YEARS` | Years of historical data for training | `15` |
 | `LSTM_TRAIN_WINDOW_END_DATE` | Override training window end date (YYYY-MM-DD) | Today |
 
@@ -78,23 +75,7 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 |----------|-------------|------------|-------|
 | `/signals/news` | yfinance + FinBERT | None | Run-based (JSON files) |
 | `/signals/news/historical` | `data/output/daily_sentiment.parquet` | None | N/A (reads from file) |
-| `/signals/fundamentals` | yfinance | None | Not needed |
-| `/signals/fundamentals/historical` | SEC CompanyFacts (eligible US) or Alpha Vantage + SEC enrichment | SEC fair-access pacing; AV free tier ~25/day (no local pre-gate) | Yes (SQLite + JSON) |
-
-Historical fundamentals are not SAC-ready until each quarterly period has exact
-SEC filing provenance (`filingDate` / `accessionNumber`). SEC-eligible pulls
-write provenance from CompanyFacts; AV paths enrich via submissions. Freshness
-uses a cheap SEC filing-head check `(filingDate, accession)` rather than
-fetch-today. `/train/sac/preflight` reports a non-retryable configuration error
-when enrichment is required but `SEC_USER_AGENT` is unset, and
-`/etl/refresh-training-data` returns HTTP 503 when a provider returns no usable
-enriched statements.
-
-The fundamentals historical endpoint response includes `api_status` (AV call
-observability only — not a local quota gate):
-```json
-{"api_status": {"calls_today": 8, "daily_limit": 25, "remaining": 17}}
-```
+| `/signals/prices` | yfinance daily closes | Provider limits | Request-time |
 
 ## API documentation
 
@@ -108,5 +89,4 @@ Once running, visit:
 ```bash
 uv run pytest
 ```
-
 

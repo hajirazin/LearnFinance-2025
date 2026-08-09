@@ -12,9 +12,10 @@ Pipeline:
     6. Return the resulting 15-name slate, persisting the full candidate
        round for the next month's stickiness lookup
 
-This produces the same count (15) as the prior blanket-top-15 selector,
-keeping all downstream consumers (LSTM/PatchTST/SAC training, ETL refresh,
-SAC-Monday active-symbols) backward compatible.
+This produces the same count (15) as the prior blanket-top-15 selector and
+feeds the ``sac_halal_filtered`` training/inference bucket plus sentiment-gap
+ETL for that slate. The standalone LSTM and PatchTST forecasters train on the
+broader ``halal_new`` universe.
 
 Cadence
 -------

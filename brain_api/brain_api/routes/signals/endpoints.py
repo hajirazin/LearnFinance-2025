@@ -7,11 +7,6 @@ from typing import Annotated
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 
-from brain_api.core.data_freshness import refresh_stale_fundamentals
-from brain_api.core.fundamentals import (
-    load_historical_fundamentals_from_cache,
-    load_point_in_time_fundamentals,
-)
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.news_sentiment import (
     NewsFetcher,
@@ -29,22 +24,12 @@ from brain_api.routes.signals.helpers import (
     result_to_response,
 )
 from brain_api.routes.signals.models import (
-    ApiStatusResponse,
     ClosesRequest,
     ClosesResponse,
-    CurrentRatiosResponse,
-    FundamentalsRequest,
-    FundamentalsResponse,
-    HistoricalFundamentalsRequest,
-    HistoricalFundamentalsResponse,
     HistoricalNewsSentimentRequest,
     HistoricalNewsSentimentResponse,
     NewsSignalRequest,
     NewsSignalResponse,
-    PendingFilingResponse,
-    RatiosResponse,
-    RefreshFundamentalsRequest,
-    RefreshFundamentalsResponse,
 )
 
 router = APIRouter()
@@ -129,121 +114,6 @@ def get_historical_news_sentiment(
     )
 
 
-# ============================================================================
-# Fundamentals endpoints
-# ============================================================================
-
-
-@router.post("/fundamentals", response_model=FundamentalsResponse)
-def get_fundamentals(
-    request: FundamentalsRequest,
-    base_path: Annotated[Path, Depends(get_data_base_path)],
-) -> FundamentalsResponse:
-    """Get filing-date-correct fundamental ratios for inference.
-
-    Only complete Alpha Vantage periods enriched with exact SEC filing
-    availability are eligible. Unresolved or incomplete periods are errors,
-    never zero-filled.
-    """
-    as_of_date = (
-        date.fromisoformat(request.as_of_date)
-        if request.as_of_date is not None
-        else date.today()
-    )
-    as_of = as_of_date.isoformat()
-    fundamentals = load_point_in_time_fundamentals(
-        symbols=request.symbols,
-        as_of_date=as_of_date,
-        base_path=base_path,
-    )
-    results: list[CurrentRatiosResponse] = []
-
-    for symbol in request.symbols:
-        fundamental = fundamentals.get(symbol)
-        if fundamental is None:
-            results.append(
-                CurrentRatiosResponse(
-                    symbol=symbol,
-                    ratios=None,
-                    error=(f"No complete SEC-enriched filing was available by {as_of}"),
-                )
-            )
-            continue
-        results.append(
-            CurrentRatiosResponse(
-                symbol=symbol,
-                ratios=RatiosResponse(
-                    **fundamental.to_dict(),
-                    as_of_date=fundamental.filing_available_date,
-                ),
-            )
-        )
-
-    return FundamentalsResponse(
-        as_of_date=as_of,
-        per_symbol=results,
-    )
-
-
-@router.post("/fundamentals/historical", response_model=HistoricalFundamentalsResponse)
-def get_historical_fundamentals(
-    request: HistoricalFundamentalsRequest,
-    base_path: Annotated[Path, Depends(get_data_base_path)],
-) -> HistoricalFundamentalsResponse:
-    """Get HISTORICAL fundamental ratios for training (date range).
-
-    Returns n symbols x m quarterly periods as a flat list. Each entry represents
-    the financial ratios that would have been available at that point in time.
-
-    Reads from cache ONLY. Use PUT /signals/fundamentals/historical to refresh cache.
-
-    Data source: Local cache (originally from Alpha Vantage)
-    """
-    start_date = date.fromisoformat(request.start_date)
-    end_date = date.fromisoformat(request.end_date)
-
-    # Use the shared loader function (reads from cache only)
-    fundamentals = load_historical_fundamentals_from_cache(
-        symbols=request.symbols,
-        start_date=start_date,
-        end_date=end_date,
-        base_path=base_path,
-    )
-
-    # Helper to convert NaN to None for JSON serialization
-    def safe_float(value: float | None) -> float | None:
-        import math
-
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            return None
-        return value
-
-    # Convert dict[str, DataFrame] to list[RatiosResponse]
-    all_ratios: list[RatiosResponse] = []
-    for symbol, df in fundamentals.items():
-        for idx, row in df.iterrows():
-            all_ratios.append(
-                RatiosResponse(
-                    symbol=symbol,
-                    as_of_date=idx.strftime("%Y-%m-%d"),
-                    gross_margin=safe_float(row.get("gross_margin")),
-                    debt_to_equity=safe_float(row.get("debt_to_equity")),
-                    eps_diluted=safe_float(row.get("eps_diluted")),
-                    fiscal_period_end=row.get("fiscal_period_end"),
-                    filing_available_date=row.get("filing_available_date"),
-                    filing_accession_number=row.get("filing_accession_number"),
-                    filing_form=row.get("filing_form"),
-                    filing_source=row.get("filing_source"),
-                )
-            )
-
-    return HistoricalFundamentalsResponse(
-        start_date=request.start_date,
-        end_date=request.end_date,
-        data=all_ratios,
-    )
-
-
 @router.post("/prices", response_model=ClosesResponse)
 def get_closes(request: ClosesRequest) -> ClosesResponse:
     """Raw daily closes for SAC momentum signals (momentum_1w/4w/12_1).
@@ -282,42 +152,3 @@ def get_closes(request: ClosesRequest) -> ClosesResponse:
         closes[symbol] = [float(v) for v in series.tail(request.lookback_bars)]
 
     return ClosesResponse(as_of_date=request.as_of_date, closes=closes)
-
-
-@router.put("/fundamentals/historical", response_model=RefreshFundamentalsResponse)
-def refresh_fundamentals(
-    request: RefreshFundamentalsRequest,
-    base_path: Annotated[Path, Depends(get_data_base_path)],
-) -> RefreshFundamentalsResponse:
-    """Refresh fundamentals using SEC-first filing-head freshness.
-
-    Pulls SEC CompanyFacts for SEC-eligible US names; Alpha Vantage + SEC
-    enrichment for non-eligible. Skips symbols whose cache already matches
-    the latest applicable SEC filing head (and has provenance).
-
-    Requires ``SEC_USER_AGENT``. ``ALPHA_VANTAGE_API_KEY`` is required only
-    for non-SEC-eligible pulls.
-    """
-    result = refresh_stale_fundamentals(
-        symbols=request.symbols,
-        base_path=base_path,
-    )
-
-    return RefreshFundamentalsResponse(
-        refreshed=result.refreshed,
-        skipped=result.skipped,
-        failed=result.failed,
-        pending_new_filing=[
-            PendingFilingResponse(
-                symbol=p.symbol,
-                first_pending_at=p.first_pending_at,
-                age_days=p.age_days,
-            )
-            for p in result.pending_new_filing
-        ],
-        api_status=ApiStatusResponse(
-            calls_today=result.api_status.get("calls_today", 0),
-            daily_limit=result.api_status.get("daily_limit", 25),
-            remaining=result.api_status.get("remaining", 25),
-        ),
-    )

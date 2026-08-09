@@ -1,6 +1,6 @@
 """Strict construction of the feature bundle used for SAC decisions.
 
-Momentum + earnings-yield math is duplicated (not imported) from
+Momentum math is duplicated (not imported) from
 ``brain_api.core.sac.momentum_signals`` because Temporal and brain_api
 are separate deployable services with independent dependency
 environments (see ``temporal/pyproject.toml`` -- no brain_api
@@ -10,10 +10,8 @@ path if either changes.
 """
 
 import math
-from datetime import date
 
 from models import (
-    FundamentalsResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
 )
@@ -64,24 +62,6 @@ def _normalize_patchtst_items(forecasts) -> list:
     return forecasts.predictions if hasattr(forecasts, "predictions") else forecasts
 
 
-def _normalize_fundamentals(fundamentals) -> dict:
-    """Return ``{symbol: ratios}``, unwrapping a ``FundamentalsResponse`` if given.
-
-    Error/missing-ratio per-symbol rows raise immediately (fail-loud);
-    a raw ``{symbol: ratios}`` dict (already ratios, no error wrapper)
-    passes through unchanged.
-    """
-    if not hasattr(fundamentals, "per_symbol"):
-        return dict(fundamentals)
-    resolved: dict = {}
-    for item in fundamentals.per_symbol:
-        if item.error or item.ratios is None:
-            detail = item.error or "missing ratios"
-            raise ValueError(f"fundamentals[{item.symbol}] unavailable: {detail}")
-        resolved[item.symbol] = item.ratios
-    return resolved
-
-
 def _price_at(closes: list[float], index: int, *, field: str) -> float:
     if index < 0 or index >= len(closes):
         raise ValueError(
@@ -122,33 +102,12 @@ def _compute_momentum_12_1(closes: list[float], *, as_of_index: int) -> float:
     return p_skip / p_lookback - 1.0
 
 
-def _compute_earnings_yield(*, eps_diluted: float | None, as_of_close: float) -> float:
-    """Earnings yield: eps_diluted / as_of_close.
-
-    ``eps_diluted`` must be SEC point-in-time diluted EPS (Basic
-    fallback) from ``/signals/fundamentals`` -- never raw P/E, and a
-    distinct metric from the universe screening module's
-    operating-income-over-enterprise-value ratio (different purpose;
-    see AGENTS.md universe pipeline invariants).
-    """
-    if eps_diluted is None or not math.isfinite(eps_diluted):
-        raise ValueError(
-            f"earnings_yield requires a finite eps_diluted, got {eps_diluted!r}"
-        )
-    if as_of_close is None or not math.isfinite(as_of_close) or as_of_close <= 0:
-        raise ValueError(
-            f"earnings_yield requires a positive finite close, got {as_of_close!r}"
-        )
-    return eps_diluted / as_of_close
-
-
 def build_sac_feature_bundle(
     *,
     symbols: list[str],
     as_of_date: str | None = None,
     decision_date: str | None = None,
     news: NewsSignalResponse | list,
-    fundamentals: FundamentalsResponse | dict,
     patchtst: PatchTSTInferenceResponse | list | None = None,
     patchtst_forecasts: PatchTSTInferenceResponse | list | None = None,
     closes: dict[str, list[float]] | None = None,
@@ -161,7 +120,7 @@ def build_sac_feature_bundle(
     oldest first, most recent last]}`` with at least
     ``MOM_12_1_SKIP_BARS + MOM_12_1_LOOKBACK_BARS`` (273) bars, used for
     momentum_1w/4w/12_1. Fail-loud everywhere: no silent zero-fill for
-    insufficient bars, missing/non-finite EPS, or non-finite prices.
+    insufficient bars or non-finite prices.
     """
     if not symbols or len(set(symbols)) != len(symbols):
         raise ValueError("SAC symbols must be non-empty and unique")
@@ -169,8 +128,6 @@ def build_sac_feature_bundle(
     resolved_date = as_of_date if as_of_date is not None else decision_date
     if resolved_date is None:
         raise ValueError("build_sac_feature_bundle requires as_of_date/decision_date")
-    decision_date_value = date.fromisoformat(resolved_date)
-
     forecasts_source = patchtst if patchtst is not None else patchtst_forecasts
     if forecasts_source is None:
         raise ValueError(
@@ -182,14 +139,6 @@ def build_sac_feature_bundle(
     news_by_symbol = _exact_per_symbol(
         _normalize_news_items(news), symbols, field="news"
     )
-    fundamentals_by_symbol = _normalize_fundamentals(fundamentals)
-    missing_fundamentals = sorted(set(symbols) - set(fundamentals_by_symbol))
-    extra_fundamentals = sorted(set(fundamentals_by_symbol) - set(symbols))
-    if missing_fundamentals or extra_fundamentals:
-        raise ValueError(
-            f"fundamentals symbol mismatch: missing={missing_fundamentals}, "
-            f"extra={extra_fundamentals}"
-        )
     patchtst_by_symbol = _exact_per_symbol(
         _normalize_patchtst_items(forecasts_source), symbols, field="patchtst_forecasts"
     )
@@ -198,20 +147,8 @@ def build_sac_feature_bundle(
         raise ValueError(f"closes missing for symbols: {missing_closes}")
 
     signals: dict[str, dict[str, float]] = {}
-    filing_provenance: dict[str, dict[str, str | None]] = {}
     for symbol in symbols:
         news_observation = news_by_symbol[symbol]
-        ratios = fundamentals_by_symbol[symbol]
-        if ratios.filing_available_date is None:
-            raise ValueError(
-                f"fundamentals[{symbol}].filing_available_date is required"
-            )
-        filing_date = date.fromisoformat(ratios.filing_available_date)
-        fundamental_age = (decision_date_value - filing_date).days
-        if fundamental_age < 0:
-            raise ValueError(
-                f"fundamentals[{symbol}] filing date is after decision date"
-            )
         if news_observation.article_count_used < 0:
             raise ValueError(f"news[{symbol}].article_count_used cannot be negative")
 
@@ -222,38 +159,17 @@ def build_sac_feature_bundle(
                 f"{MOM_12_1_LOOKBACK_BARS + 1} for momentum_12_1"
             )
         as_of_index = len(symbol_closes) - 1
-        as_of_close = _price_at(symbol_closes, as_of_index, field=f"closes[{symbol}]")
-
         signals[symbol] = {
             "news_sentiment": _required_finite(
                 news_observation.sentiment_score,
                 field=f"news[{symbol}].sentiment_score",
             ),
             "news_coverage": min(news_observation.article_count_used / 3.0, 1.0),
-            "gross_margin": _required_finite(
-                ratios.gross_margin, field=f"fundamentals[{symbol}].gross_margin"
-            ),
-            "debt_to_equity": _required_finite(
-                ratios.debt_to_equity,
-                field=f"fundamentals[{symbol}].debt_to_equity",
-            ),
-            "fundamental_age": float(fundamental_age),
             "momentum_1w": _compute_momentum_1w(symbol_closes, as_of_index=as_of_index),
             "momentum_4w": _compute_momentum_4w(symbol_closes, as_of_index=as_of_index),
             "momentum_12_1": _compute_momentum_12_1(
                 symbol_closes, as_of_index=as_of_index
             ),
-            "earnings_yield": _compute_earnings_yield(
-                eps_diluted=getattr(ratios, "eps_diluted", None),
-                as_of_close=as_of_close,
-            ),
-        }
-        filing_provenance[symbol] = {
-            "fiscal_period_end": ratios.fiscal_period_end,
-            "filing_available_date": ratios.filing_available_date,
-            "filing_accession_number": ratios.filing_accession_number,
-            "filing_form": ratios.filing_form,
-            "filing_source": ratios.filing_source,
         }
 
     news_provenance = {
@@ -261,10 +177,6 @@ def build_sac_feature_bundle(
         "run_id": getattr(news, "run_id", None),
         "attempt": getattr(news, "attempt", None),
         "from_cache": getattr(news, "from_cache", None),
-    }
-    fundamentals_provenance = {
-        "as_of_date": getattr(fundamentals, "as_of_date", resolved_date),
-        "filings": filing_provenance,
     }
     patchtst_provenance = {
         "as_of_date": getattr(forecasts_source, "as_of_date", resolved_date),
@@ -285,7 +197,6 @@ def build_sac_feature_bundle(
         "provenance": {
             "as_of_date": resolved_date,
             "news": news_provenance,
-            "fundamentals": fundamentals_provenance,
             "patchtst": patchtst_provenance,
         },
     }

@@ -4,12 +4,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from brain_api.core.fundamentals import FundamentalRatios
 from brain_api.core.news_sentiment import NewsSentimentResult, SymbolSentiment
 from brain_api.routes.signals.models import (
     ArticleResponse,
     NewsSignalResponse,
-    RatiosResponse,
     SentimentDataPoint,
     SymbolSentimentResponse,
 )
@@ -72,54 +70,6 @@ def result_to_response(
         as_of_date=result.as_of_date,
         from_cache=result.from_cache,
         per_symbol=[symbol_to_response(s, return_top_k) for s in result.per_symbol],
-    )
-
-
-def get_yfinance_ratios(symbol: str, as_of_date: str) -> RatiosResponse | None:
-    """Fetch current fundamental ratios from yfinance.
-
-    yfinance ticker.info contains pre-computed ratios from the latest filings.
-    No rate limits, no caching needed.
-    """
-    import yfinance as yf
-
-    try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
-
-        # yfinance provides these as decimals (e.g., 0.45 for 45%)
-        gross_margin = info.get("grossMargins")
-        current_ratio = info.get("currentRatio")
-        debt_to_equity = info.get("debtToEquity")
-
-        # debtToEquity from yfinance is as percentage (e.g., 150 for 1.5x)
-        # Normalize to ratio
-        if debt_to_equity is not None and debt_to_equity > 10:
-            debt_to_equity = debt_to_equity / 100
-
-        return RatiosResponse(
-            symbol=symbol,
-            as_of_date=as_of_date,
-            gross_margin=round(gross_margin, 4) if gross_margin else None,
-            current_ratio=round(current_ratio, 4) if current_ratio else None,
-            debt_to_equity=round(debt_to_equity, 4) if debt_to_equity else None,
-        )
-    except Exception:
-        return None
-
-
-def ratios_to_response(
-    ratios: FundamentalRatios | None,
-) -> RatiosResponse | None:
-    """Convert internal FundamentalRatios to API response."""
-    if ratios is None:
-        return None
-    return RatiosResponse(
-        symbol=ratios.symbol,
-        as_of_date=ratios.as_of_date,
-        gross_margin=ratios.gross_margin,
-        debt_to_equity=ratios.debt_to_equity,
-        eps_diluted=ratios.eps_diluted,
     )
 
 

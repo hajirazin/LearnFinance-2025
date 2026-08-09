@@ -1,33 +1,14 @@
-"""Models for ETL endpoints."""
+"""Temporal-facing result for the asynchronous sentiment-gap refresh."""
 
-from pydantic import BaseModel, Field
-
-
-class RefreshTrainingDataRequest(BaseModel):
-    """Request for POST /etl/refresh-training-data endpoint."""
-
-    universe: str = Field(
-        ...,
-        description=(
-            "Registered ETL universe string (e.g. 'halal_filtered'); "
-            "scopes both sentiment gap fill and fundamentals refresh."
-        ),
-    )
-    start_date: str | None = Field(
-        None, description="Training window start (YYYY-MM-DD), defaults to 10 years ago"
-    )
-    end_date: str | None = Field(
-        None, description="Training window end (YYYY-MM-DD), defaults to today"
-    )
+from pydantic import BaseModel
 
 
-class RefreshTrainingDataResponse(BaseModel):
-    """Response from POST /etl/refresh-training-data endpoint."""
+class SentimentGapFillResponse(BaseModel):
+    """Published result returned by ``run_sentiment_gap_fill``."""
 
-    sentiment_gaps_filled: int
-    sentiment_gaps_remaining: int
-    fundamentals_refreshed: list[str]
-    fundamentals_skipped: list[str]
-    fundamentals_failed: list[str]
-    fundamentals_errors: dict[str, str] = Field(default_factory=dict)
+    rows_added: int
+    remaining_gaps: int
+    gaps_pre_api_date: int
     duration_seconds: float
+    hf_url: str
+    published: bool = True

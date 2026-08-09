@@ -49,7 +49,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from activities.inference import (
         get_closes,
-        get_fundamentals,
         get_news_sentiment,
         get_patchtst_forecast,
         infer_sac,
@@ -114,13 +113,7 @@ class USWeeklyAllocationWorkflow:
             skipped_algorithms.append("SAC")
 
         # Phase 1: Get signals + PatchTST forecast + closes (parallel)
-        fundamentals, news, patchtst, closes = await asyncio.gather(
-            workflow.execute_activity(
-                get_fundamentals,
-                args=[symbols, as_of_date],
-                start_to_close_timeout=INFERENCE_TIMEOUT,
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            ),
+        news, patchtst, closes = await asyncio.gather(
             workflow.execute_activity(
                 get_news_sentiment,
                 args=[symbols, as_of_date, run_id],
@@ -154,7 +147,6 @@ class USWeeklyAllocationWorkflow:
                     "halal_filtered",
                     symbols,
                     news,
-                    fundamentals,
                     patchtst,
                     closes,
                 ],
@@ -215,7 +207,7 @@ class USWeeklyAllocationWorkflow:
         # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[patchtst, news, fundamentals, sac_alloc, "halal_filtered"],
+            args=[patchtst, news, sac_alloc, "halal_filtered"],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 

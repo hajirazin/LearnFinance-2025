@@ -124,7 +124,6 @@ OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
 
 - OHLCV log returns (5): open, high, low, close, volume
 - News sentiment (1)
-- Fundamentals (2): gross_margin, debt_to_equity
 
 ## Metrics
 

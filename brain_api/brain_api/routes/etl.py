@@ -7,6 +7,7 @@ promptly when the server receives Ctrl+C / SIGINT.
 
 import logging
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -16,6 +17,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
+from brain_api.core.config import DEFAULT_LOOKBACK_YEARS
 from brain_api.etl.config import ETLConfig
 from brain_api.etl.gap_fill import GapFillProgress, fill_sentiment_gaps
 from brain_api.etl.pipeline import run_pipeline
@@ -23,7 +25,6 @@ from brain_api.etl.universe_registry import (
     UnknownETLUniverseError,
     list_universes,
 )
-from brain_api.routes.etl_training_refresh import router as training_refresh_router
 
 
 def _get_shutdown_event() -> threading.Event:
@@ -34,7 +35,6 @@ def _get_shutdown_event() -> threading.Event:
 
 
 router = APIRouter()
-router.include_router(training_refresh_router)
 logger = logging.getLogger(__name__)
 
 
@@ -352,9 +352,12 @@ class SentimentGapsRequest(BaseModel):
         ),
         examples=["halal_filtered"],
     )
-    start_date: str = Field(
-        ...,
-        description="Earliest date to check for gaps (YYYY-MM-DD)",
+    start_date: str | None = Field(
+        None,
+        description=(
+            "Earliest date to check for gaps (YYYY-MM-DD). Defaults to January "
+            f"1 {DEFAULT_LOOKBACK_YEARS} years before end_date."
+        ),
         examples=["2011-01-01"],
     )
     end_date: str | None = Field(
@@ -387,10 +390,11 @@ def _update_gap_fill_progress(job_id: str, progress: GapFillProgress) -> None:
             "current_phase": progress.current_phase,
             "error": progress.error,
         }
-        if progress.status == "completed":
-            job.status = "completed"
-            job.completed_at = datetime.now(UTC)
-        elif progress.status == "cancelled":
+        # A progress callback is never authoritative for successful completion.
+        # ``fill_sentiment_gaps`` still has to publish the parquet to Hugging Face
+        # and return the final result.  Only ``_run_gap_fill_job`` may atomically
+        # expose ``completed`` together with that result and its required hf_url.
+        if progress.status == "cancelled":
             job.status = "failed"
             job.completed_at = datetime.now(UTC)
             job.error = "Cancelled by server shutdown"
@@ -414,6 +418,7 @@ def _run_gap_fill_job(
         return
 
     job.status = "running"
+    started = time.monotonic()
 
     try:
         result = fill_sentiment_gaps(
@@ -426,13 +431,12 @@ def _run_gap_fill_job(
             shutdown_event=_get_shutdown_event(),
         )
 
-        job.status = "completed" if result.success else "failed"
-        job.completed_at = datetime.now(UTC)
         job.result = {
             "success": result.success,
             "parquet_updated": result.parquet_updated,
             "statistics": result.statistics,
             "hf_url": result.hf_url,
+            "duration_seconds": time.monotonic() - started,
             "progress": {
                 "total_gaps": result.progress.total_gaps,
                 "gaps_fillable": result.progress.gaps_fillable,
@@ -445,13 +449,18 @@ def _run_gap_fill_job(
                 "checkpoints_saved": result.progress.checkpoints_saved,
             },
         }
+        job.completed_at = datetime.now(UTC)
         if not result.success:
             job.error = result.progress.error
+        # Publish terminal status last. Pollers that observe ``completed`` must
+        # also observe the final result and its mandatory non-local ``hf_url``.
+        job.status = "completed" if result.success else "failed"
 
     except Exception as e:
         job.status = "failed"
         job.completed_at = datetime.now(UTC)
         job.error = str(e)
+        job.result = {"duration_seconds": time.monotonic() - started}
 
 
 @router.post("/sentiment-gaps", response_model=ETLJobResponse, status_code=202)
@@ -480,15 +489,7 @@ def start_sentiment_gaps_fill(
     # Clean up old jobs
     _cleanup_old_jobs()
 
-    # Parse dates
-    try:
-        start_date = date.fromisoformat(request.start_date)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid start_date format: {e}. Use YYYY-MM-DD.",
-        ) from e
-
+    # Parse dates. The default mirrors the configured SAC training window.
     if request.end_date:
         try:
             end_date = date.fromisoformat(request.end_date)
@@ -499,6 +500,17 @@ def start_sentiment_gaps_fill(
             ) from e
     else:
         end_date = date.today()
+
+    if request.start_date:
+        try:
+            start_date = date.fromisoformat(request.start_date)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid start_date format: {e}. Use YYYY-MM-DD.",
+            ) from e
+    else:
+        start_date = date(end_date.year - DEFAULT_LOOKBACK_YEARS, 1, 1)
 
     if start_date > end_date:
         raise HTTPException(

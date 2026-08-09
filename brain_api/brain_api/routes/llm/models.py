@@ -8,10 +8,7 @@ from brain_api.routes.inference.models import (
     PatchTSTInferenceResponse,
     SACInferenceResponse,
 )
-from brain_api.routes.signals.models import (
-    FundamentalsResponse,
-    NewsSignalResponse,
-)
+from brain_api.routes.signals.models import NewsSignalResponse
 from brain_api.routes.training.models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
@@ -107,7 +104,6 @@ class SACWeeklySummaryRequest(BaseModel):
 
     patchtst: PatchTSTInferenceResponse  # from POST /inference/patchtst
     news: NewsSignalResponse  # from POST /signals/news
-    fundamentals: FundamentalsResponse  # from POST /signals/fundamentals
     sac: SACInferenceResponse  # from POST /inference/sac
     universe: str  # "halal_filtered" or "halal"; mandatory
 
