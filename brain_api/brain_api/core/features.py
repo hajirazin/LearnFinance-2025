@@ -4,6 +4,23 @@ import numpy as np
 import pandas as pd
 
 
+def _log_return_positive(series: pd.Series) -> pd.Series:
+    """Log return where both current and previous values are strictly positive.
+
+    Non-positive or non-finite bars (today or previous) become NaN so
+    downstream dataset builders skip those windows. Never substitutes a
+    sentinel (e.g. ``0 -> 1``) and never emits Inf from ``log(0/x)``.
+    """
+    prev = series.shift(1)
+    curr_v = series.to_numpy(dtype=np.float64, copy=False)
+    prev_v = prev.to_numpy(dtype=np.float64, copy=False)
+    valid = np.isfinite(curr_v) & np.isfinite(prev_v) & (curr_v > 0.0) & (prev_v > 0.0)
+    out = np.full(len(series), np.nan, dtype=np.float64)
+    if valid.any():
+        out[valid] = np.log(curr_v[valid] / prev_v[valid])
+    return pd.Series(out, index=series.index, dtype="float64")
+
+
 def compute_ohlcv_log_returns(
     df: pd.DataFrame, use_returns: bool = True
 ) -> pd.DataFrame:
@@ -20,19 +37,18 @@ def compute_ohlcv_log_returns(
     Returns:
         DataFrame with columns: open_ret, high_ret, low_ret, close_ret, volume_ret
         First row is dropped when use_returns=True (NaN from shift).
-        Non-finite values are **not** silently zeroed (AGENTS.md: no silent
-        fallbacks). Downstream dataset builders skip NaN/Inf samples.
+        Non-positive OHLCV (today or previous bar) yields NaN on that channel —
+        never Inf and never a silent zero-fill (AGENTS.md: no silent fallbacks).
+        Downstream dataset builders skip NaN/Inf samples.
     """
     if use_returns:
         features_df = pd.DataFrame(
             {
-                "open_ret": np.log(df["open"] / df["open"].shift(1)),
-                "high_ret": np.log(df["high"] / df["high"].shift(1)),
-                "low_ret": np.log(df["low"] / df["low"].shift(1)),
-                "close_ret": np.log(df["close"] / df["close"].shift(1)),
-                "volume_ret": np.log(
-                    df["volume"] / df["volume"].shift(1).replace(0, 1)
-                ),
+                "open_ret": _log_return_positive(df["open"]),
+                "high_ret": _log_return_positive(df["high"]),
+                "low_ret": _log_return_positive(df["low"]),
+                "close_ret": _log_return_positive(df["close"]),
+                "volume_ret": _log_return_positive(df["volume"]),
             },
             index=df.index,
         )
