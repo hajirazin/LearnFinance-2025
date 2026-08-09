@@ -17,7 +17,31 @@ from brain_api.core.portfolio_rl.scaler import PortfolioScaler
 from brain_api.core.sac.config import SACConfig
 from brain_api.storage.base import DEFAULT_DATA_PATH
 
-from .artifacts import SACArtifacts
+from .artifacts import (
+    SACArtifactCompatibilityError,
+    SACArtifacts,
+    SACV3AuxiliaryArtifacts,
+    validate_sac_v3_metadata,
+)
+
+_V3_AUXILIARY_FILE = "sac_v3_auxiliary.json"
+_V3_REQUIRED_FILES = frozenset(
+    {
+        "actor.pt",
+        "critic.pt",
+        "critic_target.pt",
+        "log_alpha.pt",
+        "scaler.pkl",
+        "config.json",
+        "symbol_order.json",
+        "metadata.json",
+        _V3_AUXILIARY_FILE,
+    }
+)
+
+
+def _state_shapes(module: torch.nn.Module) -> dict[str, tuple[int, ...]]:
+    return {name: tuple(value.shape) for name, value in module.state_dict().items()}
 
 
 class SACFilesystemStorage:
@@ -44,8 +68,9 @@ class SACFilesystemStorage:
         return version_path / "candidates" / f"seed-{candidate_seed}"
 
     def version_exists(self, version: str) -> bool:
-        """Return whether the canonical version directory exists."""
-        return (self._version_path(version) / "actor.pt").is_file()
+        """Return whether the complete canonical SAC v3 version exists."""
+        version_path = self._version_path(version)
+        return all((version_path / name).is_file() for name in _V3_REQUIRED_FILES)
 
     def write_artifacts(
         self,
@@ -58,6 +83,7 @@ class SACFilesystemStorage:
         config: SACConfig,
         symbol_order: list[str],
         metadata: dict[str, Any],
+        v3_auxiliary: SACV3AuxiliaryArtifacts,
     ) -> Path:
         """Write canonical artifacts without changing the current pointer."""
         return self._write_artifacts_to(
@@ -70,6 +96,7 @@ class SACFilesystemStorage:
             config,
             symbol_order,
             metadata,
+            v3_auxiliary,
         )
 
     def write_candidate_artifacts(
@@ -84,6 +111,7 @@ class SACFilesystemStorage:
         config: SACConfig,
         symbol_order: list[str],
         metadata: dict[str, Any],
+        v3_auxiliary: SACV3AuxiliaryArtifacts,
     ) -> Path:
         """Write one fixed-seed candidate below ``candidates/seed-N``."""
         return self._write_artifacts_to(
@@ -96,6 +124,7 @@ class SACFilesystemStorage:
             config,
             symbol_order,
             metadata,
+            v3_auxiliary,
         )
 
     def write_candidate_metadata(
@@ -118,7 +147,9 @@ class SACFilesystemStorage:
         )
         try:
             with os.fdopen(fd, "w") as handle:
-                handle.write(json.dumps(metadata, indent=2, default=str))
+                handle.write(
+                    json.dumps(metadata, indent=2, default=str, allow_nan=False)
+                )
             os.replace(temp_path, metadata_path)
         except Exception:
             with contextlib.suppress(OSError):
@@ -139,7 +170,39 @@ class SACFilesystemStorage:
         config: SACConfig,
         symbol_order: list[str],
         metadata: dict[str, Any],
+        v3_auxiliary: SACV3AuxiliaryArtifacts,
     ) -> Path:
+        validate_sac_v3_metadata(metadata, symbol_order)
+        # Round-trip validates HMM shapes/config before any artifact is written.
+        SACV3AuxiliaryArtifacts.from_dict(v3_auxiliary.to_dict())
+        expected_median_scaler = {
+            "mean": float(scaler.median_mean),
+            "scale": float(scaler.median_scale),
+        }
+        if v3_auxiliary.median_patchtst_scaler != expected_median_scaler:
+            raise SACArtifactCompatibilityError(
+                "SAC v3 median PatchTST scaler does not match scaler.pkl"
+            )
+        expected_actor = GaussianActor(
+            hidden_sizes=config.hidden_sizes,
+            activation=config.activation,
+        )
+        expected_critic = TwinCritic(
+            hidden_sizes=config.hidden_sizes,
+            activation=config.activation,
+        )
+        if _state_shapes(actor) != _state_shapes(expected_actor):
+            raise SACArtifactCompatibilityError(
+                "SAC v3 actor architecture does not match config.json"
+            )
+        expected_critic_shapes = _state_shapes(expected_critic)
+        if (
+            _state_shapes(critic) != expected_critic_shapes
+            or _state_shapes(critic_target) != expected_critic_shapes
+        ):
+            raise SACArtifactCompatibilityError(
+                "SAC v3 critic architecture does not match config.json"
+            )
         artifact_dir.mkdir(parents=True, exist_ok=True)
         torch.save(actor.state_dict(), artifact_dir / "actor.pt")
         torch.save(critic.state_dict(), artifact_dir / "critic.pt")
@@ -153,23 +216,17 @@ class SACFilesystemStorage:
             json.dumps(symbol_order, indent=2)
         )
         (artifact_dir / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, default=str)
+            json.dumps(metadata, indent=2, default=str, allow_nan=False)
+        )
+        (artifact_dir / _V3_AUXILIARY_FILE).write_text(
+            json.dumps(v3_auxiliary.to_dict(), indent=2, allow_nan=False)
         )
         return artifact_dir
 
     def promote_candidate(self, version: str, seed: int) -> Path:
         """Copy only the selected seed candidate into the canonical version root."""
         candidate_dir = self._artifact_path(version, seed)
-        required = {
-            "actor.pt",
-            "critic.pt",
-            "critic_target.pt",
-            "log_alpha.pt",
-            "scaler.pkl",
-            "config.json",
-            "symbol_order.json",
-            "metadata.json",
-        }
+        required = _V3_REQUIRED_FILES
         missing = sorted(
             name for name in required if not (candidate_dir / name).is_file()
         )
@@ -193,7 +250,7 @@ class SACFilesystemStorage:
 
     def promote_version(self, version: str) -> None:
         """Atomically point this bucket at a fully written canonical version."""
-        if not (self._version_path(version) / "actor.pt").is_file():
+        if not self.version_exists(version):
             raise ValueError(f"Cannot promote incomplete SAC version {version}")
         self._model_path.mkdir(parents=True, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
@@ -224,16 +281,38 @@ class SACFilesystemStorage:
         )
 
     def load_artifacts(self, version: str) -> SACArtifacts:
-        """Load SAC artifacts using the live StateSchema dim formula."""
+        """Load a complete SAC v3 artifact, rejecting legacy data first."""
         from brain_api.core.portfolio_rl.state import StateSchema
 
+        version_dir = self._version_path(version)
+        metadata_path = version_dir / "metadata.json"
+        auxiliary_path = version_dir / _V3_AUXILIARY_FILE
+        if not metadata_path.is_file():
+            raise SACArtifactCompatibilityError(
+                f"SAC artifact {version!r} has no metadata.json"
+            )
+        metadata = json.loads(metadata_path.read_text())
+        symbol_order = self.load_symbol_order(version)
+        validate_sac_v3_metadata(metadata, symbol_order)
+        if not auxiliary_path.is_file():
+            raise SACArtifactCompatibilityError(
+                f"SAC v3 artifact {version!r} is missing {_V3_AUXILIARY_FILE}"
+            )
+        v3_auxiliary = SACV3AuxiliaryArtifacts.from_dict(
+            json.loads(auxiliary_path.read_text())
+        )
         config = self.load_config(version)
         scaler = self.load_scaler(version)
-        symbol_order = self.load_symbol_order(version)
-        n_stocks = len(symbol_order)
-        state_dim = StateSchema(n_stocks=n_stocks).state_dim
-        action_dim = n_stocks + 1
-        version_dir = self._version_path(version)
+        if v3_auxiliary.median_patchtst_scaler != {
+            "mean": float(scaler.median_mean),
+            "scale": float(scaler.median_scale),
+        }:
+            raise SACArtifactCompatibilityError(
+                "SAC v3 median PatchTST scaler conflicts with scaler.pkl"
+            )
+        schema = StateSchema()
+        state_dim = schema.state_dim
+        action_dim = schema.action_dim
 
         actor = GaussianActor(
             state_dim, action_dim, config.hidden_sizes, config.activation
@@ -272,6 +351,8 @@ class SACFilesystemStorage:
             log_alpha=log_alpha,
             symbol_order=symbol_order,
             version=version,
+            metadata=metadata,
+            v3_auxiliary=v3_auxiliary,
         )
 
     def load_current_artifacts(self) -> SACArtifacts:

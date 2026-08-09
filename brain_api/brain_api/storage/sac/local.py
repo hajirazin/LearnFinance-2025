@@ -3,9 +3,20 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from brain_api.core.portfolio_rl.state import (
+    SAC_ASSET_FEATURE_NAMES,
+    SAC_GLOBAL_FEATURE_NAMES,
+    STATE_DIM,
+)
 from brain_api.core.sac.config import SACConfig
 
-from .artifacts import SACArtifacts
+from .artifacts import (
+    SAC_ACTION_DIM,
+    SAC_ARCHITECTURE,
+    SAC_MAX_ASSETS,
+    SAC_SCHEMA_VERSION,
+    SACArtifacts,
+)
 from .filesystem import SACFilesystemStorage
 
 
@@ -48,10 +59,18 @@ def create_sac_metadata(
     """Create auditable metadata for a candidate or promoted SAC artifact."""
     metadata: dict[str, Any] = {
         "model_type": bucket_name,
+        "sac_schema_version": SAC_SCHEMA_VERSION,
+        "architecture": SAC_ARCHITECTURE,
+        "max_assets": SAC_MAX_ASSETS,
+        "action_dim": SAC_ACTION_DIM,
+        "state_dim": STATE_DIM,
+        "asset_feature_names": list(SAC_ASSET_FEATURE_NAMES),
+        "global_feature_names": list(SAC_GLOBAL_FEATURE_NAMES),
         "version": version,
         "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {"start": data_window_start, "end": data_window_end},
-        "symbols": symbols,
+        "symbols": sorted(symbols),
+        "symbol_to_slot": {symbol: slot for slot, symbol in enumerate(sorted(symbols))},
         "config": config.to_dict(),
         "promoted": promoted,
         "prior_version": prior_version,

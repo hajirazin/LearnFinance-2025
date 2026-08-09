@@ -815,6 +815,10 @@ def mock_weekly_summary_request():
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
+            "asset_eligibility": {"AAPL": True, "MSFT": True},
+            "regime_posterior": [0.7, 0.2, 0.1],
+            "sac_schema_version": 3,
+            "architecture": "masked_attention",
         },
         "universe": "halal_filtered",
     }

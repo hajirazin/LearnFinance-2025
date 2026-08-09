@@ -39,10 +39,11 @@ from temporalio import activity
 from activities.reporting import send_weekly_email as _send_weekly_email_signature
 from models import (
     ActiveSymbolsResponse,
+    AdjustedClosesResponse,
     AlpacaPortfolioResponse,
-    ClosesResponse,
     GenerateOrdersResponse,
     MarketClockResponse,
+    MarketHistoryResponse,
     OrderModel,
     OrderSummary,
     PositionModel,
@@ -69,6 +70,8 @@ def _make_active_symbols(n: int) -> ActiveSymbolsResponse:
         symbols=[f"H{i}" for i in range(n)],
         source_model="sac_halal",
         model_version="v2026-05-01-halal",
+        training_cutoff_date="2026-05-08",
+        sac_schema_version=3,
     )
 
 
@@ -185,14 +188,26 @@ def _make_sac_halal_activities(
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
         return patchtst_resp
 
-    @activity.defn(name="get_closes")
-    def mock_get_closes(symbols, as_of_date, lookback_bars=253):
-        return ClosesResponse(
+    @activity.defn(name="get_adjusted_closes")
+    def mock_get_adjusted_closes(symbols, as_of_date, lookback_bars=253):
+        captured_calls["price_symbols"] = list(symbols)
+        return AdjustedClosesResponse(
             as_of_date=as_of_date,
-            closes={
+            adjusted_closes={
                 symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
                 for symbol in symbols
             },
+            execution_prices={symbol: 125.2 for symbol in symbols},
+            provenance={"provider": "test"},
+        )
+
+    @activity.defn(name="get_market_history")
+    def mock_get_market_history(training_cutoff_date, as_of_date):
+        return MarketHistoryResponse(
+            start_date="2026-05-09",
+            as_of_date=as_of_date,
+            rows=[],
+            provenance={"provider": "test"},
         )
 
     @activity.defn(name="infer_sac")
@@ -203,7 +218,8 @@ def _make_sac_halal_activities(
         symbols,
         news,
         patchtst,
-        closes,
+        prices,
+        market,
     ):
         captured_calls["infer_sac_universe"] = universe
         return sac_alloc
@@ -335,7 +351,8 @@ def _make_sac_halal_activities(
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
-        mock_get_closes,
+        mock_get_adjusted_closes,
+        mock_get_market_history,
         mock_infer_sac,
         mock_generate_orders_sac,
         mock_store_experience_sac,
@@ -420,6 +437,7 @@ class TestUSSACHalalAllocationHappyPath:
 
         # Mandatory universe arg propagated everywhere.
         assert captured["get_active_symbols_universe"] == "halal"
+        assert "H0" in captured["price_symbols"]
         assert captured["infer_sac_universe"] == "halal"
         assert captured["summary_universe"] == "halal"
         assert captured["email_universe"] == "halal"

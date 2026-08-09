@@ -23,6 +23,8 @@ class ActiveSymbolsResponse(BaseModel):
     symbols: list[str]
     source_model: str
     model_version: str
+    training_cutoff_date: str
+    sac_schema_version: int
 
 
 @router.get("/active-symbols", response_model=ActiveSymbolsResponse)
@@ -84,4 +86,6 @@ def get_active_symbols(
         symbols=artifacts.symbol_order,
         source_model=bucket.bucket_name,
         model_version=artifacts.version,
+        training_cutoff_date=artifacts.v3_auxiliary.training_cutoff_date,
+        sac_schema_version=artifacts.metadata["sac_schema_version"],
     )

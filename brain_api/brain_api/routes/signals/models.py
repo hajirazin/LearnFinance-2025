@@ -1,5 +1,7 @@
 """Request and response models for signal endpoints."""
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 # ============================================================================
@@ -11,7 +13,7 @@ MAX_ARTICLES_PER_SYMBOL = 30
 MAX_RETURN_TOP_K = 10
 DEFAULT_MAX_ARTICLES = 30
 DEFAULT_RETURN_TOP_K = 10
-MAX_PRICE_SYMBOLS = 20
+MAX_PRICE_SYMBOLS = 30
 MAX_HISTORICAL_SENTIMENT_SYMBOLS = 20
 
 
@@ -165,7 +167,39 @@ class ClosesRequest(BaseModel):
 
 
 class ClosesResponse(BaseModel):
-    """Response model for raw daily closes, oldest close first per symbol."""
+    """Point-in-time adjusted closes and safe as-of execution prices."""
 
     as_of_date: str
-    closes: dict[str, list[float]]
+    adjusted_closes: dict[str, list[float]]
+    execution_prices: dict[str, float]
+    provenance: dict[str, object]
+
+
+class MarketHistoryRequest(BaseModel):
+    """Request aligned SPY/VIX observations for causal HMM continuation."""
+
+    start_date: date = Field(
+        ...,
+        description="First required post-training-cutoff market session",
+    )
+    as_of_date: date = Field(
+        ...,
+        description="Pre-open decision date; only earlier completed XNYS sessions",
+    )
+
+
+class MarketHistoryRow(BaseModel):
+    """One aligned raw market observation row."""
+
+    date: date
+    spy_adjusted_close: float = Field(..., gt=0)
+    vix_close: float = Field(..., gt=0)
+
+
+class MarketHistoryResponse(BaseModel):
+    """Gap-sensitive raw market history consumed by Brain's HMM filter."""
+
+    start_date: date
+    as_of_date: date
+    rows: list[MarketHistoryRow]
+    provenance: dict[str, object]

@@ -19,7 +19,13 @@ from huggingface_hub.utils import RepositoryNotFoundError
 from brain_api.core.config import get_hf_sac_halal_filtered_model_repo, get_hf_token
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
+from brain_api.core.portfolio_rl.state import ACTION_DIM, STATE_DIM
 from brain_api.core.sac.config import SACConfig
+from brain_api.storage.sac.artifacts import (
+    SACArtifactCompatibilityError,
+    SACV3AuxiliaryArtifacts,
+    validate_sac_v3_metadata,
+)
 from brain_api.storage.sac.local import (
     SACArtifacts,
     SACLocalStorage,
@@ -51,6 +57,7 @@ class SACHuggingFaceModelStorage:
         - config.json           (SAC hyperparameters)
         - symbol_order.json     (Ordered list of symbols)
         - metadata.json         (Training info, metrics, data window)
+        - sac_v3_auxiliary.json (HMM, median scaler, cutoff, audit evidence)
 
     Versions are managed as git tags/branches on the HF repo.
     The 'main' branch typically points to the current promoted version.
@@ -139,6 +146,7 @@ class SACHuggingFaceModelStorage:
         config: SACConfig,
         symbol_order: list[str],
         metadata: dict[str, Any],
+        v3_auxiliary: SACV3AuxiliaryArtifacts,
         make_current: bool = False,
     ) -> HFModelInfo:
         """Upload SAC model artifacts to HuggingFace Hub.
@@ -196,7 +204,11 @@ class SACHuggingFaceModelStorage:
             # Save metadata
             metadata_path = tmppath / "metadata.json"
             with open(metadata_path, "w") as f:
-                json.dump(metadata, f, indent=2, default=str)
+                json.dump(metadata, f, indent=2, default=str, allow_nan=False)
+
+            auxiliary_path = tmppath / "sac_v3_auxiliary.json"
+            with open(auxiliary_path, "w") as f:
+                json.dump(v3_auxiliary.to_dict(), f, indent=2, allow_nan=False)
 
             # Create README
             readme_path = tmppath / "README.md"
@@ -290,22 +302,33 @@ class SACHuggingFaceModelStorage:
         with open(symbol_order_path) as f:
             symbol_order = json.load(f)
 
+        metadata_path = local_path / "metadata.json"
+        if not metadata_path.is_file():
+            raise ValueError("SAC artifact has no metadata.json")
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        validate_sac_v3_metadata(metadata, symbol_order)
+        auxiliary_path = local_path / "sac_v3_auxiliary.json"
+        if not auxiliary_path.is_file():
+            raise ValueError("SAC v3 artifact is missing sac_v3_auxiliary.json")
+        with open(auxiliary_path) as f:
+            v3_auxiliary = SACV3AuxiliaryArtifacts.from_dict(json.load(f))
+
         # Load scaler
         scaler_path = local_path / "scaler.pkl"
         scaler = PortfolioScaler.load(scaler_path)
-
-        # Compute dimensions from symbol order
-        n_stocks = len(symbol_order)
-        from brain_api.core.portfolio_rl.state import StateSchema
-
-        schema = StateSchema(n_stocks=n_stocks)
-        state_dim = schema.state_dim
-        action_dim = n_stocks + 1  # stocks + CASH
+        if v3_auxiliary.median_patchtst_scaler != {
+            "mean": float(scaler.median_mean),
+            "scale": float(scaler.median_scale),
+        }:
+            raise SACArtifactCompatibilityError(
+                "SAC v3 median PatchTST scaler conflicts with scaler.pkl"
+            )
 
         # Initialize and load actor
         actor = GaussianActor(
-            state_dim=state_dim,
-            action_dim=action_dim,
+            state_dim=STATE_DIM,
+            action_dim=ACTION_DIM,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
         )
@@ -317,8 +340,8 @@ class SACHuggingFaceModelStorage:
 
         # Initialize and load critic
         critic = TwinCritic(
-            state_dim=state_dim,
-            action_dim=action_dim,
+            state_dim=STATE_DIM,
+            action_dim=ACTION_DIM,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
         )
@@ -330,8 +353,8 @@ class SACHuggingFaceModelStorage:
 
         # Initialize and load target critic
         critic_target = TwinCritic(
-            state_dim=state_dim,
-            action_dim=action_dim,
+            state_dim=STATE_DIM,
+            action_dim=ACTION_DIM,
             hidden_sizes=config.hidden_sizes,
             activation=config.activation,
         )
@@ -373,6 +396,7 @@ class SACHuggingFaceModelStorage:
                 config=config,
                 symbol_order=symbol_order,
                 metadata=metadata,
+                v3_auxiliary=v3_auxiliary,
             )
             self.local_cache.promote_version(actual_version)
 
@@ -385,6 +409,8 @@ class SACHuggingFaceModelStorage:
             log_alpha=log_alpha,
             symbol_order=symbol_order,
             version=actual_version or "main",
+            metadata=metadata,
+            v3_auxiliary=v3_auxiliary,
         )
 
     def get_current_version(self) -> str | None:
@@ -451,12 +477,12 @@ tags:
 
 # LearnFinance SAC Model - {version}
 
-Soft Actor-Critic (SAC) portfolio allocation agent using PatchTST forecasts as features.
+SAC v3 masked-attention portfolio allocator with ranked stock tokens.
 
 ## Model Details
 
 - **Version**: {version}
-- **Model Type**: SAC (Soft Actor-Critic) with PatchTST-only forecasts
+- **Model Type**: SAC v3 (masked attention, 30 stock slots + CASH)
 - **Training Window**: {metadata.get("data_window", {}).get("start", "N/A")} to {metadata.get("data_window", {}).get("end", "N/A")}
 - **Symbols**: {len(symbol_order)} stocks
 
@@ -468,6 +494,8 @@ Soft Actor-Critic (SAC) portfolio allocation agent using PatchTST forecasts as f
 - `log_alpha.pt` - Entropy temperature coefficient
 - `scaler.pkl` - PortfolioScaler for state normalization
 - `symbol_order.json` - Ordered list of portfolio symbols
+- `metadata.json` - SAC v3 schema, architecture, slot map, and audit metadata
+- `sac_v3_auxiliary.json` - HMM parameters/scaler/labels, causal cutoff state, and market tail
 
 ## Metrics
 

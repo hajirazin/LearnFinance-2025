@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
+from brain_api.core.portfolio_rl.state import ACTION_DIM, MAX_ASSETS
 
 
 @dataclass
@@ -28,9 +29,10 @@ class SACBaseConfig:
     # === Entropy tuning ===
     # For a tanh-squashed Gaussian policy, the standard SAC heuristic is
     # target_entropy = -dim(action).
-    # For 16 dims (15 stocks + cash), -16.0 encourages moderate exploration.
+    # Runtime training uses ``-(n_valid + 1)`` per replay row. This persisted
+    # fallback records the fixed 31-way network envelope only.
     auto_entropy_tuning: bool = True
-    target_entropy: float | None = -16.0  # target_entropy = -dim(action)
+    target_entropy: float | None = -31.0
     init_alpha: float = 0.2  # Moderate initial entropy coefficient
 
     # === Training ===
@@ -58,7 +60,7 @@ class SACBaseConfig:
     # AND normalize_rewards AND auto_entropy_tuning creates 3 competing
     # magnitude controls. With reward_scale=1.0, Welford normalization
     # produces mean~0 std~1 rewards, giving alpha a stable target.
-    n_stocks: int = 15  # Top-15 stocks by liquidity
+    n_stocks: int = 15  # eligible universe size; network slots remain fixed at 30
     # IBKR Singapore Tiered transaction-cost schedule. See
     # brain_api/core/portfolio_rl/broker_costs.py for the per-leg math.
     cost_config: IBKRSingaporeCostConfig = field(
@@ -74,8 +76,8 @@ class SACBaseConfig:
 
     @property
     def action_dim(self) -> int:
-        """Action dimension = n_stocks + CASH."""
-        return self.n_stocks + 1
+        """SAC v3 always emits 30 stock slots plus CASH."""
+        return ACTION_DIM
 
     @property
     def cost_rate(self) -> float:
@@ -167,15 +169,12 @@ def make_sac_base_config_for_n_stocks(
         A new ``SACBaseConfig`` instance with ``n_stocks`` and
         ``target_entropy`` rewritten.
     """
-    if n_stocks < 1:
-        raise ValueError(
-            f"n_stocks must be >= 1 to build a meaningful SAC action space, "
-            f"got {n_stocks}."
-        )
+    if not 1 <= n_stocks <= MAX_ASSETS:
+        raise ValueError(f"n_stocks must be in [1, {MAX_ASSETS}], got {n_stocks}.")
     return replace(
         base,
         n_stocks=n_stocks,
-        target_entropy=-float(n_stocks + 1),
+        target_entropy=-float(ACTION_DIM),
     )
 
 

@@ -1,4 +1,4 @@
-"""Strict construction of the feature bundle used for SAC decisions.
+"""Strict construction of the raw evidence bundle used for SAC decisions.
 
 Momentum math is duplicated (not imported) from
 ``brain_api.core.sac.momentum_signals`` because Temporal and brain_api
@@ -10,8 +10,12 @@ path if either changes.
 """
 
 import math
+from datetime import date
+from itertools import pairwise
 
 from models import (
+    AdjustedClosesResponse,
+    MarketHistoryResponse,
     NewsSignalResponse,
     PatchTSTInferenceResponse,
 )
@@ -23,6 +27,7 @@ MOM_4W_BARS = 20
 # momentum_12_1 = P_t-21/P_t-252 - 1 (skip 21 bars, then 252-bar lookback)
 MOM_12_1_SKIP_BARS = 21
 MOM_12_1_LOOKBACK_BARS = 252
+REALIZED_VOL_RETURN_BARS = 20
 
 
 def _exact_per_symbol(items: list, symbols: list[str], *, field: str) -> dict:
@@ -102,6 +107,19 @@ def _compute_momentum_12_1(closes: list[float], *, as_of_index: int) -> float:
     return p_skip / p_lookback - 1.0
 
 
+def _compute_realized_vol_20d(closes: list[float], *, as_of_index: int) -> float:
+    """Annualized sample std of the last 20 adjusted-close log returns."""
+    start = as_of_index - REALIZED_VOL_RETURN_BARS
+    prices = [
+        _price_at(closes, index, field="realized_vol_20d.price")
+        for index in range(start, as_of_index + 1)
+    ]
+    returns = [math.log(current / previous) for previous, current in pairwise(prices)]
+    mean = sum(returns) / len(returns)
+    sample_variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
+    return math.sqrt(sample_variance) * math.sqrt(252.0)
+
+
 def build_sac_feature_bundle(
     *,
     symbols: list[str],
@@ -110,17 +128,17 @@ def build_sac_feature_bundle(
     news: NewsSignalResponse | list,
     patchtst: PatchTSTInferenceResponse | list | None = None,
     patchtst_forecasts: PatchTSTInferenceResponse | list | None = None,
-    closes: dict[str, list[float]] | None = None,
+    prices: AdjustedClosesResponse,
+    market: MarketHistoryResponse,
 ) -> dict:
-    """Build the strict feature bundle Brain uses for the SAC actor state.
+    """Build the point-in-time raw evidence bundle consumed by Brain.
 
     ``as_of_date``/``decision_date`` are aliases (same meaning); callers
     should use ``as_of_date``. ``patchtst``/``patchtst_forecasts`` are
-    likewise aliases. ``closes`` is required: ``{symbol: [daily closes,
-    oldest first, most recent last]}`` with at least
-    ``MOM_12_1_SKIP_BARS + MOM_12_1_LOOKBACK_BARS`` (273) bars, used for
-    momentum_1w/4w/12_1. Fail-loud everywhere: no silent zero-fill for
-    insufficient bars or non-finite prices.
+    likewise aliases. Temporal deliberately does not send derived momentum,
+    volatility, ranks, eligibility, or HMM probabilities. Brain owns that
+    business math and validates the raw evidence. The duplicated momentum
+    helpers above remain only for train/live formula-parity tests.
     """
     if not symbols or len(set(symbols)) != len(symbols):
         raise ValueError("SAC symbols must be non-empty and unique")
@@ -133,44 +151,34 @@ def build_sac_feature_bundle(
         raise ValueError(
             "build_sac_feature_bundle requires patchtst/patchtst_forecasts"
         )
-    if closes is None:
-        raise ValueError("build_sac_feature_bundle requires closes for momentum")
-
     news_by_symbol = _exact_per_symbol(
         _normalize_news_items(news), symbols, field="news"
     )
     patchtst_by_symbol = _exact_per_symbol(
         _normalize_patchtst_items(forecasts_source), symbols, field="patchtst_forecasts"
     )
-    missing_closes = sorted(set(symbols) - set(closes))
-    if missing_closes:
-        raise ValueError(f"closes missing for symbols: {missing_closes}")
+    if prices.as_of_date != resolved_date:
+        raise ValueError(
+            f"adjusted closes as_of_date {prices.as_of_date!r} does not match "
+            f"decision date {resolved_date!r}"
+        )
+    if date.fromisoformat(market.as_of_date) >= date.fromisoformat(resolved_date):
+        raise ValueError(
+            f"market history as_of_date {market.as_of_date!r} must be before "
+            f"decision date {resolved_date!r}"
+        )
 
-    signals: dict[str, dict[str, float]] = {}
+    news_sentiment: dict[str, float] = {}
+    news_article_counts: dict[str, int] = {}
     for symbol in symbols:
         news_observation = news_by_symbol[symbol]
         if news_observation.article_count_used < 0:
             raise ValueError(f"news[{symbol}].article_count_used cannot be negative")
-
-        symbol_closes = closes[symbol]
-        if len(symbol_closes) < MOM_12_1_LOOKBACK_BARS + 1:
-            raise ValueError(
-                f"closes[{symbol}] has {len(symbol_closes)} bars; need >= "
-                f"{MOM_12_1_LOOKBACK_BARS + 1} for momentum_12_1"
-            )
-        as_of_index = len(symbol_closes) - 1
-        signals[symbol] = {
-            "news_sentiment": _required_finite(
-                news_observation.sentiment_score,
-                field=f"news[{symbol}].sentiment_score",
-            ),
-            "news_coverage": min(news_observation.article_count_used / 3.0, 1.0),
-            "momentum_1w": _compute_momentum_1w(symbol_closes, as_of_index=as_of_index),
-            "momentum_4w": _compute_momentum_4w(symbol_closes, as_of_index=as_of_index),
-            "momentum_12_1": _compute_momentum_12_1(
-                symbol_closes, as_of_index=as_of_index
-            ),
-        }
+        news_sentiment[symbol] = _required_finite(
+            news_observation.sentiment_score,
+            field=f"news[{symbol}].sentiment_score",
+        )
+        news_article_counts[symbol] = news_observation.article_count_used
 
     news_provenance = {
         "as_of_date": getattr(news, "as_of_date", resolved_date),
@@ -185,7 +193,11 @@ def build_sac_feature_bundle(
 
     return {
         "symbols": symbols,
-        "signals": signals,
+        "adjusted_closes": {
+            symbol: prices.adjusted_closes.get(symbol, []) for symbol in symbols
+        },
+        "news_sentiment": news_sentiment,
+        "news_article_counts": news_article_counts,
         "patchtst_forecasts": {
             symbol: _required_finite(
                 patchtst_by_symbol[symbol].predicted_weekly_return_pct,
@@ -193,10 +205,15 @@ def build_sac_feature_bundle(
             )
             / 100.0
             for symbol in symbols
+            if patchtst_by_symbol[symbol].predicted_weekly_return_pct is not None
         },
+        "execution_prices": prices.execution_prices,
+        "market_history": [row.model_dump() for row in market.rows],
         "provenance": {
             "as_of_date": resolved_date,
+            "adjusted_closes": prices.provenance,
             "news": news_provenance,
             "patchtst": patchtst_provenance,
+            "market_history": market.provenance,
         },
     }

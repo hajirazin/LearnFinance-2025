@@ -28,6 +28,8 @@ from brain_api.core.portfolio_rl.rewards import (
     compute_net_log_reward,
 )
 from brain_api.core.portfolio_rl.state import (
+    ACTION_DIM,
+    MAX_ASSETS,
     StateSchema,
     build_state_vector,
 )
@@ -68,6 +70,8 @@ class PortfolioEnv:
         config: RLBaseConfig | None = None,
         cost_config: IBKRSingaporeCostConfig | None = None,
         max_episode_weeks: int | None = 52,
+        asset_masks: np.ndarray | None = None,
+        regime_probabilities: np.ndarray | None = None,
     ):
         """Initialize environment.
 
@@ -100,6 +104,8 @@ class PortfolioEnv:
 
         self.n_weeks = symbol_returns.shape[0]
         self.n_stocks = len(symbol_order)
+        if not 1 <= self.n_stocks <= MAX_ASSETS:
+            raise ValueError(f"symbol_order must contain 1..{MAX_ASSETS} stocks")
 
         if prices.shape != (self.n_weeks, self.n_stocks):
             raise ValueError(
@@ -125,6 +131,24 @@ class PortfolioEnv:
                 )
             if not np.all(np.isfinite(value)):
                 raise ValueError(f"{name} must be complete and finite")
+        self.asset_masks = (
+            np.ones((self.n_weeks, self.n_stocks), dtype=bool)
+            if asset_masks is None
+            else np.asarray(asset_masks, dtype=bool)
+        )
+        if self.asset_masks.shape != (self.n_weeks, self.n_stocks):
+            raise ValueError("asset_masks must have shape (n_weeks, n_stocks)")
+        if np.any(self.asset_masks.sum(axis=1) < 1):
+            raise ValueError(
+                "every training week must have at least one eligible asset"
+            )
+        self.regime_probabilities = (
+            np.zeros((self.n_weeks, 2), dtype=np.float64)
+            if regime_probabilities is None
+            else np.asarray(regime_probabilities, dtype=np.float64)
+        )
+        if self.regime_probabilities.shape != (self.n_weeks, 2):
+            raise ValueError("regime_probabilities must have shape (n_weeks, 2)")
 
         # Episode state
         self.current_week_idx: int = 0
@@ -144,8 +168,8 @@ class PortfolioEnv:
 
     @property
     def action_dim(self) -> int:
-        """Dimension of action vector (n_stocks + 1 for CASH)."""
-        return self.n_stocks + 1
+        """Fixed 30 stock slots plus CASH."""
+        return ACTION_DIM
 
     def _initial_weights(self) -> np.ndarray:
         """Get initial portfolio weights (100% CASH)."""
@@ -186,6 +210,8 @@ class PortfolioEnv:
             portfolio_weights=self.current_weights,
             symbol_order=self.symbol_order,
             schema=self.schema,
+            asset_mask=self.asset_masks[week_idx],
+            regime_probabilities=tuple(self.regime_probabilities[week_idx]),
         )
 
     def reset(self, start_week: int | None = None) -> np.ndarray:
@@ -229,7 +255,11 @@ class PortfolioEnv:
             EnvStep with next_state, reward, done, info.
         """
         # Convert action to weights via softmax
-        target_weights = apply_softmax_to_weights(action)
+        if np.asarray(action).shape != (ACTION_DIM,):
+            raise ValueError(f"action must have shape ({ACTION_DIM},)")
+        current_mask = np.zeros(MAX_ASSETS, dtype=bool)
+        current_mask[: self.n_stocks] = self.asset_masks[self.current_week_idx]
+        target_weights = apply_softmax_to_weights(action, current_mask)
 
         # Enforce constraints
         target_weights = enforce_constraints(
@@ -242,9 +272,10 @@ class PortfolioEnv:
         turnover = compute_turnover(self.current_weights, target_weights)
 
         # Get weekly returns for stocks (CASH return = 0)
-        stock_returns = self.symbol_returns[self.current_week_idx]  # (n_stocks,)
+        stock_returns = np.zeros(MAX_ASSETS, dtype=np.float64)
+        stock_returns[: self.n_stocks] = self.symbol_returns[self.current_week_idx]
         asset_returns = np.zeros(self.action_dim)
-        asset_returns[: self.n_stocks] = stock_returns
+        asset_returns[:MAX_ASSETS] = stock_returns
         # CASH return is 0 (could add risk-free rate if desired)
 
         portfolio_return = float(np.dot(target_weights, asset_returns))
@@ -255,8 +286,12 @@ class PortfolioEnv:
         # brain_api/core/portfolio_rl/broker_costs.py.
         rebalance_cost = compute_ibkr_rebalance_cost(
             symbol_order=self.symbol_order,
-            current_weights=self.current_weights,
-            target_weights=target_weights,
+            current_weights=np.concatenate(
+                (self.current_weights[: self.n_stocks], self.current_weights[-1:])
+            ),
+            target_weights=np.concatenate(
+                (target_weights[: self.n_stocks], target_weights[-1:])
+            ),
             prices=self.prices[self.current_week_idx],
             cfg=self.cost_config,
         )
@@ -292,7 +327,10 @@ class PortfolioEnv:
 
         # Build next state (if not done)
         if done:
-            next_state = np.zeros(self.state_dim)  # Dummy state
+            # Keep a structurally valid terminal carrier. ``done`` prevents
+            # bootstrap use, while replay batches still pass this row through
+            # the masked actor before multiplication by ``1 - done``.
+            next_state = self._build_state(self.current_week_idx - 1)
         else:
             next_state = self._build_state(self.current_week_idx)
 

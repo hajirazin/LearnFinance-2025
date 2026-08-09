@@ -1,6 +1,7 @@
 """Signals, forecasts, and allocator activities."""
 
 import logging
+from datetime import date, timedelta
 
 from temporalio import activity
 
@@ -10,10 +11,11 @@ from activities.sac_context import (
     build_sac_feature_bundle,
 )
 from models import (
+    AdjustedClosesResponse,
     AlpacaPortfolioResponse,
-    ClosesResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
+    MarketHistoryResponse,
     NewsSignalResponse,
     PatchTSTBatchScores,
     PatchTSTInferenceResponse,
@@ -32,13 +34,15 @@ SAC_MOMENTUM_LOOKBACK_BARS = MOM_12_1_LOOKBACK_BARS + 1
 
 
 @activity.defn
-def get_closes(
+def get_adjusted_closes(
     symbols: list[str],
     as_of_date: str,
     lookback_bars: int = SAC_MOMENTUM_LOOKBACK_BARS,
-) -> ClosesResponse:
-    """Fetch raw daily closes for SAC momentum signals (momentum_1w/4w/12_1)."""
-    logger.info(f"Fetching {lookback_bars}-bar closes for {len(symbols)} symbols...")
+) -> AdjustedClosesResponse:
+    """Fetch point-in-time adjusted closes and execution prices for SAC."""
+    logger.info(
+        f"Fetching {lookback_bars}-bar adjusted closes for {len(symbols)} symbols..."
+    )
     with get_client() as client:
         response = client.post(
             "/signals/prices",
@@ -49,8 +53,46 @@ def get_closes(
             },
         )
         response.raise_for_status()
-    result = ClosesResponse(**response.json())
-    logger.info(f"Got closes for {len(result.closes)} symbols")
+    result = AdjustedClosesResponse(**response.json())
+    logger.info(f"Got adjusted closes for {len(result.adjusted_closes)} symbols")
+    return result
+
+
+@activity.defn
+def get_market_history(
+    training_cutoff_date: str, as_of_date: str
+) -> MarketHistoryResponse:
+    """Fetch SPY/VIX history through the last completed pre-decision day."""
+    cutoff = date.fromisoformat(training_cutoff_date)
+    decision_date = date.fromisoformat(as_of_date)
+    if cutoff > decision_date:
+        raise ValueError("SAC training cutoff cannot be after the decision date")
+    market_as_of = decision_date - timedelta(days=1)
+    start_date = (cutoff + timedelta(days=1)).isoformat()
+    if cutoff >= market_as_of:
+        return MarketHistoryResponse(
+            start_date=start_date,
+            as_of_date=market_as_of.isoformat(),
+            rows=[],
+            provenance={
+                "source": "training_cutoff",
+                "no_completed_post_cutoff_sessions": True,
+            },
+        )
+    market_as_of_date = market_as_of.isoformat()
+    logger.info(
+        f"Fetching SAC market history ({start_date} through {market_as_of_date})..."
+    )
+    with get_client() as client:
+        response = client.post(
+            "/signals/market-history",
+            json={"start_date": start_date, "as_of_date": market_as_of_date},
+        )
+        response.raise_for_status()
+    result = MarketHistoryResponse(**response.json())
+    if result.start_date != start_date or result.as_of_date != market_as_of_date:
+        raise ValueError("Market-history response range does not match the request")
+    logger.info(f"Got {len(result.rows)} market-history rows")
     return result
 
 
@@ -244,7 +286,8 @@ def infer_sac(
     symbols: list[str],
     news: NewsSignalResponse,
     patchtst: PatchTSTInferenceResponse,
-    closes: ClosesResponse,
+    prices: AdjustedClosesResponse,
+    market: MarketHistoryResponse,
 ) -> SACInferenceResponse:
     """Get SAC allocation for the requested SAC bucket.
 
@@ -252,15 +295,16 @@ def infer_sac(
     SAC workflow declares its bucket explicitly. brain_api resolves
     the bucket via ``get_bucket(ModelType.SAC, universe)`` and loads
     that bucket's frozen ``symbol_order``. Per AGENTS.md rule #1.
-    ``closes`` (from the ``get_closes`` activity) feeds SAC's
-    momentum_1w/4w/12_1 signals.
+    Temporal sends point-in-time raw evidence only. Brain owns eligibility,
+    momentum/volatility, ranks, HMM filtering, and state packing.
     """
     feature_bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date=as_of_date,
         news=news,
         patchtst=patchtst,
-        closes=closes.closes,
+        prices=prices,
+        market=market,
     )
     logger.info(f"Getting SAC allocation (universe={universe})...")
     with get_client() as client:

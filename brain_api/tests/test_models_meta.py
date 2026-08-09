@@ -37,7 +37,12 @@ def _fake_artifacts(symbols: list[str], version: str) -> SimpleNamespace:
     shape (e.g. accidentally reading ``.actor``) trips a clear
     ``AttributeError`` instead of a silent test pass.
     """
-    return SimpleNamespace(symbol_order=symbols, version=version)
+    return SimpleNamespace(
+        symbol_order=symbols,
+        version=version,
+        metadata={"sac_schema_version": 3},
+        v3_auxiliary=SimpleNamespace(training_cutoff_date="2026-04-30"),
+    )
 
 
 class TestActiveSymbolsUniverseRouting:
@@ -79,6 +84,8 @@ class TestActiveSymbolsUniverseRouting:
         data = response.json()
         assert data["source_model"] == "sac_halal_filtered"
         assert data["model_version"] == "v2026-05-01-aaa"
+        assert data["training_cutoff_date"] == "2026-04-30"
+        assert data["sac_schema_version"] == 3
         assert len(data["symbols"]) == 15
 
         # The route MUST opt into the legacy 400 cold-start contract;

@@ -9,3 +9,5 @@ class ActiveSymbolsResponse(BaseModel):
     symbols: list[str]
     source_model: str
     model_version: str
+    training_cutoff_date: str | None = None
+    sac_schema_version: int | None = None

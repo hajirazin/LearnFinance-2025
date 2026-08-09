@@ -50,6 +50,7 @@ def load_prices_yfinance(
             end=end_date.isoformat(),
             progress=False,
             group_by="ticker",
+            auto_adjust=True,
         )
 
         # Check if download returned valid data
@@ -108,6 +109,7 @@ def load_prices_yfinance(
                 df = ticker.history(
                     start=start_date.isoformat(),
                     end=end_date.isoformat(),
+                    auto_adjust=True,
                 )
                 if df is not None and not df.empty:
                     df = df[["Open", "High", "Low", "Close", "Volume"]].copy()

@@ -23,6 +23,7 @@ from brain_api.core.portfolio_rl.sac_networks import (
     hard_update,
     soft_update,
 )
+from brain_api.core.portfolio_rl.state import LEARNED_STATE_DIM, MAX_ASSETS
 from brain_api.core.training_utils import TrainingCancelledError, get_device
 
 if TYPE_CHECKING:
@@ -120,12 +121,8 @@ class SACTrainer:
 
         # Entropy coefficient (alpha) - on device
         if config.auto_entropy_tuning:
-            # Target entropy: -dim(action) is common default
-            self.target_entropy = (
-                config.target_entropy
-                if config.target_entropy is not None
-                else -float(self.action_dim)
-            )
+            # SAC v3 target entropy is transition-specific: valid stocks + CASH.
+            self.target_entropy = None
             # Log alpha as learnable parameter
             self.log_alpha = torch.tensor(
                 np.log(config.init_alpha),
@@ -194,6 +191,7 @@ class SACTrainer:
         # Convert to tensors and move to device
         states = torch.FloatTensor(batch.states).to(self.device)
         actions = torch.FloatTensor(batch.actions).to(self.device)
+        state_masks = states[:, LEARNED_STATE_DIM:] > 0.5
         raw_rewards = batch.rewards
         next_states = torch.FloatTensor(batch.next_states).to(self.device)
         dones = torch.FloatTensor(batch.dones).unsqueeze(-1).to(self.device)
@@ -272,9 +270,9 @@ class SACTrainer:
         # === Update Alpha (entropy coefficient) ===
         alpha_loss = 0.0
         if self.config.auto_entropy_tuning and self.alpha_optimizer is not None:
-            # Alpha loss: minimize alpha * (log_pi + target_entropy)
+            target_entropy = -(state_masks.sum(dim=1).to(log_probs.dtype) + 1.0)
             alpha_loss_tensor = -(
-                self.log_alpha * (log_probs + self.target_entropy).detach()
+                self.log_alpha * (log_probs + target_entropy).detach()
             ).mean()
 
             self.alpha_optimizer.zero_grad()
@@ -333,8 +331,9 @@ class SACTrainer:
 
             # Select action
             if self.total_steps < self.config.warmup_steps:
-                # Random action during warmup
                 action = np.random.randn(self.action_dim)
+                mask = state[LEARNED_STATE_DIM:] > 0.5
+                action[:MAX_ASSETS][~mask] = 0.0
             else:
                 action = self.select_action(state)
 
@@ -429,6 +428,7 @@ class SACTrainer:
 def action_to_weights(
     action: np.ndarray,
     cash_buffer: float = 0.02,
+    asset_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Convert raw action logits to constrained portfolio weights.
 
@@ -439,7 +439,7 @@ def action_to_weights(
         Constrained portfolio weights that sum to 1.
     """
     # Apply softmax to get raw weights
-    weights = apply_softmax_to_weights(action)
+    weights = apply_softmax_to_weights(action, asset_mask)
 
     # Apply constraints
     weights = enforce_constraints(

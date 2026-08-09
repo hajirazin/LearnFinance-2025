@@ -1,10 +1,4 @@
-"""State building for portfolio RL.
-
-The state vector contains:
-- Market signals (news sentiment, coverage, momentum_1w/4w/12_1)
-- Forecast features (PatchTST predicted weekly returns only)
-- Current portfolio state (weights including CASH)
-"""
+"""Fixed-shape SAC v3 state packing and cross-sectional feature math."""
 
 from __future__ import annotations
 
@@ -13,108 +7,179 @@ from typing import Any
 
 import numpy as np
 
+MAX_ASSETS = 30
+MIN_ELIGIBLE_ASSETS = 10
+ASSET_FEATURES = 7
+GLOBAL_FEATURES = 5
+ACTION_DIM = MAX_ASSETS + 1
+LEARNED_STATE_DIM = MAX_ASSETS * ASSET_FEATURES + GLOBAL_FEATURES
+STATE_DIM = LEARNED_STATE_DIM + MAX_ASSETS
 
-@dataclass
+SAC_RAW_SIGNAL_NAMES = (
+    "momentum_1w",
+    "momentum_4w",
+    "momentum_12_1",
+    "news_sentiment",
+    "realized_vol_20d",
+)
+SAC_ASSET_FEATURE_NAMES = (
+    "patchtst_pred_weekly_cs_rank",
+    "momentum_1w_cs_rank",
+    "momentum_4w_cs_rank",
+    "momentum_12_1_cs_rank",
+    "news_sentiment_cs_rank",
+    "realized_vol_20d_cs_rank",
+    "current_weight",
+)
+SAC_GLOBAL_FEATURE_NAMES = (
+    "median_patchtst_raw",
+    "fraction_patchtst_positive",
+    "p_calm",
+    "p_stress",
+    "cash_weight",
+)
+
+
+@dataclass(frozen=True)
+class UnpackedState:
+    """Structured views unpacked from a serialized SAC state carrier."""
+
+    asset_features: np.ndarray
+    globals: np.ndarray
+    asset_mask: np.ndarray
+
+
+@dataclass(frozen=True)
 class PortfolioState:
-    """Current portfolio state for RL decision-making.
+    """Current long-only portfolio weights."""
 
-    This is the "current_weights + cash" part of the state.
-    """
-
-    current_weights: dict[str, float]  # symbol -> weight, includes "CASH"
-    cash_value: float  # absolute cash value (for reference)
-    portfolio_value: float  # total portfolio value
-    last_turnover: float = 0.0  # turnover from last rebalance
+    current_weights: dict[str, float]
+    cash_value: float
+    portfolio_value: float
+    last_turnover: float = 0.0
 
     def to_weight_array(self, symbol_order: list[str]) -> np.ndarray:
-        """Convert to numpy array with CASH last.
-
-        Args:
-            symbol_order: Ordered list of stock symbols (not including CASH).
-
-        Returns:
-            Weights array with stocks first, CASH last.
-        """
-        n_assets = len(symbol_order) + 1
-        weights = np.zeros(n_assets)
-
-        for i, symbol in enumerate(symbol_order):
-            weights[i] = self.current_weights.get(symbol, 0.0)
-
+        weights = np.zeros(ACTION_DIM, dtype=np.float64)
+        for index, symbol in enumerate(symbol_order):
+            weights[index] = self.current_weights.get(symbol, 0.0)
         weights[-1] = self.current_weights.get("CASH", 0.0)
-
         return weights
 
 
-@dataclass
+@dataclass(frozen=True)
 class StateSchema:
-    """Schema defining the live SAC state vector structure.
+    """SAC v3 fixed state schema.
 
-    Segments:
-    1. Per-stock signals (n_stocks * n_signals_per_stock)
-    2. Per-stock PatchTST forecast return (n_stocks * 1)
-    3. Current portfolio weights (n_stocks + 1 for CASH)
-
-    For n_stocks=15: 15*5 + 15*1 + 16 = 106 (5 signals: news_sentiment,
-    news_coverage, momentum_1w, momentum_4w, momentum_12_1 -- see
-    ``brain_api.core.sac.decision_context.SAC_SIGNAL_NAMES``).
+    ``n_stocks`` is accepted only to make stale call sites fail with a useful
+    error when they exceed the fixed slot envelope. It never changes shapes.
     """
 
-    n_stocks: int = 15
-    n_forecasts_per_stock: int = 1  # PatchTST return only
+    n_stocks: int = MAX_ASSETS
 
-    @property
-    def n_signals_per_stock(self) -> int:
-        """Number of per-stock signal features."""
-        return len(self.signal_names)
+    def __post_init__(self) -> None:
+        if not 1 <= self.n_stocks <= MAX_ASSETS:
+            raise ValueError(f"n_stocks must be in [1, {MAX_ASSETS}]")
 
-    @property
-    def n_forecast_features(self) -> int:
-        """Total PatchTST forecast features."""
-        return self.n_stocks * self.n_forecasts_per_stock
-
-    @property
-    def n_portfolio_weights(self) -> int:
-        """Portfolio weights including CASH."""
-        return self.n_stocks + 1
-
-    @property
-    def state_dim(self) -> int:
-        """Total state vector dimension."""
-        return (
-            self.n_stocks * self.n_signals_per_stock
-            + self.n_forecast_features
-            + self.n_portfolio_weights
-        )
+    n_signals_per_stock = len(SAC_RAW_SIGNAL_NAMES)
+    n_forecasts_per_stock = 1
+    n_portfolio_weights = ACTION_DIM
+    state_dim = STATE_DIM
+    action_dim = ACTION_DIM
 
     @property
     def signal_names(self) -> list[str]:
-        """Names of per-stock signals."""
-        from brain_api.core.sac.decision_context import SAC_SIGNAL_NAMES
+        return list(SAC_RAW_SIGNAL_NAMES)
 
-        return list(SAC_SIGNAL_NAMES)
+    def get_asset_feature_indices(self) -> tuple[int, int]:
+        return 0, MAX_ASSETS * ASSET_FEATURES
 
-    def get_signal_indices(self, stock_idx: int) -> tuple[int, int]:
-        """Get start/end indices for a stock's signals."""
-        start = stock_idx * self.n_signals_per_stock
-        end = start + self.n_signals_per_stock
-        return start, end
+    def get_global_indices(self) -> tuple[int, int]:
+        return MAX_ASSETS * ASSET_FEATURES, LEARNED_STATE_DIM
 
-    def get_forecast_indices(self) -> tuple[int, int]:
-        """Get start/end indices for all PatchTST forecast features."""
-        start = self.n_stocks * self.n_signals_per_stock
-        end = start + self.n_forecast_features
-        return start, end
+    def get_mask_indices(self) -> tuple[int, int]:
+        return LEARNED_STATE_DIM, STATE_DIM
 
-    def get_patchtst_forecast_indices(self) -> tuple[int, int]:
-        """Get start/end indices for PatchTST forecast return features."""
-        return self.get_forecast_indices()
 
-    def get_portfolio_indices(self) -> tuple[int, int]:
-        """Get start/end indices for portfolio weights."""
-        start = self.n_stocks * self.n_signals_per_stock + self.n_forecast_features
-        end = start + self.n_portfolio_weights
-        return start, end
+def cross_sectional_rank(values: np.ndarray) -> np.ndarray:
+    """Average-tie ranks over valid assets, mapped exactly to ``[-1, 1]``."""
+    values = np.asarray(values, dtype=np.float64)
+    if values.ndim != 1 or values.size == 0 or not np.all(np.isfinite(values)):
+        raise ValueError("rank values must be a non-empty finite vector")
+    if values.size == 1:
+        return np.zeros(1, dtype=np.float64)
+    order = np.argsort(values, kind="stable")
+    ranks = np.empty(values.size, dtype=np.float64)
+    cursor = 0
+    while cursor < values.size:
+        end = cursor + 1
+        while end < values.size and values[order[end]] == values[order[cursor]]:
+            end += 1
+        ranks[order[cursor:end]] = (cursor + 1 + end) / 2.0
+        cursor = end
+    return 2.0 * (ranks - 1.0) / (values.size - 1.0) - 1.0
+
+
+def pack_state(
+    asset_features: np.ndarray,
+    globals_: np.ndarray,
+    asset_mask: np.ndarray,
+) -> np.ndarray:
+    """Serialize token features, globals, and auxiliary mask into 245 values."""
+    assets = np.asarray(asset_features, dtype=np.float64)
+    globals_array = np.asarray(globals_, dtype=np.float64)
+    mask = np.asarray(asset_mask, dtype=bool)
+    if assets.shape != (MAX_ASSETS, ASSET_FEATURES):
+        raise ValueError(
+            f"asset_features must have shape ({MAX_ASSETS}, {ASSET_FEATURES})"
+        )
+    if globals_array.shape != (GLOBAL_FEATURES,):
+        raise ValueError(f"globals must have shape ({GLOBAL_FEATURES},)")
+    if mask.shape != (MAX_ASSETS,) or not np.any(mask):
+        raise ValueError(
+            f"asset_mask must have shape ({MAX_ASSETS},) with >=1 valid asset"
+        )
+    if not np.all(np.isfinite(assets[mask])) or not np.all(np.isfinite(globals_array)):
+        raise ValueError("valid asset features and globals must be finite")
+    canonical_assets = assets.copy()
+    canonical_assets[~mask] = 0.0
+    return np.concatenate(
+        (canonical_assets.reshape(-1), globals_array, mask.astype(np.float64))
+    )
+
+
+def unpack_state(state: np.ndarray) -> UnpackedState:
+    """Unpack one serialized state and validate its mask/canonical padding."""
+    vector = np.asarray(state, dtype=np.float64)
+    if vector.shape != (STATE_DIM,) or not np.all(np.isfinite(vector)):
+        raise ValueError(f"state must be a finite vector of shape ({STATE_DIM},)")
+    assets_end = MAX_ASSETS * ASSET_FEATURES
+    assets = vector[:assets_end].reshape(MAX_ASSETS, ASSET_FEATURES)
+    globals_ = vector[assets_end:LEARNED_STATE_DIM]
+    raw_mask = vector[LEARNED_STATE_DIM:]
+    if not np.all((raw_mask == 0.0) | (raw_mask == 1.0)) or not np.any(raw_mask):
+        raise ValueError("state mask must be binary with at least one valid asset")
+    mask = raw_mask.astype(bool)
+    if np.any(assets[~mask] != 0.0):
+        raise ValueError("padded asset features must be canonical zero")
+    return UnpackedState(assets, globals_, mask)
+
+
+def unpack_state_batch(states: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorized unpack for network/scaler input."""
+    batch = np.asarray(states)
+    if batch.ndim == 1:
+        batch = batch.reshape(1, -1)
+    if batch.ndim != 2 or batch.shape[1] != STATE_DIM:
+        raise ValueError(f"states must have trailing dimension {STATE_DIM}")
+    assets_end = MAX_ASSETS * ASSET_FEATURES
+    assets = batch[:, :assets_end].reshape(-1, MAX_ASSETS, ASSET_FEATURES)
+    globals_ = batch[:, assets_end:LEARNED_STATE_DIM]
+    raw_mask = batch[:, LEARNED_STATE_DIM:]
+    if not np.all((raw_mask == 0) | (raw_mask == 1)) or np.any(raw_mask.sum(1) < 1):
+        raise ValueError(
+            "every state mask must be binary with at least one valid asset"
+        )
+    return assets, globals_, raw_mask.astype(bool)
 
 
 def build_state_vector(
@@ -123,117 +188,101 @@ def build_state_vector(
     portfolio_weights: np.ndarray,
     symbol_order: list[str],
     schema: StateSchema | None = None,
+    *,
+    asset_mask: np.ndarray | None = None,
+    regime_probabilities: tuple[float, float] = (0.0, 0.0),
 ) -> np.ndarray:
-    """Build the full state vector for RL agents (SAC).
+    """Build the ranked, padded SAC v3 state from raw per-asset observations."""
+    del schema
+    n_symbols = len(symbol_order)
+    if not 1 <= n_symbols <= MAX_ASSETS or len(set(symbol_order)) != n_symbols:
+        raise ValueError(f"symbol_order must contain 1..{MAX_ASSETS} unique symbols")
+    weights = np.asarray(portfolio_weights, dtype=np.float64)
+    if weights.shape == (n_symbols + 1,):
+        padded_weights = np.zeros(ACTION_DIM, dtype=np.float64)
+        padded_weights[:n_symbols] = weights[:-1]
+        padded_weights[-1] = weights[-1]
+        weights = padded_weights
+    if weights.shape != (ACTION_DIM,) or not np.all(np.isfinite(weights)):
+        raise ValueError(f"portfolio_weights must have shape ({ACTION_DIM},)")
+    if np.any(weights < 0) or not np.isclose(weights.sum(), 1.0, atol=1e-8):
+        raise ValueError("portfolio_weights must be a nonnegative simplex")
+    mask = np.zeros(MAX_ASSETS, dtype=bool)
+    mask[:n_symbols] = True
+    if asset_mask is not None:
+        supplied = np.asarray(asset_mask, dtype=bool)
+        if supplied.shape == (n_symbols,):
+            mask[:n_symbols] = supplied
+        elif supplied.shape == (MAX_ASSETS,):
+            mask = supplied.copy()
+            mask[n_symbols:] = False
+        else:
+            raise ValueError("asset_mask has invalid shape")
+    if not np.any(mask):
+        raise ValueError("at least one asset must be eligible")
 
-    Args:
-        signals: Dict of symbol -> signal_dict (SAC_SIGNAL_NAMES keys).
-        patchtst_forecasts: Dict of symbol -> PatchTST predicted weekly return.
-        portfolio_weights: Current portfolio weights with CASH last.
-        symbol_order: Ordered list of stock symbols (determines ordering).
-        schema: State schema (created from defaults if None).
-
-    Returns:
-        Flat state vector of shape (state_dim,).
-    """
-    if schema is None:
-        schema = StateSchema(n_stocks=len(symbol_order))
-
-    if len(symbol_order) != schema.n_stocks:
-        raise ValueError(
-            f"symbol_order has {len(symbol_order)} stocks, schema expects "
-            f"{schema.n_stocks}"
-        )
-    if portfolio_weights.shape != (schema.n_portfolio_weights,):
-        raise ValueError(
-            f"portfolio_weights shape {portfolio_weights.shape} does not match "
-            f"({schema.n_portfolio_weights},)"
-        )
-
-    state = np.zeros(schema.state_dim)
-
-    signal_names = schema.signal_names
-    for stock_idx, symbol in enumerate(symbol_order):
-        start, _end = schema.get_signal_indices(stock_idx)
-        if symbol not in signals:
-            raise ValueError(f"Missing required SAC signals for {symbol}")
-        symbol_signals = signals[symbol]
-
-        for signal_idx, signal_name in enumerate(signal_names):
-            if signal_name not in symbol_signals:
+    valid_indices = np.flatnonzero(mask)
+    raw = np.empty((len(valid_indices), 6), dtype=np.float64)
+    for row, index in enumerate(valid_indices):
+        symbol = symbol_order[index]
+        if symbol not in signals or symbol not in patchtst_forecasts:
+            raise ValueError(f"missing SAC v3 observations for eligible asset {symbol}")
+        raw[row, 0] = float(patchtst_forecasts[symbol])
+        for column, name in enumerate(SAC_RAW_SIGNAL_NAMES, start=1):
+            try:
+                raw[row, column] = float(signals[symbol][name])
+            except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(
-                    f"Missing required SAC signal {signal_name!r} for {symbol}"
-                )
-            value = symbol_signals[signal_name]
-            if not np.isfinite(value):
-                raise ValueError(
-                    f"Non-finite SAC signal {signal_name!r} for {symbol}: {value}"
-                )
-            state[start + signal_idx] = value
+                    f"missing SAC v3 signal {name!r} for {symbol}"
+                ) from exc
+    if not np.all(np.isfinite(raw)):
+        raise ValueError("eligible SAC v3 observations must be finite")
 
-    patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
-    for stock_idx, symbol in enumerate(symbol_order):
-        if symbol not in patchtst_forecasts:
-            raise ValueError(f"Missing required PatchTST forecast for {symbol}")
-        value = patchtst_forecasts[symbol]
-        if not np.isfinite(value):
-            raise ValueError(f"Non-finite PatchTST forecast for {symbol}: {value}")
-        state[patchtst_start + stock_idx] = value
-
-    if not np.all(np.isfinite(portfolio_weights)):
-        raise ValueError("Portfolio weights must all be finite")
-    if np.any(portfolio_weights < 0):
-        raise ValueError("Portfolio weights must all be nonnegative")
-    if not np.isclose(float(portfolio_weights.sum()), 1.0, atol=1e-8):
-        raise ValueError(
-            f"Portfolio weights must sum to 1.0, got {portfolio_weights.sum()}"
-        )
-
-    portfolio_start, portfolio_end = schema.get_portfolio_indices()
-    state[portfolio_start:portfolio_end] = portfolio_weights
-
-    return state
+    assets = np.zeros((MAX_ASSETS, ASSET_FEATURES), dtype=np.float64)
+    for column in range(6):
+        assets[valid_indices, column] = cross_sectional_rank(raw[:, column])
+    assets[valid_indices, 6] = weights[valid_indices]
+    p_calm, p_stress = map(float, regime_probabilities)
+    if min(p_calm, p_stress) < 0 or p_calm + p_stress > 1.0 + 1e-8:
+        raise ValueError("regime probabilities must be nonnegative and sum to <= 1")
+    globals_ = np.asarray(
+        [np.median(raw[:, 0]), np.mean(raw[:, 0] > 0), p_calm, p_stress, weights[-1]],
+        dtype=np.float64,
+    )
+    return pack_state(assets, globals_, mask)
 
 
 def extract_portfolio_weights_from_state(
-    state: np.ndarray,
-    schema: StateSchema,
+    state: np.ndarray, schema: StateSchema | None = None
 ) -> np.ndarray:
-    """Extract portfolio weights from state vector."""
-    start, end = schema.get_portfolio_indices()
-    return state[start:end].copy()
+    """Return padded stock weights plus CASH from a v3 state."""
+    del schema
+    unpacked = unpack_state(state)
+    weights = np.zeros(ACTION_DIM, dtype=np.float64)
+    weights[:MAX_ASSETS] = unpacked.asset_features[:, 6]
+    weights[-1] = unpacked.globals[-1]
+    return weights
 
 
 def state_to_dict(
-    state: np.ndarray,
-    symbol_order: list[str],
-    schema: StateSchema | None = None,
+    state: np.ndarray, symbol_order: list[str], schema: StateSchema | None = None
 ) -> dict[str, Any]:
-    """Convert state vector back to structured dict."""
-    if schema is None:
-        schema = StateSchema(n_stocks=len(symbol_order))
-
-    result: dict[str, Any] = {
-        "signals": {},
-        "patchtst_forecasts": {},
-        "current_weights": {},
+    """Return an audit-friendly structured representation."""
+    del schema
+    unpacked = unpack_state(state)
+    return {
+        "asset_features": {
+            symbol: dict(
+                zip(
+                    SAC_ASSET_FEATURE_NAMES,
+                    map(float, unpacked.asset_features[index]),
+                    strict=True,
+                )
+            )
+            for index, symbol in enumerate(symbol_order)
+        },
+        "globals": dict(
+            zip(SAC_GLOBAL_FEATURE_NAMES, map(float, unpacked.globals), strict=True)
+        ),
+        "asset_mask": unpacked.asset_mask.astype(int).tolist(),
     }
-
-    signal_names = schema.signal_names
-    for stock_idx, symbol in enumerate(symbol_order):
-        start, _end = schema.get_signal_indices(stock_idx)
-        result["signals"][symbol] = {}
-        for signal_idx, signal_name in enumerate(signal_names):
-            result["signals"][symbol][signal_name] = float(state[start + signal_idx])
-
-    patchtst_start, _patchtst_end = schema.get_patchtst_forecast_indices()
-    for stock_idx, symbol in enumerate(symbol_order):
-        result["patchtst_forecasts"][symbol] = float(state[patchtst_start + stock_idx])
-
-    portfolio_start, portfolio_end = schema.get_portfolio_indices()
-    weights = state[portfolio_start:portfolio_end]
-    for stock_idx, symbol in enumerate(symbol_order):
-        result["current_weights"][symbol] = float(weights[stock_idx])
-    result["current_weights"]["CASH"] = float(weights[-1])
-
-    return result

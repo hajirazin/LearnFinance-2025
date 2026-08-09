@@ -4,12 +4,13 @@ from models.alpha_screen import PatchTSTBatchScores
 from models.email import TrainingSummaryEmailResponse
 from models.etl import SentimentGapFillResponse
 from models.forecast_email import (
+    AdjustedClosesResponse,
     AllocationDetailModel,
     AlpacaPortfolioResponse,
-    ClosesResponse,
     GenerateOrdersResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
+    MarketHistoryResponse,
     NewsSignalResponse,
     OrderDetail,
     OrderHistoryItem,
@@ -62,10 +63,11 @@ __all__ = [
     # Forecast Email Flow
     "AlpacaPortfolioResponse",
     "AllocationDetailModel",
-    "ClosesResponse",
+    "AdjustedClosesResponse",
     "GenerateOrdersResponse",
     "HRPAllocationResponse",
     "LSTMInferenceResponse",
+    "MarketHistoryResponse",
     "NewsSignalResponse",
     "OrderDetail",
     "OrderHistoryItem",

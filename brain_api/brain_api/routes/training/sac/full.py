@@ -47,6 +47,7 @@ from brain_api.storage.policy import (
 from brain_api.storage.sac import (
     SACHalalFilteredModelStorage,
     SACHalalModelStorage,
+    SACV3AuxiliaryArtifacts,
     create_sac_metadata,
 )
 
@@ -58,6 +59,7 @@ from ..job_registry import (
     update_progress,
 )
 from ..models import SACTrainResponse, TrainingJobResponse
+from ._market_history import extract_aligned_market_history
 from ._shared import SACTrainRequest, sac_us_allowed_universes
 from .preflight import assess_sac_training_readiness
 
@@ -96,7 +98,9 @@ def train_sac_endpoint(
     except UnknownBucketError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    symbols = bucket.symbols_resolver()
+    # SAC v3 owns one canonical ticker-to-slot map per bucket. Eligibility
+    # changes only the mask and never reshuffles these lexicographic slots.
+    symbols = sorted(bucket.symbols_resolver())
     if bucket.symbol_validator is not None:
         try:
             bucket.symbol_validator(symbols)
@@ -126,6 +130,8 @@ def train_sac_endpoint(
     if (
         not request.force
         and prior_metadata is not None
+        and prior_metadata.get("sac_schema_version") == 3
+        and prior_metadata.get("architecture") == "masked_attention"
         and set(prior_metadata.get("symbols", [])) == set(symbols)
     ):
         logger.info(
@@ -254,7 +260,9 @@ def _run_sac_full_training(
         # (skip 21 + lookback 252 = 273 bars). This widens the existing
         # price fetch; it is not a new ETL pipeline.
         price_start_date = start_date - timedelta(days=MOM_12_1_CALENDAR_BUFFER_DAYS)
-        prices_dict = load_prices_yfinance(symbols, price_start_date, end_date)
+        prices_dict = load_prices_yfinance(
+            [*symbols, "SPY", "^VIX"], price_start_date, end_date + timedelta(days=1)
+        )
 
         if len(prices_dict) == 0:
             raise ValueError("No price data available for training")
@@ -266,6 +274,11 @@ def _run_sac_full_training(
                 "SAC training requires returns for the exact halal slate; "
                 f"missing price histories: {missing_price_symbols}"
             )
+        market_dates, spy_adjusted_closes, vix_closes = extract_aligned_market_history(
+            prices_dict,
+            start_date=price_start_date,
+            completed_through=end_date,
+        )
 
         trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
         weekly_prices = {}
@@ -333,6 +346,10 @@ def _run_sac_full_training(
             signals,
             patchtst_predictions,
             available_symbols,
+            weekly_dates=list(weekly_dates),
+            market_dates=market_dates,
+            spy_adjusted_closes=spy_adjusted_closes,
+            vix_closes=vix_closes,
         )
         experiment = SACTrainingExperiment.run(
             config=config,
@@ -351,12 +368,10 @@ def _run_sac_full_training(
             f"[SAC] Eval sharpe: {result.eval_sharpe:.4f}, CAGR: {result.eval_cagr * 100:.2f}%"
         )
 
-        update_progress(job_id, {"phase": "promotion_check"})
+        update_progress(job_id, {"phase": "artifact_health_check"})
         hf_model_repo = hf_repo_getter()
         # prior_version is kept purely for audit lineage on metadata.
-        # The promotion decision below is the new artifact's own
-        # guardrails (CAGR floor + finite metrics + symbol-count match
-        # + artifact files present); prior metrics are NEVER consulted.
+        # Health is recorded for review but never activates the artifact.
         try:
             prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
         except StoragePolicyError as exc:
@@ -394,6 +409,14 @@ def _run_sac_full_training(
                 training_seed=candidate.seed,
                 experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
             )
+            candidate_auxiliary = SACV3AuxiliaryArtifacts(
+                regime_hmm=candidate_result.regime_hmm,
+                median_patchtst_scaler={
+                    "mean": float(candidate_result.scaler.median_mean),
+                    "scale": float(candidate_result.scaler.median_scale),
+                },
+                audit_metadata=dict(candidate_result.audit_metadata),
+            )
             candidate_paths[candidate.seed] = storage.write_candidate_artifacts(
                 version,
                 candidate.seed,
@@ -405,6 +428,7 @@ def _run_sac_full_training(
                 candidate_config,
                 available_symbols,
                 candidate_metadata,
+                candidate_auxiliary,
             )
         selected_candidate_dir = candidate_paths[selected_candidate.seed]
 
@@ -424,14 +448,14 @@ def _run_sac_full_training(
             actual_symbol_count=len(available_symbols),
             artifact_dir=selected_candidate_dir,
         )
-        promoted = health.is_healthy
+        promoted = False
         logger.info(
-            f"[SAC] Promotion: {'YES' if promoted else 'NO'} "
-            f"(CAGR: {result.eval_cagr * 100:.2f}%)"
-            + ("" if promoted else f" (failures: {health.failure_reasons})")
+            f"[SAC] Versioned artifact health: "
+            f"{'PASS' if health.is_healthy else 'FAIL'} "
+            f"(promotion is excluded from the SAC v3 rebuild)"
         )
 
-        # Final metadata write with the real promoted + failure_reasons.
+        # SAC v3 implementation writes reviewable versioned artifacts only.
         metadata = create_sac_metadata(
             version=version,
             data_window_start=start_date.isoformat(),
@@ -452,26 +476,30 @@ def _run_sac_full_training(
             training_seed=selected_candidate.seed,
             experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
         )
-        if promoted:
-            storage.promote_candidate(version, selected_candidate.seed)
-            storage.write_artifacts(
-                version,
-                result.actor,
-                result.critic,
-                result.critic_target,
-                result.log_alpha,
-                result.scaler,
-                selected_config,
-                available_symbols,
-                metadata,
-            )
-            storage.promote_version(version)
-        else:
-            storage.write_candidate_metadata(
-                version,
-                selected_candidate.seed,
-                metadata,
-            )
+        storage.write_candidate_metadata(
+            version,
+            selected_candidate.seed,
+            metadata,
+        )
+        storage.write_artifacts(
+            version,
+            result.actor,
+            result.critic,
+            result.critic_target,
+            result.log_alpha,
+            result.scaler,
+            selected_config,
+            available_symbols,
+            metadata,
+            SACV3AuxiliaryArtifacts(
+                regime_hmm=result.regime_hmm,
+                median_patchtst_scaler={
+                    "mean": float(result.scaler.median_mean),
+                    "scale": float(result.scaler.median_scale),
+                },
+                audit_metadata=dict(result.audit_metadata),
+            ),
+        )
 
         hf_repo = None
         hf_url = None
@@ -483,9 +511,6 @@ def _run_sac_full_training(
                 hf_storage = hf_storage_class(
                     repo_id=hf_model_repo, local_cache=storage
                 )
-                # make_current = promoted (no cold-start fallback). An
-                # unhealthy inaugural leaves HF main empty and forces
-                # the operator to investigate -- per AGENTS.md rule #1.
                 hf_info = hf_storage.upload_model(
                     version=version,
                     actor=result.actor,
@@ -496,7 +521,15 @@ def _run_sac_full_training(
                     config=selected_config,
                     symbol_order=available_symbols,
                     metadata=metadata,
-                    make_current=promoted,
+                    v3_auxiliary=SACV3AuxiliaryArtifacts(
+                        regime_hmm=result.regime_hmm,
+                        median_patchtst_scaler={
+                            "mean": float(result.scaler.median_mean),
+                            "scale": float(result.scaler.median_scale),
+                        },
+                        audit_metadata=dict(result.audit_metadata),
+                    ),
+                    make_current=False,
                 )
                 hf_repo = hf_info.repo_id
                 hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"

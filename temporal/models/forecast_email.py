@@ -6,7 +6,7 @@ used in the weekly forecast email workflow.
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ============================================================================
 # Alpaca Endpoint Models
@@ -215,11 +215,30 @@ class NewsSignalResponse(BaseModel):
     as_of_date: str
 
 
-class ClosesResponse(BaseModel):
-    """Response from POST /signals/prices -- raw daily closes for SAC momentum."""
+class AdjustedClosesResponse(BaseModel):
+    """Point-in-time adjusted closes and as-of execution prices for SAC."""
 
     as_of_date: str
-    closes: dict[str, list[float]]
+    adjusted_closes: dict[str, list[float]]
+    execution_prices: dict[str, float]
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class MarketHistoryRow(BaseModel):
+    """One aligned daily SPY/VIX observation supplied to Brain's HMM."""
+
+    date: str
+    spy_adjusted_close: float
+    vix_close: float
+
+
+class MarketHistoryResponse(BaseModel):
+    """Ordered point-in-time market history for causal SAC regime filtering."""
+
+    start_date: str
+    as_of_date: str
+    rows: list[MarketHistoryRow]
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
 
 # ============================================================================

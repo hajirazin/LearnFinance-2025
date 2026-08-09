@@ -1,5 +1,9 @@
 """SAC model storage for the PatchTST-featured allocator."""
 
+from brain_api.storage.sac.artifacts import (
+    SACArtifactCompatibilityError,
+    SACV3AuxiliaryArtifacts,
+)
 from brain_api.storage.sac.huggingface import (
     HFModelInfo,
     SACHuggingFaceModelStorage,
@@ -14,10 +18,12 @@ from brain_api.storage.sac.local import (
 
 __all__ = [
     "HFModelInfo",
+    "SACArtifactCompatibilityError",
     "SACArtifacts",
     "SACHalalFilteredModelStorage",
     "SACHalalModelStorage",
     "SACHuggingFaceModelStorage",
     "SACLocalStorage",  # Backward compatibility alias
+    "SACV3AuxiliaryArtifacts",
     "create_sac_metadata",
 ]

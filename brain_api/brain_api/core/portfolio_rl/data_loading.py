@@ -20,6 +20,7 @@ from brain_api.core.sac.momentum_signals import (
     compute_momentum_1w,
     compute_momentum_4w,
     compute_momentum_12_1,
+    compute_realized_vol_20d,
 )
 
 
@@ -185,9 +186,6 @@ def align_signals_to_weekly(
             "news_sentiment": np.asarray(
                 [observation.sentiment_score for observation in weekly_news]
             ),
-            "news_coverage": np.asarray(
-                [observation.coverage for observation in weekly_news]
-            ),
         }
 
         # momentum_1w = P_t/P_t-5-1 (5 trading bars); momentum_4w =
@@ -213,6 +211,7 @@ def align_signals_to_weekly(
         momentum_1w = np.empty(n_weeks)
         momentum_4w = np.empty(n_weeks)
         momentum_12_1 = np.empty(n_weeks)
+        realized_vol_20d = np.empty(n_weeks)
         for week_idx, close_position in enumerate(close_positions):
             as_of_index = int(close_position)
             try:
@@ -225,6 +224,9 @@ def align_signals_to_weekly(
                 momentum_12_1[week_idx] = compute_momentum_12_1(
                     close_values, as_of_index=as_of_index
                 )
+                realized_vol_20d[week_idx] = compute_realized_vol_20d(
+                    close_values, as_of_index=as_of_index
+                )
             except MomentumSignalError as exc:
                 raise ValueError(
                     f"Momentum computation failed for {symbol} "
@@ -234,6 +236,7 @@ def align_signals_to_weekly(
         symbol_signals["momentum_1w"] = momentum_1w
         symbol_signals["momentum_4w"] = momentum_4w
         symbol_signals["momentum_12_1"] = momentum_12_1
+        symbol_signals["realized_vol_20d"] = realized_vol_20d
 
         signals[symbol] = symbol_signals
 

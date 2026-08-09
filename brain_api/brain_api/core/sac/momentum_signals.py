@@ -18,6 +18,8 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
+import numpy as np
+
 MOM_1W_BARS = 5
 MOM_4W_BARS = 20
 MOM_12_1_SKIP_BARS = 21
@@ -30,6 +32,7 @@ MOM_12_1_LOOKBACK_BARS = 252
 # day, plus slack for weekends/holidays. This is a wider price fetch on
 # an existing call, not a new ETL pipeline.
 MOM_12_1_CALENDAR_BUFFER_DAYS = 420
+REALIZED_VOL_BARS = 20
 
 
 class MomentumSignalError(ValueError):
@@ -85,3 +88,20 @@ def compute_momentum_12_1(closes: Sequence[float], *, as_of_index: int) -> float
         field="momentum_12_1.P_t-252",
     )
     return p_skip / p_lookback - 1.0
+
+
+def compute_realized_vol_20d(closes: Sequence[float], *, as_of_index: int) -> float:
+    """Annualized sample volatility of the last 20 adjusted-close log returns."""
+    start = as_of_index - REALIZED_VOL_BARS
+    values = np.asarray(
+        [
+            _price_at(closes, index, field="realized_vol_20d")
+            for index in range(start, as_of_index + 1)
+        ],
+        dtype=np.float64,
+    )
+    log_returns = np.diff(np.log(values))
+    result = float(np.std(log_returns, ddof=1) * np.sqrt(252.0))
+    if not math.isfinite(result):
+        raise MomentumSignalError("realized_vol_20d produced a non-finite value")
+    return result

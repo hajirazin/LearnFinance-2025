@@ -24,10 +24,10 @@ class RealTimeSignalBuilder:
     # decision_context module).
     SIGNAL_KEYS: ClassVar[list[str]] = [
         "news_sentiment",
-        "news_coverage",
         "momentum_1w",
         "momentum_4w",
         "momentum_12_1",
+        "realized_vol_20d",
     ]
 
     def __init__(self, base_path: Path | None = None):
@@ -58,8 +58,6 @@ class RealTimeSignalBuilder:
             f"[SignalBuilder] Fetching real-time signals for {len(symbols)} symbols"
         )
 
-        # News retains its existing log-and-continue behavior. Momentum is
-        # fail-loud (no zero-fill) so incomplete prices cannot reach the actor.
         signals = self._init_empty_signals(symbols)
 
         # Fetch news sentiment
@@ -80,39 +78,39 @@ class RealTimeSignalBuilder:
         signals: dict[str, dict[str, float]],
     ) -> None:
         """Fetch news sentiment using yfinance + FinBERT."""
-        try:
-            from brain_api.core.finbert import FinBERTScorer
-            from brain_api.core.news_sentiment import (
-                YFinanceNewsFetcher,
-                process_news_sentiment,
-            )
+        from brain_api.core.finbert import FinBERTScorer
+        from brain_api.core.news_sentiment import (
+            YFinanceNewsFetcher,
+            process_news_sentiment,
+        )
 
-            fetcher = YFinanceNewsFetcher()
-            scorer = FinBERTScorer()
+        fetcher = YFinanceNewsFetcher()
+        scorer = FinBERTScorer()
 
-            news_result = process_news_sentiment(
-                symbols=symbols,
-                fetcher=fetcher,
-                scorer=scorer,
-                as_of_date=as_of_date,
-                max_articles_per_symbol=10,
-                run_id=f"rl_inference:{as_of_date.isoformat()}",
-                attempt=1,
-                base_path=self.base_path,
-            )
+        news_result = process_news_sentiment(
+            symbols=symbols,
+            fetcher=fetcher,
+            scorer=scorer,
+            as_of_date=as_of_date,
+            max_articles_per_symbol=10,
+            run_id=f"rl_inference:{as_of_date.isoformat()}",
+            attempt=1,
+            base_path=self.base_path,
+        )
 
-            # Extract sentiment scores
-            for symbol_sentiment in news_result.per_symbol:
-                if symbol_sentiment.symbol in signals:
-                    signals[symbol_sentiment.symbol]["news_sentiment"] = (
-                        symbol_sentiment.sentiment_score
-                    )
+        by_symbol = {item.symbol: item for item in news_result.per_symbol}
+        if set(by_symbol) != set(symbols):
+            raise ValueError("provider-checked news response does not match symbols")
+        for symbol in symbols:
+            observation = by_symbol[symbol]
+            if observation.article_count_used == 0:
+                signals[symbol]["news_sentiment"] = 0.0
+            else:
+                signals[symbol]["news_sentiment"] = observation.sentiment_score
 
-            logger.info(
-                f"[SignalBuilder] News sentiment fetched for {len(news_result.per_symbol)} symbols"
-            )
-        except Exception as e:
-            logger.warning(f"[SignalBuilder] Failed to fetch news sentiment: {e}")
+        logger.info(
+            f"[SignalBuilder] News sentiment fetched for {len(news_result.per_symbol)} symbols"
+        )
 
     def _fetch_momentum(
         self,
@@ -132,6 +130,7 @@ class RealTimeSignalBuilder:
             compute_momentum_1w,
             compute_momentum_4w,
             compute_momentum_12_1,
+            compute_realized_vol_20d,
         )
 
         # 252-bar lookback (~12 months) needs a wide enough calendar
@@ -159,6 +158,9 @@ class RealTimeSignalBuilder:
                 closes, as_of_index=as_of_index
             )
             signals[symbol]["momentum_12_1"] = compute_momentum_12_1(
+                closes, as_of_index=as_of_index
+            )
+            signals[symbol]["realized_vol_20d"] = compute_realized_vol_20d(
                 closes, as_of_index=as_of_index
             )
         logger.info(f"[SignalBuilder] Momentum computed for {len(symbols)} symbols")

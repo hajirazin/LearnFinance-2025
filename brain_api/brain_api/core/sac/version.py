@@ -4,6 +4,7 @@ Creates deterministic version strings based on data window, symbols, and config.
 """
 
 import hashlib
+import json
 from datetime import date
 from typing import TYPE_CHECKING
 
@@ -31,22 +32,27 @@ def compute_version(
     Returns:
         Version string (e.g., "v2026-01-08_abc123")
     """
-    # Build deterministic hash input
-    hash_input = (
-        f"sac_{data_window_start.isoformat()}_{data_window_end.isoformat()}_"
-        f"{'_'.join(sorted(symbols))}_"
-        f"hidden_{config.hidden_sizes}_"
-        f"actor_lr_{config.actor_lr}_"
-        f"critic_lr_{config.critic_lr}_"
-        f"tau_{config.tau}_"
-        f"gamma_{config.gamma}_"
-        f"alpha_{config.init_alpha}_"
-        f"target_entropy_{config.target_entropy}_"
-        f"max_grad_norm_{config.max_grad_norm}_"
-        f"q_value_clip_{config.q_value_clip}_"
-        f"normalize_rewards_{config.normalize_rewards}_"
-        f"tanh_squash_v2_"  # Added tanh squashing to actions
-        f"seed_{config.seed}"
+    hash_input = json.dumps(
+        {
+            "model": "sac",
+            "sac_schema_version": 3,
+            "architecture": "masked_attention",
+            "max_assets": 30,
+            "action_dim": 31,
+            "hmm": {
+                "states": 3,
+                "covariance": "diag",
+                "seed": 42,
+                "max_iterations": 200,
+                "tolerance": 1e-4,
+            },
+            "data_window_start": data_window_start.isoformat(),
+            "data_window_end": data_window_end.isoformat(),
+            "symbols": sorted(symbols),
+            "config": config.to_dict(),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
     )
 
     # Compute short hash

@@ -132,7 +132,8 @@ temporal/                         # Temporal workflow orchestration
 |----------|---------|
 | `POST /signals/news` | News sentiment (FinBERT, real-time) |
 | `POST /signals/news/historical` | News sentiment (historical) |
-| `POST /signals/prices` | Raw daily closes for SAC's `momentum_1w`/`momentum_4w`/`momentum_12_1` (Temporal's `get_closes` activity) |
+| `POST /signals/prices` | Adjusted daily closes, current execution prices, and provenance for SAC v3 eligibility/features |
+| `POST /signals/market-history` | Gap-checked aligned SPY adjusted-close/VIX history after the active SAC artifact's HMM cutoff |
 
 **Training** (called by Saturday/Sunday cron or manual):
 
@@ -176,7 +177,7 @@ temporal/                         # Temporal workflow orchestration
 | `GET /universe/halal` | Halal stock universe |
 | `GET /universe/halal_india` | Top 15 PatchTST-scored from Nifty 500 Shariah (NSE India) |
 | `GET /universe/nifty_shariah_500` | All ~210 Nifty 500 Shariah constituents (NSE India) |
-| `GET /models/active-symbols` | Active symbols from SAC model metadata; `universe` query param is mandatory (`halal_filtered` or `halal`) |
+| `GET /models/active-symbols` | Active SAC symbols plus schema version and HMM training cutoff; `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
 | `POST /experience/store` | Store RL experience |
@@ -245,34 +246,53 @@ Invariants:
 | HRP | Covariance matrix | Allocation weights |
 | SAC | State vector + PatchTST forecast features | Allocation weights |
 
-### Signal state vector (for SAC)
+### SAC v3 token state and action contract
 
-SAC consumes a flat state vector composed of **per-stock signals**, a **per-stock PatchTST forecast**, and **portfolio-level features**. Source of truth: `SAC_SIGNAL_NAMES` in [brain_api/brain_api/core/sac/decision_context.py](brain_api/brain_api/core/sac/decision_context.py) and `StateSchema` in [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
+SAC v3 uses one unconditional fixed-shape contract for both SAC buckets; there
+are no feature flags or legacy flat-model fallbacks. The serialized state is
+245 values: `asset_features[30,7]` + `globals[5]` + the auxiliary binary
+`asset_mask[30]`. The actor is a shared token encoder plus masked attention and
+always emits 31 logits (30 stock slots + CASH). The critics encode shared
+masked `(token, action)` pairs and pool them; padded slots are excluded from
+attention, sampling, log probability, entropy, Q, allocation, reward, and
+costs. Source of truth: `StateSchema` in
+[brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py).
 
-**Per-stock signals (5 per stock, x `n_stocks`, from `SAC_SIGNAL_NAMES`):**
+**Per-asset token (valid assets are exact average-tie CS-ranked):**
 
-| Feature | Source |
-|---------|--------|
-| News sentiment score | `/signals/news` (FinBERT) |
-| News coverage | `/signals/news` (article count scaled to [0, 1]) |
-| Momentum 1w (`P[t]/P[t-5] - 1`, 5 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
-| Momentum 4w (`P[t]/P[t-20] - 1`, 20 trading bars) | Daily closes (yfinance train / `/signals/prices` infer) |
-| Momentum 12-1 (`P[t-21]/P[t-252] - 1`, skip 21 bars then 252-bar lookback) | Daily closes (yfinance train / `/signals/prices` infer) |
+| Feature | Raw source |
+|---------|------------|
+| PatchTST weekly-return rank | `/inference/patchtst` |
+| Momentum 1w rank (`P[t]/P[t-5]-1`) | adjusted closes |
+| Momentum 4w rank (`P[t]/P[t-20]-1`) | adjusted closes |
+| Momentum 12-1 rank (`P[t-21]/P[t-252]-1`) | adjusted closes |
+| News-sentiment rank | provider-checked `/signals/news` |
+| Realized-volatility rank | 20 adjusted-close log returns, `ddof=1`, annualized `sqrt(252)` |
+| Current stock weight | portfolio state, unscaled |
 
-**Per-stock forecast feature (1 per stock, x `n_stocks`, separate from the 5 signals above):**
+The five globals are raw PatchTST median (training-fold standardized), raw
+PatchTST fraction positive, filtered HMM calm/stress probabilities, and
+unscaled cash weight. All ranks, probabilities, weights, cash, and masks remain
+unscaled. The HMM is a deterministic three-state diagonal Gaussian model over
+SPY 20-bar return/realized volatility plus positive VIX level/5-bar change. It
+is fit on the train fold only and validation/test/live use causal forward
+filtering. Artifacts persist the cutoff posterior and the final 21 aligned SPY
+and VIX sessions so stateless live inference can derive the first post-cutoff
+observation without overlapping history.
 
-| Feature | Source |
-|---------|--------|
-| PatchTST predicted weekly return | `/inference/patchtst` (US, re-run on the chosen 15) |
+Live SPY/VIX evidence must cover the exact XNYS sessions after the artifact
+cutoff through the latest completed session before the scheduled decision date.
+The Monday 18:00 IST SAC decision is pre-open in New York, so the partial Monday
+session is never requested, required, or used; the normal endpoint is the prior
+Friday. Empty evidence is valid only when no completed post-cutoff XNYS session
+is due.
 
-**Portfolio-level features (`n_stocks + 1`):**
-
-| Feature | Source |
-|---------|--------|
-| Current weight per stock | Portfolio state |
-| Current cash weight (CASH slot) | Portfolio state |
-
-For `n_stocks = 15` -> `state_dim = 15*5 + 15*1 + 16 = 106`. PatchTST runs **on the 15-name slate** chosen by `halal_filtered` so that SAC's forecast features cover the same symbols as its action space. Momentum is fail-loud (no silent zero-fill for insufficient price history or `P<=0`); train (`portfolio_rl.data_loading`) and Monday infer (`temporal/activities/sac_context.py`) duplicate the same bar counts (5/20/21/252) and encodings to avoid train/infer skew across the two independent deployables. LSTM remains a standalone forecaster (`/train/lstm`, `/inference/lstm`, `USForecastersTrainingWorkflow`) and is **not** an SAC input.
+Missing/non-finite PatchTST or insufficient/nonpositive feature history masks
+that asset; provider/news failures abort. Production train/infer requires at
+least 10 eligible assets. A held asset without a finite positive execution
+price aborts the rebalance; padded zero prices are never costed. Training and
+Temporal preserve identical adjusted-close momentum/volatility formulas. LSTM
+remains standalone and is not a SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)

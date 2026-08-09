@@ -254,6 +254,8 @@ def active_symbols():
         symbols=[f"SYM{i}" for i in range(15)],
         source_model="sac",
         model_version="v1.0.0",
+        training_cutoff_date="2026-05-08",
+        sac_schema_version=3,
     )
 
 

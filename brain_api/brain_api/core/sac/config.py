@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from brain_api.core.portfolio_rl.sac_config import SACBaseConfig
+from brain_api.core.portfolio_rl.state import ACTION_DIM, MAX_ASSETS
 
 
 @dataclass
@@ -68,15 +69,12 @@ def make_sac_config_for_n_stocks(base: SACConfig, n_stocks: int) -> SACConfig:
     -(n_stocks + 1)``) and the byte-equivalence guarantee at
     ``n_stocks == base.n_stocks``.
     """
-    if n_stocks < 1:
-        raise ValueError(
-            f"n_stocks must be >= 1 to build a meaningful SAC action space, "
-            f"got {n_stocks}."
-        )
+    if not 1 <= n_stocks <= MAX_ASSETS:
+        raise ValueError(f"n_stocks must be in [1, {MAX_ASSETS}], got {n_stocks}.")
     return replace(
         base,
         n_stocks=n_stocks,
-        target_entropy=-float(n_stocks + 1),
+        target_entropy=-float(ACTION_DIM),
     )
 
 

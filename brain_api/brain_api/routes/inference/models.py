@@ -1,5 +1,6 @@
 """Shared request/response models for inference endpoints."""
 
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -184,12 +185,24 @@ class WeightChange(BaseModel):
 # ============================================================================
 
 
-class SACFeatureBundleRequest(BaseModel):
-    """Exact point-in-time features used to build the SAC actor state."""
+class SACMarketHistoryRow(BaseModel):
+    """One dated raw SPY/VIX row for causal HMM continuation."""
 
-    symbols: list[str] = Field(..., min_length=1)
-    signals: dict[str, dict[str, float]]
+    date: date
+    spy_adjusted_close: float = Field(..., gt=0)
+    vix_close: float = Field(..., gt=0)
+
+
+class SACFeatureBundleRequest(BaseModel):
+    """Raw point-in-time evidence from which Brain builds SAC v3 features."""
+
+    symbols: Annotated[list[str], Field(min_length=1, max_length=30)]
+    adjusted_closes: dict[str, list[float]]
+    news_sentiment: dict[str, float]
+    news_article_counts: dict[str, Annotated[int, Field(ge=0)]]
     patchtst_forecasts: dict[str, float]
+    execution_prices: dict[str, float]
+    market_history: list[SACMarketHistoryRow]
     provenance: dict[str, object] = Field(default_factory=dict)
 
 
@@ -204,11 +217,11 @@ class SACInferenceRequest(BaseModel):
         None,
         description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
     )
-    feature_bundle: SACFeatureBundleRequest | None = Field(
-        None,
+    feature_bundle: SACFeatureBundleRequest = Field(
+        ...,
         description=(
-            "Exact signals and PatchTST forecasts fetched by the orchestrator. "
-            "Required for SAC inference; Brain will not refetch actor inputs."
+            "Raw adjusted prices, news evidence, forecasts, execution prices, "
+            "and SPY/VIX history. Brain owns all feature construction."
         ),
     )
 
@@ -218,6 +231,7 @@ class ForcedLiquidationAudit(BaseModel):
 
     symbol: str
     market_value: float
+    execution_price: float = Field(..., gt=0)
     reason: str = "outside_active_sac_symbol_set"
 
 
@@ -233,3 +247,7 @@ class SACInferenceResponse(BaseModel):
     decision_state: dict[str, object] | None = None
     state_digest: str | None = None
     forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)
+    asset_eligibility: dict[str, bool]
+    regime_posterior: Annotated[list[float], Field(min_length=3, max_length=3)]
+    sac_schema_version: Literal[3]
+    architecture: Literal["masked_attention"]

@@ -32,6 +32,7 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         email_calls: list[dict] = []
         store_experience_calls: list[dict] = []
         update_execution_calls: list[dict] = []
+        price_fetch_calls: list[list[str]] = []
 
         activities = make_sac_only_activities(
             active_symbols=active_symbols,
@@ -48,6 +49,7 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
             email_calls=email_calls,
             store_experience_calls=store_experience_calls,
             update_execution_calls=update_execution_calls,
+            price_fetch_calls=price_fetch_calls,
         )
 
         async with worker_with_activities(
@@ -97,6 +99,8 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         # actual_weights.
         assert update_execution_calls
         assert update_execution_calls[0]["has_post_trade_portfolio"] is True
+        assert price_fetch_calls
+        assert "AAPL" in price_fetch_calls[0]
 
         # Per the email-enhancement plan, the per-order detail table
         # plus the "Going Into This Week" prior-allocation snapshot

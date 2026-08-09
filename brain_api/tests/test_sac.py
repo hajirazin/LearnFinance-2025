@@ -8,8 +8,10 @@ Tests focus on:
 
 import tempfile
 from dataclasses import replace
+from datetime import date
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 from fastapi.testclient import TestClient
@@ -17,12 +19,18 @@ from fastapi.testclient import TestClient
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
+from brain_api.core.portfolio_rl.state import LEARNED_STATE_DIM, STATE_DIM
 from brain_api.core.sac import (
     SACConfig,
     SACTrainingResult,
 )
+from brain_api.core.sac.regime_hmm import RegimeHMMArtifact
 from brain_api.main import app
-from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
+from brain_api.storage.sac import (
+    SACHalalFilteredModelStorage,
+    SACV3AuxiliaryArtifacts,
+    create_sac_metadata,
+)
 
 
 def _override_sac_bucket(
@@ -66,8 +74,19 @@ def _override_sac_bucket(
 
 
 def mock_symbols() -> list[str]:
-    """Return a small fixed list of symbols for testing."""
-    return ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
+    """Return the minimum production-eligible canonical slate."""
+    return [
+        "AAPL",
+        "ADBE",
+        "AMD",
+        "AMZN",
+        "AVGO",
+        "GOOGL",
+        "META",
+        "MSFT",
+        "NVDA",
+        "TSLA",
+    ]
 
 
 # Signal keys must match `RealTimeSignalBuilder.SIGNAL_KEYS` so the SAC
@@ -76,10 +95,10 @@ def mock_symbols() -> list[str]:
 # tests assert on actor outputs (weight bounds), not on signal values.
 _MOCK_SIGNAL_KEYS: tuple[str, ...] = (
     "news_sentiment",
-    "news_coverage",
     "momentum_1w",
     "momentum_4w",
     "momentum_12_1",
+    "realized_vol_20d",
 )
 
 
@@ -94,10 +113,10 @@ def _mock_signals(symbols, as_of_date) -> dict[str, dict[str, float]]:
     return {
         symbol: {
             "news_sentiment": 0.1,
-            "news_coverage": 1.0,
             "momentum_1w": 0.01,
             "momentum_4w": 0.02,
             "momentum_12_1": 0.10,
+            "realized_vol_20d": 0.20,
         }
         for symbol in symbols
     }
@@ -118,8 +137,21 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
     symbols = symbols if symbols is not None else mock_symbols()
     return {
         "symbols": symbols,
-        "signals": _mock_signals(symbols, None),
+        "adjusted_closes": {
+            symbol: [100.0 + index * 0.1 for index in range(253)] for symbol in symbols
+        },
+        "news_sentiment": dict.fromkeys(symbols, 0.1),
+        "news_article_counts": dict.fromkeys(symbols, 1),
         "patchtst_forecasts": _mock_forecasts(symbols, "patchtst", None),
+        "execution_prices": dict.fromkeys(symbols, 125.2),
+        "market_history": [
+            {
+                "date": value.date().isoformat(),
+                "spy_adjusted_close": 621.0 + index,
+                "vix_close": 16.0 + index * 0.1,
+            }
+            for index, value in enumerate(pd.bdate_range("2026-08-03", "2026-08-07"))
+        ],
         "provenance": {"test": True},
     }
 
@@ -146,7 +178,7 @@ def _patch_sac_inference_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 def mock_config() -> SACConfig:
     """Return a minimal config for fast testing."""
     return SACConfig(
-        n_stocks=5,
+        n_stocks=10,
         total_timesteps=100,  # Very small for fast tests
         hidden_sizes=(16, 16),  # Small network
         batch_size=8,
@@ -169,40 +201,30 @@ def create_mock_training_result(
         config: SAC config (``n_stocks`` determines network dims).
         eval_cagr: CAGR to include in the result metadata.
     """
-    n_stocks = config.n_stocks
-    # State dim: signals (5 per stock) + PatchTST (1) + weights.
-    state_dim = n_stocks * 5 + n_stocks + (n_stocks + 1)
-    action_dim = n_stocks + 1
-
     actor = GaussianActor(
-        state_dim=state_dim,
-        action_dim=action_dim,
         hidden_sizes=config.hidden_sizes,
         activation=config.activation,
     )
 
     critic = TwinCritic(
-        state_dim=state_dim,
-        action_dim=action_dim,
         hidden_sizes=config.hidden_sizes,
         activation=config.activation,
     )
 
     critic_target = TwinCritic(
-        state_dim=state_dim,
-        action_dim=action_dim,
         hidden_sizes=config.hidden_sizes,
         activation=config.activation,
     )
 
     log_alpha = torch.tensor(np.log(0.2), dtype=torch.float32)
 
-    scaler = PortfolioScaler.create(n_stocks=n_stocks)
-    # Fit scaler on dummy data
-    dummy_states = np.random.randn(10, state_dim)
+    scaler = PortfolioScaler.create(n_stocks=config.n_stocks)
+    dummy_states = np.zeros((10, STATE_DIM))
+    dummy_states[:, LEARNED_STATE_DIM : LEARNED_STATE_DIM + config.n_stocks] = 1.0
+    dummy_states[:, 210] = np.linspace(-0.02, 0.02, 10)
     scaler.fit(dummy_states)
 
-    symbol_order = mock_symbols()[:n_stocks]
+    symbol_order = sorted(mock_symbols()[: config.n_stocks])
 
     return SACTrainingResult(
         actor=actor,
@@ -212,6 +234,8 @@ def create_mock_training_result(
         scaler=scaler,
         config=config,
         symbol_order=symbol_order,
+        regime_hmm=_mock_regime_hmm(),
+        audit_metadata={"sac_schema_version": 3, "architecture": "masked_attention"},
         final_actor_loss=0.1,
         final_critic_loss=0.05,
         avg_episode_return=0.02,
@@ -219,6 +243,38 @@ def create_mock_training_result(
         eval_sharpe=0.6,
         eval_cagr=eval_cagr,
         eval_max_drawdown=0.15,
+    )
+
+
+def _mock_regime_hmm() -> RegimeHMMArtifact:
+    tail_dates = list(pd.bdate_range(end="2026-07-31", periods=21).date)
+    return RegimeHMMArtifact(
+        start_probability=np.asarray([0.4, 0.3, 0.3]),
+        transition=np.asarray([[0.8, 0.1, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]]),
+        means=np.zeros((3, 4)),
+        variances=np.ones((3, 4)),
+        scaler_mean=np.zeros(4),
+        scaler_scale=np.ones(4),
+        label_map={"calm": 0, "transition": 1, "stress": 2},
+        terminal_posterior=np.asarray([0.7, 0.2, 0.1]),
+        training_cutoff_date=date(2026, 7, 31),
+        fit_start_date=date(2020, 1, 1),
+        iterations=10,
+        log_likelihood=-1.0,
+        spy_tail=np.linspace(600.0, 620.0, 21),
+        vix_tail=np.linspace(15.0, 17.0, 21),
+        tail_dates=tail_dates,
+    )
+
+
+def _v3_auxiliary(result: SACTrainingResult) -> SACV3AuxiliaryArtifacts:
+    return SACV3AuxiliaryArtifacts(
+        regime_hmm=result.regime_hmm,
+        median_patchtst_scaler={
+            "mean": result.scaler.median_mean,
+            "scale": result.scaler.median_scale,
+        },
+        audit_metadata=result.audit_metadata,
     )
 
 
@@ -265,6 +321,7 @@ def trained_model_storage():
             config=config,
             symbol_order=result.symbol_order,
             metadata=metadata,
+            v3_auxiliary=_v3_auxiliary(result),
         )
         storage.promote_version(version)
 
@@ -310,7 +367,7 @@ class TestSACLSTMInference:
     def test_inference_returns_valid_weights(self, inference_client):
         """Test that inference returns weights summing to 1."""
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 10000.0,
@@ -336,10 +393,30 @@ class TestSACLSTMInference:
         total = sum(weights.values())
         assert abs(total - 1.0) < 0.01, f"Weights sum to {total}, expected ~1.0"
 
+    def test_inference_rejects_partial_decision_date_market_row(self, inference_client):
+        feature_bundle = _mock_feature_bundle()
+        feature_bundle["market_history"].append(
+            {
+                "date": "2026-08-10",
+                "spy_adjusted_close": 999.0,
+                "vix_close": 999.0,
+            }
+        )
+        response = inference_client.post(
+            "/inference/sac?universe=halal_filtered",
+            json={
+                "as_of_date": "2026-08-10",
+                "portfolio": {"cash": 10000.0, "positions": []},
+                "feature_bundle": feature_bundle,
+            },
+        )
+        assert response.status_code == 422
+        assert "extra=['2026-08-10']" in response.json()["detail"]
+
     def test_inference_respects_cash_buffer(self, inference_client):
         """Test that CASH weight >= cash_buffer (2%)."""
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 100.0,  # Small cash
@@ -363,17 +440,19 @@ class TestSACLSTMInference:
     def test_off_slate_liquidation_value_is_cash_in_exact_actor_state(
         self, inference_client
     ):
+        feature_bundle = _mock_feature_bundle()
+        feature_bundle["execution_prices"]["NFLX"] = 90.0
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 0.0,
                     "positions": [
                         {"symbol": "AAPL", "market_value": 5000.0},
-                        {"symbol": "TSLA", "market_value": 5000.0},
+                        {"symbol": "NFLX", "market_value": 5000.0},
                     ],
                 },
-                "feature_bundle": _mock_feature_bundle(),
+                "feature_bundle": feature_bundle,
             },
         )
 
@@ -384,8 +463,9 @@ class TestSACLSTMInference:
         assert weights["CASH"] == pytest.approx(0.5)
         assert data["forced_liquidations"] == [
             {
-                "symbol": "TSLA",
+                "symbol": "NFLX",
                 "market_value": 5000.0,
+                "execution_price": 90.0,
                 "reason": "outside_active_sac_symbol_set",
             }
         ]
@@ -403,12 +483,13 @@ class TestSACLSTMInference:
 
         client = TestClient(app)
         response = client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 10000.0,
                     "positions": [],
                 },
+                "feature_bundle": _mock_feature_bundle(),
             },
         )
 
@@ -418,10 +499,41 @@ class TestSACLSTMInference:
         """Test that invalid request payload returns 422."""
         # Missing required portfolio field
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={},
         )
         assert response.status_code == 422
+
+    def test_inference_requires_explicit_universe(self, inference_client):
+        response = inference_client.post(
+            "/inference/sac",
+            json={
+                "portfolio": {"cash": 10000.0, "positions": []},
+                "feature_bundle": _mock_feature_bundle(),
+            },
+        )
+        assert response.status_code == 422
+        assert "universe" in response.text
+
+    @pytest.mark.parametrize("invalid_price", [None, 0.0, -1.0, "NaN"])
+    def test_positive_off_slate_holding_requires_safe_execution_price(
+        self, inference_client, invalid_price
+    ):
+        feature_bundle = _mock_feature_bundle()
+        if invalid_price is not None:
+            feature_bundle["execution_prices"]["NFLX"] = invalid_price
+        response = inference_client.post(
+            "/inference/sac?universe=halal_filtered",
+            json={
+                "portfolio": {
+                    "cash": 5000.0,
+                    "positions": [{"symbol": "NFLX", "market_value": 5000.0}],
+                },
+                "feature_bundle": feature_bundle,
+            },
+        )
+        assert response.status_code == 422
+        assert "execution_prices[NFLX]" in response.text
 
 
 # ============================================================================
@@ -431,12 +543,17 @@ class TestSACLSTMInference:
 
 def mock_price_loader(symbols, start_date, end_date):
     """Return mock price data for testing."""
-    import pandas as pd
-
     # Daily rows are required because SAC trades at the first XNYS session
     # open of each week. Business-day fixtures contain every requested XNYS
     # session, including holiday-shifted Tuesdays.
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")
+    import exchange_calendars as xcals
+    import pandas as pd
+
+    dates = (
+        xcals.get_calendar("XNYS")
+        .sessions_in_range(pd.Timestamp(start_date), pd.Timestamp(end_date))
+        .tz_localize(None)
+    )
     prices = {}
     for i, symbol in enumerate(symbols):
         base = 100 + i * 10
@@ -461,7 +578,7 @@ def mock_price_loader(symbols, start_date, end_date):
 # ``make_sac_config_for_n_stocks``, so the value here is irrelevant
 # beyond satisfying the constructor invariants.
 _TINY_SAC_BASE_CONFIG = SACConfig(
-    n_stocks=5,
+    n_stocks=10,
     total_timesteps=100,
     hidden_sizes=(8, 8),
     batch_size=8,
@@ -486,10 +603,10 @@ def _mock_patchtst_forecasts(
 
 _RL_SIGNAL_KEYS: tuple[str, ...] = (
     "news_sentiment",
-    "news_coverage",
     "momentum_1w",
     "momentum_4w",
     "momentum_12_1",
+    "realized_vol_20d",
 )
 
 
@@ -607,9 +724,30 @@ class TestSACFullTraining:
             assert "data_window_end" in data
             assert "promoted" in data
             assert "symbols_used" in data
-            assert data["promoted"] is True
+            assert data["promoted"] is False
+            assert temp_storage.read_current_version() is None
         finally:
             app.dependency_overrides.clear()
+
+    def test_legacy_current_metadata_never_short_circuits_v3_training(
+        self, temp_storage, monkeypatch
+    ):
+        """A symbol-matching flat artifact cannot suppress the required rebuild."""
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        _patch_sac_full_training_internals(monkeypatch)
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+        monkeypatch.setattr(
+            sac_full_route,
+            "get_prior_metadata_for_bucket",
+            lambda **kwargs: {
+                "version": "legacy-flat",
+                "symbols": mock_symbols(),
+            },
+        )
+
+        response = TestClient(app).post("/train/sac/full")
+        assert response.status_code == 202
 
     def test_full_training_is_idempotent(self, temp_storage, monkeypatch):
         """Test that running full training twice with same data produces same version."""
@@ -783,7 +921,7 @@ class TestSACFullTraining:
     def test_force_retrain_rejection_preserves_same_version_active_artifact(
         self, temp_storage, monkeypatch
     ):
-        """A rejected force run may write candidates but not canonical files."""
+        """A forced rerun writes a version but never creates a current pointer."""
         from brain_api.routes.training.sac import full as sac_full_route
 
         app.dependency_overrides.clear()
@@ -793,8 +931,9 @@ class TestSACFullTraining:
         try:
             initial = client.post("/train/sac/full")
             assert initial.status_code == 202
-            version = temp_storage.read_current_version()
-            assert version is not None
+            first_status = client.get(f"/train/status/{initial.json()['job_id']}")
+            version = first_status.json()["result"]["version"]
+            assert temp_storage.read_current_version() is None
             actor_path = (
                 temp_storage.base_path
                 / "models"
@@ -802,7 +941,7 @@ class TestSACFullTraining:
                 / version
                 / "actor.pt"
             )
-            active_actor = actor_path.read_bytes()
+            assert actor_path.is_file()
 
             def _rejected_result(training_data, config, shutdown_event=None):
                 del training_data, shutdown_event
@@ -818,9 +957,7 @@ class TestSACFullTraining:
             status = client.get(f"/train/status/{rejected.json()['job_id']}")
             assert status.json()["status"] == "completed"
             assert status.json()["result"]["promoted"] is False
-
-            assert temp_storage.read_current_version() == version
-            assert actor_path.read_bytes() == active_actor
+            assert temp_storage.read_current_version() is None
         finally:
             app.dependency_overrides.clear()
 
@@ -865,18 +1002,10 @@ class TestSACFullTraining:
         finally:
             app.dependency_overrides.clear()
 
-    def test_full_training_force_false_short_circuits_when_symbols_match(
+    def test_full_training_new_window_writes_new_version_without_current(
         self, temp_storage, monkeypatch
     ):
-        """force=False short-circuits when current symbol set matches.
-
-        Proves the new symbol-equality short-circuit fires (and not the
-        existing version-equality one). After the first run, we patch
-        ``resolve_training_window`` to a clearly different end_date so
-        the recomputed deterministic version would differ from the
-        stored v1; the only way the second POST can return 200 with
-        ``version == v1`` is via the new symbol-equality branch.
-        """
+        """A new data window writes another version without activating it."""
         from datetime import date as dt_date
 
         from brain_api.routes.training.sac import full as sac_full_route
@@ -892,8 +1021,9 @@ class TestSACFullTraining:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
 
-            v1 = temp_storage.read_current_version()
-            assert v1 is not None, "First training run should have promoted v1"
+            first_status = client.get(f"/train/status/{r1.json()['job_id']}")
+            v1 = first_status.json()["result"]["version"]
+            assert temp_storage.read_current_version() is None
 
             monkeypatch.setattr(
                 sac_full_route,
@@ -902,14 +1032,10 @@ class TestSACFullTraining:
             )
 
             r2 = client.post("/train/sac/full")
-            assert r2.status_code == 200
-            data = r2.json()
-            assert data["version"] == v1, (
-                f"Expected current version {v1!r} (proves symbol-equality "
-                f"short-circuit fired), got {data['version']!r}"
-            )
-            assert set(data["symbols_used"]) == set(mock_symbols())
-            assert data["promoted"] is True
+            assert r2.status_code == 202
+            second_status = client.get(f"/train/status/{r2.json()['job_id']}")
+            assert second_status.json()["result"]["version"] != v1
+            assert temp_storage.read_current_version() is None
         finally:
             app.dependency_overrides.clear()
 
@@ -939,8 +1065,7 @@ class TestSACFullTraining:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
 
-            v1 = temp_storage.read_current_version()
-            assert v1 is not None
+            assert temp_storage.read_current_version() is None
 
             monkeypatch.setattr(
                 sac_full_route,
@@ -977,11 +1102,10 @@ class TestSACFullTraining:
             r1 = client.post("/train/sac/full")
             assert r1.status_code == 202
 
-            v1 = temp_storage.read_current_version()
-            assert v1 is not None
+            assert temp_storage.read_current_version() is None
 
             def _different_symbols() -> list[str]:
-                return ["NVDA", "TSLA", "ADBE", "INTC", "ORCL"]
+                return [f"ZZZ{i:02d}" for i in range(10)]
 
             assert set(_different_symbols()).isdisjoint(set(mock_symbols())), (
                 "Test precondition: replacement slate must be disjoint "
@@ -1115,7 +1239,7 @@ class TestStateDimensionValidation:
     def test_inference_with_all_cash_portfolio(self, inference_client):
         """Test inference with all-cash portfolio (no positions)."""
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 10000.0,
@@ -1135,8 +1259,10 @@ class TestStateDimensionValidation:
 
     def test_inference_with_symbols_not_in_model(self, inference_client):
         """Test inference with portfolio containing symbols not in model."""
+        feature_bundle = _mock_feature_bundle()
+        feature_bundle["execution_prices"]["UNKNOWN_SYM"] = 25.0
         response = inference_client.post(
-            "/inference/sac",
+            "/inference/sac?universe=halal_filtered",
             json={
                 "portfolio": {
                     "cash": 5000.0,
@@ -1148,11 +1274,12 @@ class TestStateDimensionValidation:
                         },  # NOT in model
                     ],
                 },
-                "feature_bundle": _mock_feature_bundle(),
+                "feature_bundle": feature_bundle,
             },
         )
 
-        # Should still return 200, ignoring unknown symbols
+        # Off-slate liquidation is safe only because its raw execution price
+        # survived validation before the active-only feature bundle was built.
         assert response.status_code == 200
 
 
@@ -1198,6 +1325,7 @@ class TestSACLSTMStorage:
             config=config,
             symbol_order=result.symbol_order,
             metadata=metadata,
+            v3_auxiliary=_v3_auxiliary(result),
         )
 
         # Verify version exists
@@ -1244,6 +1372,7 @@ class TestSACLSTMStorage:
             config=config,
             symbol_order=result.symbol_order,
             metadata=metadata,
+            v3_auxiliary=_v3_auxiliary(result),
         )
 
         # Promote version

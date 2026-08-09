@@ -96,7 +96,8 @@ with workflow.unsafe.imports_passed_through():
         update_execution_sac,
     )
     from activities.inference import (
-        get_closes,
+        get_adjusted_closes,
+        get_market_history,
         get_news_sentiment,
         get_patchtst_forecast,
         infer_sac,
@@ -164,6 +165,12 @@ class USSACHalalAllocationWorkflow:
         )
 
         symbols = active_symbols.symbols
+        if not active_symbols.training_cutoff_date:
+            raise RuntimeError("SAC v3 active-symbol metadata lacks training cutoff")
+        if active_symbols.sac_schema_version != 3:
+            raise RuntimeError("SAC active-symbol metadata is not schema version 3")
+        held_symbols = {position.symbol for position in sac_portfolio.positions}
+        price_symbols = symbols + sorted(held_symbols - set(symbols))
         run_sac = sac_portfolio.open_orders_count == 0
 
         skipped_algorithms = []
@@ -173,7 +180,7 @@ class USSACHalalAllocationWorkflow:
         # Phase 1: Get signals + PatchTST forecast (parallel) on the
         # halal slate. PatchTST is called per-symbol; any missing
         # forecast fails canonical SAC context construction.
-        news, patchtst, closes = await asyncio.gather(
+        news, patchtst, prices, market = await asyncio.gather(
             workflow.execute_activity(
                 get_news_sentiment,
                 args=[symbols, as_of_date, run_id],
@@ -187,8 +194,14 @@ class USSACHalalAllocationWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
             workflow.execute_activity(
-                get_closes,
-                args=[symbols, as_of_date],
+                get_adjusted_closes,
+                args=[price_symbols, as_of_date],
+                start_to_close_timeout=INFERENCE_TIMEOUT,
+                retry_policy=RetryPolicy(maximum_attempts=3),
+            ),
+            workflow.execute_activity(
+                get_market_history,
+                args=[active_symbols.training_cutoff_date, as_of_date],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
@@ -208,7 +221,8 @@ class USSACHalalAllocationWorkflow:
                     symbols,
                     news,
                     patchtst,
-                    closes,
+                    prices,
+                    market,
                 ],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
             )

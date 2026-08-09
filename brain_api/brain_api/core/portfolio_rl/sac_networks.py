@@ -1,9 +1,4 @@
-"""Neural network architectures for SAC.
-
-Implements:
-- GaussianActor: Stochastic policy that outputs mean and log_std
-- TwinCritic: Two Q-networks for double Q-learning
-"""
+"""Masked, permutation-safe attention networks for SAC v3."""
 
 from __future__ import annotations
 
@@ -12,264 +7,242 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
+from brain_api.core.portfolio_rl.state import (
+    ACTION_DIM,
+    ASSET_FEATURES,
+    GLOBAL_FEATURES,
+    LEARNED_STATE_DIM,
+    MAX_ASSETS,
+    STATE_DIM,
+)
+
 LOG_STD_MIN = -20
 LOG_STD_MAX = 2
+
+
+def _activation(name: str) -> type[nn.Module]:
+    activations = {"relu": nn.ReLU, "tanh": nn.Tanh, "elu": nn.ELU}
+    try:
+        return activations[name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown activation: {name}") from exc
 
 
 def create_mlp(
     input_dim: int,
     output_dim: int,
-    hidden_sizes: tuple[int, ...],
+    hidden_sizes: tuple[int, ...] = (64, 64),
     activation: str = "relu",
 ) -> nn.Sequential:
-    """Create a multi-layer perceptron.
-
-    Args:
-        input_dim: Input dimension.
-        output_dim: Output dimension.
-        hidden_sizes: Tuple of hidden layer sizes.
-        activation: Activation function ("relu" or "tanh").
-
-    Returns:
-        Sequential MLP module.
-    """
-    act_fn = nn.ReLU if activation == "relu" else nn.Tanh
-
     layers: list[nn.Module] = []
-    prev_dim = input_dim
-
-    for hidden_dim in hidden_sizes:
-        layers.append(nn.Linear(prev_dim, hidden_dim))
-        layers.append(act_fn())
-        prev_dim = hidden_dim
-
-    layers.append(nn.Linear(prev_dim, output_dim))
+    previous = input_dim
+    activation_cls = _activation(activation)
+    for size in hidden_sizes:
+        layers.extend((nn.Linear(previous, size), activation_cls()))
+        previous = size
+    layers.append(nn.Linear(previous, output_dim))
     return nn.Sequential(*layers)
 
 
-class GaussianActor(nn.Module):
-    """Gaussian policy for SAC.
+def unpack_state_tensor(
+    state: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Unpack a batch of serialized states without detaching gradients."""
+    if state.ndim == 1:
+        state = state.unsqueeze(0)
+    if state.ndim != 2 or state.shape[-1] != STATE_DIM:
+        raise ValueError(f"state must have trailing dimension {STATE_DIM}")
+    assets_end = MAX_ASSETS * ASSET_FEATURES
+    assets = state[:, :assets_end].reshape(-1, MAX_ASSETS, ASSET_FEATURES)
+    globals_ = state[:, assets_end:LEARNED_STATE_DIM]
+    raw_mask = state[:, LEARNED_STATE_DIM:]
+    mask = raw_mask > 0.5
+    if torch.any(mask.sum(dim=1) < 1):
+        raise ValueError("each SAC state must contain at least one valid asset")
+    return assets, globals_, mask
 
-    Outputs a diagonal Gaussian distribution over actions (logits).
-    Actions are sampled and then passed through softmax externally
-    to produce portfolio weights.
-    """
+
+class MaskedStateEncoder(nn.Module):
+    """Shared token encoder followed by masked cross-asset attention."""
+
+    def __init__(self, hidden_dim: int, activation: str) -> None:
+        super().__init__()
+        activation_cls = _activation(activation)
+        self.token_encoder = nn.Sequential(
+            nn.Linear(ASSET_FEATURES, hidden_dim), activation_cls()
+        )
+        heads = 4 if hidden_dim % 4 == 0 else 1
+        self.attention = nn.MultiheadAttention(hidden_dim, heads, batch_first=True)
+
+    def forward(
+        self, state: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        assets, globals_, mask = unpack_state_tensor(state)
+        encoded = self.token_encoder(assets)
+        attended, _ = self.attention(
+            encoded,
+            encoded,
+            encoded,
+            key_padding_mask=~mask,
+            need_weights=False,
+        )
+        mask_f = mask.unsqueeze(-1).to(attended.dtype)
+        attended = attended * mask_f
+        pooled = attended.sum(dim=1) / mask_f.sum(dim=1).clamp_min(1.0)
+        return attended, pooled, globals_, mask
+
+
+class GaussianActor(nn.Module):
+    """Equivariant masked Gaussian policy over 30 stock slots plus CASH."""
 
     def __init__(
         self,
-        state_dim: int,
-        action_dim: int,
+        state_dim: int = STATE_DIM,
+        action_dim: int = ACTION_DIM,
         hidden_sizes: tuple[int, ...] = (64, 64),
         activation: str = "relu",
-    ):
-        """Initialize actor network.
-
-        Args:
-            state_dim: Dimension of state input.
-            action_dim: Dimension of action output.
-            hidden_sizes: Hidden layer sizes.
-            activation: Activation function.
-        """
+    ) -> None:
         super().__init__()
-
+        if state_dim != STATE_DIM or action_dim != ACTION_DIM:
+            raise ValueError(
+                f"SAC v3 requires state_dim={STATE_DIM}, action_dim={ACTION_DIM}"
+            )
+        hidden_dim = hidden_sizes[0] if hidden_sizes else 64
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.encoder = MaskedStateEncoder(hidden_dim, activation)
+        context_dim = hidden_dim * 2 + GLOBAL_FEATURES
+        cash_context_dim = hidden_dim + GLOBAL_FEATURES
+        self.asset_mean = nn.Linear(context_dim, 1)
+        self.asset_log_std = nn.Linear(context_dim, 1)
+        self.cash_mean = nn.Linear(cash_context_dim, 1)
+        self.cash_log_std = nn.Linear(cash_context_dim, 1)
 
-        # Shared feature extraction
-        act_fn = nn.ReLU if activation == "relu" else nn.Tanh
-
-        layers: list[nn.Module] = []
-        prev_dim = state_dim
-        for hidden_dim in hidden_sizes:
-            layers.append(nn.Linear(prev_dim, hidden_dim))
-            layers.append(act_fn())
-            prev_dim = hidden_dim
-
-        self.feature_net = nn.Sequential(*layers)
-
-        # Separate heads for mean and log_std
-        self.mean_head = nn.Linear(prev_dim, action_dim)
-        self.log_std_head = nn.Linear(prev_dim, action_dim)
+    def distribution_parameters(
+        self, state: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        attended, pooled, globals_, mask = self.encoder(state)
+        repeated = pooled.unsqueeze(1).expand(-1, MAX_ASSETS, -1)
+        repeated_globals = globals_.unsqueeze(1).expand(-1, MAX_ASSETS, -1)
+        context = torch.cat((attended, repeated, repeated_globals), dim=-1)
+        asset_mean = self.asset_mean(context).squeeze(-1)
+        asset_log_std = self.asset_log_std(context).squeeze(-1)
+        cash_context = torch.cat((pooled, globals_), dim=-1)
+        mean = torch.cat((asset_mean, self.cash_mean(cash_context)), dim=-1)
+        log_std = torch.cat(
+            (asset_log_std, self.cash_log_std(cash_context)), dim=-1
+        ).clamp(LOG_STD_MIN, LOG_STD_MAX)
+        canonical = torch.cat(
+            (
+                mask,
+                torch.ones((mask.shape[0], 1), dtype=torch.bool, device=mask.device),
+            ),
+            dim=-1,
+        )
+        mean = mean.masked_fill(~canonical, 0.0)
+        log_std = log_std.masked_fill(~canonical, 0.0)
+        return mean, log_std, canonical
 
     def forward(
-        self,
-        state: torch.Tensor,
-        deterministic: bool = False,
+        self, state: torch.Tensor, deterministic: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass: sample action and compute log probability.
-
-        Args:
-            state: State tensor (batch_size, state_dim).
-            deterministic: If True, return mean action without sampling.
-
-        Returns:
-            Tuple of (action, log_prob).
-            - action: Sampled or mean action (batch_size, action_dim).
-            - log_prob: Log probability of the action (batch_size,).
-        """
-        features = self.feature_net(state)
-
-        mean = self.mean_head(features)
-        log_std = self.log_std_head(features)
-        log_std = torch.clamp(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = torch.exp(log_std)
-
+        mean, log_std, action_mask = self.distribution_parameters(state)
         if deterministic:
-            action = torch.tanh(mean)
-            log_prob = torch.zeros(state.shape[0], device=state.device)
-        else:
-            # Sample from Gaussian
-            dist = Normal(mean, std)
-            x_t = dist.rsample()  # Reparameterization trick
-            action = torch.tanh(x_t)
-
-            # Compute log probability
-            log_prob = dist.log_prob(x_t).sum(dim=-1)
-            # Enforce action bound
-            log_prob -= torch.log(1 - action.pow(2) + 1e-6).sum(dim=-1)
-
+            return torch.tanh(mean).masked_fill(~action_mask, 0.0), torch.zeros(
+                mean.shape[0], device=mean.device
+            )
+        distribution = Normal(mean, log_std.exp())
+        pre_tanh = distribution.rsample()
+        action = torch.tanh(pre_tanh).masked_fill(~action_mask, 0.0)
+        per_dimension = distribution.log_prob(pre_tanh) - torch.log(
+            1 - torch.tanh(pre_tanh).pow(2) + 1e-6
+        )
+        log_prob = (per_dimension * action_mask.to(per_dimension.dtype)).sum(dim=-1)
         return action, log_prob
 
-    def get_action(
-        self,
-        state: np.ndarray,
-        deterministic: bool = False,
-    ) -> np.ndarray:
-        """Get action from state (numpy interface).
-
-        Args:
-            state: State array (state_dim,) or (batch_size, state_dim).
-            deterministic: If True, return mean action.
-
-        Returns:
-            Action array.
-        """
+    def get_action(self, state: np.ndarray, deterministic: bool = False) -> np.ndarray:
         with torch.no_grad():
-            # Get device from model parameters
             device = next(self.parameters()).device
-            state_tensor = torch.FloatTensor(state).to(device)
-            if state_tensor.dim() == 1:
-                state_tensor = state_tensor.unsqueeze(0)
-
-            action, _ = self.forward(state_tensor, deterministic=deterministic)
-            return action.squeeze(0).cpu().numpy()
+            tensor = torch.as_tensor(state, dtype=torch.float32, device=device)
+            single = tensor.ndim == 1
+            action, _ = self.forward(tensor, deterministic=deterministic)
+            result = action.cpu().numpy()
+            return result[0] if single else result
 
 
 class Critic(nn.Module):
-    """Q-network for SAC.
-
-    Takes state and action as input, outputs Q-value.
-    """
+    """Permutation-invariant Q network over shared masked token/action pairs."""
 
     def __init__(
         self,
-        state_dim: int,
-        action_dim: int,
+        state_dim: int = STATE_DIM,
+        action_dim: int = ACTION_DIM,
         hidden_sizes: tuple[int, ...] = (64, 64),
         activation: str = "relu",
-    ):
-        """Initialize critic network.
-
-        Args:
-            state_dim: Dimension of state input.
-            action_dim: Dimension of action input.
-            hidden_sizes: Hidden layer sizes.
-            activation: Activation function.
-        """
+    ) -> None:
         super().__init__()
-
+        if state_dim != STATE_DIM or action_dim != ACTION_DIM:
+            raise ValueError(
+                f"SAC v3 requires state_dim={STATE_DIM}, action_dim={ACTION_DIM}"
+            )
+        hidden_dim = hidden_sizes[0] if hidden_sizes else 64
+        activation_cls = _activation(activation)
+        self.token_encoder = nn.Sequential(
+            nn.Linear(ASSET_FEATURES + 1, hidden_dim), activation_cls()
+        )
+        remainder = hidden_sizes[1:] if len(hidden_sizes) > 1 else (hidden_dim,)
         self.q_net = create_mlp(
-            input_dim=state_dim + action_dim,
-            output_dim=1,
-            hidden_sizes=hidden_sizes,
-            activation=activation,
+            hidden_dim + GLOBAL_FEATURES + 1,
+            1,
+            tuple(remainder),
+            activation,
         )
 
     def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        """Compute Q-value.
-
-        Args:
-            state: State tensor (batch_size, state_dim).
-            action: Action tensor (batch_size, action_dim).
-
-        Returns:
-            Q-value tensor (batch_size, 1).
-        """
-        x = torch.cat([state, action], dim=-1)
-        return self.q_net(x)
+        assets, globals_, mask = unpack_state_tensor(state)
+        if action.ndim == 1:
+            action = action.unsqueeze(0)
+        if action.shape != (assets.shape[0], ACTION_DIM):
+            raise ValueError(f"action must have shape (batch, {ACTION_DIM})")
+        masked_actions = action[:, :MAX_ASSETS].masked_fill(~mask, 0.0)
+        pairs = torch.cat((assets, masked_actions.unsqueeze(-1)), dim=-1)
+        encoded = self.token_encoder(pairs)
+        mask_f = mask.unsqueeze(-1).to(encoded.dtype)
+        pooled = (encoded * mask_f).sum(1) / mask_f.sum(1).clamp_min(1.0)
+        return self.q_net(torch.cat((pooled, globals_, action[:, -1:]), dim=-1))
 
 
 class TwinCritic(nn.Module):
-    """Twin Q-networks for SAC.
-
-    Uses two separate Q-networks and takes the minimum for
-    target value computation to reduce overestimation bias.
-    """
-
     def __init__(
         self,
-        state_dim: int,
-        action_dim: int,
+        state_dim: int = STATE_DIM,
+        action_dim: int = ACTION_DIM,
         hidden_sizes: tuple[int, ...] = (64, 64),
         activation: str = "relu",
-    ):
-        """Initialize twin critics.
-
-        Args:
-            state_dim: Dimension of state input.
-            action_dim: Dimension of action input.
-            hidden_sizes: Hidden layer sizes.
-            activation: Activation function.
-        """
+    ) -> None:
         super().__init__()
-
         self.q1 = Critic(state_dim, action_dim, hidden_sizes, activation)
         self.q2 = Critic(state_dim, action_dim, hidden_sizes, activation)
 
     def forward(
-        self,
-        state: torch.Tensor,
-        action: torch.Tensor,
+        self, state: torch.Tensor, action: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute both Q-values.
-
-        Args:
-            state: State tensor (batch_size, state_dim).
-            action: Action tensor (batch_size, action_dim).
-
-        Returns:
-            Tuple of (q1_value, q2_value).
-        """
-        q1 = self.q1(state, action)
-        q2 = self.q2(state, action)
-        return q1, q2
+        return self.q1(state, action), self.q2(state, action)
 
     def q1_forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        """Compute only Q1 value (for policy update)."""
         return self.q1(state, action)
 
     def min_q(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        """Compute minimum of Q1 and Q2."""
-        q1, q2 = self.forward(state, action)
-        return torch.min(q1, q2)
+        return torch.min(*self.forward(state, action))
 
 
 def soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
-    """Soft update target network parameters.
-
-    target = tau * source + (1 - tau) * target
-
-    Args:
-        target: Target network to update.
-        source: Source network.
-        tau: Interpolation coefficient (0 < tau <= 1).
-    """
-    for target_param, source_param in zip(
-        target.parameters(), source.parameters(), strict=False
-    ):
-        target_param.data.copy_(tau * source_param.data + (1 - tau) * target_param.data)
+    with torch.no_grad():
+        for target_param, source_param in zip(
+            target.parameters(), source.parameters(), strict=True
+        ):
+            target_param.data.mul_(1.0 - tau).add_(source_param.data, alpha=tau)
 
 
 def hard_update(target: nn.Module, source: nn.Module) -> None:
-    """Hard update: copy all parameters from source to target."""
     target.load_state_dict(source.state_dict())

@@ -1,6 +1,6 @@
 """SAC training endpoints (full retrain only).
 
-Sub-package shape (Phase A of the always-promote plan):
+Sub-package shape:
 
 * :mod:`._shared` -- constants and the request schema for SAC training
 * :mod:`.full` -- ``POST /train/sac/full`` and its background task

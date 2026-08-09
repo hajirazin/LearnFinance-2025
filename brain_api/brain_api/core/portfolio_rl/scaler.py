@@ -1,8 +1,4 @@
-"""Feature scaling for portfolio RL.
-
-Fits a StandardScaler on training data and applies it at inference.
-The scaler is stored with the policy artifact.
-"""
+"""SAC v3 scaler: standardize only the raw PatchTST median global."""
 
 from __future__ import annotations
 
@@ -11,171 +7,110 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+
+from brain_api.core.portfolio_rl.state import (
+    LEARNED_STATE_DIM,
+    MAX_ASSETS,
+    STATE_DIM,
+)
+
+MEDIAN_GLOBAL_INDEX = MAX_ASSETS * 7
 
 
 @dataclass
 class PortfolioScaler:
-    """Scaler for portfolio RL state features.
+    """Training-fold statistics for the sole standardized v3 input."""
 
-    Wraps sklearn StandardScaler with portfolio-specific logic:
-    - Only scales signal and forecast features
-    - Portfolio weights are NOT scaled (they're already in [0, 1])
-    """
-
-    scaler: StandardScaler
-    n_features_to_scale: int  # number of features to scale (signals + forecasts)
-    n_portfolio_weights: int  # number of portfolio weight features (not scaled)
+    median_mean: float = 0.0
+    median_scale: float = 1.0
     is_fitted: bool = False
 
     @classmethod
-    def create(cls, n_stocks: int = 15) -> PortfolioScaler:
-        """Create a new unfitted scaler.
+    def create(cls, n_stocks: int = MAX_ASSETS) -> PortfolioScaler:
+        if not 1 <= n_stocks <= MAX_ASSETS:
+            raise ValueError(f"n_stocks must be in [1, {MAX_ASSETS}]")
+        return cls()
 
-        Args:
-            n_stocks: Number of stocks in universe.
+    @property
+    def n_features_to_scale(self) -> int:
+        return 1
 
-        Returns:
-            New PortfolioScaler instance.
-        """
-        from brain_api.core.portfolio_rl.state import StateSchema
-
-        schema = StateSchema(n_stocks=n_stocks)
-        n_features_to_scale = (
-            n_stocks * schema.n_signals_per_stock + schema.n_forecast_features
-        )
-        n_portfolio_weights = n_stocks + 1  # +1 for CASH
-
-        return cls(
-            scaler=StandardScaler(),
-            n_features_to_scale=n_features_to_scale,
-            n_portfolio_weights=n_portfolio_weights,
-            is_fitted=False,
-        )
+    @property
+    def n_portfolio_weights(self) -> int:
+        return MAX_ASSETS + 1
 
     def fit(self, states: np.ndarray) -> PortfolioScaler:
-        """Fit scaler on training states.
+        batch = np.asarray(states, dtype=np.float64)
+        if batch.ndim != 2 or batch.shape[1] != STATE_DIM:
+            raise ValueError(f"states must have shape (n, {STATE_DIM})")
+        return self.fit_patchtst_medians(batch[:, MEDIAN_GLOBAL_INDEX])
 
-        Only fits on the signal/forecast portion of the state.
-        Portfolio weights are left unscaled.
-
-        Args:
-            states: Training states, shape (n_samples, state_dim).
-
-        Returns:
-            Self for chaining.
-        """
-        # Extract only the features to scale
-        features_to_scale = states[:, : self.n_features_to_scale]
-        self.scaler.fit(features_to_scale)
+    def fit_patchtst_medians(self, medians: np.ndarray) -> PortfolioScaler:
+        """Fit once on every raw training-fold weekly median."""
+        medians = np.asarray(medians, dtype=np.float64)
+        if medians.ndim != 1 or len(medians) < 1:
+            raise ValueError("raw PatchTST medians must be a non-empty vector")
+        if not np.all(np.isfinite(medians)):
+            raise ValueError("raw PatchTST median values must be finite")
+        self.median_mean = float(np.mean(medians))
+        scale = float(np.std(medians, ddof=0))
+        self.median_scale = scale if scale > 0 else 1.0
         self.is_fitted = True
         return self
 
     def transform(self, states: np.ndarray) -> np.ndarray:
-        """Transform states using fitted scaler.
-
-        Args:
-            states: States to transform, shape (n_samples, state_dim) or (state_dim,).
-
-        Returns:
-            Scaled states with same shape.
-        """
         if not self.is_fitted:
             raise RuntimeError("Scaler must be fitted before transform")
-
-        # Handle single state (1D) vs batch (2D)
-        single_state = states.ndim == 1
-        if single_state:
-            states = states.reshape(1, -1)
-
-        result = states.copy()
-
-        # Scale only the signal/forecast features
-        features_to_scale = states[:, : self.n_features_to_scale]
-        scaled_features = self.scaler.transform(features_to_scale)
-        result[:, : self.n_features_to_scale] = scaled_features
-
-        # Portfolio weights remain unchanged
-
-        if single_state:
-            result = result.flatten()
-
-        return result
+        values = np.asarray(states, dtype=np.float64)
+        single = values.ndim == 1
+        batch = values.reshape(1, -1) if single else values
+        if batch.ndim != 2 or batch.shape[1] != STATE_DIM:
+            raise ValueError(f"states must have trailing dimension {STATE_DIM}")
+        result = batch.copy()
+        result[:, MEDIAN_GLOBAL_INDEX] = (
+            result[:, MEDIAN_GLOBAL_INDEX] - self.median_mean
+        ) / self.median_scale
+        # Ranks, probabilities, weights and masks are intentionally untouched.
+        return result[0] if single else result
 
     def fit_transform(self, states: np.ndarray) -> np.ndarray:
-        """Fit and transform in one step.
-
-        Args:
-            states: Training states.
-
-        Returns:
-            Scaled states.
-        """
-        self.fit(states)
-        return self.transform(states)
+        return self.fit(states).transform(states)
 
     def inverse_transform(self, states: np.ndarray) -> np.ndarray:
-        """Inverse transform scaled states.
-
-        Args:
-            states: Scaled states.
-
-        Returns:
-            Original-scale states.
-        """
         if not self.is_fitted:
             raise RuntimeError("Scaler must be fitted before inverse_transform")
+        values = np.asarray(states, dtype=np.float64)
+        single = values.ndim == 1
+        batch = values.reshape(1, -1) if single else values
+        if batch.ndim != 2 or batch.shape[1] != STATE_DIM:
+            raise ValueError(f"states must have trailing dimension {STATE_DIM}")
+        result = batch.copy()
+        result[:, MEDIAN_GLOBAL_INDEX] = (
+            result[:, MEDIAN_GLOBAL_INDEX] * self.median_scale + self.median_mean
+        )
+        return result[0] if single else result
 
-        single_state = states.ndim == 1
-        if single_state:
-            states = states.reshape(1, -1)
-
-        result = states.copy()
-
-        scaled_features = states[:, : self.n_features_to_scale]
-        original_features = self.scaler.inverse_transform(scaled_features)
-        result[:, : self.n_features_to_scale] = original_features
-
-        if single_state:
-            result = result.flatten()
-
-        return result
+    def to_dict(self) -> dict[str, float | bool | int]:
+        return {
+            "schema_version": 3,
+            "median_mean": self.median_mean,
+            "median_scale": self.median_scale,
+            "is_fitted": self.is_fitted,
+            "learned_state_dim": LEARNED_STATE_DIM,
+        }
 
     def save(self, path: Path | str) -> None:
-        """Save scaler to file.
-
-        Args:
-            path: Path to save scaler pickle.
-        """
-        path = Path(path)
-        with open(path, "wb") as f:
-            pickle.dump(
-                {
-                    "scaler": self.scaler,
-                    "n_features_to_scale": self.n_features_to_scale,
-                    "n_portfolio_weights": self.n_portfolio_weights,
-                    "is_fitted": self.is_fitted,
-                },
-                f,
-            )
+        with Path(path).open("wb") as handle:
+            pickle.dump(self.to_dict(), handle)
 
     @classmethod
     def load(cls, path: Path | str) -> PortfolioScaler:
-        """Load scaler from file.
-
-        Args:
-            path: Path to scaler pickle.
-
-        Returns:
-            Loaded PortfolioScaler instance.
-        """
-        path = Path(path)
-        with open(path, "rb") as f:
-            data = pickle.load(f)
-
+        with Path(path).open("rb") as handle:
+            data = pickle.load(handle)
+        if not isinstance(data, dict) or data.get("schema_version") != 3:
+            raise ValueError("legacy SAC scaler is incompatible with SAC schema v3")
         return cls(
-            scaler=data["scaler"],
-            n_features_to_scale=data["n_features_to_scale"],
-            n_portfolio_weights=data["n_portfolio_weights"],
-            is_fitted=data["is_fitted"],
+            median_mean=float(data["median_mean"]),
+            median_scale=float(data["median_scale"]),
+            is_fitted=bool(data["is_fitted"]),
         )

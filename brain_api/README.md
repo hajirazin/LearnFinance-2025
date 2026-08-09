@@ -48,7 +48,8 @@ uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 | POST | `/inference/lstm` | LSTM weekly return predictions (Monday run). Returns predictions sorted highest gain → highest loss, with insufficient-history symbols at the end. |
 | POST | `/signals/news` | **Current** news sentiment for inference. Uses **yfinance + FinBERT**. Returns recency-weighted sentiment scores per symbol. |
 | POST | `/signals/news/historical` | **Historical** news sentiment for training. Uses **parquet file** (no rate limits). Takes date range, returns daily sentiment for all (date, symbol) combos. Missing data returns neutral (0.0). |
-| POST | `/signals/prices` | Raw daily closes for SAC momentum inputs. |
+| POST | `/signals/prices` | Adjusted closes, execution prices, and provenance for SAC v3. |
+| POST | `/signals/market-history` | Aligned post-cutoff SPY/VIX rows for causal SAC v3 HMM filtering. |
 
 ## Environment Variables
 
@@ -75,7 +76,8 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 |----------|-------------|------------|-------|
 | `/signals/news` | yfinance + FinBERT | None | Run-based (JSON files) |
 | `/signals/news/historical` | `data/output/daily_sentiment.parquet` | None | N/A (reads from file) |
-| `/signals/prices` | yfinance daily closes | Provider limits | Request-time |
+| `/signals/prices` | yfinance adjusted closes | Provider limits | Request-time |
+| `/signals/market-history` | yfinance SPY + VIX | Provider limits | Request-time |
 
 ## API documentation
 
@@ -89,4 +91,3 @@ Once running, visit:
 ```bash
 uv run pytest
 ```
-

@@ -34,25 +34,13 @@ from brain_api.core.sac.config import (
 class TestMakeSACBaseConfigForNStocks:
     """Pure-math contract for the base helper."""
 
-    @pytest.mark.parametrize(
-        "n_stocks,expected_target_entropy",
-        [
-            (5, -6.0),
-            (12, -13.0),
-            (13, -14.0),
-            (14, -15.0),
-            (15, -16.0),
-            (20, -21.0),
-        ],
-    )
-    def test_target_entropy_equals_negative_action_dim(
-        self, n_stocks: int, expected_target_entropy: float
-    ) -> None:
-        """target_entropy must be -float(n_stocks + 1) for tanh-squashed Gaussian."""
+    @pytest.mark.parametrize("n_stocks", [5, 12, 13, 14, 15, 20, 30])
+    def test_target_entropy_equals_negative_action_dim(self, n_stocks: int) -> None:
+        """Persisted fallback reflects the fixed 31-way network envelope."""
         cfg = make_sac_base_config_for_n_stocks(DEFAULT_SAC_BASE_CONFIG, n_stocks)
         assert cfg.n_stocks == n_stocks
-        assert cfg.target_entropy == expected_target_entropy
-        assert cfg.action_dim == n_stocks + 1
+        assert cfg.target_entropy == -31.0
+        assert cfg.action_dim == 31
 
     def test_n_stocks_equal_to_base_round_trips_byte_equivalent(self) -> None:
         """Calling with the base's own n_stocks must reproduce the base.
@@ -116,9 +104,9 @@ class TestMakeSACBaseConfigForNStocks:
 
     def test_zero_or_negative_n_stocks_raises(self) -> None:
         """No silent fallback for impossible action spaces (AGENTS.md rule #1)."""
-        with pytest.raises(ValueError, match=">= 1"):
+        with pytest.raises(ValueError, match=r"\[1, 30\]"):
             make_sac_base_config_for_n_stocks(DEFAULT_SAC_BASE_CONFIG, 0)
-        with pytest.raises(ValueError, match=">= 1"):
+        with pytest.raises(ValueError, match=r"\[1, 30\]"):
             make_sac_base_config_for_n_stocks(DEFAULT_SAC_BASE_CONFIG, -3)
 
 
@@ -132,7 +120,7 @@ class TestMakeSACConfigForNStocks:
         assert cfg.training_years == 7
         assert cfg.n_eval_folds == 5
         assert cfg.n_stocks == 12
-        assert cfg.target_entropy == -13.0
+        assert cfg.target_entropy == -31.0
         assert isinstance(cfg, SACConfig)
 
     def test_default_round_trips_at_n_stocks_15(self) -> None:
@@ -147,10 +135,10 @@ class TestMakeSACConfigForNStocks:
         """Cover the realistic halal yfinance-top-holdings range."""
         cfg = make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, n_stocks)
         assert cfg.n_stocks == n_stocks
-        assert cfg.target_entropy == -float(n_stocks + 1)
+        assert cfg.target_entropy == -31.0
 
     def test_zero_or_negative_raises(self) -> None:
-        with pytest.raises(ValueError, match=">= 1"):
+        with pytest.raises(ValueError, match=r"\[1, 30\]"):
             make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, 0)
 
 
@@ -160,7 +148,7 @@ class TestPreservedDefaults:
     def test_default_base_config_n_stocks_is_15(self) -> None:
         """halal_filtered's contract relies on this default staying at 15."""
         assert DEFAULT_SAC_BASE_CONFIG.n_stocks == 15
-        assert DEFAULT_SAC_BASE_CONFIG.target_entropy == -16.0
+        assert DEFAULT_SAC_BASE_CONFIG.target_entropy == -31.0
 
     def test_default_sac_config_inherits_base_defaults(self) -> None:
         assert isinstance(DEFAULT_SAC_CONFIG, SACBaseConfig)

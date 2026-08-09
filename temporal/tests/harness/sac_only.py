@@ -13,9 +13,10 @@ from temporalio import activity
 from activities.reporting import send_weekly_email
 from models import (
     ActiveSymbolsResponse,
+    AdjustedClosesResponse,
     AlpacaPortfolioResponse,
-    ClosesResponse,
     MarketClockResponse,
+    MarketHistoryResponse,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
     WeeklySummaryResponse,
@@ -66,6 +67,7 @@ def make_sac_only_activities(
     update_execution_calls: list[dict] | None = None,
     get_alpaca_clock_fn=None,
     get_alpaca_clock_calls: list[None] | None = None,
+    price_fetch_calls: list[list[str]] | None = None,
 ):
     """Build mock activities for the SAC-only ``USWeeklyAllocationWorkflow``."""
 
@@ -116,14 +118,29 @@ def make_sac_only_activities(
     def mock_get_patchtst_forecast(as_of_date, symbols=None):
         return patchtst_resp
 
-    @activity.defn(name="get_closes")
-    def mock_get_closes(symbols, as_of_date, lookback_bars=_DEFAULT_MOMENTUM_BARS):
-        return ClosesResponse(
+    @activity.defn(name="get_adjusted_closes")
+    def mock_get_adjusted_closes(
+        symbols, as_of_date, lookback_bars=_DEFAULT_MOMENTUM_BARS
+    ):
+        if price_fetch_calls is not None:
+            price_fetch_calls.append(list(symbols))
+        return AdjustedClosesResponse(
             as_of_date=as_of_date,
-            closes={
+            adjusted_closes={
                 symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
                 for symbol in symbols
             },
+            execution_prices={symbol: 125.2 for symbol in symbols},
+            provenance={"provider": "test"},
+        )
+
+    @activity.defn(name="get_market_history")
+    def mock_get_market_history(training_cutoff_date, as_of_date):
+        return MarketHistoryResponse(
+            start_date="2026-05-09",
+            as_of_date=as_of_date,
+            rows=[],
+            provenance={"provider": "test"},
         )
 
     @activity.defn(name="infer_sac")
@@ -134,7 +151,8 @@ def make_sac_only_activities(
         symbols,
         news,
         patchtst,
-        closes,
+        prices,
+        market,
     ):
         return sac_alloc
 
@@ -254,7 +272,8 @@ def make_sac_only_activities(
         mock_get_news_sentiment,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
-        mock_get_closes,
+        mock_get_adjusted_closes,
+        mock_get_market_history,
         mock_infer_sac,
         mock_generate_orders_sac,
         mock_store_experience_sac,

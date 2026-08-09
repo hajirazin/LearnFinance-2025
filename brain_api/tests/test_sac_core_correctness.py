@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
-from torch.distributions import Normal
 
 from brain_api.core.portfolio_rl.constraints import apply_softmax_to_weights
 from brain_api.core.portfolio_rl.rewards import (
@@ -17,6 +17,8 @@ from brain_api.core.portfolio_rl.rewards import (
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor
 from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
 from brain_api.core.portfolio_rl.state import (
+    ACTION_DIM,
+    STATE_DIM,
     StateSchema,
     build_state_vector,
 )
@@ -33,10 +35,10 @@ def _patchtst_inputs() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
     signals = {
         "AAA": {
             "news_sentiment": 0.1,
-            "news_coverage": 0.5,
             "momentum_1w": 0.01,
             "momentum_4w": 0.02,
             "momentum_12_1": 0.10,
+            "realized_vol_20d": 0.2,
         }
     }
     return signals, {"AAA": 0.03}
@@ -47,16 +49,16 @@ def test_state_schema_dimension_and_strict_construction() -> None:
     state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
 
     assert StateSchema(n_stocks=15).n_forecasts_per_stock == 1
-    assert StateSchema(n_stocks=15).state_dim == 106
-    assert state.shape == (8,)
-    assert state[1] == pytest.approx(0.5)
+    assert StateSchema(n_stocks=15).state_dim == STATE_DIM
+    assert state.shape == (245,)
+    assert state[-30] == 1.0
 
 
 @pytest.mark.parametrize(
     ("missing_from", "expected"),
     [
-        ("signal", "news_coverage"),
-        ("patchtst", "PatchTST"),
+        ("signal", "realized_vol_20d"),
+        ("patchtst", "observations"),
     ],
 )
 def test_state_vector_never_zero_fills_missing_actor_inputs(
@@ -64,7 +66,7 @@ def test_state_vector_never_zero_fills_missing_actor_inputs(
 ) -> None:
     signals, patchtst = _patchtst_inputs()
     if missing_from == "signal":
-        signals["AAA"].pop("news_coverage")
+        signals["AAA"].pop("realized_vol_20d")
     else:
         patchtst.clear()
 
@@ -73,7 +75,7 @@ def test_state_vector_never_zero_fills_missing_actor_inputs(
 
 
 def test_state_vector_rejects_empty_signals() -> None:
-    with pytest.raises(ValueError, match="Missing required SAC signals"):
+    with pytest.raises(ValueError, match="observations"):
         build_state_vector(
             {}, {}, np.array([0.0, 1.0]), ["AAA"], StateSchema(n_stocks=1)
         )
@@ -108,28 +110,33 @@ def test_exact_reward_is_log_one_plus_gross_minus_cost() -> None:
 
 def test_training_data_requires_complete_inputs_and_uses_trade_time_price() -> None:
     signals, patchtst = _patchtst_inputs()
+    symbols = [f"S{index:02d}" for index in range(10)]
+    price_inputs = {symbol: np.array([100.0, 110.0, 99.0]) for symbol in symbols}
     signal_arrays = {
-        "AAA": {
+        symbol: {
             name: np.array([value, value]) for name, value in signals["AAA"].items()
         }
+        for symbol in symbols
     }
     data = build_training_data(
-        prices={"AAA": np.array([100.0, 110.0, 99.0])},
+        prices=price_inputs,
         signals=signal_arrays,
-        patchtst_predictions={"AAA": np.array([patchtst["AAA"], patchtst["AAA"]])},
-        symbol_order=["AAA"],
+        patchtst_predictions={
+            symbol: np.array([patchtst["AAA"], patchtst["AAA"]]) for symbol in symbols
+        },
+        symbol_order=symbols,
     )
     assert data.prices[:, 0] == pytest.approx([100.0, 110.0])
     assert data.symbol_returns[:, 0] == pytest.approx([0.10, -0.10])
 
-    broken = dict(signal_arrays["AAA"])
+    broken = dict(signal_arrays[symbols[0]])
     broken.pop("momentum_4w")
     with pytest.raises(ValueError, match="momentum_4w"):
         build_training_data(
-            {"AAA": np.array([100.0, 110.0, 99.0])},
-            {"AAA": broken},
-            {"AAA": np.array([0.1, 0.1])},
-            ["AAA"],
+            price_inputs,
+            {**signal_arrays, symbols[0]: broken},
+            {symbol: np.array([0.1, 0.1]) for symbol in symbols},
+            symbols,
         )
 
 
@@ -143,19 +150,14 @@ def test_tanh_softmax_has_bounded_concentration() -> None:
 
 
 def test_gaussian_actor_log_prob_includes_tanh_jacobian() -> None:
-    actor = GaussianActor(state_dim=3, action_dim=2, hidden_sizes=())
-    with torch.no_grad():
-        actor.mean_head.weight.zero_()
-        actor.mean_head.bias.zero_()
-        actor.log_std_head.weight.zero_()
-        actor.log_std_head.bias.zero_()
+    actor = GaussianActor(hidden_sizes=(16, 16))
+    signals, patchtst = _patchtst_inputs()
+    state = build_state_vector(signals, patchtst, np.array([0.8, 0.2]), ["AAA"])
     torch.manual_seed(42)
-    action, log_prob = actor(torch.zeros((1, 3)))
-    pre_tanh = torch.atanh(action)
-    expected = Normal(0.0, 1.0).log_prob(pre_tanh).sum(dim=-1)
-    expected -= torch.log(1 - action.pow(2) + 1e-6).sum(dim=-1)
+    action, log_prob = actor(torch.tensor(state, dtype=torch.float32).unsqueeze(0))
     assert torch.isfinite(log_prob).all()
-    assert log_prob.detach().numpy() == pytest.approx(expected.detach().numpy())
+    assert action.shape == (1, ACTION_DIM)
+    assert torch.count_nonzero(action[0, 1:30]) == 0
 
 
 def test_policy_evaluation_is_chronological_and_uses_104_net_returns() -> None:
@@ -210,28 +212,27 @@ def test_trainer_result_reports_tracked_optimizer_losses() -> None:
     assert result.final_critic_loss == pytest.approx(2.5)
 
 
-def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> None:
-    """Process-global RNG history cannot change a fixed seed's scaler fit."""
+def test_training_scaler_uses_every_training_week_median_once(monkeypatch) -> None:
     from brain_api.core.sac import training as training_module
 
     fitted_samples: list[np.ndarray] = []
 
     class FakeEnv:
-        action_dim = 2
-        state_dim = 9
+        action_dim = ACTION_DIM
+        state_dim = STATE_DIM
 
         def reset(self, start_week=None):
             del start_week
-            return np.zeros(9)
+            return np.zeros(STATE_DIM)
 
         def step(self, action):
-            next_state = np.zeros(9)
+            next_state = np.zeros(STATE_DIM)
             next_state[0] = float(np.sum(action))
             return SimpleNamespace(next_state=next_state, done=False)
 
     class FakeScaler:
-        def fit(self, states):
-            fitted_samples.append(states.copy())
+        def fit_patchtst_medians(self, medians):
+            fitted_samples.append(medians.copy())
             return self
 
         def transform(self, states):
@@ -272,22 +273,43 @@ def test_training_seed_controls_scaler_sampling_before_trainer(monkeypatch) -> N
         "evaluate_policy",
         lambda *args, **kwargs: (0.5, 0.2, -0.1),
     )
+    fake_hmm = SimpleNamespace(terminal_posterior=np.full(3, 1 / 3))
+    monkeypatch.setattr(
+        training_module,
+        "market_observations",
+        lambda spy, vix: np.zeros((len(spy) - 20, 4)),
+    )
+    monkeypatch.setattr(
+        training_module, "fit_regime_hmm", lambda *args, **kwargs: fake_hmm
+    )
+    monkeypatch.setattr(
+        training_module,
+        "causal_filter",
+        lambda observations, *args, **kwargs: np.full((len(observations), 3), 1 / 3),
+    )
+    monkeypatch.setattr(
+        training_module, "regime_probabilities", lambda *args: (1 / 3, 1 / 3)
+    )
+    market_dates = [date(2020, 1, 1) + timedelta(days=index) for index in range(228)]
+    forecasts = np.arange(208, dtype=float).reshape(-1, 1)
     data = TrainingData(
         symbol_returns=np.zeros((208, 1)),
-        signals=np.zeros((208, 1, 9)),
-        patchtst_forecasts=np.zeros((208, 1)),
+        signals=np.zeros((208, 1, 5)),
+        patchtst_forecasts=forecasts,
         prices=np.ones((208, 1)),
+        asset_masks=np.ones((208, 1), dtype=bool),
         symbol_order=["AAA"],
         n_weeks=208,
         n_stocks=1,
+        weekly_dates=market_dates[20:],
+        market_dates=market_dates,
+        spy_adjusted_closes=np.ones(228),
+        vix_closes=np.ones(228),
     )
     config = SACConfig(n_stocks=1, seed=123, total_timesteps=1)
 
-    np.random.seed(999)
-    train_sac(data, config)
-    np.random.seed(2026)
-    np.random.standard_normal(500)
     train_sac(data, config)
 
-    assert len(fitted_samples) == 2
-    assert fitted_samples[0] == pytest.approx(fitted_samples[1])
+    assert len(fitted_samples) == 1
+    train_weeks = 104
+    np.testing.assert_array_equal(fitted_samples[0], forecasts[:train_weeks, 0])

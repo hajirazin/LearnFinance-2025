@@ -11,7 +11,9 @@ from __future__ import annotations
 import numpy as np
 
 
-def apply_softmax_to_weights(logits: np.ndarray) -> np.ndarray:
+def apply_softmax_to_weights(
+    logits: np.ndarray, asset_mask: np.ndarray | None = None
+) -> np.ndarray:
     """Apply softmax to convert raw logits to portfolio weights.
 
     This enforces:
@@ -29,16 +31,30 @@ def apply_softmax_to_weights(logits: np.ndarray) -> np.ndarray:
     # This naturally limits the maximum softmax concentration to ~33% for 16 dims,
     # preventing pathological concentration exploits mathematically.
 
-    # Numerical stability: subtract max
-    if logits.ndim == 1:
-        shifted = logits - np.max(logits)
-        exp_logits = np.exp(shifted)
-        return exp_logits / np.sum(exp_logits)
+    values = np.asarray(logits, dtype=np.float64)
+    single = values.ndim == 1
+    batch = values.reshape(1, -1) if single else values
+    if batch.ndim != 2:
+        raise ValueError("logits must be one- or two-dimensional")
+    if asset_mask is None:
+        action_mask = np.ones_like(batch, dtype=bool)
     else:
-        # Batch case
-        shifted = logits - np.max(logits, axis=-1, keepdims=True)
-        exp_logits = np.exp(shifted)
-        return exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
+        mask = np.asarray(asset_mask, dtype=bool)
+        if mask.ndim == 1:
+            mask = mask.reshape(1, -1)
+        if mask.shape[0] == 1 and batch.shape[0] > 1:
+            mask = np.repeat(mask, batch.shape[0], axis=0)
+        if mask.shape != (batch.shape[0], batch.shape[1] - 1):
+            raise ValueError("asset_mask must match logits excluding CASH")
+        action_mask = np.concatenate(
+            (mask, np.ones((batch.shape[0], 1), dtype=bool)), axis=1
+        )
+    masked = np.where(action_mask, batch, -np.inf)
+    shifted = masked - np.max(masked, axis=-1, keepdims=True)
+    exp_logits = np.where(action_mask, np.exp(shifted), 0.0)
+    weights = exp_logits / exp_logits.sum(axis=-1, keepdims=True)
+    weights[~action_mask] = 0.0
+    return weights[0] if single else weights
 
 
 def enforce_constraints(

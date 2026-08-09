@@ -1,7 +1,9 @@
-"""SAC inference endpoint with PatchTST-only forecasts."""
+"""SAC v3 inference endpoint from raw point-in-time evidence."""
 
 import logging
+import math
 import time
+from datetime import date
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
@@ -38,12 +40,11 @@ logger = logging.getLogger(__name__)
 @router.post("/sac", response_model=SACInferenceResponse)
 def infer_sac(
     request: SACInferenceRequest,
-    universe: str | None = Query(
-        default=None,
+    universe: str = Query(
+        ...,
         description=(
-            "Optional bucket override. Defaults to the only registered SAC "
-            "universe (`halal_filtered`). Future buckets (e.g. `halal`) can "
-            "be selected without breaking existing callers."
+            "Required SAC bucket universe (`halal_filtered` or `halal`); "
+            "there is no default because the buckets are independent."
         ),
     ),
 ) -> SACInferenceResponse:
@@ -52,26 +53,26 @@ def infer_sac(
     This endpoint:
     1. Loads the current SAC model via the active storage policy
     2. Normalizes the portfolio snapshot to weights
-    3. Builds state vector with current signals + PatchTST forecasts
-    4. Runs SAC inference to get target weights
-    5. Returns target weights and turnover
+    3. Applies eligibility, ranking, and causal HMM filtering in Brain
+    4. Runs the fixed masked-attention policy
+    5. Returns target weights plus reproducible decision audit data
     """
     t_start = time.time()
     logger.info("[SAC] Starting inference")
 
-    resolved_universe = universe if universe is not None else "halal_filtered"
     try:
-        bucket = get_bucket(ModelType.SAC, resolved_universe)
+        bucket = get_bucket(ModelType.SAC, universe)
     except UnknownBucketError as exc:
         allowed = sorted(list_universes_for(ModelType.SAC))
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"Unknown universe '{resolved_universe}' for SAC. Allowed: {allowed}"
-            ),
+            detail=(f"Unknown universe '{universe}' for SAC. Allowed: {allowed}"),
         ) from exc
 
     cutoff_date = get_sac_as_of_date(request)
+    decision_date = (
+        date.fromisoformat(request.as_of_date) if request.as_of_date else date.today()
+    )
     logger.info(f"[SAC] Cutoff date: {cutoff_date}")
 
     week_boundaries = compute_week_from_cutoff(cutoff_date)
@@ -95,9 +96,39 @@ def infer_sac(
     position_values = {
         pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
+    raw_execution_prices = dict(request.feature_bundle.execution_prices)
+    held_execution_prices: dict[str, float] = {}
+    for symbol, market_value in position_values.items():
+        if market_value <= 0:
+            continue
+        if symbol not in raw_execution_prices:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"execution_prices[{symbol}] is required for a positive held "
+                    "position"
+                ),
+            )
+        try:
+            execution_price = float(raw_execution_prices[symbol])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"execution_prices[{symbol}] must be numeric",
+            ) from exc
+        if not math.isfinite(execution_price) or execution_price <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"execution_prices[{symbol}] must be finite and positive",
+            )
+        held_execution_prices[symbol] = execution_price
 
     forced_liquidations = [
-        ForcedLiquidationAudit(symbol=symbol, market_value=market_value)
+        ForcedLiquidationAudit(
+            symbol=symbol,
+            market_value=market_value,
+            execution_price=held_execution_prices[symbol],
+        )
         for symbol, market_value in sorted(position_values.items())
         if symbol not in artifacts.symbol_order and market_value > 0
     ]
@@ -116,20 +147,18 @@ def infer_sac(
         effective_cash_value / allocatable_value if allocatable_value > 0 else 1.0
     )
 
-    if request.feature_bundle is None:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "feature_bundle is required for SAC inference; Brain will "
-                "not refetch or zero-fill actor inputs"
-            ),
-        )
-
     try:
         feature_bundle = SACFeatureBundle.create(
             symbols=request.feature_bundle.symbols,
-            signals=request.feature_bundle.signals,
+            adjusted_closes=request.feature_bundle.adjusted_closes,
+            news_sentiment=request.feature_bundle.news_sentiment,
+            news_article_counts=request.feature_bundle.news_article_counts,
             patchtst_forecasts=request.feature_bundle.patchtst_forecasts,
+            execution_prices=request.feature_bundle.execution_prices,
+            market_history=[
+                row.model_dump(mode="json")
+                for row in request.feature_bundle.market_history
+            ],
             provenance=request.feature_bundle.provenance,
         )
         if feature_bundle.symbols != tuple(artifacts.symbol_order):
@@ -137,7 +166,7 @@ def infer_sac(
                 "feature_bundle symbols must exactly match active model symbol order"
             )
         decision_context = SACDecisionContext.create(
-            as_of_date=cutoff_date,
+            as_of_date=decision_date,
             feature_bundle=feature_bundle,
             current_weights={
                 **{
@@ -150,20 +179,18 @@ def infer_sac(
     except SACDecisionContextError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    signals = feature_bundle.signals
-    patchtst_forecasts = feature_bundle.patchtst_forecasts
-
     logger.info("[SAC] Running inference...")
-    result = run_sac_inference(
-        actor=artifacts.actor,
-        scaler=artifacts.scaler,
-        config=artifacts.config,
-        symbol_order=artifacts.symbol_order,
-        current_weights=current_weights,
-        signals=signals,
-        patchtst_forecasts=patchtst_forecasts,
-        model_version=artifacts.version,
-    )
+    try:
+        result = run_sac_inference(
+            actor=artifacts.actor,
+            scaler=artifacts.scaler,
+            config=artifacts.config,
+            decision_context=decision_context,
+            regime_hmm=artifacts.v3_auxiliary.regime_hmm,
+            model_version=artifacts.version,
+        )
+    except (SACDecisionContextError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     decision_state = SACDecisionState.create(
         vector=result.state_vector,
         context=decision_context,
@@ -205,4 +232,11 @@ def infer_sac(
         decision_state=decision_state.to_dict(),
         state_digest=decision_state.digest,
         forced_liquidations=forced_liquidations,
+        asset_eligibility={
+            symbol: bool(result.asset_mask[index])
+            for index, symbol in enumerate(artifacts.symbol_order)
+        },
+        regime_posterior=[float(value) for value in result.regime_posterior],
+        sac_schema_version=artifacts.metadata["sac_schema_version"],
+        architecture=artifacts.metadata["architecture"],
     )

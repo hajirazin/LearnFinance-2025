@@ -48,7 +48,7 @@ This repo compares multiple approaches at each stage:
 |-------|-------|--------|
 | HRP | Covariance matrix | ✅ Active |
 | ~~PPO~~ | ~~Legacy state vector~~ | Retired |
-| SAC | State vector + PatchTST forecast | ✅ Active |
+| SAC v3 | 30-slot masked token state + PatchTST/HMM features | ✅ Active |
 
 > **Note:** After 3 months of paper-trading experimentation, HRP and SAC consistently outperformed PPO. PPO has been retired from the codebase.
 
@@ -61,27 +61,25 @@ This repo compares multiple approaches at each stage:
 | Price momentum (1w, 4w, 12-1) | ✅ Active | `/signals/prices` |
 | Twitter/Social sentiment | 🔜 To build | — |
 
-### Signal state vector (for SAC allocator)
+### SAC v3 token state
 
-**6 features per stock** (x15 stocks selected by `halal_filtered`) = 5 signals + 1 forecast:
-
-| Feature | Source |
-|---------|--------|
-| News sentiment score | `/signals/news` (FinBERT) |
-| News coverage | `/signals/news` |
-| Momentum 1w | Daily closes from `/signals/prices` |
-| Momentum 4w | Daily closes from `/signals/prices` |
-| Momentum 12-1 | Daily closes from `/signals/prices` |
-| PatchTST predicted return | `/inference/patchtst` (re-run on the chosen 15) |
-
-Plus portfolio-level features:
+The fixed 245-value carrier contains `asset_features[30,7]`, five globals,
+and an auxiliary `asset_mask[30]`; the action is always 30 stock slots plus
+CASH. Valid assets use exact cross-sectional ranks:
 
 | Feature | Source |
 |---------|--------|
-| Current weight per stock (15) | Portfolio state |
-| Current cash weight | Portfolio state (CASH slot in weight vector) |
+| PatchTST weekly return | `/inference/patchtst` |
+| Momentum 1w / 4w / 12-1 | adjusted closes from `/signals/prices` |
+| News sentiment | `/signals/news` (FinBERT) |
+| Realized volatility 20d | adjusted closes from `/signals/prices` |
+| Current weight | portfolio state (unscaled) |
 
-Total state dimension for 15 stocks: 15 stocks × 6 = 90 stock features + 16 portfolio weights (15 stocks + CASH) = **106** (see [brain_api/brain_api/core/portfolio_rl/state.py](brain_api/brain_api/core/portfolio_rl/state.py)).
+Globals are raw PatchTST median/fraction-positive, causal three-state HMM
+calm/stress probabilities from SPY/VIX, and cash weight. Pads are excluded from
+attention, actions, entropy, critics, rewards, and costs. Production requires
+at least 10 eligible assets. There are no SAC feature flags or legacy artifact
+fallbacks.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
@@ -500,7 +498,8 @@ We store three kinds of data:
 |----------|---------|
 | `POST /signals/news` | News sentiment (FinBERT, real-time) |
 | `POST /signals/news/historical` | News sentiment (historical) |
-| `POST /signals/prices` | Raw closes for SAC momentum signals |
+| `POST /signals/prices` | Adjusted closes and execution prices for SAC v3 |
+| `POST /signals/market-history` | Post-cutoff SPY/VIX rows for the causal HMM |
 
 ### Training endpoints
 
