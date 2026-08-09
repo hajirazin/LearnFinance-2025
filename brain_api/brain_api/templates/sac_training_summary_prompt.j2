@@ -28,7 +28,7 @@ This model learns portfolio allocation strategies using Soft Actor-Critic with d
 {%- else %}
   - Bucket-resolved slate; size and selection rule depend on the universe.
 {%- endif %}
-- Promotion gate: SAC must pass model-specific guardrails (artifact integrity, finite metrics, eval CAGR floor of 0.12, symbol count match against the bucket; finetune additionally requires symbol-order equality with the prior model's action space). There is no prior-comparison gate -- universe drift across months is no longer a reason to reject a healthy run. Each bucket has its own ``current`` pointer; promoting one MUST NOT touch the other.
+- Promotion gate: SAC must pass model-specific guardrails (artifact integrity, finite metrics, eval CAGR floor of 0.12, symbol count match against the bucket). There is no prior-comparison gate -- universe drift across months is no longer a reason to reject a healthy run. Each bucket has its own ``current`` pointer; promoting one MUST NOT touch the other.
 - The slate size matches the SAC action space, so any change in symbols comes from upstream universe movement -- worth flagging if the slate looks unstable.
 
 ## Instructions

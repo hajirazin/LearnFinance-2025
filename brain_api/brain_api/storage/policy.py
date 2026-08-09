@@ -545,9 +545,9 @@ def build_common_train_response_kwargs(
 ) -> dict[str, Any]:
     """Build the 7 kwargs every ``*TrainResponse`` class shares.
 
-    Extracted from the 6 line-for-line identical idempotency-skip
-    blocks across LSTM / PatchTST x2 / PatchTST India / SAC full /
-    SAC finetune. Per AGENTS.md "Code reuse" -- this is provably
+    Extracted from the line-for-line identical idempotency-skip
+    blocks across LSTM / PatchTST x2 / PatchTST India / SAC full.
+    Per AGENTS.md "Code reuse" -- this is provably
     identical metadata-to-response mapping (no algorithm-specific
     math), and per AGENTS.md rule #2 each call site keeps its
     model-specific extras (``num_input_channels`` + ``signals_used``

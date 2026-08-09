@@ -354,9 +354,9 @@ to compare which slate produces a better allocator:
   `make_sac_config_for_n_stocks`.
 
 Each bucket has an independent `current` pointer; promoting one MUST
-NOT touch the other. `/inference/sac` and `/train/sac/finetune` are
-still hard-pinned to `sac_halal_filtered` (see AGENTS.md "Known
-limitations").
+NOT touch the other. `/inference/sac` requires an explicit `universe`
+query param (`halal_filtered` or `halal`) so the two A/B paths cannot
+share state.
 
 ## Key design decisions
 
@@ -521,8 +521,7 @@ We store three kinds of data:
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) | Weekly (cron, beefier host only) |
 | ~~`POST /train/ppo/full`~~ | ~~Full PPO retrain (dual forecasts)~~ | ~~Monthly (manual)~~ |
 | ~~`POST /train/ppo/finetune`~~ | ~~PPO fine-tune on experience buffer~~ | ~~Weekly (cron)~~ |
-| `POST /train/sac/full` | Full SAC retrain (dual forecasts) | Monthly (manual) |
-| `POST /train/sac/finetune` | SAC fine-tune on experience buffer | Weekly (cron, beefier host only) |
+| `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts) | Monthly (manual) |
 
 ### LLM endpoints
 
@@ -635,7 +634,7 @@ Monday inference runs **do not retrain** models. Training happens separately.
 | When | What | Trigger |
 |------|------|---------|
 | Monthly (Saturday) | Full retrain all US models (LSTM, PatchTST, SAC) | Manual |
-| Weekly (Sunday 11:00 UTC) | Full SAC retrain / fine-tune (US) | Cron (Temporal, beefier host only) |
+| Monthly (first Sunday) | Full SAC retrain (US; `halal_filtered` then `halal`) | Cron (Temporal, training queue) |
 | Weekly (Sunday 04:30 UTC / 10:00 IST) | Full PatchTST retrain (India NiftyShariah500) | Cron (Temporal, beefier host only) |
 | Monday (multiple slots Mon 03:30 - 12:00 UTC) | Inference + allocation across 5 workflows | Cron (Temporal) |
 
@@ -702,11 +701,11 @@ After each Monday run, store the experience tuple:
 
 Save to: `data/experience/<run_id>.json`
 
-### Fine-tune guardrails
+### Promotion guardrails
 
-- **Evaluation gate**: new policy must beat prior + a baseline
+- **Evaluation gate**: new artifact must pass model-specific health checks (finite metrics, artifact integrity; SAC also requires eval CAGR above floor and symbol-count match)
 - **Rollback**: keep last known-good version; promotion is atomic pointer swap
-- **Drift detection**: if performance degrades 4 weeks in a row, consider full retrain
+- **No HF cold-start fallback**: HuggingFace `make_current` follows `promoted` only
 
 ## Cloud migration
 

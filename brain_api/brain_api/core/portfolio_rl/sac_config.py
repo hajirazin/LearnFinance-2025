@@ -179,16 +179,5 @@ def make_sac_base_config_for_n_stocks(
     )
 
 
-@dataclass
-class SACFinetuneConfig:
-    """Configuration for weekly SAC fine-tuning."""
-
-    lookback_weeks: int = 26  # 6-month rolling buffer
-    total_timesteps: int = 2_000  # Much smaller than full training
-    actor_lr: float = 1e-4  # Lower LR for fine-tuning
-    critic_lr: float = 1e-4
-    alpha_lr: float = 1e-4
-
-
 # Default configuration
 DEFAULT_SAC_BASE_CONFIG = SACBaseConfig()

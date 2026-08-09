@@ -19,7 +19,6 @@ from brain_api.core.portfolio_rl.eval import (
     compute_max_drawdown,
     compute_sharpe_ratio,
 )
-from brain_api.core.portfolio_rl.sac_config import SACFinetuneConfig
 from brain_api.core.portfolio_rl.sac_networks import GaussianActor, TwinCritic
 from brain_api.core.portfolio_rl.sac_trainer import SACTrainer
 from brain_api.core.portfolio_rl.scaler import PortfolioScaler
@@ -295,85 +294,6 @@ def train_sac(
         log_alpha=sac_result.log_alpha,
         scaler=scaler,
         config=config,
-        symbol_order=training_data.symbol_order,
-        final_actor_loss=sac_result.final_actor_loss,
-        final_critic_loss=sac_result.final_critic_loss,
-        avg_episode_return=sac_result.avg_episode_return,
-        avg_episode_sharpe=sac_result.avg_episode_sharpe,
-        eval_sharpe=eval_sharpe,
-        eval_cagr=eval_cagr,
-        eval_max_drawdown=eval_max_drawdown,
-    )
-
-
-def finetune_sac(
-    training_data: TrainingData,
-    prior_actor: GaussianActor,
-    prior_critic: TwinCritic,
-    prior_critic_target: TwinCritic,
-    prior_log_alpha: torch.Tensor,
-    prior_scaler: PortfolioScaler,
-    prior_config: SACConfig,
-    finetune_config: SACFinetuneConfig,
-    shutdown_event: threading.Event | None = None,
-) -> SACTrainingResult:
-    """Fine-tune SAC model on recent data.
-
-    Args:
-        training_data: Recent training data with PatchTST forecasts.
-        prior_actor: Previously trained actor.
-        prior_critic: Previously trained critics.
-        prior_critic_target: Previously trained target critics.
-        prior_log_alpha: Previously trained entropy coefficient.
-        prior_scaler: Previously fitted scaler.
-        prior_config: Previous configuration.
-        finetune_config: Fine-tuning configuration.
-
-    Returns:
-        Fine-tuned model result.
-    """
-    # Create environment from recent data
-    env = create_env_from_training_data(training_data, prior_config)
-    env_normalized = NormalizedEnv(env, prior_scaler)
-
-    # Create trainer with prior models
-    trainer = SACTrainer(env_normalized, prior_config, shutdown_event=shutdown_event)
-
-    # Load prior weights
-    trainer.actor.load_state_dict(prior_actor.state_dict())
-    trainer.critic.load_state_dict(prior_critic.state_dict())
-    trainer.critic_target.load_state_dict(prior_critic_target.state_dict())
-    trainer.log_alpha = prior_log_alpha.clone().requires_grad_(True)
-
-    # Update learning rates for fine-tuning
-    for param_group in trainer.actor_optimizer.param_groups:
-        param_group["lr"] = finetune_config.actor_lr
-    for param_group in trainer.critic_optimizer.param_groups:
-        param_group["lr"] = finetune_config.critic_lr
-    if trainer.alpha_optimizer is not None:
-        for param_group in trainer.alpha_optimizer.param_groups:
-            param_group["lr"] = finetune_config.alpha_lr
-
-    # Fine-tune
-    trainer.train(total_timesteps=finetune_config.total_timesteps)
-
-    # Get result
-    sac_result = trainer.get_result()
-
-    # Evaluate
-    eval_sharpe, eval_cagr, eval_max_drawdown = evaluate_policy(
-        sac_result.actor,
-        env_normalized,
-        prior_config,
-    )
-
-    return SACTrainingResult(
-        actor=sac_result.actor,
-        critic=sac_result.critic,
-        critic_target=sac_result.critic_target,
-        log_alpha=sac_result.log_alpha,
-        scaler=prior_scaler,  # Keep same scaler
-        config=prior_config,
         symbol_order=training_data.symbol_order,
         final_actor_loss=sac_result.final_actor_loss,
         final_critic_loss=sac_result.final_critic_loss,

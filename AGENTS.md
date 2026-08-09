@@ -144,7 +144,6 @@ temporal/                         # Temporal workflow orchestration
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
 | `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
-| `POST /train/sac/finetune` | SAC fine-tune on experience buffer (halal_filtered-only -- see "Operational requirements") |
 
 **Alpaca** (called by Monday run via Temporal for order execution):
 
@@ -480,7 +479,7 @@ The system must:
 Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. The four training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker).
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
-- **Promotion requires guardrails**: new model must pass model-specific health checks (artifact integrity, finite metrics, SAC CAGR floor of 0.12, SAC finetune symbol-order preservation). Universe drift no longer suppresses healthy promotions; rollback is the recovery mechanism (separate story).
+- **Promotion requires guardrails**: new model must pass model-specific health checks (artifact integrity, finite metrics, SAC CAGR floor of 0.12, SAC symbol-count match against the bucket). Universe drift no longer suppresses healthy promotions; rollback is the recovery mechanism (separate story).
 - **Rollback is always possible**: keep last known-good version; pointer swap is atomic
 - **No HF cold-start fallback**: HuggingFace `make_current` is set to `promoted` only. A failed inaugural run leaves HF `main` empty (and inference 503s) by design -- AGENTS.md rule #1 forbids the silent "ship the broken inaugural" fallback.
 
@@ -498,14 +497,6 @@ Any implementation must include:
 
 ### Known limitations
 
-- `POST /train/sac/finetune` is intentionally `halal_filtered`-only at
-  the moment. The endpoint loads the prior model via the legacy
-  `get_sac_storage` dependency (which is hard-pinned to the
-  `sac_halal_filtered` bucket) and reuses the prior model's
-  `n_stocks` for fine-tune. Extending finetune to the parallel
-  `sac_halal` bucket requires plumbing `universe` through the
-  finetune request body and bucket lookup -- deliberately deferred
-  until the finetune flow is ready for an A/B comparison.
 - `/inference/sac` and `/models/active-symbols` accept a **mandatory**
   `universe` query parameter; both routes resolve the SAC bucket via
   `get_bucket(ModelType.SAC, universe)`. There is no implicit default
@@ -564,7 +555,7 @@ Before merging changes that touch ML/model code:
 
 - [ ] Confirm Monday inference does NOT trigger training
 - [ ] Confirm training writes new versioned artifact (not overwrite)
-- [ ] Confirm promotion uses the per-model guardrail check (forecaster: `evaluate_forecaster_artifact_health`; SAC full: `evaluate_sac_artifact_health`; SAC finetune: `evaluate_sac_finetune_artifact_health`) and that HF `make_current = promoted` with no cold-start fallback
+- [ ] Confirm promotion uses the per-model guardrail check (forecaster: `evaluate_forecaster_artifact_health`; SAC full: `evaluate_sac_artifact_health`) and that HF `make_current = promoted` with no cold-start fallback
 - [ ] Confirm `failure_reasons` is threaded end-to-end (metadata.json -> training response -> Temporal workflow return -> Jinja prompt + email template)
 - [ ] Confirm endpoints remain stateless (no global model cache)
 - [ ] Confirm storage abstraction is used (not hardcoded paths)

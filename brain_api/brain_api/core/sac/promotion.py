@@ -95,73 +95,7 @@ def evaluate_sac_artifact_health(
     )
 
 
-def evaluate_sac_finetune_artifact_health(
-    *,
-    actor_loss: float,
-    critic_loss: float,
-    eval_cagr: float,
-    eval_sharpe: float,
-    eval_max_drawdown: float,
-    prior_symbol_order: list[str],
-    actual_symbol_order: list[str],
-    artifact_dir: Path,
-) -> ArtifactHealthCheck:
-    """Run SAC finetune guardrails.
-
-    Same finite-metric + CAGR-floor + artifact-existence guardrails as
-    :func:`evaluate_sac_artifact_health`, with the symbol-count check
-    replaced by a stricter symbol-ORDER equality check: SAC's actor /
-    critic action-space dimension is positional, so a finetune that
-    drops a delisted symbol or reorders the slate would silently
-    misalign the action distribution from the prior model's weights.
-
-    Guardrails (each failure appends a stable, human-readable string):
-
-    1. ``eval_cagr`` finite AND ``> SAC_PROMOTION_CAGR_FLOOR``
-    2. ``eval_sharpe`` finite
-    3. ``eval_max_drawdown`` finite
-    4. ``actor_loss`` finite
-    5. ``critic_loss`` finite
-    6. ``actual_symbol_order == prior_symbol_order`` (list equality
-       INCLUDING ordering, not just set equality)
-    7-14. Same eight SAC artifact files as full training
-
-    Returns:
-        :class:`ArtifactHealthCheck` whose ``is_healthy`` is the new
-        promotion decision.
-    """
-    failure_reasons: list[str] = []
-
-    if not math.isfinite(eval_cagr):
-        failure_reasons.append("eval_cagr is not finite")
-    elif eval_cagr <= SAC_PROMOTION_CAGR_FLOOR:
-        failure_reasons.append(
-            f"eval_cagr {eval_cagr:.4f} below floor {SAC_PROMOTION_CAGR_FLOOR}"
-        )
-
-    _check_finite_metric(eval_sharpe, "eval_sharpe", failure_reasons)
-    _check_finite_metric(eval_max_drawdown, "eval_max_drawdown", failure_reasons)
-    _check_finite_metric(actor_loss, "actor_loss", failure_reasons)
-    _check_finite_metric(critic_loss, "critic_loss", failure_reasons)
-
-    if list(actual_symbol_order) != list(prior_symbol_order):
-        failure_reasons.append(
-            f"actual_symbol_order {actual_symbol_order} does not match "
-            f"prior_symbol_order {prior_symbol_order} (finetune action "
-            "space is positional; symbols must be identical and in the "
-            "same order)"
-        )
-
-    _check_artifact_files(artifact_dir, failure_reasons)
-
-    return ArtifactHealthCheck(
-        is_healthy=not failure_reasons,
-        failure_reasons=failure_reasons,
-    )
-
-
 __all__ = [
     "SAC_PROMOTION_CAGR_FLOOR",
     "evaluate_sac_artifact_health",
-    "evaluate_sac_finetune_artifact_health",
 ]

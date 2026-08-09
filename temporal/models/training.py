@@ -20,7 +20,7 @@ class TrainingResponse(BaseModel):
     prior_version: str | None = None
     # Empty when ``promoted`` is True; otherwise lists every guardrail
     # the new artifact failed (finite metrics, files-on-disk, SAC CAGR
-    # floor, SAC finetune symbol-order). Threaded through the LLM
+    # floor, SAC symbol-count match). Threaded through the LLM
     # prompt + email template so the operator sees what to investigate.
     failure_reasons: list[str] = []
     # Optional fields that vary by model type

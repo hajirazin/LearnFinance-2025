@@ -19,7 +19,6 @@ from brain_api.core.sac.training import (
     SACTrainingResult,
     TrainingData,
     build_training_data,
-    finetune_sac,
     train_sac,
 )
 from brain_api.core.sac.version import compute_version
@@ -36,7 +35,6 @@ __all__ = [
     "build_training_data",
     # Version
     "compute_version",
-    "finetune_sac",
     "make_sac_config_for_n_stocks",
     # Inference
     "run_sac_inference",

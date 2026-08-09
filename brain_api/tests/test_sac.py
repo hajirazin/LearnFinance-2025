@@ -6,7 +6,6 @@ Tests focus on:
 - Promotion gate behavior (Sharpe-first)
 """
 
-import os
 import tempfile
 from dataclasses import replace
 
@@ -23,9 +22,6 @@ from brain_api.core.sac import (
     SACTrainingResult,
 )
 from brain_api.main import app
-from brain_api.routes.training import (
-    get_sac_storage,
-)
 from brain_api.storage.sac import SACHalalFilteredModelStorage, create_sac_metadata
 
 
@@ -169,7 +165,6 @@ def mock_config() -> SACConfig:
 def create_mock_training_result(
     config: SACConfig,
     eval_cagr: float = 0.13,
-    symbol_order_override: list[str] | None = None,
 ) -> SACTrainingResult:
     """Create a mock training result for testing.
 
@@ -181,10 +176,6 @@ def create_mock_training_result(
     Args:
         config: SAC config (``n_stocks`` determines network dims).
         eval_cagr: CAGR to include in the result metadata.
-        symbol_order_override: If provided, use this instead of the
-            default ``mock_symbols()[:n_stocks]`` so a test can exercise
-            the finetune symbol-order guardrail without changing the
-            number of stocks or the available price data.
     """
     n_stocks = config.n_stocks
     # State dim: signals (9 per stock, SAC_SIGNAL_NAMES) + PatchTST (1) + weights
@@ -219,11 +210,7 @@ def create_mock_training_result(
     dummy_states = np.random.randn(10, state_dim)
     scaler.fit(dummy_states)
 
-    symbol_order = (
-        symbol_order_override
-        if symbol_order_override is not None
-        else mock_symbols()[:n_stocks]
-    )
+    symbol_order = mock_symbols()[:n_stocks]
 
     return SACTrainingResult(
         actor=actor,
@@ -446,7 +433,7 @@ class TestSACLSTMInference:
 
 
 # ============================================================================
-# Finetune endpoint tests
+# SAC training fixtures
 # ============================================================================
 
 
@@ -498,11 +485,8 @@ def _mock_patchtst_forecasts(
     target_dates=None,
 ):
     """Stand-in for :func:`build_patchtst_forecast_features` used by the
-    SAC full-training / finetune tests so they don't run real walk-forward
+    SAC full-training tests so they don't run real walk-forward
     PatchTST fits on top of mock prices.
-
-    Mirrors the pattern already used by
-    :func:`TestSACLSTMFinetune.test_finetune_end_date_is_always_friday`.
     """
     n = len(weekly_dates)
     return {s: np.zeros(n) for s in symbols if s in weekly_prices}
@@ -530,19 +514,17 @@ def _mock_rl_training_signals(
     weekly_cutoffs=None,
 ) -> dict[str, dict[str, np.ndarray]]:
     """Stand-in for :func:`build_rl_training_signals` used by the SAC
-    full-training and finetune tests so the route does not hit real
+    full-training tests so the route does not hit real
     parquet/cache I/O for historical news sentiment + fundamentals.
 
     Returns one zero array per ``(symbol, signal)`` pair sized off the
     weekly index of ``prices_dict[symbol]``. Length is intentionally
     generous (``len(weekly)``) so the route's slice-or-pad branch in
-    :func:`brain_api.routes.training.sac._run_sac_finetune` and the
-    sibling full-training path both take the slice path with a
-    deterministic shape.
+    the full-training path takes the slice path with a deterministic
+    shape.
 
     Per AGENTS.md rule: side effects mocked, never skipped. Replaces
-    the unmocked ~520ms parquet read measured in the SAC finetune
-    timing breakdown.
+    the unmocked ~520ms parquet read timing breakdown.
     """
     signals: dict[str, dict[str, np.ndarray]] = {}
     for symbol in symbols:
@@ -608,213 +590,6 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-class TestSACLSTMFinetune:
-    """Tests for /train/sac/finetune endpoint."""
-
-    def test_finetune_without_prior_returns_400(self, temp_storage, monkeypatch):
-        """Test that finetune without prior model returns 400.
-
-        Finetune resolves the prior version via
-        ``get_prior_metadata_for_bucket(bucket=halal_filtered)`` and
-        also keeps the legacy ``Depends(get_sac_storage)`` shim for the
-        post-finetune persistence step. Both seams point at the same
-        bucket / storage class, so we cover both: ``_override_sac_bucket``
-        for the registry read and the ``Depends`` override for the
-        in-route handle. With ``temp_storage`` empty, the policy helper
-        returns ``None`` and the endpoint surfaces the 400 contract.
-        """
-        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
-        app.dependency_overrides[get_sac_storage] = lambda: temp_storage
-
-        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "5"
-        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-        try:
-            client = TestClient(app)
-            response = client.post("/train/sac/finetune")
-
-            assert response.status_code == 400
-            assert "No prior SAC model" in response.json()["detail"]
-        finally:
-            app.dependency_overrides.clear()
-            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
-
-    def test_finetune_end_date_is_always_friday(
-        self, trained_model_storage, monkeypatch
-    ):
-        """Finetune endpoint always uses Friday-anchored end_date.
-
-        Mocks ``load_prices_yfinance``, ``build_patchtst_forecast_features``,
-        and ``finetune_sac`` on the route module so the real RL loop
-        (``SACFinetuneConfig.total_timesteps=2_000`` plus walk-forward
-        eval) is replaced by deterministic stubs. The route's
-        promotion-check, metadata-write, and ``complete_job`` flow
-        still run end-to-end -- only the heavy compute is mocked
-        (per AGENTS.md rule: side effects mocked, never skipped).
-        """
-        from datetime import date as dt_date
-
-        from brain_api.routes.training.sac import finetune as sac_ft_route
-
-        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
-        monkeypatch.setattr(
-            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
-        )
-        monkeypatch.setattr(
-            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
-        )
-        monkeypatch.setattr(
-            sac_ft_route,
-            "finetune_sac",
-            lambda training_data,
-            actor,
-            critic,
-            critic_target,
-            log_alpha,
-            scaler,
-            prior_config,
-            finetune_config,
-            shutdown_event=None: create_mock_training_result(prior_config),
-        )
-
-        app.dependency_overrides.clear()
-        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
-        app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-
-        client = TestClient(app)
-
-        try:
-            response1 = client.post("/train/sac/finetune")
-            assert response1.status_code == 202
-
-            response = client.post("/train/sac/finetune")
-            assert response.status_code == 200
-
-            data = response.json()
-            end_date = dt_date.fromisoformat(data["data_window_end"])
-
-            assert end_date.weekday() == 4, (
-                f"Expected Friday, got {end_date.strftime('%A')}"
-            )
-        finally:
-            app.dependency_overrides.clear()
-
-    def test_finetune_eval_cagr_below_floor_rejects(
-        self, trained_model_storage, monkeypatch
-    ):
-        """Finetune with eval_cagr=0.10 (sub-floor) -> promoted=False.
-
-        Same absolute floor as full training; finetune doesn't get a
-        free pass even though it inherits the prior's symbol set.
-        """
-        from brain_api.routes.training.sac import finetune as sac_ft_route
-
-        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
-        monkeypatch.setattr(
-            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
-        )
-        monkeypatch.setattr(
-            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
-        )
-        monkeypatch.setattr(
-            sac_ft_route,
-            "finetune_sac",
-            lambda training_data,
-            actor,
-            critic,
-            critic_target,
-            log_alpha,
-            scaler,
-            prior_config,
-            finetune_config,
-            shutdown_event=None: create_mock_training_result(
-                prior_config, eval_cagr=0.10
-            ),
-        )
-
-        app.dependency_overrides.clear()
-        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
-        app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-
-        client = TestClient(app)
-
-        try:
-            response1 = client.post("/train/sac/finetune")
-            assert response1.status_code == 202
-            response = client.post("/train/sac/finetune")
-            assert response.status_code == 200
-            data = response.json()
-            assert data["promoted"] is False
-            assert any(
-                "eval_cagr" in r and "below floor" in r for r in data["failure_reasons"]
-            )
-        finally:
-            app.dependency_overrides.clear()
-
-    def test_finetune_symbol_order_mismatch_rejects(
-        self, trained_model_storage, monkeypatch
-    ):
-        """Finetune that returns a re-ordered symbol set -> promoted=False.
-
-        SAC's actor/critic action space is positional; if the trainer
-        permutes the symbol order vs. the prior, the action distribution
-        misaligns. The guardrail catches this and refuses to promote.
-        """
-        from brain_api.routes.training.sac import finetune as sac_ft_route
-
-        monkeypatch.setattr(sac_ft_route, "load_prices_yfinance", mock_price_loader)
-        monkeypatch.setattr(
-            sac_ft_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
-        )
-        monkeypatch.setattr(
-            sac_ft_route, "build_rl_training_signals", _mock_rl_training_signals
-        )
-
-        # Return a healthy result with the same symbols but reversed
-        # order so that evaluate_sac_finetune_artifact_health detects
-        # the mismatch and refuses to promote.
-        monkeypatch.setattr(
-            sac_ft_route,
-            "finetune_sac",
-            lambda training_data,
-            actor,
-            critic,
-            critic_target,
-            log_alpha,
-            scaler,
-            prior_config,
-            finetune_config,
-            shutdown_event=None: create_mock_training_result(
-                prior_config,
-                symbol_order_override=list(
-                    reversed(mock_symbols()[: prior_config.n_stocks])
-                ),
-            ),
-        )
-
-        app.dependency_overrides.clear()
-        _override_sac_bucket(monkeypatch, trained_model_storage, mock_symbols)
-        app.dependency_overrides[get_sac_storage] = lambda: trained_model_storage
-
-        client = TestClient(app)
-
-        try:
-            response1 = client.post("/train/sac/finetune")
-            assert response1.status_code == 202
-            response = client.post("/train/sac/finetune")
-            assert response.status_code == 200
-            data = response.json()
-            assert data["promoted"] is False
-            assert any(
-                "actual_symbol_order" in r and "does not match" in r
-                for r in data["failure_reasons"]
-            )
-        finally:
-            app.dependency_overrides.clear()
-
-
-# ============================================================================
 # Full training endpoint tests
 # ============================================================================
 

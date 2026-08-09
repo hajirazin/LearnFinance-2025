@@ -1,11 +1,11 @@
 """Shared constants and request schemas for SAC training endpoints.
 
 Split out of the original ``routes/training/sac.py`` so the file stays
-under the 600-line limit (AGENTS.md rule). The full and finetune
-endpoints each live in their own sibling module and import what they
-need directly from the relevant ``brain_api.core`` modules so that
-mocks applied at the route module level (``monkeypatch.setattr``) hit
-the same lookup the route function makes at call time.
+under the 600-line limit (AGENTS.md rule). The full-retrain and
+preflight endpoints live in sibling modules and import what they need
+directly from the relevant ``brain_api.core`` modules so that mocks
+applied at the route module level (``monkeypatch.setattr``) hit the
+same lookup the route function makes at call time.
 """
 
 import logging

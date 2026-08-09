@@ -1,7 +1,7 @@
 """HF-aware short-circuit tests for every ``/train/*`` endpoint.
 
 The five training endpoints (LSTM, PatchTST US-route, PatchTST India,
-SAC full, SAC finetune) all delegate the "version already trained?"
+SAC full) all delegate the "version already trained?"
 check to :func:`brain_api.storage.policy.try_load_existing_train_metadata`.
 Per the plan, the existing per-endpoint idempotency tests already
 cover the local-hit branch (they POST twice and the second call
@@ -349,81 +349,6 @@ def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: 
                 )
 
             assert response.status_code == 202, response.text
-        finally:
-            app.dependency_overrides.clear()
-
-
-# ---------------------------------------------------------------------------
-# SAC finetune
-# ---------------------------------------------------------------------------
-
-
-def test_sac_finetune_endpoint_hf_cold_start_short_circuits_via_helper(monkeypatch):
-    """SAC finetune: short-circuit returns 200 + cached metadata.
-
-    Finetune is hard-pinned to ``sac_halal_filtered`` per AGENTS.md
-    known limitation. Even so, the HF-aware skip MUST still apply to
-    its ``-ft``-suffixed versions so a wiped local cache doesn't
-    re-finetune work that already exists on HF.
-
-    Note: finetune's prior-model preview path (loading the previous
-    actor for symbol order + config) would normally run before the
-    skip check. We patch that out so the test stays focused on the
-    short-circuit; a real finetune integration test belongs in
-    ``test_sac.py``.
-    """
-    from types import SimpleNamespace
-
-    from brain_api.core import model_buckets
-    from brain_api.core.sac import DEFAULT_SAC_CONFIG
-    from brain_api.routes.training.dependencies import get_sac_storage
-    from brain_api.storage.sac import SACHalalFilteredModelStorage
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        storage = SACHalalFilteredModelStorage(base_path=tmpdir)
-        original = get_bucket(ModelType.SAC, "halal_filtered")
-        patched = replace(
-            original,
-            local_storage_class=lambda: storage,
-            symbols_resolver=lambda: [f"S{i}" for i in range(15)],
-        )
-        monkeypatch.setitem(
-            model_buckets._BUCKETS, (ModelType.SAC, "halal_filtered"), patched
-        )
-        app.dependency_overrides[get_sac_storage] = lambda: storage
-
-        sac_metadata = _fake_metadata_with(symbols=[f"S{i}" for i in range(15)])
-
-        # Stub out the prior-metadata + prior-artifacts preview so
-        # the test focuses exclusively on the
-        # ``try_load_existing_train_metadata`` short-circuit.
-        prior_artifacts = SimpleNamespace(
-            symbol_order=[f"S{i}" for i in range(15)],
-            config=DEFAULT_SAC_CONFIG,
-        )
-
-        try:
-            with (
-                patch(
-                    "brain_api.routes.training.sac.finetune.get_prior_metadata_for_bucket",
-                    return_value={"version": "v2026-04-24-prev"},
-                ),
-                patch(
-                    "brain_api.storage.policy.load_current_artifacts_for_bucket",
-                    return_value=prior_artifacts,
-                ),
-                patch(
-                    "brain_api.routes.training.sac.finetune.try_load_existing_train_metadata",
-                    return_value=sac_metadata,
-                ),
-            ):
-                client = TestClient(app)
-                response = client.post("/train/sac/finetune", json={})
-
-            assert response.status_code == 200, response.text
-            data = response.json()
-            assert data["promoted"] is True
-            assert data["symbols_used"] == [f"S{i}" for i in range(15)]
         finally:
             app.dependency_overrides.clear()
 
