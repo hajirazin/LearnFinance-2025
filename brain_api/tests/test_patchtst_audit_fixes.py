@@ -12,7 +12,7 @@ from brain_api.core.inference_utils import (
     DEFAULT_INDIA_EXCHANGE,
     compute_week_from_cutoff,
 )
-from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
 from brain_api.core.patchtst.data_loaders import align_multivariate_data
 from brain_api.core.patchtst.dataset import _week_end_anchors, build_dataset
 from brain_api.core.patchtst.training import _chrono_train_val_split
