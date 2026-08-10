@@ -51,7 +51,7 @@ def get_halal_filtered_stocks() -> dict:
 
     Takes the halal_new base (~410 stocks), runs PatchTST inference on
     qualifying symbols, then applies rank-band sticky selection
-    (K_in=15, K_hold=30) against last month's selected set under the
+    (K_in=15, K_hold=20) against last month's selected set under the
     ``halal_filtered_alpha`` partition (``screening_history`` table).
     Cold start (no prior round) is byte-equivalent to the legacy
     blanket top-15 by predicted weekly return.
@@ -77,7 +77,7 @@ def get_halal_india_stocks() -> dict:
 
     Takes the NiftyShariah500 base (~210 .NS-suffixed stocks), runs
     India PatchTST inference on the qualifying subset, then applies a
-    rank-band sticky selector (K_in=15, K_hold=30) against the previous
+    rank-band sticky selector (K_in=15, K_hold=20) against the previous
     monthly round under partition ``halal_india_filtered_alpha`` (in
     the ``screening_history`` sibling table). Symbols retain the
     ``.NS`` suffix end-to-end. Cold start (empty partition) is

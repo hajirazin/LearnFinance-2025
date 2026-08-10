@@ -226,7 +226,7 @@ class RankBandTopNRequest(BaseModel):
         description="Entry threshold K_in: target count of selected symbols",
     )
     hold_threshold: int = Field(
-        30,
+        20,
         ge=1,
         le=500,
         description=(

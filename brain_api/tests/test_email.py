@@ -548,14 +548,14 @@ def mock_india_weekly_report_email_request():
     """Valid request payload for India Alpha-HRP report email endpoint.
 
     Mirrors the shape of the US Alpha-HRP request fixture (Stage 1
-    top-25 + sticky stats + Stage 2 HRP). India does not trade through
+    top-30 + sticky stats + Stage 2 HRP). India does not trade through
     Alpaca so no ``order_results`` / ``skipped`` fields are sent --
     those defaults to ``None`` / ``False`` on the shared
     :class:`AlphaHRPEmailRequest` base.
     """
     return {
         "summary": {
-            "para_1_market_outlook": "Top 25 PatchTST forecasts cluster around IT services.",
+            "para_1_market_outlook": "Top 30 PatchTST forecasts cluster around IT services.",
             "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
             "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
             "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
@@ -582,7 +582,7 @@ def mock_india_weekly_report_email_request():
         },
         "universe": "halal_india_alpha",
         "top_n": 15,
-        "hold_threshold": 30,
+        "hold_threshold": 20,
         "target_week_start": "2026-03-02",
         "target_week_end": "2026-03-06",
         "as_of_date": "2026-03-02",
@@ -637,7 +637,7 @@ class TestIndiaAlphaHRPReportEmailEndpoint:
         # 4-paragraph schema rendered.
         assert "Market Outlook" in body
         assert "Selection Rationale" in body
-        # Stage 1 alpha screen with top-25 context.
+        # Stage 1 alpha screen with top-30 context.
         assert "Stage 1: Alpha Screen" in body
         # Sticky stats present.
         assert "Rank-band Sticky Selection" in body

@@ -13,7 +13,7 @@ remaining phases are the same Alpha-HRP pipeline:
    via the ``score_halal_india_with_patchtst`` activity which targets
    ``POST /inference/patchtst/score-batch`` with ``market='india'``.
 1.5. Phase 1.5: Rank-band sticky selection
-   (``universe='halal_india_alpha'``, K_in=15, K_hold=30) -> 15
+   (``universe='halal_india_alpha'``, K_in=15, K_hold=20) -> 15
    chosen Indian symbols. Persists score rows in sticky_history.db
    under the ``halal_india_alpha`` partition so next week's selection
    has a basis for stickiness. Note the partition is distinct from
@@ -87,7 +87,7 @@ class IndiaAlphaHrpStrategyParams:
     sticky_partition: str = "halal_india_alpha"
     stage2_lookback_days: int = 252
     top_n: int = 15  # K_in (entry threshold)
-    hold_threshold: int = 30  # K_hold (sticky retention threshold)
+    hold_threshold: int = 20  # K_hold (sticky retention threshold)
     paper_nav_inr: float = 1_000_000.0  # Notional NAV for paper share conversion
 
 

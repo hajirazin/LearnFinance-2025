@@ -103,7 +103,7 @@ def sticky_cold_start():
         universe="halal_new_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
 
 
@@ -120,7 +120,7 @@ def sticky_stable():
         universe="halal_new_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
 
 
@@ -142,7 +142,7 @@ def sticky_eviction():
         universe="halal_new_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
 
 

@@ -62,7 +62,7 @@ class TestUSAlphaHRPHappyPath:
         assert result["stage1_predicted_count"] == 20
         assert result["model_version"] == "v2026-04-26-abc"
         assert result["top_n"] == 15
-        assert result["hold_threshold"] == 30
+        assert result["hold_threshold"] == 20
         assert result["kept_count"] == 0
         assert result["fillers_count"] == 15
         assert result["previous_year_week_used"] is None
@@ -79,7 +79,7 @@ class TestUSAlphaHRPHappyPath:
         assert len(select_calls) == 1
         assert select_calls[0]["universe"] == "halal_new_alpha"
         assert select_calls[0]["top_n"] == 15
-        assert select_calls[0]["hold_threshold"] == 30
+        assert select_calls[0]["hold_threshold"] == 20
         assert select_calls[0]["scores_count"] == 20
 
         assert len(hrp_calls) == 1

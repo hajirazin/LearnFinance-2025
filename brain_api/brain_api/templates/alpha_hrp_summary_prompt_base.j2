@@ -29,8 +29,8 @@ Analyze a two-stage "Alpha-HRP" portfolio allocation for the {{ universe }} univ
 - As-of Date: {{ stage2.as_of_date }}
 {% block strategy_overview_extras %}{% endblock %}
 
-## Stage 1: Alpha Ranking (top 25 by predicted weekly return %)
-Showing the top 25 PatchTST forecasts so you can see context beyond the {{ top_n }} that were actually picked. Rank-band sticky retained {{ kept_count }} of last week's holdings and filled {{ fillers_count }} slots from this week's highest ranks.
+## Stage 1: Alpha Ranking (top 30 by predicted weekly return %)
+Showing the top 30 PatchTST forecasts so you can see context beyond the {{ top_n }} that were actually picked (and beyond K_hold={{ hold_threshold }} sticky retention). Rank-band sticky retained {{ kept_count }} of last week's holdings and filled {{ fillers_count }} slots from this week's highest ranks.
 {% for item in stage1_top_scores %}- #{{ item.rank }} {{ item.symbol }}: {{ "%+.2f" | format(item.score) }}% predicted weekly return
 {% endfor %}
 

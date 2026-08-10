@@ -251,7 +251,7 @@ class AlphaHRPEmailRequest(BaseModel):
     """
 
     summary: dict[str, str]  # from POST /llm/{us,india}-alpha-hrp-summary
-    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
+    stage1_top_scores: list[AlphaScoreItem]  # top 30 by PatchTST score
     model_version: str
     predicted_count: int
     requested_count: int
@@ -376,7 +376,7 @@ class USAlphaHRPEmailRequest(AlphaHRPEmailRequest):
     US Alpha-HRP weekly report. Stage 1 is PatchTST predicted weekly
     returns over halal_new (alpha screen); rank-band sticky selection
     picks the top ``top_n`` (default 15) with hold threshold
-    ``hold_threshold`` (default 30); Stage 2 HRP risk-parity sizes the
+    ``hold_threshold`` (default 20); Stage 2 HRP risk-parity sizes the
     chosen names. On the skip path the template hides allocation tables
     and shows a banner about the open-orders gate.
 

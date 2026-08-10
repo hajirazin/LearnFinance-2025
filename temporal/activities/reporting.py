@@ -444,7 +444,7 @@ def send_us_double_hrp_email(
     return result
 
 
-def _alpha_top_scores(scores: PatchTSTBatchScores, top_k: int = 25) -> list[dict]:
+def _alpha_top_scores(scores: PatchTSTBatchScores, top_k: int = 30) -> list[dict]:
     """Return the top ``top_k`` PatchTST scores as ``[{symbol, score, rank}]``.
 
     Sorted by score descending with symbol-asc tie-break -- the same
@@ -471,7 +471,7 @@ def _build_alpha_hrp_report_payload(
 ) -> dict:
     """Common JSON shape for Alpha-HRP LLM-summary and email payloads.
 
-    The same Stage 1 (top-25 alpha scores) + rank-band sticky + Stage 2
+    The same Stage 1 (top-30 alpha scores) + rank-band sticky + Stage 2
     (HRP) bundle ships to both ``/llm/{us,india}-alpha-hrp-summary`` and
     ``/email/{us,india}-alpha-hrp-report``. Centralising the shape here
     keeps the four activities from drifting (e.g. one starts using
@@ -511,7 +511,7 @@ def generate_us_alpha_hrp_summary(
 
     Stage 1 is PatchTST predicted weekly returns over halal_new (alpha
     screen); Stage 2 is HRP risk-parity sizing on the chosen ``top_n``.
-    The LLM gets the top-25 alpha scores (for market-outlook narrative)
+    The LLM gets the top-30 alpha scores (for market-outlook narrative)
     and the rank-band sticky stats (kept/fillers/evicted) along with
     the final HRP weights.
     """

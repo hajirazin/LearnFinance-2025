@@ -193,7 +193,7 @@ def rank_by_score(scores: dict[str, float]) -> list[tuple[str, int, float]]:
       ``brain_api/routes/allocation.py`` (writes ``stage1_rank`` to
       ``sticky_history.db``)
     - Reporting code that wants to show the ranks the selector actually
-      saw (e.g. the alpha-HRP email's top-25 table).
+      saw (e.g. the alpha-HRP email's top-30 table).
 
     Keeping a single helper means the persisted ``stage1_rank`` cannot
     drift from the rank used inside the selector, even if either layer

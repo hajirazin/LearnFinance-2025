@@ -66,7 +66,7 @@ def mock_india_filtered():
         "fillers_count": 15,
         "evicted_from_previous": {},
         "k_in": 15,
-        "k_hold": 30,
+        "k_hold": 20,
     }
 
 

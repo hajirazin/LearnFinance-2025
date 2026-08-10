@@ -277,7 +277,7 @@ def send_india_alpha_hrp_report_email(
 
     India weekly allocation is structurally "PatchTST alpha screen on
     Nifty Shariah 500 -> rank-band sticky -> HRP". The email mirrors the
-    US Alpha-HRP report (Stage 1 top-25, sticky kept/fillers/evicted,
+    US Alpha-HRP report (Stage 1 top-30, sticky kept/fillers/evicted,
     Stage 2 weights) minus the Alpaca order-execution / skipped blocks,
     since India does not trade through a paper account.
     """
@@ -352,7 +352,7 @@ def send_us_alpha_hrp_report_email(
     """Send a US Alpha-HRP portfolio analysis email.
 
     Stage 1 = PatchTST alpha screen on halal_new (~410 stocks);
-    rank-band sticky selection picks 15 (K_in=15, K_hold=30); Stage 2 =
+    rank-band sticky selection picks 15 (K_in=15, K_hold=20); Stage 2 =
     HRP on the chosen 15. Trades through the ``hrp`` Alpaca paper
     account (algorithm tag ``alpha_hrp`` for forward-going audit).
 

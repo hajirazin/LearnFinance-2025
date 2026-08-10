@@ -7,7 +7,7 @@ Pipeline (Monday weekly, ``hrp`` Alpaca paper account):
 1. Phase 1: PatchTST batch inference across the full halal_new universe
    (~410 symbols) -> {symbol -> predicted_weekly_return_pct}.
 1.5. Phase 1.5: Rank-band sticky selection
-   (``universe='halal_new_alpha'``, K_in=15, K_hold=30) -> 15 chosen
+   (``universe='halal_new_alpha'``, K_in=15, K_hold=20) -> 15 chosen
    symbols. Persists score rows in sticky_history.db so next week's
    selection has a basis for stickiness.
 2. Phase 2: HRP allocation (``lookback_days=252``) on the 15 selected
@@ -97,7 +97,7 @@ class UsAlphaHrpStrategyParams:
     sticky_partition: str = "halal_new_alpha"
     stage2_lookback_days: int = 252
     top_n: int = 15  # K_in (entry threshold)
-    hold_threshold: int = 30  # K_hold (sticky retention threshold)
+    hold_threshold: int = 20  # K_hold (sticky retention threshold)
 
 
 # Default parameters for the production schedule. Tests / experiments

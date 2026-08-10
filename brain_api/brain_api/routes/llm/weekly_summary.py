@@ -117,7 +117,7 @@ def _render_alpha_hrp_summary(
     Both the US and India Alpha-HRP summary endpoints share an identical
     pipeline:
 
-    1. Load market-specific Jinja prompt (Stage 1 top-25 + sticky outcome
+    1. Load market-specific Jinja prompt (Stage 1 top-30 + sticky outcome
        sections come from a shared base template; only the JSON schema
        paragraphs differ per market).
     2. Render with the same ``AlphaHRPSummaryRequest`` payload shape.
@@ -219,7 +219,7 @@ def _render_double_hrp_summary(
     identical pipeline:
 
     1. Load market-specific Jinja prompt (Strategy Overview + Stage 1
-       top-25 + sticky outcome + Stage 2 sections come from a shared
+       top-30 + sticky outcome + Stage 2 sections come from a shared
        base template; only the analyst intro and JSON schema paragraphs
        differ per market).
     2. Render with the same ``DoubleHRPSummaryRequest`` payload shape.
@@ -311,7 +311,7 @@ def generate_us_alpha_hrp_summary(
     """Generate an LLM summary of US Alpha-HRP weekly results.
 
     Stage 1 is PatchTST predicted weekly returns over halal_new (alpha
-    screen); rank-band sticky selection picks 15 with K_hold=30; Stage 2
+    screen); rank-band sticky selection picks 15 with K_hold=20; Stage 2
     HRP risk-parity sizes the chosen names. The summary frames the
     alpha-then-risk pipeline for the human reviewer of the ``hrp``
     Alpaca paper account.

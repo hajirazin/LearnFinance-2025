@@ -60,17 +60,17 @@ def alpha_request_body():
         },
         "universe": "halal_new",
         "top_n": 15,
-        "hold_threshold": 30,
+        "hold_threshold": 20,
     }
 
 
 @pytest.fixture
 def llm_summary_payload():
     return {
-        "para_1_market_outlook": "Top 25 PatchTST forecasts cluster around tech.",
+        "para_1_market_outlook": "Top 30 PatchTST forecasts cluster around tech.",
         "para_2_selection_rationale": "Sticky kept 12, three new high-rank entrants.",
         "para_3_final_allocation": "HRP weights AAA=8.5%, BBB=8.2%.",
-        "para_4_risk_observations": "Watch K_hold=30 across regime shifts.",
+        "para_4_risk_observations": "Watch K_hold=20 across regime shifts.",
         "para_5_stage_transition_insight": "AAA jumped from alpha rank 12 to HRP weight rank 1 due to low correlation with basket peers.",
     }
 
@@ -118,7 +118,7 @@ class TestUSAlphaHRPSummaryEndpoint:
                     "selected_symbols": [],
                     "universe": "halal_new",
                     "top_n": 15,
-                    "hold_threshold": 30,
+                    "hold_threshold": 20,
                 },
             )
             assert response.status_code == 422
@@ -200,7 +200,7 @@ class TestUSAlphaHRPSummaryEndpoint:
                     },
                     "universe": "halal_new",
                     "top_n": 15,
-                    "hold_threshold": 30,
+                    "hold_threshold": 20,
                 },
             )
             assert response.status_code == 200, response.text

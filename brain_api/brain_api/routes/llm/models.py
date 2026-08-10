@@ -207,7 +207,7 @@ class AlphaHRPSummaryRequest(BaseModel):
     :mod:`brain_api.core.strategy_partitions`.
     """
 
-    stage1_top_scores: list[AlphaScoreItem]  # top 25 by PatchTST score
+    stage1_top_scores: list[AlphaScoreItem]  # top 30 by PatchTST score
     model_version: str  # PatchTST model version used for stage 1
     predicted_count: int  # how many of requested_count produced valid scores
     requested_count: int  # universe size sent into PatchTST

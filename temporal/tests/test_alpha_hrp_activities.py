@@ -312,7 +312,7 @@ def _alpha_payload_fixtures():
         universe="halal_new_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
     stage2 = HRPAllocationResponse(
         percentage_weights={f"SYM{i}": round(100.0 / 15, 2) for i in range(15)},
@@ -325,7 +325,7 @@ def _alpha_payload_fixtures():
 
 
 class TestGenerateUSAlphaHrpSummary:
-    def test_posts_to_alpha_hrp_summary_endpoint_with_top_25_scores(self):
+    def test_posts_to_alpha_hrp_summary_endpoint_with_top_30_scores(self):
         scores, sticky, stage2 = _alpha_payload_fixtures()
         fake = FakeClient(
             {
@@ -344,17 +344,17 @@ class TestGenerateUSAlphaHrpSummary:
                 stage2=stage2,
                 universe="halal_new",
                 top_n=15,
-                hold_threshold=30,
+                hold_threshold=20,
             )
 
         assert isinstance(result, WeeklySummaryResponse)
         body = fake.calls[0]["json"]
         assert fake.calls[0]["path"] == "/llm/us-alpha-hrp-summary"
         assert body["top_n"] == 15
-        assert body["hold_threshold"] == 30
+        assert body["hold_threshold"] == 20
         assert body["universe"] == "halal_new"
         assert body["selected_symbols"] == sticky.selected
-        # Top 20 valid scores -> top_25 returns all 20, ordered by score desc.
+        # Top 20 valid scores -> top_30 returns all 20, ordered by score desc.
         assert len(body["stage1_top_scores"]) == 20
         assert body["stage1_top_scores"][0]["symbol"] == "SYM0"
         assert body["stage1_top_scores"][0]["rank"] == 1
@@ -395,7 +395,7 @@ class TestSendUSAlphaHrpEmail:
                 stage2=stage2,
                 universe="halal_new",
                 top_n=15,
-                hold_threshold=30,
+                hold_threshold=20,
                 target_week_start="2026-04-27",
                 target_week_end="2026-05-01",
                 as_of_date="2026-04-28",
@@ -438,7 +438,7 @@ class TestSendUSAlphaHrpEmail:
                 stage2=stage2,
                 universe="halal_new",
                 top_n=15,
-                hold_threshold=30,
+                hold_threshold=20,
                 target_week_start="2026-04-27",
                 target_week_end="2026-05-01",
                 as_of_date="2026-04-28",
@@ -508,7 +508,7 @@ class TestSendUSAlphaHrpEmail:
                 stage2=stage2,
                 universe="halal_new",
                 top_n=15,
-                hold_threshold=30,
+                hold_threshold=20,
                 target_week_start="2026-04-27",
                 target_week_end="2026-05-01",
                 as_of_date="2026-04-28",

@@ -681,7 +681,7 @@ def test_get_halal_filtered_returns_expected_structure():
     assert data["partition"] == "halal_filtered_alpha"
     assert "period_key" in data
     assert data["k_in"] == 15
-    assert data["k_hold"] == 30
+    assert data["k_hold"] == 20
     assert data["previous_period_key_used"] is None
     assert data["kept_count"] == 0
     assert data["fillers_count"] == len(data["stocks"])
@@ -1054,7 +1054,7 @@ def test_get_halal_filtered_warm_start_keeps_held_stock_in_hold_band():
 
     Seeds the screening repository with a previous month's selected set
     that includes a symbol the next month ranks below K_in (=15) but
-    within K_hold (=30). The second build must keep that symbol with
+    within K_hold (=20). The second build must keep that symbol with
     ``selection_reason='sticky'`` and add fillers from this month's top
     of the rank.
     """
@@ -1078,7 +1078,7 @@ def test_get_halal_filtered_warm_start_keeps_held_stock_in_hold_band():
     ):
         repo = ScreeningHistoryRepository()
         previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
-        prev_selected = {symbols[20]}
+        prev_selected = {symbols[19]}
         prev_scores = scores_by_symbol
         persist_screening_rows(
             repo=repo,
@@ -1088,7 +1088,7 @@ def test_get_halal_filtered_warm_start_keeps_held_stock_in_hold_band():
             run_id="seed",
             scores=prev_scores,
             selected_set=prev_selected,
-            selection_reasons={symbols[20]: "sticky"},
+            selection_reasons={symbols[19]: "sticky"},
         )
 
         with (
@@ -1112,8 +1112,8 @@ def test_get_halal_filtered_warm_start_keeps_held_stock_in_hold_band():
     data = response.json()
 
     selected = [s["symbol"] for s in data["stocks"]]
-    assert symbols[20] in selected
-    sticky_entry = next(s for s in data["stocks"] if s["symbol"] == symbols[20])
+    assert symbols[19] in selected
+    sticky_entry = next(s for s in data["stocks"] if s["symbol"] == symbols[19])
     assert sticky_entry["selection_reason"] == "sticky"
     assert data["kept_count"] == 1
     assert data["fillers_count"] == 14
@@ -1308,7 +1308,7 @@ def test_get_halal_india_returns_expected_structure():
     assert "evicted_from_previous" in data
     assert isinstance(data["evicted_from_previous"], dict)
     assert data["k_in"] == 15
-    assert data["k_hold"] == 30
+    assert data["k_hold"] == 20
 
 
 def test_get_halal_india_returns_max_15_stocks():
@@ -1545,9 +1545,9 @@ def test_get_halal_india_warm_start_keeps_sticky_within_k_hold():
     ):
         repo = ScreeningHistoryRepository()
         previous_period_key = iso_year_week_of_month_anchor(date(2026, 3, 15))
-        # Seed previous round with a .NS symbol that ranks 21 this period
-        # (within K_hold=30 but beyond K_in=15).
-        sticky_symbol = sorted_symbols[20]
+        # Seed previous round with a .NS symbol that ranks 20 this period
+        # (within K_hold=20 but beyond K_in=15).
+        sticky_symbol = sorted_symbols[19]
         persist_screening_rows(
             repo=repo,
             partition=HALAL_INDIA_FILTERED_ALPHA_PARTITION,
@@ -1689,7 +1689,7 @@ def test_get_halal_india_fewer_than_khold_valid_scores_still_works():
     """Rank-band tolerates fewer-than-K_hold valid scores (only top-15 is required)."""
     from datetime import date
 
-    # 20 valid scores -- enough for K_in=15 but fewer than K_hold=30.
+    # 20 valid scores -- enough for K_in=15 but fewer than K_hold=20.
     mock_universe = _make_mock_nifty_shariah_500_universe_n(20)
     ns_symbols = [s["symbol"] for s in mock_universe["stocks"]]
     mock_result = _make_mock_india_batch_inference(ns_symbols)

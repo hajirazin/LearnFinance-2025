@@ -95,7 +95,7 @@ def test_save_and_load_new_halal_filtered_shape_roundtrips():
         "fillers_count": 1,
         "evicted_from_previous": {"NVDA": "rank_out_of_hold"},
         "k_in": 15,
-        "k_hold": 30,
+        "k_hold": 20,
     }
     save_universe_cache("halal_filtered", new_shape, date(2026, 4, 5))
 

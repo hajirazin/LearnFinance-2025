@@ -6,7 +6,7 @@ Pipeline:
        walk-forward training (threshold derived from training window config)
     3. Run PatchTST batch inference on qualifying symbols (OHLCV only)
     4. Drop predictions with no valid return
-    5. Apply rank-band sticky selection (K_in=15, K_hold=30) against the
+    5. Apply rank-band sticky selection (K_in=15, K_hold=20) against the
        previous monthly round (partition ``halal_filtered_alpha`` in the
        sibling ``screening_history`` table)
     6. Return the resulting 15-name slate, persisting the full candidate
@@ -99,7 +99,7 @@ from brain_api.universe.halal_new import get_halal_new_universe
 logger = logging.getLogger(__name__)
 
 HALAL_FILTERED_TOP_N = 15
-HALAL_FILTERED_HOLD_THRESHOLD = 30
+HALAL_FILTERED_HOLD_THRESHOLD = 20
 
 
 def get_halal_filtered_universe(
@@ -133,7 +133,7 @@ def get_halal_filtered_universe(
         - ``previous_period_key_used``: prior period_key if warm-start, else None.
         - ``kept_count`` / ``fillers_count``: from rank-band selection.
         - ``evicted_from_previous``: list of ``[symbol, reason]`` pairs.
-        - ``k_in`` / ``k_hold``: 15 / 30.
+        - ``k_in`` / ``k_hold``: 15 / 20.
 
     Raises:
         ValueError: If PatchTST inference produced no valid predictions

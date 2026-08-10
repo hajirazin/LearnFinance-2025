@@ -2,11 +2,11 @@
 
 Owns the math-aware sections that must be identical across markets:
 
-* Stage 1 top-25 PatchTST forecast table -- including the greying logic
-  that visually separates the K_in entry zone (rank <= top_n) from the
-  K_hold extension zone (rank > top_n). This is a math-aware visual
-  invariant; if US and India disagreed on what "grey" means, readers
-  could not compare them.
+* Stage 1 top-30 PatchTST forecast table -- including the greying logic
+  that visually separates the K_in entry zone (rank <= top_n), the
+  K_hold sticky zone (top_n < rank <= hold_threshold), and context-only
+  ranks beyond K_hold. This is a math-aware visual invariant; if US and
+  India disagreed on what each band means, readers could not compare them.
 * Sticky selection block -- kept_count, fillers_count, evicted prior
   holdings, prior week comparison.
 * Stage 2 HRP allocation table with running total -- one
@@ -130,16 +130,18 @@ universe-agnostic. #}
   </div>
 {% endblock %}
 
-{# ---- Stage 1 alpha screen top-25 table.
+{# ---- Stage 1 alpha screen top-30 table.
 
-       Greying past top_n is a math-aware visualisation: rows with
-       rank <= top_n are in the K_in entry zone (this week's actual
-       picks); rows with rank > top_n are shown for context only and
-       are visually demoted. Both markets MUST agree on this rule or
-       comparison reports become misleading. #}
+       Three-band greying is a math-aware visualisation:
+       * rank <= top_n -- K_in entry zone (this week's new-entry picks)
+       * top_n < rank <= hold_threshold -- K_hold sticky zone (can be
+         retained if previously held; not pure context)
+       * rank > hold_threshold -- context only, visually demoted
+       Both markets MUST agree on this rule or comparison reports
+       become misleading. #}
 {% block stage1 %}
   <div style="margin-bottom: 24px;">
-    <h3 style="color: #374151; border-bottom: 2px solid {{ self.strategy_primary() }}; padding-bottom: 8px;">Stage 1: Alpha Screen (Top 25 of {{ predicted_count }} valid PatchTST forecasts)</h3>
+    <h3 style="color: #374151; border-bottom: 2px solid {{ self.strategy_primary() }}; padding-bottom: 8px;">Stage 1: Alpha Screen (Top 30 of {{ predicted_count }} valid PatchTST forecasts)</h3>
     <p style="color: #6b7280; font-size: 14px;">PatchTST model: <code>{{ model_version }}</code> | Universe size: {{ requested_count }} | Forecasts produced: {{ predicted_count }} | New names enter only at rank &le; K_in={{ top_n }}; previously-held names are retained while their rank stays &le; K_hold={{ hold_threshold }}</p>
     <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px;">
       <thead>
@@ -151,10 +153,10 @@ universe-agnostic. #}
       </thead>
       <tbody>
         {% for item in stage1_top_scores %}
-        <tr style="background-color: {% if item.rank <= 3 %}{{ self.strategy_primary_bg() }}{% elif item.rank <= top_n %}white{% else %}#f9fafb{% endif %};">
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ item.rank }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ item.symbol }}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% else %}#9ca3af{% endif %};">{{ "%+.2f" | format(item.score) }}%</td>
+        <tr style="background-color: {% if item.rank <= 3 %}{{ self.strategy_primary_bg() }}{% elif item.rank <= top_n %}white{% elif item.rank <= hold_threshold %}#f3f4f6{% else %}#f9fafb{% endif %};">
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% elif item.rank <= hold_threshold %}#4b5563{% else %}#9ca3af{% endif %};">{{ item.rank }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {% if item.rank <= top_n %}#111827{% elif item.rank <= hold_threshold %}#4b5563{% else %}#9ca3af{% endif %};">{{ item.symbol }}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: {% if item.rank <= top_n %}#111827{% elif item.rank <= hold_threshold %}#4b5563{% else %}#9ca3af{% endif %};">{{ "%+.2f" | format(item.score) }}%</td>
         </tr>
         {% endfor %}
       </tbody>

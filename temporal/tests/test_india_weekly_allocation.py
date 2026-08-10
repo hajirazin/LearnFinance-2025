@@ -77,7 +77,7 @@ def india_sticky_cold_start():
         universe="halal_india_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
 
 
@@ -94,7 +94,7 @@ def india_sticky_stable():
         universe="halal_india_alpha",
         year_week="202618",
         top_n=15,
-        hold_threshold=30,
+        hold_threshold=20,
     )
 
 
@@ -169,7 +169,7 @@ class TestIndiaAlphaHRPHappyPath:
         assert result["stage1_predicted_count"] == 20
         assert result["model_version"] == "v2026-04-26-india"
         assert result["top_n"] == 15
-        assert result["hold_threshold"] == 30
+        assert result["hold_threshold"] == 20
         assert result["kept_count"] == 0
         assert result["fillers_count"] == 15
         assert result["previous_year_week_used"] is None
@@ -190,7 +190,7 @@ class TestIndiaAlphaHRPHappyPath:
         assert len(select_calls) == 1
         assert select_calls[0]["universe"] == "halal_india_alpha"
         assert select_calls[0]["top_n"] == 15
-        assert select_calls[0]["hold_threshold"] == 30
+        assert select_calls[0]["hold_threshold"] == 20
         assert select_calls[0]["scores_count"] == 20
 
         # Phase 2: HRP runs ONLY on the selected set with 252d lookback.

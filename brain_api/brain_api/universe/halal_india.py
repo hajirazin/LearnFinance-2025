@@ -7,7 +7,7 @@ Pipeline:
     3. Run India PatchTST batch inference on qualifying symbols (OHLCV
        only; ``PatchTSTIndiaModelStorage``)
     4. Drop predictions with no valid return
-    5. Apply rank-band sticky selection (K_in=15, K_hold=30) against the
+    5. Apply rank-band sticky selection (K_in=15, K_hold=20) against the
        previous monthly round (partition ``halal_india_filtered_alpha``
        in the sibling ``screening_history`` table)
     6. Return the resulting 15-name slate, persisting the full candidate
@@ -126,7 +126,7 @@ from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_universe
 logger = logging.getLogger(__name__)
 
 HALAL_INDIA_TOP_N = 15
-HALAL_INDIA_HOLD_THRESHOLD = 30
+HALAL_INDIA_HOLD_THRESHOLD = 20
 NS_SUFFIX = ".NS"
 
 
@@ -163,7 +163,7 @@ def get_halal_india_universe(
         - ``kept_count`` / ``fillers_count``: from rank-band selection.
         - ``evicted_from_previous``: ``dict[str, str]`` mapping evicted
           symbol (.NS-suffixed) -> reason.
-        - ``k_in`` / ``k_hold``: 15 / 30.
+        - ``k_in`` / ``k_hold``: 15 / 20.
 
     Raises:
         ValueError: If no promoted India PatchTST model is available, if

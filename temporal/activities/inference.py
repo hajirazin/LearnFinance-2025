@@ -464,7 +464,7 @@ def select_rank_band_top_n(
     as_of_date: str,
     run_id: str,
     top_n: int = 15,
-    hold_threshold: int = 30,
+    hold_threshold: int = 20,
 ) -> RankBandTopNResponse:
     """Apply rank-band sticky selection to a PatchTST batch result.
 

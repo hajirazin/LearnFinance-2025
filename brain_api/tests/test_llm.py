@@ -871,7 +871,7 @@ def mock_india_weekly_summary_request():
         },
         "universe": "halal_india_alpha",
         "top_n": 15,
-        "hold_threshold": 30,
+        "hold_threshold": 20,
     }
 
 
@@ -879,7 +879,7 @@ def mock_india_weekly_summary_request():
 def mock_india_llm_json_response():
     """Mock JSON response from LLM for India summary (4-paragraph schema)."""
     return {
-        "para_1_market_outlook": "Top 25 PatchTST forecasts cluster around IT services and pharma.",
+        "para_1_market_outlook": "Top 30 PatchTST forecasts cluster around IT services and pharma.",
         "para_2_selection_rationale": "Sticky kept 12 NSE names; three new high-rank entrants.",
         "para_3_final_allocation": "HRP weights RELIANCE.NS=7.0%, TCS.NS=6.8%.",
         "para_4_risk_observations": "Watch INR/USD risk and small-cap NSE liquidity.",
@@ -1023,7 +1023,7 @@ class TestIndiaAlphaHRPSummaryEndpoint:
                     "stage2": "not-an-hrp-allocation",
                     "universe": "halal_india_alpha",
                     "top_n": 15,
-                    "hold_threshold": 30,
+                    "hold_threshold": 20,
                 },
             )
             assert response.status_code == 422
