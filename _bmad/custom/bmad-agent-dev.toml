@@ -10,5 +10,5 @@ persistent_facts = [
   "India symbols carry .NS suffix end-to-end; never strip it.",
   "No training schedules on Monday (inference-only day).",
   "paper: in run_id/client_order_id is cosmetic — live vs paper = ALPACA_{ACCOUNT}_URL.",
-  "Research-glob changes require QuantBMAD qb-plan / qb-implement artifacts; do not bypass.",
+  "Research-glob changes: prefer QuantBMAD qb-agent-* peers and optional party quantbmad when the user asks; do not invent a qb-plan/qb-implement workflow.",
 ]

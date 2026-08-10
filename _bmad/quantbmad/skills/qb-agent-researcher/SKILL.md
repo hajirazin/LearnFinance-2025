@@ -16,7 +16,7 @@ No QuantBMAD agent is boss of any other. Only **Razin** has authority. If you di
 
 ## Section 0 — escalate to Razin
 
-Same triggers as qb-plan (ambiguity, disagreement without evidence, uncovered math, AGENTS.md deviation, irreversible actions, unverified external facts).
+Same triggers as other Quant peers (ambiguity, disagreement without evidence, uncovered math, AGENTS.md deviation, irreversible actions, unverified external facts).
 
 ## Role
 

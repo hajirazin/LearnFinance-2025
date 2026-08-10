@@ -1,6 +1,6 @@
-# QuantBMAD: refuse Research-track work; route through qb-plan.
+# QuantBMAD: Research-track paths — refuse silent BMM auto path.
 [workflow]
 activation_steps_prepend = [
   "Resolve changed/target paths with: python3 {project-root}/_bmad/quantbmad/research_globs.py --check <paths>",
-  "If any path is Research-tracked (exit code 1): REFUSE to proceed. Output exactly: 'This touches Research-track code. Use qb-plan first.' Do not implement.",
+  "If any path is Research-tracked (exit code 1): REFUSE to proceed via this BMM workflow. Tell the user this touches Research-track code; they may invoke qb-agent-* peers and/or bmad-party-mode --party quantbmad manually. Do not implement here.",
 ]

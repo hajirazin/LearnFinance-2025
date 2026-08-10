@@ -1,5 +1,5 @@
 # QuantBMAD standing party — peers only; Razin is sole authority.
-# Invoked by qb-plan / qb-implement via: bmad-party-mode --party quantbmad --mode subagent
+# Opt-in: bmad-party-mode --party quantbmad --mode subagent (no default plan/implement skill).
 # Do NOT set default_party here — keep global BMM party intact.
 
 [workflow]
@@ -8,11 +8,9 @@ persistent_facts = [
   "QuantBMAD party quantbmad: all members are equal peers. No chair, no boss, no majority whip.",
   "Only Razin can break ties or override. After 3 failed unanimous-consensus loops, stop and ask Razin.",
   "Math correctness > DRY. No silent fallbacks. Paper default; live is per-account opt-in.",
-  "Skeptic (q-skeptic) falsifies only. Plan-time skeptic-plan-review after plan-party Agree / Razin override. Implement-time evidence-cert after independent experiment re-run (early gate); ship-party Agree comes AFTER code + git diff + post repo-green.",
-  "qb-implement order: pre-green → evidence → Skeptic cert → implement → post-green → full party ship consensus on git diff. Architect cannot approve unwritten code.",
-  "qb-implement requires check_repo_green.py pre and post (ruff + brain_api pytest + temporal pytest). No unrelated-skip — fix all failures or ask Razin.",
+  "Skeptic (q-skeptic) falsifies only. evidence-cert after independent experiment re-run when asked; ship review needs a real git diff.",
+  "Optional helper: check_repo_green.py (ruff + brain_api pytest + temporal pytest). No unrelated-skip when used.",
   "file:{project-root}/AGENTS.md",
-  "file:{project-root}/docs/quantbmad-spec-v3.md",
 ]
 
 [[workflow.party_members]]

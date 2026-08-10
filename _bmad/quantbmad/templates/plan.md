@@ -37,4 +37,4 @@ Skeptic probe adequacy: PASS | REJECT (see skeptic-plan-review.md)
 <question → answer; unanswered = do not proceed>
 
 ## Next Step
-Proceed to qb-implement only after Status: Approved (human edit only).
+Proceed only after Status: Approved (human edit only), if you are using a plan.md gate.

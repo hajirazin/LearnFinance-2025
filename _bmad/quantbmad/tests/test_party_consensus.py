@@ -21,11 +21,13 @@ def _votes_block(agree: bool = True) -> str:
     return "\n".join(lines)
 
 
-def test_skill_names_include_agents_not_qb_skeptic() -> None:
+def test_skill_names_are_agents_only() -> None:
     assert "qb-skeptic" not in SKILL_NAMES
+    assert "qb-plan" not in SKILL_NAMES
+    assert "qb-implement" not in SKILL_NAMES
     assert "qb-agent-skeptic" in SKILL_NAMES
-    assert "qb-plan" in SKILL_NAMES
-    assert "qb-implement" in SKILL_NAMES
+    assert "qb-agent-researcher" in SKILL_NAMES
+    assert all(name.startswith("qb-agent-") for name in SKILL_NAMES)
 
 
 def test_unanimous_approve_ok(tmp_path: Path) -> None:
@@ -93,19 +95,6 @@ razin_decision:
     )
     errs = validate_party_consensus(path)
     assert any("unanimous agree" in e for e in errs)
-
-
-def test_qb_implement_ship_consensus_after_implementation() -> None:
-    """Ship party must be after Implementation + post-green, not before coding."""
-    skill = Path(__file__).resolve().parents[1] / "skills" / "qb-implement" / "SKILL.md"
-    text = skill.read_text(encoding="utf-8")
-    impl_idx = text.index("### 3. Implementation")
-    post_green_idx = text.index("### 4. Post-implement repo-green")
-    ship_idx = text.index("### 5. Mandatory ship party consensus")
-    early_idx = text.index("### 2. Early evidence gate")
-    assert early_idx < impl_idx < post_green_idx < ship_idx
-    assert "git_diff" in text or "git diff" in text
-    assert "Architect cannot approve unwritten code" in text
 
 
 def test_escalate_requires_round_3_and_razin(tmp_path: Path) -> None:

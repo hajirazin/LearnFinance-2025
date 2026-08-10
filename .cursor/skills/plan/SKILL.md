@@ -1,20 +1,13 @@
 ---
 name: plan
-description: Create structured implementation plans for features, fixes, and refactors. Use when the user asks to plan, design an approach, break down a task, or is in plan mode. Enforces reuse-first, math correctness, file size limits, DDD naming, and test planning. Research-glob math/model work must use qb-plan instead.
+description: Create structured implementation plans for features, fixes, and refactors. Use when the user asks to plan, design an approach, break down a task, or is in plan mode. Enforces reuse-first, math correctness, file size limits, DDD naming, and test planning.
 ---
 
 # Implementation Planning
 
-## QuantBMAD Research gate (run first)
+## QuantBMAD note (optional)
 
-Before planning any work that would touch paths matched by QuantBMAD Research globs:
-
-1. Identify target/changed paths.
-2. Run: `python3 {project-root}/_bmad/quantbmad/research_globs.py --check <paths>`
-3. If exit code 1 (any Research-tracked path): **REFUSE**. Output exactly: `This touches Research-track code. Use qb-plan first.` Do **not** produce an implementation plan via this skill or CreatePlan for that work. Redirect the user to the `qb-plan` skill.
-4. Editing `_bmad/quantbmad/research_globs.py` itself is Go-live/Compliance — still refuse here; use `qb-plan`.
-
-Non-Research planning continues below.
+If the plan touches Research-glob paths (`python3 {project-root}/_bmad/quantbmad/research_globs.py --check <paths>` exit 1), mention that in the plan. The user may optionally invoke Quant agents (`qb-agent-*`) or party `quantbmad` manually — do **not** auto-switch into a QuantBMAD workflow skill or refuse ordinary planning.
 
 Produce structured, actionable implementation plans that enforce engineering discipline before any code is written.
 

@@ -1,14 +1,12 @@
 ---
-description: QuantBMAD gates for LearnFinance-2025 — Research-track work must use qb-plan/qb-implement with party quantbmad consensus
+description: QuantBMAD peers and optional party for LearnFinance-2025 research/math work
 alwaysApply: true
 ---
 
 # QuantBMAD
 
-- Research-glob paths (`_bmad/quantbmad/research_globs.py`) → only `qb-plan` / `qb-implement`. Do not use Plan-mode-only, quick-dev, or loop to ship those diffs.
-- **Party `quantbmad`:** all Quant agents are equal peers. No boss except Razin. `qb-plan` and `qb-implement` require unanimous party Agree or 3 disagreement loops then ask Razin. Invoke `bmad-party-mode --party quantbmad --mode subagent`.
-- Never write `Status: Approved` into `docs/plans/**/plan.md` (human only). Never forge `evidence-cert.md` PASS — only `qb-agent-skeptic` after independent experiment re-run (early implement gate).
-- Require `party-consensus-plan.md` / `party-consensus-implement.md` (implement consensus **after** code + post-green, with `git_diff`). Spec: `docs/quantbmad-spec-v3.md`.
-- **`qb-implement` order:** pre-green → evidence → Skeptic cert → implement → post-green → full party on git diff. Architect does not approve unwritten code.
-- **`qb-implement` repo-green:** Must run `python3 _bmad/quantbmad/scripts/check_repo_green.py --phase pre` before starting and `--phase post` before ship consensus. Covers ruff + brain_api pytest + temporal pytest. Never skip failures as unrelated — fix them.
-- Do not use `git commit --no-verify` for Research-glob work.
+- Quant peers live as skills `qb-agent-*` (researcher, pm, ml, risk, skeptic, validation, dev, architect). Invoke them **only when the user asks** — do not auto-select a plan/implement workflow.
+- **Party `quantbmad`:** equal peers; no boss except Razin. Invoke only when the user asks: `bmad-party-mode --party quantbmad --mode subagent` (unanimous Agree or 3 loops → ask Razin).
+- Research-glob paths are listed in `_bmad/quantbmad/research_globs.py`. Prefer evidence + Skeptic cert for math/model ships when the user wants that rigor; never forge `evidence-cert.md` PASS (`qb-agent-skeptic` only).
+- Never write `Status: Approved` into `docs/plans/**/plan.md` (human only).
+- Optional helpers: `check_repo_green.py`, `validate_party_consensus.py`, `search_ledger.py`. Do not use `git commit --no-verify` for Research-glob work when the research gate is enabled.

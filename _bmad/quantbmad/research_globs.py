@@ -33,8 +33,6 @@ QUANTBMAD_RESEARCH_GLOBS: list[str] = [
 ]
 
 SKILL_NAMES: tuple[str, ...] = (
-    "qb-plan",
-    "qb-implement",
     "qb-agent-researcher",
     "qb-agent-pm",
     "qb-agent-ml",

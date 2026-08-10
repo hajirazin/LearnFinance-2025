@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""QuantBMAD repo-green gate for qb-implement.
+"""QuantBMAD repo-green helper (ruff + brain_api + temporal tests).
+
+Optional gate when shipping Research-track changes. Exit 0 only when all checks pass.
 
 Runs (in order) and fails fast on first non-zero exit:
   1. ruff check + ruff format --check on brain_api, temporal, _bmad/quantbmad
@@ -8,12 +10,12 @@ Runs (in order) and fails fast on first non-zero exit:
 
 Usage:
   python3 _bmad/quantbmad/scripts/check_repo_green.py
-  python3 _bmad/quantbmad/scripts/check_repo_green.py --phase pre   # before implement starts
-  python3 _bmad/quantbmad/scripts/check_repo_green.py --phase post  # before marking implement done
+  python3 _bmad/quantbmad/scripts/check_repo_green.py --phase pre
+  python3 _bmad/quantbmad/scripts/check_repo_green.py --phase post
 
 Exit 0 = all green. Exit 1 = failure. Exit 2 = usage/env error.
 
-Agents MUST NOT skip failures as \"unrelated\". Fix them, then re-run.
+Do not skip failures as \"unrelated\". Fix them, then re-run.
 """
 
 from __future__ import annotations
@@ -110,8 +112,8 @@ def main(argv: list[str] | None = None) -> int:
         if rc != 0:
             print(
                 f"FAILED: {name} (exit {rc}). "
-                f"qb-implement must NOT {'start' if args.phase == 'pre' else 'finish'} "
-                "until this is green. Fix related AND unrelated failures.",
+                f"Repo-green ({args.phase}) is not satisfied until this passes. "
+                "Fix related AND unrelated failures.",
                 file=sys.stderr,
             )
             return 1 if rc != 2 else 2
