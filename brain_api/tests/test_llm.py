@@ -815,6 +815,7 @@ def mock_weekly_summary_request():
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
+            "execution_prices": {"AAPL": 200.0, "MSFT": 400.0},
             "asset_eligibility": {"AAPL": True, "MSFT": True},
             "regime_posterior": [0.7, 0.2, 0.1],
             "sac_schema_version": 3,
@@ -1068,6 +1069,42 @@ class TestSACWeeklySummaryEndpoint:
             assert "para_1_overall_summary" in data["summary"]
         finally:
             app.dependency_overrides.clear()
+
+    def test_skipped_sac_summary_is_accepted(
+        self,
+        mock_weekly_summary_request,
+        mock_weekly_llm_json_response,
+    ):
+        """Open-order skip path remains reportable without fake v3 evidence."""
+        import json
+
+        payload = dict(mock_weekly_summary_request)
+        payload["sac"] = {
+            "skipped": True,
+            "algorithm": "sac",
+            "reason": "Open orders exist",
+            "target_weights": {},
+            "turnover": 0.0,
+            "model_version": "skipped",
+            "target_week_start": "",
+            "target_week_end": "",
+            "weight_changes": [],
+            "decision_state": None,
+        }
+        app.dependency_overrides[get_llm_provider] = lambda: MockLLMProvider(
+            name="openai",
+            response=LLMResponse(
+                content=json.dumps(mock_weekly_llm_json_response),
+                model="gpt-5-mini",
+                tokens_used=100,
+            ),
+        )
+        try:
+            response = client.post("/llm/sac-weekly-summary", json=payload)
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200, response.text
 
     def test_weekly_summary_llm_failure(
         self,

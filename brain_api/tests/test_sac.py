@@ -314,6 +314,7 @@ class TestSACLSTMInference:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 10000.0,
                     "positions": [
@@ -325,7 +326,7 @@ class TestSACLSTMInference:
             },
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
 
         # Check response structure
@@ -363,6 +364,7 @@ class TestSACLSTMInference:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 100.0,  # Small cash
                     "positions": [
@@ -390,6 +392,7 @@ class TestSACLSTMInference:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 0.0,
                     "positions": [
@@ -414,6 +417,8 @@ class TestSACLSTMInference:
                 "reason": "outside_active_sac_symbol_set",
             }
         ]
+        assert data["execution_prices"]["AAPL"] == 125.2
+        assert data["execution_prices"]["NFLX"] == 90.0
         # True portfolio was 50% AAPL / 50% NFLX / 0% cash. Target sets NFLX
         # to 0, so turnover must include that forced sell (folded cash view
         # alone understates churn whenever cash also moves).
@@ -434,6 +439,7 @@ class TestSACLSTMInference:
         response = client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 10000.0,
                     "positions": [],
@@ -474,6 +480,7 @@ class TestSACLSTMInference:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 5000.0,
                     "positions": [{"symbol": "NFLX", "market_value": 5000.0}],
@@ -1212,6 +1219,7 @@ class TestStateDimensionValidation:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 10000.0,
                     "positions": [],  # All cash, no positions
@@ -1235,6 +1243,7 @@ class TestStateDimensionValidation:
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
+                "as_of_date": "2026-08-10",
                 "portfolio": {
                     "cash": 5000.0,
                     "positions": [

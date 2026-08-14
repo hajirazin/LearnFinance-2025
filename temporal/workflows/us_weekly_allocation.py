@@ -86,7 +86,7 @@ class USWeeklyAllocationWorkflow:
 
         attempt = await workflow.execute_activity(
             resolve_next_attempt,
-            args=[run_id, as_of_date],
+            args=[run_id, as_of_date, ["sac"]],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 

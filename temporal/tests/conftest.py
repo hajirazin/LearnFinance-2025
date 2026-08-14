@@ -338,6 +338,11 @@ def sac_alloc():
         target_week_end="2026-02-14",
         decision_state=decision_state,
         state_digest="fixture-state-digest",
+        execution_prices={"AAPL": 175.5},
+        asset_eligibility={"AAPL": True},
+        regime_posterior=[0.8, 0.1, 0.1],
+        sac_schema_version=3,
+        architecture="masked_attention",
     )
 
 

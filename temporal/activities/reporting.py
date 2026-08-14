@@ -34,12 +34,16 @@ def _alloc_to_dict(alloc) -> dict:
     """
     if isinstance(alloc, SkippedAllocation) or getattr(alloc, "skipped", False):
         return {
+            "skipped": True,
+            "algorithm": alloc.algorithm,
+            "reason": alloc.reason,
             "target_weights": {},
             "turnover": 0,
             "model_version": "skipped",
             "target_week_start": "",
             "target_week_end": "",
             "weight_changes": [],
+            "decision_state": None,
         }
     return alloc.model_dump()
 

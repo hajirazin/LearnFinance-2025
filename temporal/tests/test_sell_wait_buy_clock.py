@@ -328,6 +328,51 @@ class TestOneMinuteCadenceBetweenPolls:
                 f"Poll gap {i} out of expected 1-min band: gap={gap}"
             )
 
+    @pytest.mark.asyncio
+    async def test_missing_status_rows_do_not_count_as_terminal(
+        self,
+        active_symbols,
+        sac_portfolio_no_open,
+        patchtst_resp,
+        news_resp,
+        sac_alloc,
+        sell_and_buy_orders,
+        sac_submit_resp,
+        sac_summary_resp,
+        sac_email_resp,
+    ):
+        polls = {"count": 0}
+
+        def check_fn(account, client_order_ids):
+            polls["count"] += 1
+            if polls["count"] == 1:
+                return []
+            return [{"client_order_id": client_order_ids[0], "status": "filled"}]
+
+        activities = make_sac_only_activities(
+            active_symbols=active_symbols,
+            sac_portfolio=sac_portfolio_no_open,
+            news_resp=news_resp,
+            patchtst_resp=patchtst_resp,
+            sac_alloc=sac_alloc,
+            sac_orders=sell_and_buy_orders,
+            sac_submit_resp=sac_submit_resp,
+            summary_resp=sac_summary_resp,
+            email_resp=sac_email_resp,
+            check_order_statuses_fn=check_fn,
+        )
+
+        async with worker_with_activities(
+            [USWeeklyAllocationWorkflow], activities
+        ) as env:
+            await env.client.execute_workflow(
+                USWeeklyAllocationWorkflow.run,
+                id="test-missing-sell-status-is-not-terminal",
+                task_queue="test-queue",
+            )
+
+        assert polls["count"] == 2
+
 
 class TestNoSellsSkipsClockFetch:
     """A buy-only cycle must not invoke ``get_alpaca_clock`` at all."""

@@ -8,6 +8,7 @@ Converts allocation weights into actionable market orders with:
 - Sell qty capped at position quantity
 """
 
+import math
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -31,6 +32,10 @@ ATR_PERIOD: int = 14
 # Daily-bar window pulled from yfinance for ATR computation.
 # 40 days >> ATR_PERIOD so weekend/holiday gaps still leave 14+ usable bars.
 ATR_FETCH_DAYS: int = 40
+
+
+class OrderPriceError(ValueError):
+    """Raised when a material rebalance leg has no safe execution price."""
 
 
 # ============================================================================
@@ -441,16 +446,6 @@ def generate_orders(
     if prices is None:
         prices = fetch_current_prices(symbols_needed)
 
-    # Compute ATR(14) alongside prices so the email layer has a
-    # stop-loss reference per buy without an additional yfinance call.
-    if atr_map is None:
-        try:
-            ohlc = fetch_ohlc_window(symbols_needed)
-            atr_map = compute_atr_map(ohlc)
-        except Exception as e:
-            print(f"[Orders] ATR computation failed: {e}")
-            atr_map = {}
-
     # Build current weights
     current_weights: dict[str, float] = {"CASH": portfolio.cash / total_value}
     for pos in portfolio.positions:
@@ -467,6 +462,46 @@ def generate_orders(
     all_symbols = set(target_weights.keys()) | set(current_weights.keys())
     all_symbols.discard("CASH")
 
+    material_symbols = []
+    for symbol in sorted(all_symbols):
+        current_weight = current_weights.get(symbol, 0.0)
+        target_weight = target_weights.get(symbol, 0.0)
+        weight_diff = target_weight - current_weight
+        is_full_exit = target_weight == 0.0 and current_weight > 0.0
+        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA and not is_full_exit:
+            continue
+        if abs(weight_diff) * total_value < MIN_TRADE_VALUE:
+            continue
+        material_symbols.append(symbol)
+
+    invalid_prices = []
+    for symbol in material_symbols:
+        try:
+            price = float(prices[symbol])
+        except (KeyError, TypeError, ValueError):
+            invalid_prices.append(symbol)
+            continue
+        if not math.isfinite(price) or price <= 0:
+            invalid_prices.append(symbol)
+            continue
+        prices[symbol] = price
+    if invalid_prices:
+        raise OrderPriceError(
+            "finite positive execution prices are required for all material "
+            f"order legs; missing_or_invalid={invalid_prices}"
+        )
+
+    # Compute ATR(14) only after every material leg has a validated price.
+    # ATR remains display-only and best-effort, but an invalid execution-price
+    # snapshot must fail before any secondary provider call is attempted.
+    if atr_map is None:
+        try:
+            ohlc = fetch_ohlc_window(symbols_needed)
+            atr_map = compute_atr_map(ohlc)
+        except Exception as e:
+            print(f"[Orders] ATR computation failed: {e}")
+            atr_map = {}
+
     for symbol in sorted(all_symbols):
         current_weight = current_weights.get(symbol, 0.0)
         target_weight = target_weights.get(symbol, 0.0)
@@ -478,16 +513,6 @@ def generate_orders(
             skipped_below_threshold += 1
             continue
 
-        # Skip if we don't have a price
-        if symbol not in prices:
-            print(f"[Orders] Skipping {symbol}: no price available")
-            continue
-
-        current_price = prices[symbol]
-        if current_price <= 0:
-            print(f"[Orders] Skipping {symbol}: invalid price {current_price}")
-            continue
-
         # Calculate trade value
         trade_value = abs(weight_diff) * total_value
 
@@ -495,6 +520,8 @@ def generate_orders(
         if trade_value < MIN_TRADE_VALUE:
             skipped_small_orders += 1
             continue
+
+        current_price = prices[symbol]
 
         # Determine side
         if weight_diff > 0:

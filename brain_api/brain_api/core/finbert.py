@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -124,6 +125,9 @@ class FinBERTScorer:
     """
 
     _instance: FinBERTScorer | None = None
+    _instance_lock = threading.Lock()
+    _load_lock = threading.Lock()
+    _inference_lock = threading.Lock()
     _pipeline = None
     _device: str = "cpu"
     _cache: SentimentCache | None = None
@@ -141,9 +145,11 @@ class FinBERTScorer:
             use_gpu: Force GPU usage. None = auto-detect.
         """
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._use_gpu = use_gpu
-            cls._instance._cache = cache
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._use_gpu = use_gpu
+                    cls._instance._cache = cache
         elif cache is not None and cls._instance._cache is None:
             # Update cache if provided on subsequent call
             cls._instance._cache = cache
@@ -177,32 +183,36 @@ class FinBERTScorer:
         if self._pipeline is not None:
             return
 
-        self._device = self._detect_device()
+        with self._load_lock:
+            if self._pipeline is not None:
+                return
 
-        tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL)
-        model = AutoModelForSequenceClassification.from_pretrained(FINBERT_MODEL)
+            self._device = self._detect_device()
 
-        # Move model to device
-        if self._device != "cpu":
-            model = model.to(self._device)
+            tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL)
+            model = AutoModelForSequenceClassification.from_pretrained(FINBERT_MODEL)
 
-        # Determine device parameter for pipeline
-        if self._device == "cuda":
-            device_param = 0
-        elif self._device == "cpu":
-            device_param = -1
-        else:
-            device_param = self._device  # "mps"
+            # Move model to device
+            if self._device != "cpu":
+                model = model.to(self._device)
 
-        self._pipeline = pipeline(
-            "sentiment-analysis",
-            model=model,
-            tokenizer=tokenizer,
-            top_k=None,
-            truncation=True,
-            max_length=FINBERT_MAX_LENGTH,
-            device=device_param,
-        )
+            # Determine device parameter for pipeline
+            if self._device == "cuda":
+                device_param = 0
+            elif self._device == "cpu":
+                device_param = -1
+            else:
+                device_param = self._device  # "mps"
+
+            self._pipeline = pipeline(
+                "sentiment-analysis",
+                model=model,
+                tokenizer=tokenizer,
+                top_k=None,
+                truncation=True,
+                max_length=FINBERT_MAX_LENGTH,
+                device=device_param,
+            )
 
     @property
     def device(self) -> str:
@@ -284,11 +294,14 @@ class FinBERTScorer:
 
         # Score remaining texts with FinBERT
         if texts_to_score:
-            self._ensure_loaded()
-
             texts_only = [t[1] for t in texts_to_score]
             try:
-                batch_results = self._pipeline(texts_only)
+                # The singleton is shared by FastAPI worker threads. Loading and
+                # inference are serialized because Transformers/PyTorch MPS
+                # pipelines are not safe to initialize or execute concurrently.
+                with self._inference_lock:
+                    self._ensure_loaded()
+                    batch_results = self._pipeline(texts_only)
             except Exception:
                 # Return neutral on error
                 batch_results = [

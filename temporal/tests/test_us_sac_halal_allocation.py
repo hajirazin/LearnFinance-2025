@@ -85,6 +85,11 @@ def _make_sac_alloc(symbols: list[str]) -> SACInferenceResponse:
         model_version="v2026-05-01-halal",
         target_week_start="2026-05-04",
         target_week_end="2026-05-08",
+        execution_prices={symbol: 125.2 for symbol in symbols},
+        asset_eligibility={symbol: True for symbol in symbols},
+        regime_posterior=[0.8, 0.1, 0.1],
+        sac_schema_version=3,
+        architecture="masked_attention",
     )
 
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from brain_api.core.orders import (
     GenerateOrdersResult,
+    OrderPriceError,
     PortfolioInput,
     PositionInput,
     convert_weights_to_whole_shares,
@@ -73,6 +74,13 @@ class GenerateOrdersRequest(BaseModel):
     algorithm: str = Field(
         ...,
         description="Algorithm name (e.g., 'sac', 'hrp')",
+    )
+    execution_prices: dict[str, float] | None = Field(
+        default=None,
+        description=(
+            "Validated point-in-time prices supplied by the allocator. Required "
+            "for SAC so order generation never performs a second price lookup."
+        ),
     )
 
 
@@ -221,7 +229,8 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
       },
       "run_id": "paper:2026-01-20",
       "attempt": 1,
-      "algorithm": "sac"
+      "algorithm": "sac",
+      "execution_prices": {"AAPL": 170.00, "MSFT": 415.00}
     }
     ```
 
@@ -294,6 +303,12 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         f"portfolio_value=${portfolio.total_value:.2f}"
     )
 
+    if request.algorithm.startswith("sac") and request.execution_prices is None:
+        raise HTTPException(
+            status_code=422,
+            detail="execution_prices is required for SAC order generation",
+        )
+
     # Generate orders
     try:
         result: GenerateOrdersResult = generate_orders(
@@ -302,7 +317,10 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             run_id=request.run_id,
             attempt=request.attempt,
             algorithm=request.algorithm,
+            prices=request.execution_prices,
         )
+    except OrderPriceError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
     except Exception as e:
         logger.error(f"[Orders] Order generation failed: {e}")
         raise HTTPException(

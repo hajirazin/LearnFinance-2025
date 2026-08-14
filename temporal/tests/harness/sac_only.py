@@ -68,6 +68,7 @@ def make_sac_only_activities(
     get_alpaca_clock_fn=None,
     get_alpaca_clock_calls: list[None] | None = None,
     price_fetch_calls: list[list[str]] | None = None,
+    resolve_attempt_calls: list[dict] | None = None,
 ):
     """Build mock activities for the SAC-only ``USWeeklyAllocationWorkflow``."""
 
@@ -79,6 +80,10 @@ def make_sac_only_activities(
 
     @activity.defn(name="resolve_next_attempt")
     def mock_resolve_next_attempt(run_id, as_of_date, accounts=None) -> int:
+        if resolve_attempt_calls is not None:
+            resolve_attempt_calls.append(
+                {"run_id": run_id, "as_of_date": as_of_date, "accounts": accounts}
+            )
         return 1
 
     @activity.defn(name="get_active_symbols")

@@ -511,6 +511,7 @@ def mock_weekly_report_email_request():
             "target_week_end": "2026-02-07",
             "model_version": "v2026-01-15-sac001",
             "weight_changes": [],
+            "execution_prices": {"AAPL": 200.0, "MSFT": 400.0},
             "asset_eligibility": {"AAPL": True, "MSFT": True},
             "regime_posterior": [0.7, 0.2, 0.1],
             "sac_schema_version": 3,
@@ -843,6 +844,18 @@ class TestSACWeeklyReportEmailEndpoint:
         mock_send_email.return_value = True
         mock_weekly_report_email_request["skipped_algorithms"] = ["SAC"]
         mock_weekly_report_email_request["order_results"]["sac"]["skipped"] = True
+        mock_weekly_report_email_request["sac"] = {
+            "skipped": True,
+            "algorithm": "sac",
+            "reason": "Open orders exist",
+            "target_weights": {},
+            "turnover": 0.0,
+            "model_version": "skipped",
+            "target_week_start": "",
+            "target_week_end": "",
+            "weight_changes": [],
+            "decision_state": None,
+        }
 
         response = client.post(
             "/email/sac-weekly-report",

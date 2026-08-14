@@ -7,6 +7,7 @@ from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
     PatchTSTInferenceResponse,
     SACInferenceResponse,
+    SkippedSACInferenceResponse,
 )
 from brain_api.routes.signals.models import NewsSignalResponse
 from brain_api.routes.training.models import (
@@ -104,7 +105,7 @@ class SACWeeklySummaryRequest(BaseModel):
 
     patchtst: PatchTSTInferenceResponse  # from POST /inference/patchtst
     news: NewsSignalResponse  # from POST /signals/news
-    sac: SACInferenceResponse  # from POST /inference/sac
+    sac: SACInferenceResponse | SkippedSACInferenceResponse
     universe: str  # "halal_filtered" or "halal"; mandatory
 
 

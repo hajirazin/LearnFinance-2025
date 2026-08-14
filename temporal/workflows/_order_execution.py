@@ -173,8 +173,16 @@ async def sell_wait_buy(
                 args=[account, sell_order_ids],
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
+            statuses_by_id = {
+                status.get("client_order_id"): status
+                for status in statuses
+                if status.get("client_order_id")
+            }
             all_terminal = all(
-                s.get("status", "").lower() in TERMINAL_STATUSES for s in statuses
+                order_id in statuses_by_id
+                and statuses_by_id[order_id].get("status", "").lower()
+                in TERMINAL_STATUSES
+                for order_id in sell_order_ids
             )
 
             if all_terminal:

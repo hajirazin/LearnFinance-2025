@@ -4,7 +4,7 @@ These models represent the responses from brain_api endpoints
 used in the weekly forecast email workflow.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -145,6 +145,7 @@ class ForcedLiquidationAudit(BaseModel):
 
     symbol: str
     market_value: float
+    execution_price: float
     reason: str = "outside_active_sac_symbol_set"
 
 
@@ -156,10 +157,15 @@ class SACInferenceResponse(BaseModel):
     model_version: str
     target_week_start: str | None = None
     target_week_end: str | None = None
-    weight_changes: list[WeightChange] = []
+    weight_changes: list[WeightChange] = Field(default_factory=list)
     decision_state: dict[str, Any] | None = None
     state_digest: str | None = None
-    forced_liquidations: list[ForcedLiquidationAudit] = []
+    forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)
+    execution_prices: dict[str, float] = Field(default_factory=dict)
+    asset_eligibility: dict[str, bool]
+    regime_posterior: list[float]
+    sac_schema_version: Literal[3]
+    architecture: Literal["masked_attention"]
 
 
 class HRPAllocationResponse(BaseModel):

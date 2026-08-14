@@ -33,6 +33,7 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         store_experience_calls: list[dict] = []
         update_execution_calls: list[dict] = []
         price_fetch_calls: list[list[str]] = []
+        resolve_attempt_calls: list[dict] = []
 
         activities = make_sac_only_activities(
             active_symbols=active_symbols,
@@ -50,6 +51,7 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
             store_experience_calls=store_experience_calls,
             update_execution_calls=update_execution_calls,
             price_fetch_calls=price_fetch_calls,
+            resolve_attempt_calls=resolve_attempt_calls,
         )
 
         async with worker_with_activities(
@@ -66,6 +68,13 @@ class TestUSWeeklyAllocationSACOnlyHappyPath:
         assert result["sac"]["skipped"] is False
         assert result["sac"]["orders_submitted"] > 0
         assert result["email"]["is_success"] is True
+        assert resolve_attempt_calls == [
+            {
+                "run_id": result["run_id"],
+                "as_of_date": result["as_of_date"],
+                "accounts": ["sac"],
+            }
+        ]
 
         assert "hrp" not in result
 

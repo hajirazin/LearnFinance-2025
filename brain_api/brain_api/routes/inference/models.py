@@ -247,7 +247,29 @@ class SACInferenceResponse(BaseModel):
     decision_state: dict[str, object] | None = None
     state_digest: str | None = None
     forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)
+    execution_prices: dict[str, float] = Field(
+        ...,
+        description=(
+            "Finite positive point-in-time prices validated during SAC inference "
+            "and reused unchanged for order generation."
+        ),
+    )
     asset_eligibility: dict[str, bool]
     regime_posterior: Annotated[list[float], Field(min_length=3, max_length=3)]
     sac_schema_version: Literal[3]
     architecture: Literal["masked_attention"]
+
+
+class SkippedSACInferenceResponse(BaseModel):
+    """Reporting-only representation of a SAC run skipped for open orders."""
+
+    skipped: Literal[True]
+    algorithm: str
+    reason: str
+    target_weights: dict[str, float] = Field(default_factory=dict)
+    turnover: float = 0.0
+    model_version: Literal["skipped"] = "skipped"
+    target_week_start: str = ""
+    target_week_end: str = ""
+    weight_changes: list[WeightChange] = Field(default_factory=list)
+    decision_state: None = None

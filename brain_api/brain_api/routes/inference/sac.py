@@ -258,6 +258,11 @@ def infer_sac(
         decision_state=decision_state.to_dict(),
         state_digest=decision_state.digest,
         forced_liquidations=forced_liquidations,
+        execution_prices={
+            symbol: float(price)
+            for symbol, price in raw_execution_prices.items()
+            if price is not None and math.isfinite(float(price)) and float(price) > 0
+        },
         asset_eligibility={
             symbol: bool(result.asset_mask[index])
             for index, symbol in enumerate(artifacts.symbol_order)

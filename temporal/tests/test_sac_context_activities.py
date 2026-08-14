@@ -204,10 +204,13 @@ def test_temporal_formula_parity_helpers_use_adjusted_close_contract():
 
 
 def test_raw_evidence_fetch_activities_send_point_in_time_contracts():
+    endpoint_market = _canonical_market().model_copy(
+        update={"as_of_date": "2026-02-05"}
+    )
     fake = FakeClient(
         {
             "/signals/prices": _canonical_prices(["AAPL"]).model_dump(),
-            "/signals/market-history": _canonical_market().model_dump(),
+            "/signals/market-history": endpoint_market.model_dump(),
         }
     )
     with patch_client(inference_module, fake):
@@ -225,8 +228,31 @@ def test_raw_evidence_fetch_activities_send_point_in_time_contracts():
     }
     assert fake.calls[1]["json"] == {
         "start_date": "2026-02-03",
-        "as_of_date": "2026-02-04",
+        "as_of_date": "2026-02-05",
     }
+
+
+def test_adjusted_closes_batches_active_and_off_slate_holdings_over_api_limit():
+    symbols = [f"S{i:02d}" for i in range(33)]
+
+    class BatchClient(FakeClient):
+        def post(self, path, json=None):
+            if path != "/signals/prices":
+                return super().post(path, json=json)
+            self.calls.append({"method": "POST", "path": path, "json": json})
+            requested = json["symbols"]
+            from tests._fake_client import FakeResponse
+
+            return FakeResponse(_canonical_prices(requested).model_dump())
+
+    fake = BatchClient({})
+    with patch_client(inference_module, fake):
+        prices = inference_module.get_adjusted_closes(symbols, "2026-02-05")
+
+    assert [len(call["json"]["symbols"]) for call in fake.calls] == [30, 3]
+    assert set(prices.adjusted_closes) == set(symbols)
+    assert set(prices.execution_prices) == set(symbols)
+    assert prices.provenance["batched"] is True
 
 
 def test_market_history_skips_fetch_when_decision_is_training_cutoff():
@@ -243,7 +269,7 @@ def test_market_history_skips_fetch_when_decision_is_training_cutoff():
 def test_market_history_monday_preopen_never_requests_partial_monday():
     response = MarketHistoryResponse(
         start_date="2026-08-08",
-        as_of_date="2026-08-09",
+        as_of_date="2026-08-10",
         rows=[],
         provenance={"calendar": "XNYS"},
     )
@@ -254,7 +280,7 @@ def test_market_history_monday_preopen_never_requests_partial_monday():
     assert market.as_of_date == "2026-08-09"
     assert fake.calls[0]["json"] == {
         "start_date": "2026-08-08",
-        "as_of_date": "2026-08-09",
+        "as_of_date": "2026-08-10",
     }
 
 
@@ -295,7 +321,14 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state(universe: st
                 "weight_changes": [],
                 "decision_state": decision_state,
                 "state_digest": "abc123",
-                "forced_liquidations": [{"symbol": "OLD", "market_value": 50.0}],
+                "forced_liquidations": [
+                    {"symbol": "OLD", "market_value": 50.0, "execution_price": 25.0}
+                ],
+                "execution_prices": {"AAPL": 125.2, "OLD": 25.0},
+                "asset_eligibility": {"AAPL": True},
+                "regime_posterior": [0.8, 0.1, 0.1],
+                "sac_schema_version": 3,
+                "architecture": "masked_attention",
             }
         }
     )
@@ -321,6 +354,7 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state(universe: st
     assert result.decision_state == decision_state
     assert result.state_digest == "abc123"
     assert result.forced_liquidations[0].symbol == "OLD"
+    assert result.execution_prices == {"AAPL": 125.2, "OLD": 25.0}
 
 
 def test_store_experience_persists_allocator_state_and_digest_verbatim():
@@ -335,6 +369,11 @@ def test_store_experience_persists_allocator_state_and_digest_verbatim():
         model_version="sac-v2",
         decision_state=state,
         state_digest="canonical-digest",
+        execution_prices={"AAPL": 125.2},
+        asset_eligibility={"AAPL": True},
+        regime_posterior=[0.8, 0.1, 0.1],
+        sac_schema_version=3,
+        architecture="masked_attention",
     )
     fake = FakeClient(
         {
@@ -357,3 +396,50 @@ def test_store_experience_persists_allocator_state_and_digest_verbatim():
     payload = fake.calls[0]["json"]
     assert payload["state"] == state
     assert payload["state_digest"] == "canonical-digest"
+
+
+def test_generate_orders_sac_forwards_inference_execution_prices():
+    allocation = SACInferenceResponse(
+        target_weights={"AAPL": 0.4, "CASH": 0.6},
+        turnover=0.1,
+        model_version="sac-v2",
+        execution_prices={"AAPL": 125.2, "OLD": 25.0},
+        asset_eligibility={"AAPL": True},
+        regime_posterior=[0.8, 0.1, 0.1],
+        sac_schema_version=3,
+        architecture="masked_attention",
+    )
+    fake = FakeClient(
+        {
+            "/orders/generate": {
+                "orders": [],
+                "summary": {
+                    "buys": 0,
+                    "sells": 0,
+                    "total_buy_value": 0.0,
+                    "total_sell_value": 0.0,
+                    "turnover_pct": 0.0,
+                    "skipped_small_orders": 0,
+                    "skipped_below_threshold": 0,
+                },
+                "prices_used": {"AAPL": 125.2, "OLD": 25.0},
+                "atr_used": {},
+            }
+        }
+    )
+
+    with patch_client(execution_module, fake):
+        execution_module.generate_orders_sac(
+            allocation=allocation,
+            portfolio=AlpacaPortfolioResponse(
+                cash=1000.0, positions=[], open_orders_count=0
+            ),
+            run_id="paper:2026-02-05",
+            attempt=1,
+            algorithm="sac",
+        )
+
+    assert fake.calls[0]["json"]["execution_prices"] == {
+        "AAPL": 125.2,
+        "OLD": 25.0,
+    }

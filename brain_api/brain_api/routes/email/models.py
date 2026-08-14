@@ -7,6 +7,7 @@ from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
     PatchTSTInferenceResponse,
     SACInferenceResponse,
+    SkippedSACInferenceResponse,
 )
 from brain_api.routes.training.models import (
     LSTMTrainResponse,
@@ -192,7 +193,7 @@ class SACWeeklyReportEmailRequest(BaseModel):
     as_of_date: str
     universe: str  # "halal_filtered" or "halal"; mandatory; renders into subject
 
-    sac: SACInferenceResponse
+    sac: SACInferenceResponse | SkippedSACInferenceResponse
 
     patchtst: PatchTSTInferenceResponse
 

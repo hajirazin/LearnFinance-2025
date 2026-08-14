@@ -17,3 +17,9 @@ def test_ist_calendar_date_does_not_depend_on_process_timezone():
     sunday_utc_monday_ist = datetime(2026, 7, 26, 20, 0, tzinfo=UTC)
 
     assert ist_calendar_date(sunday_utc_monday_ist) == "2026-07-27"
+
+
+def test_ist_calendar_date_preserves_manual_friday_run_date():
+    friday_ist = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+
+    assert ist_calendar_date(friday_ist) == "2026-08-14"

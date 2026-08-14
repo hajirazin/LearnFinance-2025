@@ -60,6 +60,7 @@ def generate_orders_sac(
                 "run_id": run_id,
                 "attempt": attempt,
                 "algorithm": algorithm,
+                "execution_prices": allocation.execution_prices,
             },
         )
         response.raise_for_status()
