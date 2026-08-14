@@ -85,7 +85,6 @@ def _make_sac_alloc(symbols: list[str]) -> SACInferenceResponse:
         model_version="v2026-05-01-halal",
         target_week_start="2026-05-04",
         target_week_end="2026-05-08",
-        execution_prices={symbol: 125.2 for symbol in symbols},
         asset_eligibility={symbol: True for symbol in symbols},
         regime_posterior=[0.8, 0.1, 0.1],
         sac_schema_version=3,
@@ -202,7 +201,6 @@ def _make_sac_halal_activities(
                 symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
                 for symbol in symbols
             },
-            execution_prices={symbol: 125.2 for symbol in symbols},
             provenance={"provider": "test"},
         )
 
@@ -229,10 +227,29 @@ def _make_sac_halal_activities(
         captured_calls["infer_sac_universe"] = universe
         return sac_alloc
 
-    @activity.defn(name="generate_orders_sac")
-    def mock_generate_orders_sac(allocation, portfolio, run_id, attempt, algorithm):
+    @activity.defn(name="generate_sell_orders_sac")
+    def mock_generate_sell_orders_sac(
+        allocation, portfolio, run_id, attempt, algorithm
+    ):
         captured_calls["generate_orders_sac_algorithm"] = algorithm
         captured_calls["generate_orders_sac_run_id"] = run_id
+        return GenerateOrdersResponse(
+            orders=[],
+            summary=OrderSummary(
+                buys=0,
+                sells=0,
+                total_buy_value=0.0,
+                total_sell_value=0.0,
+                turnover_pct=0.0,
+                skipped_small_orders=0,
+                skipped_below_threshold=0,
+            ),
+            prices_used={},
+        )
+
+    @activity.defn(name="generate_buy_orders_sac")
+    def mock_generate_buy_orders_sac(allocation, portfolio, run_id, attempt, algorithm):
+        captured_calls["generate_buy_orders_sac_algorithm"] = algorithm
         return orders
 
     @activity.defn(name="store_experience_sac")
@@ -359,7 +376,8 @@ def _make_sac_halal_activities(
         mock_get_adjusted_closes,
         mock_get_market_history,
         mock_infer_sac,
-        mock_generate_orders_sac,
+        mock_generate_sell_orders_sac,
+        mock_generate_buy_orders_sac,
         mock_store_experience_sac,
         mock_submit_orders_ibkr_sac_halal,
         mock_submit_orders_sac_halal,

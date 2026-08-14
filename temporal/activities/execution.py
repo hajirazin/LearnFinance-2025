@@ -30,7 +30,50 @@ def generate_orders_sac(
     attempt: int,
     algorithm: str,
 ) -> GenerateOrdersResponse | SkippedOrdersResponse:
-    """Generate orders for a SAC allocation, tagged by ``algorithm``.
+    """Legacy all-sides SAC generation activity retained for replay safety."""
+    return _generate_orders_sac(
+        allocation, portfolio, run_id, attempt, algorithm, order_side="all"
+    )
+
+
+@activity.defn
+def generate_sell_orders_sac(
+    allocation: SACInferenceResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+    algorithm: str,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Generate SAC sell orders using prices fetched by brain_api now."""
+    return _generate_orders_sac(
+        allocation, portfolio, run_id, attempt, algorithm, order_side="sell"
+    )
+
+
+@activity.defn
+def generate_buy_orders_sac(
+    allocation: SACInferenceResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+    algorithm: str,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Generate SAC buy orders using prices fetched by brain_api now."""
+    return _generate_orders_sac(
+        allocation, portfolio, run_id, attempt, algorithm, order_side="buy"
+    )
+
+
+def _generate_orders_sac(
+    allocation: SACInferenceResponse | SkippedAllocation,
+    portfolio: AlpacaPortfolioResponse,
+    run_id: str,
+    attempt: int,
+    algorithm: str,
+    *,
+    order_side: str,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Generate one SAC order phase, tagged by ``algorithm``.
 
     The ``algorithm`` arg is mandatory (no default) so the two parallel
     A/B SAC workflows tag their orders with distinct buckets:
@@ -46,7 +89,7 @@ def generate_orders_sac(
         logger.info(f"{algorithm.upper()} skipped - returning empty orders")
         return SkippedOrdersResponse(skipped=True, algorithm=algorithm)
 
-    logger.info(f"Generating {algorithm.upper()} orders...")
+    logger.info(f"Generating {algorithm.upper()} {order_side} orders...")
     with get_client() as client:
         response = client.post(
             "/orders/generate",
@@ -60,7 +103,7 @@ def generate_orders_sac(
                 "run_id": run_id,
                 "attempt": attempt,
                 "algorithm": algorithm,
-                "execution_prices": allocation.execution_prices,
+                "order_side": order_side,
             },
         )
         response.raise_for_status()

@@ -207,7 +207,6 @@ def build_sac_feature_bundle(
             for symbol in symbols
             if patchtst_by_symbol[symbol].predicted_weekly_return_pct is not None
         },
-        "execution_prices": prices.execution_prices,
         "market_history": [row.model_dump() for row in market.rows],
         "provenance": {
             "as_of_date": resolved_date,

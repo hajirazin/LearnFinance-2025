@@ -201,7 +201,6 @@ class SACFeatureBundleRequest(BaseModel):
     news_sentiment: dict[str, float]
     news_article_counts: dict[str, Annotated[int, Field(ge=0)]]
     patchtst_forecasts: dict[str, float]
-    execution_prices: dict[str, float]
     market_history: list[SACMarketHistoryRow]
     provenance: dict[str, object] = Field(default_factory=dict)
 
@@ -220,7 +219,7 @@ class SACInferenceRequest(BaseModel):
     feature_bundle: SACFeatureBundleRequest = Field(
         ...,
         description=(
-            "Raw adjusted prices, news evidence, forecasts, execution prices, "
+            "Raw adjusted-price history, news evidence, forecasts, "
             "and SPY/VIX history. Brain owns all feature construction."
         ),
     )
@@ -231,7 +230,6 @@ class ForcedLiquidationAudit(BaseModel):
 
     symbol: str
     market_value: float
-    execution_price: float = Field(..., gt=0)
     reason: str = "outside_active_sac_symbol_set"
 
 
@@ -247,13 +245,6 @@ class SACInferenceResponse(BaseModel):
     decision_state: dict[str, object] | None = None
     state_digest: str | None = None
     forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)
-    execution_prices: dict[str, float] = Field(
-        ...,
-        description=(
-            "Finite positive point-in-time prices validated during SAC inference "
-            "and reused unchanged for order generation."
-        ),
-    )
     asset_eligibility: dict[str, bool]
     regime_posterior: Annotated[list[float], Field(min_length=3, max_length=3)]
     sac_schema_version: Literal[3]

@@ -181,21 +181,15 @@ def test_realized_vol_uses_20_log_returns_ddof_one() -> None:
     assert compute_realized_vol_20d(closes, as_of_index=20) == pytest.approx(expected)
 
 
-def _feature_bundle(
-    n_symbols: int = 12, *, missing_held_price: bool = False
-) -> SACFeatureBundle:
+def _feature_bundle(n_symbols: int = 12) -> SACFeatureBundle:
     symbols = [f"S{index:02d}" for index in range(n_symbols)]
     closes = np.linspace(80.0, 120.0, 274).tolist()
-    execution = dict.fromkeys(symbols, 100.0)
-    if missing_held_price:
-        execution[symbols[0]] = None
     return SACFeatureBundle.create(
         symbols=symbols,
         adjusted_closes=dict.fromkeys(symbols, closes),
         news_sentiment=dict.fromkeys(symbols, 0.0),
         news_article_counts=dict.fromkeys(symbols, 0),
         patchtst_forecasts=dict.fromkeys(symbols, 0.01),
-        execution_prices=execution,
         market_history=[],
     )
 
@@ -219,15 +213,6 @@ def test_production_eligibility_allows_12_to_11_but_rejects_below_10() -> None:
     )
     with pytest.raises(SACDecisionContextError, match="at least 10"):
         reduced.eligible_inputs(weights)
-
-
-def test_missing_held_execution_price_aborts_rebalance() -> None:
-    bundle = _feature_bundle(missing_held_price=True)
-    weights = dict.fromkeys(bundle.symbols, 0.0)
-    weights[bundle.symbols[0]] = 0.2
-    weights["CASH"] = 0.8
-    with pytest.raises(SACDecisionContextError, match="held asset"):
-        bundle.eligible_inputs(weights)
 
 
 def test_hmm_fit_is_causal_and_persists_market_tail() -> None:

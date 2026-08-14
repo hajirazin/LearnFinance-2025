@@ -15,8 +15,10 @@ from models import (
     ActiveSymbolsResponse,
     AdjustedClosesResponse,
     AlpacaPortfolioResponse,
+    GenerateOrdersResponse,
     MarketClockResponse,
     MarketHistoryResponse,
+    OrderSummary,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
     WeeklySummaryResponse,
@@ -69,6 +71,7 @@ def make_sac_only_activities(
     get_alpaca_clock_calls: list[None] | None = None,
     price_fetch_calls: list[list[str]] | None = None,
     resolve_attempt_calls: list[dict] | None = None,
+    execution_sequence: list[str] | None = None,
 ):
     """Build mock activities for the SAC-only ``USWeeklyAllocationWorkflow``."""
 
@@ -77,6 +80,31 @@ def make_sac_only_activities(
             forbidden_calls.append(name)
             return None
         raise AssertionError(f"Workflow must not invoke retired HRP activity '{name}'")
+
+    def _orders_for_side(side: str):
+        if isinstance(sac_orders, SkippedOrdersResponse):
+            return sac_orders
+        selected = [order for order in sac_orders.orders if order.side == side]
+        is_buy = side == "buy"
+        return GenerateOrdersResponse(
+            orders=selected,
+            summary=OrderSummary(
+                buys=len(selected) if is_buy else 0,
+                sells=0 if is_buy else len(selected),
+                total_buy_value=(sac_orders.summary.total_buy_value if is_buy else 0.0),
+                total_sell_value=(
+                    0.0 if is_buy else sac_orders.summary.total_sell_value
+                ),
+                turnover_pct=sac_orders.summary.turnover_pct,
+                skipped_small_orders=0,
+                skipped_below_threshold=0,
+            ),
+            prices_used={
+                order.symbol: sac_orders.prices_used[order.symbol]
+                for order in selected
+                if order.symbol in sac_orders.prices_used
+            },
+        )
 
     @activity.defn(name="resolve_next_attempt")
     def mock_resolve_next_attempt(run_id, as_of_date, accounts=None) -> int:
@@ -92,6 +120,8 @@ def make_sac_only_activities(
 
     @activity.defn(name="get_sac_portfolio")
     def mock_get_sac_portfolio() -> AlpacaPortfolioResponse:
+        if execution_sequence is not None:
+            execution_sequence.append("portfolio")
         return sac_portfolio
 
     @activity.defn(name="get_hrp_portfolio")
@@ -135,7 +165,6 @@ def make_sac_only_activities(
                 symbol: [100.0 + i * 0.1 for i in range(lookback_bars)]
                 for symbol in symbols
             },
-            execution_prices={symbol: 125.2 for symbol in symbols},
             provenance={"provider": "test"},
         )
 
@@ -161,9 +190,19 @@ def make_sac_only_activities(
     ):
         return sac_alloc
 
-    @activity.defn(name="generate_orders_sac")
-    def mock_generate_orders_sac(allocation, portfolio, run_id, attempt, algorithm):
-        return sac_orders
+    @activity.defn(name="generate_sell_orders_sac")
+    def mock_generate_sell_orders_sac(
+        allocation, portfolio, run_id, attempt, algorithm
+    ):
+        if execution_sequence is not None:
+            execution_sequence.append("sell_generation")
+        return _orders_for_side("sell")
+
+    @activity.defn(name="generate_buy_orders_sac")
+    def mock_generate_buy_orders_sac(allocation, portfolio, run_id, attempt, algorithm):
+        if execution_sequence is not None:
+            execution_sequence.append("buy_generation")
+        return _orders_for_side("buy")
 
     @activity.defn(name="store_experience_sac")
     def mock_store_experience_sac(*args):
@@ -280,7 +319,8 @@ def make_sac_only_activities(
         mock_get_adjusted_closes,
         mock_get_market_history,
         mock_infer_sac,
-        mock_generate_orders_sac,
+        mock_generate_sell_orders_sac,
+        mock_generate_buy_orders_sac,
         mock_store_experience_sac,
         mock_submit_orders_sac,
         mock_check_order_statuses,

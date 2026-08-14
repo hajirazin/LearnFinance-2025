@@ -145,7 +145,6 @@ class ForcedLiquidationAudit(BaseModel):
 
     symbol: str
     market_value: float
-    execution_price: float
     reason: str = "outside_active_sac_symbol_set"
 
 
@@ -161,7 +160,6 @@ class SACInferenceResponse(BaseModel):
     decision_state: dict[str, Any] | None = None
     state_digest: str | None = None
     forced_liquidations: list[ForcedLiquidationAudit] = Field(default_factory=list)
-    execution_prices: dict[str, float] = Field(default_factory=dict)
     asset_eligibility: dict[str, bool]
     regime_posterior: list[float]
     sac_schema_version: Literal[3]
@@ -222,11 +220,10 @@ class NewsSignalResponse(BaseModel):
 
 
 class AdjustedClosesResponse(BaseModel):
-    """Point-in-time adjusted closes and as-of execution prices for SAC."""
+    """Point-in-time adjusted closes for SAC feature construction."""
 
     as_of_date: str
     adjusted_closes: dict[str, list[float]]
-    execution_prices: dict[str, float]
     provenance: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -108,7 +108,6 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
         "news_sentiment": dict.fromkeys(symbols, 0.1),
         "news_article_counts": dict.fromkeys(symbols, 1),
         "patchtst_forecasts": _mock_forecasts(symbols),
-        "execution_prices": dict.fromkeys(symbols, 125.2),
         "market_history": [
             {
                 "date": value.date().isoformat(),
@@ -388,7 +387,6 @@ class TestSACLSTMInference:
         self, inference_client
     ):
         feature_bundle = _mock_feature_bundle()
-        feature_bundle["execution_prices"]["NFLX"] = 90.0
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={
@@ -413,12 +411,9 @@ class TestSACLSTMInference:
             {
                 "symbol": "NFLX",
                 "market_value": 5000.0,
-                "execution_price": 90.0,
                 "reason": "outside_active_sac_symbol_set",
             }
         ]
-        assert data["execution_prices"]["AAPL"] == 125.2
-        assert data["execution_prices"]["NFLX"] == 90.0
         # True portfolio was 50% AAPL / 50% NFLX / 0% cash. Target sets NFLX
         # to 0, so turnover must include that forced sell (folded cash view
         # alone understates churn whenever cash also moves).
@@ -469,27 +464,6 @@ class TestSACLSTMInference:
         )
         assert response.status_code == 422
         assert "universe" in response.text
-
-    @pytest.mark.parametrize("invalid_price", [None, 0.0, -1.0, "NaN"])
-    def test_positive_off_slate_holding_requires_safe_execution_price(
-        self, inference_client, invalid_price
-    ):
-        feature_bundle = _mock_feature_bundle()
-        if invalid_price is not None:
-            feature_bundle["execution_prices"]["NFLX"] = invalid_price
-        response = inference_client.post(
-            "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
-                    "cash": 5000.0,
-                    "positions": [{"symbol": "NFLX", "market_value": 5000.0}],
-                },
-                "feature_bundle": feature_bundle,
-            },
-        )
-        assert response.status_code == 422
-        assert "execution_prices[NFLX]" in response.text
 
 
 # ============================================================================
@@ -1239,7 +1213,6 @@ class TestStateDimensionValidation:
     def test_inference_with_symbols_not_in_model(self, inference_client):
         """Test inference with portfolio containing symbols not in model."""
         feature_bundle = _mock_feature_bundle()
-        feature_bundle["execution_prices"]["UNKNOWN_SYM"] = 25.0
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
             json={

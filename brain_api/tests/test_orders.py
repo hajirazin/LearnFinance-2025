@@ -40,43 +40,51 @@ class TestGenerateOrdersEndpoint:
         assert response.status_code == 400
         assert "Portfolio currency must be USD" in response.json()["detail"]
 
-    def test_sac_requires_allocator_execution_prices(self):
+    def test_sell_phase_fetches_only_material_sell_prices(self):
         payload = {
-            "target_weights": {"AAPL": 0.5, "CASH": 0.5},
-            "portfolio": {"cash": 1000.0, "currency": "USD", "positions": []},
+            "target_weights": {"AAPL": 0.0, "MSFT": 0.5, "CASH": 0.5},
+            "portfolio": {
+                "cash": 0.0,
+                "currency": "USD",
+                "positions": [{"symbol": "AAPL", "qty": 10, "market_value": 1000}],
+            },
             "run_id": "paper:2026-01-20",
             "attempt": 1,
             "algorithm": "sac",
+            "order_side": "sell",
         }
 
-        with patch("brain_api.core.orders.fetch_current_prices") as fetch:
+        with patch(
+            "brain_api.core.orders.fetch_current_prices", return_value={"AAPL": 100.0}
+        ) as fetch:
             response = client.post("/orders/generate", json=payload)
 
-        assert response.status_code == 422
-        assert response.json()["detail"] == (
-            "execution_prices is required for SAC order generation"
-        )
-        fetch.assert_not_called()
+        assert response.status_code == 200
+        assert [order["side"] for order in response.json()["orders"]] == ["sell"]
+        fetch.assert_called_once_with(["AAPL"])
 
-    def test_sac_reuses_allocator_prices_without_current_price_fetch(self):
+    def test_buy_phase_fetches_price_when_phase_runs(self):
         payload = {
             "target_weights": {"AAPL": 0.5, "CASH": 0.5},
             "portfolio": {"cash": 1000.0, "currency": "USD", "positions": []},
             "run_id": "paper:2026-01-20",
             "attempt": 1,
             "algorithm": "sac",
-            "execution_prices": {"AAPL": 100.0},
+            "order_side": "buy",
         }
 
         with (
-            patch("brain_api.core.orders.fetch_current_prices") as fetch,
+            patch(
+                "brain_api.core.orders.fetch_current_prices",
+                return_value={"AAPL": 100.0},
+            ) as fetch,
             patch("brain_api.core.orders.fetch_ohlc_window", return_value={}),
         ):
             response = client.post("/orders/generate", json=payload)
 
         assert response.status_code == 200
         assert response.json()["prices_used"] == {"AAPL": 100.0}
-        fetch.assert_not_called()
+        fetch.assert_called_once_with(["AAPL"])
 
     def test_sac_rejects_missing_price_for_material_leg(self):
         payload = {
@@ -85,12 +93,13 @@ class TestGenerateOrdersEndpoint:
             "run_id": "paper:2026-01-20",
             "attempt": 1,
             "algorithm": "sac",
-            "execution_prices": {},
+            "order_side": "buy",
         }
 
-        with patch(
-            "brain_api.core.orders.fetch_ohlc_window", return_value={}
-        ) as fetch_ohlc:
+        with (
+            patch("brain_api.core.orders.fetch_current_prices", return_value={}),
+            patch("brain_api.core.orders.fetch_ohlc_window") as fetch_ohlc,
+        ):
             response = client.post("/orders/generate", json=payload)
 
         assert response.status_code == 422

@@ -1,7 +1,6 @@
 """SAC v3 inference endpoint from raw point-in-time evidence."""
 
 import logging
-import math
 import time
 from datetime import date
 
@@ -97,38 +96,10 @@ def infer_sac(
     position_values = {
         pos.symbol: pos.market_value for pos in request.portfolio.positions
     }
-    raw_execution_prices = dict(request.feature_bundle.execution_prices)
-    held_execution_prices: dict[str, float] = {}
-    for symbol, market_value in position_values.items():
-        if market_value <= 0:
-            continue
-        if symbol not in raw_execution_prices:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"execution_prices[{symbol}] is required for a positive held "
-                    "position"
-                ),
-            )
-        try:
-            execution_price = float(raw_execution_prices[symbol])
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=422,
-                detail=f"execution_prices[{symbol}] must be numeric",
-            ) from exc
-        if not math.isfinite(execution_price) or execution_price <= 0:
-            raise HTTPException(
-                status_code=422,
-                detail=f"execution_prices[{symbol}] must be finite and positive",
-            )
-        held_execution_prices[symbol] = execution_price
-
     forced_liquidations = [
         ForcedLiquidationAudit(
             symbol=symbol,
             market_value=market_value,
-            execution_price=held_execution_prices[symbol],
         )
         for symbol, market_value in sorted(position_values.items())
         if symbol not in artifacts.symbol_order and market_value > 0
@@ -173,7 +144,6 @@ def infer_sac(
             news_sentiment=request.feature_bundle.news_sentiment,
             news_article_counts=request.feature_bundle.news_article_counts,
             patchtst_forecasts=request.feature_bundle.patchtst_forecasts,
-            execution_prices=request.feature_bundle.execution_prices,
             market_history=[
                 row.model_dump(mode="json")
                 for row in request.feature_bundle.market_history
@@ -258,11 +228,6 @@ def infer_sac(
         decision_state=decision_state.to_dict(),
         state_digest=decision_state.digest,
         forced_liquidations=forced_liquidations,
-        execution_prices={
-            symbol: float(price)
-            for symbol, price in raw_execution_prices.items()
-            if price is not None and math.isfinite(float(price)) and float(price) > 0
-        },
         asset_eligibility={
             symbol: bool(result.asset_mask[index])
             for index, symbol in enumerate(artifacts.symbol_order)

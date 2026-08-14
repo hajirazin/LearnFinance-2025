@@ -167,11 +167,10 @@ class ClosesRequest(BaseModel):
 
 
 class ClosesResponse(BaseModel):
-    """Point-in-time adjusted closes and safe as-of execution prices."""
+    """Point-in-time adjusted closes for SAC feature construction."""
 
     as_of_date: str
     adjusted_closes: dict[str, list[float]]
-    execution_prices: dict[str, float]
     provenance: dict[str, object]
 
 

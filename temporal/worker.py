@@ -15,10 +15,12 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from activities.execution import (
+    generate_buy_orders_sac,
     generate_orders_alpha_hrp,
     generate_orders_dhrp,
     generate_orders_sac,
     generate_paper_allocation,
+    generate_sell_orders_sac,
     store_experience_sac,
     update_execution_sac,
 )
@@ -152,6 +154,8 @@ ALL_ACTIVITIES = [
     resolve_next_attempt_ibkr,
     # Execution / experience
     generate_orders_sac,
+    generate_sell_orders_sac,
+    generate_buy_orders_sac,
     generate_orders_dhrp,
     generate_orders_alpha_hrp,
     generate_paper_allocation,

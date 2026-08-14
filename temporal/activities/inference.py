@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 # Minimum trailing daily closes for SAC's momentum_12_1 (skip 21 bars,
 # then a 252-bar/~12-month lookback -- see activities.sac_context).
 SAC_MOMENTUM_LOOKBACK_BARS = MOM_12_1_LOOKBACK_BARS + 1
-PRICE_SYMBOL_BATCH_SIZE = 30
 
 
 @activity.defn
@@ -40,50 +39,21 @@ def get_adjusted_closes(
     as_of_date: str,
     lookback_bars: int = SAC_MOMENTUM_LOOKBACK_BARS,
 ) -> AdjustedClosesResponse:
-    """Fetch point-in-time adjusted closes and execution prices for SAC."""
+    """Fetch point-in-time adjusted-close history for SAC features."""
     logger.info(
         f"Fetching {lookback_bars}-bar adjusted closes for {len(symbols)} symbols..."
     )
-    batches: list[AdjustedClosesResponse] = []
     with get_client() as client:
-        for start in range(0, len(symbols), PRICE_SYMBOL_BATCH_SIZE):
-            symbol_batch = symbols[start : start + PRICE_SYMBOL_BATCH_SIZE]
-            response = client.post(
-                "/signals/prices",
-                json={
-                    "symbols": symbol_batch,
-                    "as_of_date": as_of_date,
-                    "lookback_bars": lookback_bars,
-                },
-            )
-            response.raise_for_status()
-            batch = AdjustedClosesResponse(**response.json())
-            if batch.as_of_date != as_of_date:
-                raise ValueError(
-                    f"adjusted closes batch as_of_date {batch.as_of_date!r} does not "
-                    f"match request {as_of_date!r}"
-                )
-            batches.append(batch)
-
-    adjusted_closes: dict[str, list[float]] = {}
-    execution_prices: dict[str, float] = {}
-    for batch in batches:
-        adjusted_closes.update(batch.adjusted_closes)
-        execution_prices.update(batch.execution_prices)
-    result = AdjustedClosesResponse(
-        as_of_date=as_of_date,
-        adjusted_closes=adjusted_closes,
-        execution_prices=execution_prices,
-        provenance=(
-            batches[0].provenance
-            if len(batches) == 1
-            else {
-                "batched": True,
-                "batch_size": PRICE_SYMBOL_BATCH_SIZE,
-                "batches": [batch.provenance for batch in batches],
-            }
-        ),
-    )
+        response = client.post(
+            "/signals/prices",
+            json={
+                "symbols": symbols,
+                "as_of_date": as_of_date,
+                "lookback_bars": lookback_bars,
+            },
+        )
+        response.raise_for_status()
+    result = AdjustedClosesResponse(**response.json())
     logger.info(f"Got adjusted closes for {len(result.adjusted_closes)} symbols")
     return result
 

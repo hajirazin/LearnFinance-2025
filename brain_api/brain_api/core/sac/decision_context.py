@@ -64,7 +64,6 @@ class SACFeatureBundle:
     news_sentiment: dict[str, float]
     news_article_counts: dict[str, int]
     patchtst_forecasts: dict[str, float | None]
-    execution_prices: dict[str, float | None]
     market_history: tuple[dict[str, Any], ...]
     provenance: dict[str, Any]
 
@@ -77,7 +76,6 @@ class SACFeatureBundle:
         news_sentiment: Mapping[str, Any],
         news_article_counts: Mapping[str, Any],
         patchtst_forecasts: Mapping[str, Any],
-        execution_prices: Mapping[str, Any],
         market_history: list[dict[str, Any]],
         provenance: Mapping[str, Any] | None = None,
     ) -> SACFeatureBundle:
@@ -131,20 +129,11 @@ class SACFeatureBundle:
                 ) from exc
 
         forecasts: dict[str, float | None] = {}
-        prices: dict[str, float | None] = {}
         for symbol in symbol_order:
             forecast = patchtst_forecasts.get(symbol)
             forecasts[symbol] = (
                 float(forecast)
                 if forecast is not None and math.isfinite(float(forecast))
-                else None
-            )
-            execution_price = execution_prices.get(symbol)
-            prices[symbol] = (
-                float(execution_price)
-                if execution_price is not None
-                and math.isfinite(float(execution_price))
-                and float(execution_price) > 0
                 else None
             )
         return cls(
@@ -153,7 +142,6 @@ class SACFeatureBundle:
             news_sentiment=normalized_sentiment,
             news_article_counts=normalized_counts,
             patchtst_forecasts=forecasts,
-            execution_prices=prices,
             market_history=tuple(dict(row) for row in market_history),
             provenance=dict(provenance or {}),
         )
@@ -166,13 +154,6 @@ class SACFeatureBundle:
         signals: dict[str, dict[str, float]] = {}
         forecasts: dict[str, float] = {}
         for index, symbol in enumerate(self.symbols):
-            execution_price = self.execution_prices[symbol]
-            if execution_price is None:
-                if current_weights.get(symbol, 0.0) > 0:
-                    raise SACDecisionContextError(
-                        f"held asset {symbol} lacks a finite positive execution price"
-                    )
-                continue
             forecast = self.patchtst_forecasts[symbol]
             closes = self.adjusted_closes.get(symbol)
             if forecast is None or closes is None:
@@ -213,7 +194,6 @@ class SACFeatureBundle:
             "news_sentiment": self.news_sentiment,
             "news_article_counts": self.news_article_counts,
             "patchtst_forecasts": self.patchtst_forecasts,
-            "execution_prices": self.execution_prices,
             "market_history": list(self.market_history),
             "provenance": self.provenance,
         }

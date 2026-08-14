@@ -283,7 +283,7 @@ def test_training_market_history_rejects_joint_early_ending():
         )
 
 
-def test_prices_api_returns_adjusted_history_execution_prices_and_short_asset():
+def test_prices_api_returns_adjusted_history_and_short_asset():
     dates = pd.bdate_range(end="2026-08-07", periods=253)
     loaded = {
         "AAPL": _price_frame([100.0 + i for i in range(253)], dates),
@@ -306,7 +306,6 @@ def test_prices_api_returns_adjusted_history_execution_prices_and_short_asset():
     body = response.json()
     assert len(body["adjusted_closes"]["AAPL"]) == 253
     assert body["adjusted_closes"]["NEW"] == [10.0, 11.0]
-    assert body["execution_prices"] == {"AAPL": 352.0, "NEW": 11.0}
     assert body["provenance"]["price_basis"] == "adjusted"
     assert "closes" not in body
 
@@ -335,7 +334,6 @@ def test_sac_api_rejects_bundle_over_capacity_before_artifact_loading():
                 "news_sentiment": {},
                 "news_article_counts": {},
                 "patchtst_forecasts": {},
-                "execution_prices": {},
                 "market_history": [],
                 "provenance": {},
             },
@@ -356,7 +354,6 @@ def test_sac_api_rejects_nonpositive_market_evidence_at_boundary():
                 "news_sentiment": {"AAPL": 0.0},
                 "news_article_counts": {"AAPL": 0},
                 "patchtst_forecasts": {},
-                "execution_prices": {},
                 "market_history": [
                     {
                         "date": "2026-08-07",

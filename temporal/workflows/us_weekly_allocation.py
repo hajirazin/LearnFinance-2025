@@ -32,8 +32,11 @@ from temporalio.common import RetryPolicy
 
 from workflows._order_execution import (
     SHORT_TIMEOUT,
+    combine_order_phases,
+    combine_submit,
     sell_wait_buy,
     split_orders_by_side,
+    submit_sells_and_wait,
 )
 from workflows._run_identity import ist_calendar_date
 
@@ -43,7 +46,9 @@ with workflow.unsafe.imports_passed_through():
         build_prior_allocation_from_portfolio,
     )
     from activities.execution import (
+        generate_buy_orders_sac,
         generate_orders_sac,
+        generate_sell_orders_sac,
         store_experience_sac,
         update_execution_sac,
     )
@@ -111,8 +116,6 @@ class USWeeklyAllocationWorkflow:
             raise RuntimeError("SAC v3 active-symbol metadata lacks training cutoff")
         if active_symbols.sac_schema_version != 3:
             raise RuntimeError("SAC active-symbol metadata is not schema version 3")
-        held_symbols = {position.symbol for position in sac_portfolio.positions}
-        price_symbols = symbols + sorted(held_symbols - set(symbols))
         run_sac = sac_portfolio.open_orders_count == 0
 
         skipped_algorithms = []
@@ -135,7 +138,7 @@ class USWeeklyAllocationWorkflow:
             ),
             workflow.execute_activity(
                 get_adjusted_closes,
-                args=[price_symbols, as_of_date],
+                args=[symbols, as_of_date],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
@@ -169,12 +172,22 @@ class USWeeklyAllocationWorkflow:
         else:
             sac_alloc = SkippedAllocation(algorithm="sac")
 
-        # Phase 3: Generate SAC orders.
-        sac_orders = await workflow.execute_activity(
-            generate_orders_sac,
-            args=[sac_alloc, sac_portfolio, run_id, attempt, "sac"],
-            start_to_close_timeout=SHORT_TIMEOUT,
-        )
+        fresh_buy_pricing = workflow.patched("sac-fresh-buy-pricing-v1")
+        if fresh_buy_pricing:
+            # Brain prices and generates sells immediately.
+            sac_sell_orders = await workflow.execute_activity(
+                generate_sell_orders_sac,
+                args=[sac_alloc, sac_portfolio, run_id, attempt, "sac"],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
+            sac_orders = sac_sell_orders
+        else:
+            # Replay-only path for workflows started before the phase split.
+            sac_orders = await workflow.execute_activity(
+                generate_orders_sac,
+                args=[sac_alloc, sac_portfolio, run_id, attempt, "sac"],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
 
         # Store experience (fire-and-forget for SAC RL).
         if run_sac:
@@ -190,11 +203,35 @@ class USWeeklyAllocationWorkflow:
                 start_to_close_timeout=SHORT_TIMEOUT,
             )
 
-        # Phase 4: SAC sell-wait-buy.
-        sac_sells, sac_buys = split_orders_by_side(sac_orders)
-        sac_submit = await sell_wait_buy(
-            "sac", sac_sells, sac_buys, sac_orders, submit_orders_sac
-        )
+        if fresh_buy_pricing:
+            # Submit sells and wait. Only after that durable wait do we
+            # refresh broker state and ask Brain to price/generate buys.
+            sell_submit = await submit_sells_and_wait(
+                "sac", sac_sell_orders, submit_orders_sac
+            )
+            buy_portfolio = sac_portfolio
+            if run_sac:
+                buy_portfolio = await workflow.execute_activity(
+                    get_sac_portfolio,
+                    start_to_close_timeout=SHORT_TIMEOUT,
+                )
+            sac_buy_orders = await workflow.execute_activity(
+                generate_buy_orders_sac,
+                args=[sac_alloc, buy_portfolio, run_id, attempt, "sac"],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
+            buy_submit = await workflow.execute_activity(
+                submit_orders_sac,
+                args=[sac_buy_orders],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
+            sac_orders = combine_order_phases(sac_sell_orders, sac_buy_orders)
+            sac_submit = combine_submit(sell_submit, buy_submit)
+        else:
+            sac_sells, sac_buys = split_orders_by_side(sac_orders)
+            sac_submit = await sell_wait_buy(
+                "sac", sac_sells, sac_buys, sac_orders, submit_orders_sac
+            )
 
         # Phase 5: Get SAC order history + post-trade portfolio (parallel),
         # then update execution. The post-trade portfolio snapshot is what

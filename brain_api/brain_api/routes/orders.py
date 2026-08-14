@@ -4,6 +4,7 @@ Converts allocation weights into actionable limit orders.
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -75,12 +76,9 @@ class GenerateOrdersRequest(BaseModel):
         ...,
         description="Algorithm name (e.g., 'sac', 'hrp')",
     )
-    execution_prices: dict[str, float] | None = Field(
-        default=None,
-        description=(
-            "Validated point-in-time prices supplied by the allocator. Required "
-            "for SAC so order generation never performs a second price lookup."
-        ),
+    order_side: Literal["all", "sell", "buy"] = Field(
+        default="all",
+        description="Generate all rebalance legs or only one execution phase.",
     )
 
 
@@ -230,7 +228,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
       "run_id": "paper:2026-01-20",
       "attempt": 1,
       "algorithm": "sac",
-      "execution_prices": {"AAPL": 170.00, "MSFT": 415.00}
+      "order_side": "sell"
     }
     ```
 
@@ -303,12 +301,6 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
         f"portfolio_value=${portfolio.total_value:.2f}"
     )
 
-    if request.algorithm.startswith("sac") and request.execution_prices is None:
-        raise HTTPException(
-            status_code=422,
-            detail="execution_prices is required for SAC order generation",
-        )
-
     # Generate orders
     try:
         result: GenerateOrdersResult = generate_orders(
@@ -317,7 +309,7 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
             run_id=request.run_id,
             attempt=request.attempt,
             algorithm=request.algorithm,
-            prices=request.execution_prices,
+            order_side=request.order_side,
         )
     except OrderPriceError as e:
         raise HTTPException(status_code=422, detail=str(e)) from None

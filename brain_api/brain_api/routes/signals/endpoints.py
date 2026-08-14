@@ -135,7 +135,6 @@ def get_closes(request: ClosesRequest) -> ClosesResponse:
         raise HTTPException(status_code=503, detail="Adjusted-close provider failed")
 
     adjusted_closes: dict[str, list[float]] = {}
-    execution_prices: dict[str, float] = {}
     for symbol in request.symbols:
         price_df = prices.get(symbol)
         if price_df is None or price_df.empty:
@@ -152,14 +151,9 @@ def get_closes(request: ClosesRequest) -> ClosesResponse:
             adjusted_closes[symbol] = [float(v) for v in tail]
         else:
             adjusted_closes[symbol] = []
-        latest = float(series.iloc[-1])
-        if np.isfinite(latest) and latest > 0:
-            execution_prices[symbol] = latest
-
     return ClosesResponse(
         as_of_date=request.as_of_date,
         adjusted_closes=adjusted_closes,
-        execution_prices=execution_prices,
         provenance={
             "provider": "yfinance",
             "price_basis": "adjusted",

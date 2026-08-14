@@ -35,7 +35,7 @@ ATR_FETCH_DAYS: int = 40
 
 
 class OrderPriceError(ValueError):
-    """Raised when a material rebalance leg has no safe execution price."""
+    """Raised when a material rebalance leg has no safe current price."""
 
 
 # ============================================================================
@@ -394,6 +394,7 @@ def generate_orders(
     run_id: str,
     attempt: int,
     algorithm: str,
+    order_side: str = "all",
     prices: dict[str, float] | None = None,
     atr_map: dict[str, float] | None = None,
 ) -> GenerateOrdersResult:
@@ -405,6 +406,7 @@ def generate_orders(
         run_id: Run identifier (e.g., "paper:2026-01-20")
         attempt: Attempt number
         algorithm: Algorithm name (for logging)
+        order_side: Generate ``all``, ``sell``, or ``buy`` legs only.
         prices: Optional pre-fetched prices (if None, will fetch)
         atr_map: Optional pre-computed ATR(14) per symbol. When ``None``,
             ATR is fetched alongside prices so the email layer can render
@@ -416,6 +418,9 @@ def generate_orders(
         GenerateOrdersResult with orders, summary, prices, and ATR map.
     """
     total_value = portfolio.total_value
+
+    if order_side not in {"all", "sell", "buy"}:
+        raise ValueError("order_side must be one of: all, sell, buy")
 
     if total_value <= 0:
         return GenerateOrdersResult(
@@ -433,20 +438,7 @@ def generate_orders(
             atr_used={},
         )
 
-    # Get all symbols we need prices for (excluding CASH)
-    symbols_needed = [s for s in target_weights if s != "CASH"]
-
-    # Add current positions that might need to be sold
     current_positions = {p.symbol: p for p in portfolio.positions}
-    for symbol in current_positions:
-        if symbol not in symbols_needed:
-            symbols_needed.append(symbol)
-
-    # Fetch prices if not provided
-    if prices is None:
-        prices = fetch_current_prices(symbols_needed)
-
-    # Build current weights
     current_weights: dict[str, float] = {"CASH": portfolio.cash / total_value}
     for pos in portfolio.positions:
         current_weights[pos.symbol] = pos.market_value / total_value
@@ -462,17 +454,28 @@ def generate_orders(
     all_symbols = set(target_weights.keys()) | set(current_weights.keys())
     all_symbols.discard("CASH")
 
-    material_symbols = []
+    material_symbols: list[str] = []
+    material_sides: dict[str, str] = {}
     for symbol in sorted(all_symbols):
         current_weight = current_weights.get(symbol, 0.0)
         target_weight = target_weights.get(symbol, 0.0)
         weight_diff = target_weight - current_weight
+        side = "buy" if weight_diff > 0 else "sell"
+        if order_side != "all" and side != order_side:
+            continue
         is_full_exit = target_weight == 0.0 and current_weight > 0.0
         if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA and not is_full_exit:
             continue
         if abs(weight_diff) * total_value < MIN_TRADE_VALUE:
             continue
         material_symbols.append(symbol)
+        material_sides[symbol] = side
+
+    # Each execution phase fetches its own current prices inside Brain. In the
+    # sell-wait-buy workflow this means the buy call happens after the durable
+    # wait and cannot reuse decision-time or sell-time prices.
+    if prices is None:
+        prices = fetch_current_prices(material_symbols)
 
     invalid_prices = []
     for symbol in material_symbols:
@@ -487,16 +490,19 @@ def generate_orders(
         prices[symbol] = price
     if invalid_prices:
         raise OrderPriceError(
-            "finite positive execution prices are required for all material "
+            "finite positive current prices are required for all material "
             f"order legs; missing_or_invalid={invalid_prices}"
         )
 
     # Compute ATR(14) only after every material leg has a validated price.
-    # ATR remains display-only and best-effort, but an invalid execution-price
+    # ATR remains display-only and best-effort, but an invalid current-price
     # snapshot must fail before any secondary provider call is attempted.
     if atr_map is None:
         try:
-            ohlc = fetch_ohlc_window(symbols_needed)
+            buy_symbols = [
+                symbol for symbol in material_symbols if material_sides[symbol] == "buy"
+            ]
+            ohlc = fetch_ohlc_window(buy_symbols)
             atr_map = compute_atr_map(ohlc)
         except Exception as e:
             print(f"[Orders] ATR computation failed: {e}")
@@ -506,6 +512,9 @@ def generate_orders(
         current_weight = current_weights.get(symbol, 0.0)
         target_weight = target_weights.get(symbol, 0.0)
         weight_diff = target_weight - current_weight
+        side = "buy" if weight_diff > 0 else "sell"
+        if order_side != "all" and side != order_side:
+            continue
 
         # Skip negligible change (always allow full exit: target 0 with a position)
         is_full_exit = target_weight == 0.0 and current_weight > 0.0
@@ -524,11 +533,9 @@ def generate_orders(
         current_price = prices[symbol]
 
         # Determine side
-        if weight_diff > 0:
-            side = "buy"
+        if side == "buy":
             total_buy_value += trade_value
         else:
-            side = "sell"
             total_sell_value += trade_value
 
         qty = trade_value / current_price

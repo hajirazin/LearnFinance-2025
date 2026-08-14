@@ -34,6 +34,7 @@ with workflow.unsafe.imports_passed_through():
     from models import (
         GenerateOrdersResponse,
         OrderModel,
+        OrderSummary,
         SkippedOrdersResponse,
         SkippedSubmitResponse,
     )
@@ -111,6 +112,102 @@ def combine_submit(sell_submit, buy_submit):
     )
 
 
+def combine_order_phases(
+    sells: GenerateOrdersResponse | SkippedOrdersResponse,
+    buys: GenerateOrdersResponse | SkippedOrdersResponse,
+) -> GenerateOrdersResponse | SkippedOrdersResponse:
+    """Combine independently priced sell and buy generation responses."""
+    if isinstance(sells, SkippedOrdersResponse):
+        return buys
+    if isinstance(buys, SkippedOrdersResponse):
+        return sells
+    return GenerateOrdersResponse(
+        orders=[*sells.orders, *buys.orders],
+        summary=OrderSummary(
+            buys=buys.summary.buys,
+            sells=sells.summary.sells,
+            total_buy_value=buys.summary.total_buy_value,
+            total_sell_value=sells.summary.total_sell_value,
+            turnover_pct=sells.summary.turnover_pct + buys.summary.turnover_pct,
+            skipped_small_orders=(
+                sells.summary.skipped_small_orders + buys.summary.skipped_small_orders
+            ),
+            skipped_below_threshold=(
+                sells.summary.skipped_below_threshold
+                + buys.summary.skipped_below_threshold
+            ),
+        ),
+        prices_used={**sells.prices_used, **buys.prices_used},
+        atr_used={**sells.atr_used, **buys.atr_used},
+    )
+
+
+async def submit_sells_and_wait(
+    account: str,
+    sells: GenerateOrdersResponse | SkippedOrdersResponse,
+    submit_activity,
+    check_status_activity=check_order_statuses,
+):
+    """Submit sells and durably wait until they are terminal or time out."""
+    sell_submit = await workflow.execute_activity(
+        submit_activity,
+        args=[sells],
+        start_to_close_timeout=SHORT_TIMEOUT,
+    )
+
+    sell_order_ids = extract_sell_ids(sells)
+
+    if sell_order_ids:
+        workflow.logger.info(
+            f"[{account.upper()}] Waiting for {len(sell_order_ids)} sell orders..."
+        )
+
+        clock = await workflow.execute_activity(
+            get_alpaca_clock,
+            start_to_close_timeout=SHORT_TIMEOUT,
+        )
+        if not clock.is_open:
+            next_open = datetime.fromisoformat(clock.next_open)
+            wait = next_open - workflow.now()
+            if wait > timedelta(0):
+                workflow.logger.info(
+                    f"[{account.upper()}] Sleeping {wait} until market open "
+                    f"({next_open.isoformat()})"
+                )
+                await workflow.sleep(wait)
+
+        deadline = workflow.now() + SELL_DEADLINE
+        while workflow.now() < deadline:
+            statuses = await workflow.execute_activity(
+                check_status_activity,
+                args=[account, sell_order_ids],
+                start_to_close_timeout=SHORT_TIMEOUT,
+            )
+            statuses_by_id = {
+                status.get("client_order_id"): status
+                for status in statuses
+                if status.get("client_order_id")
+            }
+            if all(
+                order_id in statuses_by_id
+                and statuses_by_id[order_id].get("status", "").lower()
+                in TERMINAL_STATUSES
+                for order_id in sell_order_ids
+            ):
+                workflow.logger.info(f"[{account.upper()}] All sell orders terminal.")
+                break
+            workflow.logger.info(
+                f"[{account.upper()}] Sells still pending, sleeping {POLL_INTERVAL}..."
+            )
+            await workflow.sleep(POLL_INTERVAL)
+        else:
+            workflow.logger.warning(
+                f"[{account.upper()}] Sell deadline reached (48h), proceeding to buys."
+            )
+
+    return sell_submit
+
+
 async def sell_wait_buy(
     account: str,
     sells: GenerateOrdersResponse | SkippedOrdersResponse,
@@ -133,70 +230,9 @@ async def sell_wait_buy(
     ``USSACHalalAllocationWorkflow`` passes ``check_order_statuses_ibkr``
     explicitly so the helper never branches on ``account``.
     """
-    sell_submit = await workflow.execute_activity(
-        submit_activity,
-        args=[sells],
-        start_to_close_timeout=SHORT_TIMEOUT,
+    sell_submit = await submit_sells_and_wait(
+        account, sells, submit_activity, check_status_activity
     )
-
-    sell_order_ids = extract_sell_ids(sells)
-
-    if sell_order_ids:
-        workflow.logger.info(
-            f"[{account.upper()}] Waiting for {len(sell_order_ids)} sell orders..."
-        )
-
-        # One-shot clock check: sleep until exactly the next NYSE open
-        # if the market is currently closed. Mathematically this is
-        # ``max(0, next_open - now)`` -- a strict equality with the
-        # advertised open time, no lead-time fudge -- so the first
-        # status poll fires the moment the market opens.
-        clock = await workflow.execute_activity(
-            get_alpaca_clock,
-            start_to_close_timeout=SHORT_TIMEOUT,
-        )
-        if not clock.is_open:
-            next_open = datetime.fromisoformat(clock.next_open)
-            wait = next_open - workflow.now()
-            if wait > timedelta(0):
-                workflow.logger.info(
-                    f"[{account.upper()}] Sleeping {wait} until market open "
-                    f"({next_open.isoformat()})"
-                )
-                await workflow.sleep(wait)
-
-        deadline = workflow.now() + SELL_DEADLINE
-
-        while workflow.now() < deadline:
-            statuses = await workflow.execute_activity(
-                check_status_activity,
-                args=[account, sell_order_ids],
-                start_to_close_timeout=SHORT_TIMEOUT,
-            )
-            statuses_by_id = {
-                status.get("client_order_id"): status
-                for status in statuses
-                if status.get("client_order_id")
-            }
-            all_terminal = all(
-                order_id in statuses_by_id
-                and statuses_by_id[order_id].get("status", "").lower()
-                in TERMINAL_STATUSES
-                for order_id in sell_order_ids
-            )
-
-            if all_terminal:
-                workflow.logger.info(f"[{account.upper()}] All sell orders terminal.")
-                break
-
-            workflow.logger.info(
-                f"[{account.upper()}] Sells still pending, sleeping {POLL_INTERVAL}..."
-            )
-            await workflow.sleep(POLL_INTERVAL)
-        else:
-            workflow.logger.warning(
-                f"[{account.upper()}] Sell deadline reached (48h), proceeding to buys."
-            )
 
     buy_resp = make_buy_response(buy_orders, original_orders)
     buy_submit = await workflow.execute_activity(
