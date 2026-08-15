@@ -17,10 +17,11 @@ def create_snapshot_metadata(
     stopped_epoch: int,
     *,
     config_symbols_hash: str,
+    failure_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create metadata dictionary for a forecaster snapshot."""
 
-    return {
+    payload: dict[str, Any] = {
         "forecaster_type": forecaster_type,
         "cutoff_date": cutoff_date.isoformat(),
         "training_timestamp": datetime.now(UTC).isoformat(),
@@ -38,3 +39,6 @@ def create_snapshot_metadata(
             "stopped_epoch": stopped_epoch,
         },
     }
+    if failure_reasons:
+        payload["failure_reasons"] = list(failure_reasons)
+    return payload

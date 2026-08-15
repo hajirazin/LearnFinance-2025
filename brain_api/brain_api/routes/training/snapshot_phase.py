@@ -55,6 +55,7 @@ from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
 from brain_api.core.version import compute_model_hash
+from brain_api.routes.training.snapshot_persist import persist_forecaster_snapshot
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
@@ -230,24 +231,19 @@ def _run_lstm_snapshot_phase(
                 stopped_epoch=main_artifacts.stopped_epoch,
                 config_symbols_hash=end_snap_digest,
             )
-            snapshot_storage.write_snapshot(
+            persist_forecaster_snapshot(
+                snapshot_storage=snapshot_storage,
                 cutoff_date=end_date,
                 snapshot_digest=end_snap_digest,
                 model=main_artifacts.model,
                 feature_scaler=main_artifacts.feature_scaler,
                 config=config,
                 metadata=snapshot_metadata,
+                train_loss=main_artifacts.train_loss,
+                val_loss=main_artifacts.val_loss,
+                snapshot_hf_repo=snapshot_hf_repo,
+                log_prefix=log_prefix,
             )
-            logger.info(f"{log_prefix} Saved snapshot for cutoff {end_date}")
-
-            if snapshot_hf_repo:
-                try:
-                    snapshot_storage.upload_snapshot_to_hf(end_date, end_snap_digest)
-                    logger.info(
-                        f"{log_prefix} Uploaded snapshot {end_date} to HuggingFace"
-                    )
-                except Exception as e:
-                    logger.error(f"{log_prefix} Failed to upload snapshot to HF: {e}")
         else:
             # Snapshots-only path: cannot recreate the end-window
             # snapshot without retraining main. Log loudly so the
@@ -390,29 +386,23 @@ def _backfill_lstm_snapshots(
             config_symbols_hash=backfill_digest,
         )
 
-        snapshot_storage.write_snapshot(
+        persist_forecaster_snapshot(
+            snapshot_storage=snapshot_storage,
             cutoff_date=cutoff_date,
             snapshot_digest=backfill_digest,
             model=result.model,
             feature_scaler=result.feature_scaler,
             config=config,
             metadata=metadata,
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+            snapshot_hf_repo=snapshot_hf_repo,
+            log_prefix="[LSTM Backfill]",
         )
         logger.info(
-            f"[LSTM Backfill] Saved snapshot for {cutoff_date} in "
+            f"[LSTM Backfill] Persist finished for {cutoff_date} in "
             f"{time.time() - t0:.1f}s"
         )
-
-        # Upload to HuggingFace whenever the bucket's HF repo env is
-        # configured (writes ignore the read policy).
-        if snapshot_hf_repo:
-            try:
-                snapshot_storage.upload_snapshot_to_hf(cutoff_date, backfill_digest)
-                logger.info(
-                    f"[LSTM Backfill] Uploaded snapshot {cutoff_date} to HuggingFace"
-                )
-            except Exception as e:
-                logger.error(f"[LSTM Backfill] Failed to upload snapshot to HF: {e}")
 
         # Memory cleanup after each snapshot to prevent accumulation
         del dataset, result, prices, metadata
@@ -492,24 +482,19 @@ def _run_patchtst_snapshot_phase(
                 stopped_epoch=main_artifacts.stopped_epoch,
                 config_symbols_hash=end_snap_digest,
             )
-            snapshot_storage.write_snapshot(
+            persist_forecaster_snapshot(
+                snapshot_storage=snapshot_storage,
                 cutoff_date=end_date,
                 snapshot_digest=end_snap_digest,
                 model=main_artifacts.model,
                 feature_scaler=main_artifacts.feature_scaler,
                 config=config,
                 metadata=snapshot_metadata,
+                train_loss=main_artifacts.train_loss,
+                val_loss=main_artifacts.val_loss,
+                snapshot_hf_repo=snapshot_hf_repo,
+                log_prefix=log_prefix,
             )
-            logger.info(f"{log_prefix} Saved snapshot for cutoff {end_date}")
-
-            if snapshot_hf_repo:
-                try:
-                    snapshot_storage.upload_snapshot_to_hf(end_date, end_snap_digest)
-                    logger.info(
-                        f"{log_prefix} Uploaded snapshot {end_date} to HuggingFace"
-                    )
-                except Exception as e:
-                    logger.error(f"{log_prefix} Failed to upload snapshot to HF: {e}")
         else:
             logger.warning(
                 f"{log_prefix} End-of-window snapshot for {end_date} is "
@@ -663,26 +648,20 @@ def _backfill_patchtst_snapshots(
             config_symbols_hash=backfill_digest,
         )
 
-        snapshot_storage.write_snapshot(
+        persist_forecaster_snapshot(
+            snapshot_storage=snapshot_storage,
             cutoff_date=cutoff_date,
             snapshot_digest=backfill_digest,
             model=result.model,
             feature_scaler=result.feature_scaler,
             config=config,
             metadata=metadata,
+            train_loss=result.train_loss,
+            val_loss=result.val_loss,
+            snapshot_hf_repo=snapshot_hf_repo,
+            log_prefix=backfill_prefix,
         )
         logger.info(
-            f"[{backfill_prefix}] Saved snapshot for {cutoff_date} in "
+            f"[{backfill_prefix}] Persist finished for {cutoff_date} in "
             f"{time.time() - t0:.1f}s"
         )
-
-        if snapshot_hf_repo:
-            try:
-                snapshot_storage.upload_snapshot_to_hf(cutoff_date, backfill_digest)
-                logger.info(
-                    f"[{backfill_prefix}] Uploaded snapshot {cutoff_date} to HuggingFace"
-                )
-            except Exception as e:
-                logger.error(
-                    f"[{backfill_prefix}] Failed to upload snapshot to HF: {e}"
-                )

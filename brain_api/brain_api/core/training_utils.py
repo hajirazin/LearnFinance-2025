@@ -54,8 +54,8 @@ def evaluate_forecaster_artifact_health(
     *,
     train_loss: float,
     val_loss: float,
-    baseline_loss: float,
-    artifact_dir: Path,
+    baseline_loss: float | None = None,
+    artifact_dir: Path | None = None,
 ) -> ArtifactHealthCheck:
     """Run the forecaster (LSTM, PatchTST US, PatchTST India) guardrails.
 
@@ -69,14 +69,17 @@ def evaluate_forecaster_artifact_health(
 
     1. ``val_loss`` is finite AND ``> 0``
     2. ``train_loss`` is finite AND ``> 0``
-    3. ``baseline_loss`` is finite AND ``> 0``
+    3. ``baseline_loss`` is finite AND ``> 0`` (skipped when ``None``;
+       snapshot persist has no baseline)
     4-7. Each of ``weights.pt``, ``feature_scaler.pkl``, ``config.json``,
        and ``metadata.json`` exists under ``artifact_dir`` with a
-       non-zero size
+       non-zero size (skipped when ``artifact_dir`` is ``None``;
+       metrics-first snapshot persist writes files only after this
+       check passes)
 
     Returns:
         :class:`ArtifactHealthCheck` whose ``is_healthy`` is the new
-        promotion decision.
+        promotion decision (main) or canonical-snapshot decision.
     """
     failure_reasons: list[str] = []
 
@@ -90,15 +93,17 @@ def evaluate_forecaster_artifact_health(
     elif train_loss <= 0:
         failure_reasons.append(f"train_loss must be > 0, got {train_loss}")
 
-    if not math.isfinite(baseline_loss):
-        failure_reasons.append("baseline_loss is not finite")
-    elif baseline_loss <= 0:
-        failure_reasons.append(f"baseline_loss must be > 0, got {baseline_loss}")
+    if baseline_loss is not None:
+        if not math.isfinite(baseline_loss):
+            failure_reasons.append("baseline_loss is not finite")
+        elif baseline_loss <= 0:
+            failure_reasons.append(f"baseline_loss must be > 0, got {baseline_loss}")
 
-    for filename in _FORECASTER_REQUIRED_FILES:
-        path = artifact_dir / filename
-        if not path.exists() or path.stat().st_size <= 0:
-            failure_reasons.append(f"{filename} missing or zero bytes")
+    if artifact_dir is not None:
+        for filename in _FORECASTER_REQUIRED_FILES:
+            path = artifact_dir / filename
+            if not path.exists() or path.stat().st_size <= 0:
+                failure_reasons.append(f"{filename} missing or zero bytes")
 
     return ArtifactHealthCheck(
         is_healthy=not failure_reasons,

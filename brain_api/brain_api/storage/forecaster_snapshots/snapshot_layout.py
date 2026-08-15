@@ -8,9 +8,19 @@ from datetime import date
 SNAPSHOT_DIGEST_LEN = 12
 
 
+REJECTED_DIRNAME = "rejected"
+
+
 def snapshot_branch_basename(cutoff_date: date, snapshot_digest: str) -> str:
     """Basename for local dir and HF branch: ``snapshot-{date}-{digest}``."""
     return f"snapshot-{cutoff_date.isoformat()}-{snapshot_digest}"
+
+
+def rejected_snapshot_relpath(cutoff_date: date, snapshot_digest: str) -> str:
+    """Relative path under the bucket: ``rejected/snapshot-{date}-{digest}``."""
+    return (
+        f"{REJECTED_DIRNAME}/{snapshot_branch_basename(cutoff_date, snapshot_digest)}"
+    )
 
 
 def parse_hashed_snapshot_folder_name(dirname: str) -> tuple[date, str] | None:

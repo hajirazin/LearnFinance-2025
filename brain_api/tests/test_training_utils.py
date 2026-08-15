@@ -124,6 +124,31 @@ def test_negative_baseline_loss_rejects(healthy_artifact_dir: Path):
     assert any("baseline_loss must be > 0" in r for r in health.failure_reasons)
 
 
+def test_snapshot_metrics_only_skips_baseline_and_files():
+    """Snapshot persist has no baseline and checks metrics before write."""
+    health = evaluate_forecaster_artifact_health(
+        train_loss=0.001,
+        val_loss=0.002,
+        baseline_loss=None,
+        artifact_dir=None,
+    )
+    assert health.is_healthy is True
+    assert health.failure_reasons == []
+
+
+def test_snapshot_metrics_only_rejects_nan_val_loss():
+    health = evaluate_forecaster_artifact_health(
+        train_loss=0.001,
+        val_loss=float("nan"),
+        baseline_loss=None,
+        artifact_dir=None,
+    )
+    assert health.is_healthy is False
+    assert "val_loss is not finite" in health.failure_reasons
+    assert not any("baseline_loss" in r for r in health.failure_reasons)
+    assert not any("missing or zero bytes" in r for r in health.failure_reasons)
+
+
 @pytest.mark.parametrize("missing_file", _FORECASTER_REQUIRED_FILES)
 def test_missing_file_rejects(tmp_path: Path, missing_file: str):
     """Each of the four artifact files must exist with non-zero size."""

@@ -254,6 +254,26 @@ class TestCreateSnapshotMetadata:
         assert metadata["metrics"]["best_epoch"] == 3
         assert metadata["metrics"]["stopped_epoch"] == 18
         assert "training_timestamp" in metadata
+        assert "failure_reasons" not in metadata
+
+    def test_includes_failure_reasons_when_provided(self):
+        mock_config = MagicMock()
+        mock_config.to_dict.return_value = {}
+        metadata = create_snapshot_metadata(
+            forecaster_type="lstm",
+            cutoff_date=date(2019, 12, 31),
+            data_window_start="2016-01-01",
+            data_window_end="2019-12-31",
+            symbols=["AAPL"],
+            config=mock_config,
+            train_loss=0.01,
+            val_loss=float("nan"),
+            best_epoch=1,
+            stopped_epoch=1,
+            config_symbols_hash="bbbbbbbbbbbb",
+            failure_reasons=["val_loss is not finite"],
+        )
+        assert metadata["failure_reasons"] == ["val_loss is not finite"]
 
 
 class TestSnapshotFolderNaming:
@@ -313,6 +333,88 @@ class TestSnapshotFolderNaming:
         assert len(dirs) == 1
         assert digest_b in dirs[0].name
         assert legacy_flat.exists()
+
+
+class TestRejectedSnapshots:
+    """Rejected audit copies are not canonical snapshots."""
+
+    def _dummy_write_args(self):
+        mock_model = MagicMock()
+        mock_model.state_dict.return_value = {}
+        mock_cfg = MagicMock()
+        mock_cfg.to_dict.return_value = {}
+        return mock_model, StandardScaler(), mock_cfg
+
+    def test_rejected_not_listed_or_loaded_as_canonical(self, tmp_path) -> None:
+        storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
+        cutoff = date(2019, 12, 31)
+        digest_a = "aaaaaaaaaaaa"
+        digest_b = "bbbbbbbbbbbb"
+        model, scaler, cfg = self._dummy_write_args()
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=digest_a,
+            model=model,
+            feature_scaler=scaler,
+            config=cfg,
+            metadata={"metrics": {"train_loss": 0.01, "val_loss": 0.02}},
+        )
+        rejected = storage.write_rejected_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=digest_b,
+            model=model,
+            feature_scaler=scaler,
+            config=cfg,
+            metadata={"failure_reasons": ["val_loss is not finite"]},
+        )
+        assert "rejected" in str(rejected)
+        assert storage.list_snapshots() == [cutoff]
+        dirs = storage.hashed_snapshot_dirs_for_cutoff(cutoff)
+        assert len(dirs) == 1
+        assert digest_a in dirs[0].name
+        assert storage.snapshot_exists(cutoff, digest_a) is True
+        assert storage.snapshot_exists(cutoff, digest_b) is False
+        assert storage.rejected_snapshot_exists(cutoff, digest_b) is True
+        assert (
+            storage.snapshot_exists_anywhere(cutoff, digest_b, check_hf=False) is True
+        )
+
+    def test_download_nan_metadata_does_not_evict_sibling(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        import json
+
+        storage = SnapshotLocalStorage("lstm", base_path=tmp_path)
+        cutoff = date(2019, 12, 31)
+        digest_a = "aaaaaaaaaaaa"
+        digest_b = "bbbbbbbbbbbb"
+        model, scaler, cfg = self._dummy_write_args()
+        storage.write_snapshot(
+            cutoff_date=cutoff,
+            snapshot_digest=digest_a,
+            model=model,
+            feature_scaler=scaler,
+            config=cfg,
+            metadata={},
+        )
+        hf_cache = tmp_path / "hf_cache"
+        hf_cache.mkdir()
+        with open(hf_cache / "metadata.json", "w") as f:
+            json.dump(
+                {"metrics": {"train_loss": 0.01, "val_loss": float("nan")}},
+                f,
+                allow_nan=True,
+            )
+        monkeypatch.setattr(storage, "_get_hf_repo", lambda: "user/repo")
+        monkeypatch.setattr(
+            "brain_api.storage.forecaster_snapshots.snapshot_hf.snapshot_download",
+            lambda **kwargs: str(hf_cache),
+        )
+        assert storage.download_snapshot_from_hf(cutoff, digest_b) is False
+        dirs = storage.hashed_snapshot_dirs_for_cutoff(cutoff)
+        assert len(dirs) == 1
+        assert digest_a in dirs[0].name
+        assert not storage.snapshot_exists(cutoff, digest_b)
 
 
 class TestPatchTSTSnapshots:
