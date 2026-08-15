@@ -412,6 +412,8 @@ def _run_lstm_training(
             train_loss=result.train_loss,
             val_loss=result.val_loss,
             baseline_loss=result.baseline_loss,
+            best_epoch=result.best_epoch,
+            stopped_epoch=result.stopped_epoch,
             promoted=False,  # placeholder; real value set below
             prior_version=prior_version,
             failure_reasons=[],  # placeholder
@@ -450,6 +452,8 @@ def _run_lstm_training(
             train_loss=result.train_loss,
             val_loss=result.val_loss,
             baseline_loss=result.baseline_loss,
+            best_epoch=result.best_epoch,
+            stopped_epoch=result.stopped_epoch,
             promoted=promoted,
             prior_version=prior_version,
             failure_reasons=health.failure_reasons,
@@ -509,6 +513,8 @@ def _run_lstm_training(
                     feature_scaler=result.feature_scaler,
                     train_loss=result.train_loss,
                     val_loss=result.val_loss,
+                    best_epoch=result.best_epoch,
+                    stopped_epoch=result.stopped_epoch,
                     available_symbols=available_symbols,
                 ),
             )
@@ -521,6 +527,8 @@ def _run_lstm_training(
                 "train_loss": result.train_loss,
                 "val_loss": result.val_loss,
                 "baseline_loss": result.baseline_loss,
+                "best_epoch": result.best_epoch,
+                "stopped_epoch": result.stopped_epoch,
             },
             promoted=promoted,
             prior_version=prior_version,

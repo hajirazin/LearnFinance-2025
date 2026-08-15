@@ -78,6 +78,14 @@
         <td style="padding: 8px 12px; border-bottom: 1px solid #eee; color: #666;">Baseline Loss</td>
         <td style="padding: 8px 12px; border-bottom: 1px solid #eee;">{{ "%.6f" | format(patchtst.metrics.baseline_loss) }}</td>
       </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #eee; color: #666;">Best Epoch</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #eee;">{{ patchtst.metrics.best_epoch | default("N/A") }}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #eee; color: #666;">Stopped Epoch</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #eee;">{{ patchtst.metrics.stopped_epoch | default("N/A") }}</td>
+      </tr>
       {% if patchtst.prior_version %}
       <tr>
         <td style="padding: 8px 12px; color: #666;">Prior Version</td>

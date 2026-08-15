@@ -24,6 +24,8 @@ class TrainingResult:
     train_loss: float
     val_loss: float
     baseline_loss: float  # Baseline: predict 0 return (no change)
+    best_epoch: int  # 1-indexed checkpoint restored; 0 if none
+    stopped_epoch: int  # 1-indexed last epoch actually run; 0 if none
 
 
 def train_model_pytorch(
@@ -66,6 +68,8 @@ def train_model_pytorch(
             train_loss=float("inf"),
             val_loss=float("inf"),
             baseline_loss=float("inf"),
+            best_epoch=0,
+            stopped_epoch=0,
         )
 
     # Train/val split (time-based, not random, to prevent data leakage)
@@ -111,6 +115,7 @@ def train_model_pytorch(
     best_val_loss = float("inf")
     best_model_state = None
     best_epoch = 0
+    stopped_epoch = 0
     epochs_without_improvement = 0
     log_interval = max(1, config.epochs // 5)  # Log ~5 times during training
 
@@ -161,6 +166,7 @@ def train_model_pytorch(
                 n_val_batches += 1
                 del val_X, val_y, val_outputs
         val_loss = total_val_loss / n_val_batches
+        stopped_epoch = epoch + 1
 
         # Log progress at intervals
         if (epoch + 1) % log_interval == 0 or epoch == 0:
@@ -248,4 +254,6 @@ def train_model_pytorch(
         train_loss=final_train_loss,
         val_loss=best_val_loss,
         baseline_loss=baseline_loss,
+        best_epoch=best_epoch,
+        stopped_epoch=stopped_epoch,
     )

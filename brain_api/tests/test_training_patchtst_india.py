@@ -83,6 +83,8 @@ def _mock_trainer(
         train_loss=0.01,
         val_loss=0.02,
         baseline_loss=0.05,
+        best_epoch=1,
+        stopped_epoch=1,
     )
 
 
@@ -98,6 +100,8 @@ def _mock_trainer_worse(
         train_loss=0.10,
         val_loss=0.10,
         baseline_loss=0.05,
+        best_epoch=1,
+        stopped_epoch=1,
     )
 
 
@@ -265,7 +269,7 @@ def test_train_patchtst_india_rejects_missing_ns_suffix(
         os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_train_patchtst_india_returns_required_fields(client_india):
+def test_train_patchtst_india_returns_required_fields(client_india, temp_india_storage):
     """POST /train/patchtst/india returns all required PatchTSTTrainResponse fields."""
     response1 = client_india.post(TRAIN_INDIA_URL)
     assert response1.status_code == 202
@@ -282,6 +286,12 @@ def test_train_patchtst_india_returns_required_fields(client_india):
     assert "signals_used" in data
     assert data["num_input_channels"] == 5
     assert data["signals_used"] == ["ohlcv"]
+    assert data["metrics"]["best_epoch"] == 1
+    assert data["metrics"]["stopped_epoch"] == 1
+    on_disk = temp_india_storage.read_metadata(data["version"])
+    assert on_disk is not None
+    assert on_disk["metrics"]["best_epoch"] == 1
+    assert on_disk["metrics"]["stopped_epoch"] == 1
 
 
 def test_train_patchtst_india_idempotent_version(client_india):

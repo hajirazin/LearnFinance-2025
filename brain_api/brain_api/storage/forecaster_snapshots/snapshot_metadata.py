@@ -13,6 +13,8 @@ def create_snapshot_metadata(
     config: Any,
     train_loss: float,
     val_loss: float,
+    best_epoch: int,
+    stopped_epoch: int,
     *,
     config_symbols_hash: str,
 ) -> dict[str, Any]:
@@ -32,5 +34,7 @@ def create_snapshot_metadata(
         "metrics": {
             "train_loss": train_loss,
             "val_loss": val_loss,
+            "best_epoch": best_epoch,
+            "stopped_epoch": stopped_epoch,
         },
     }

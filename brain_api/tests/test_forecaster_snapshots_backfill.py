@@ -49,6 +49,8 @@ class TestBackfillSnapshotRange:
         mock_result = MagicMock()
         mock_result.train_loss = 0.01
         mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
 
         with (
             patch(
@@ -104,6 +106,8 @@ class TestBackfillSnapshotRange:
         mock_result = MagicMock()
         mock_result.train_loss = 0.01
         mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
 
         with (
             patch(
@@ -168,6 +172,8 @@ class TestBackfillSnapshotRange:
         mock_result = MagicMock()
         mock_result.train_loss = 0.01
         mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
 
         with (
             patch(
@@ -219,6 +225,8 @@ class TestBackfillSnapshotRange:
         mock_result = MagicMock()
         mock_result.train_loss = 0.01
         mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
 
         captured_metadata = []
 
@@ -389,6 +397,8 @@ class TestBackfillLoopsRespectPolicy:
         mock_result = MagicMock()
         mock_result.train_loss = 0.01
         mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
         stack.enter_context(
             patch(
                 "brain_api.routes.training.snapshot_phase.train_model_pytorch",

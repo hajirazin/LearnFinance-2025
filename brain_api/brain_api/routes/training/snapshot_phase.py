@@ -163,6 +163,8 @@ class _LSTMMainTrainingArtifacts:
     feature_scaler: Any
     train_loss: float
     val_loss: float
+    best_epoch: int
+    stopped_epoch: int
     available_symbols: list[str]
 
 
@@ -224,6 +226,8 @@ def _run_lstm_snapshot_phase(
                 config=config,
                 train_loss=main_artifacts.train_loss,
                 val_loss=main_artifacts.val_loss,
+                best_epoch=main_artifacts.best_epoch,
+                stopped_epoch=main_artifacts.stopped_epoch,
                 config_symbols_hash=end_snap_digest,
             )
             snapshot_storage.write_snapshot(
@@ -381,6 +385,8 @@ def _backfill_lstm_snapshots(
             config=config,
             train_loss=result.train_loss,
             val_loss=result.val_loss,
+            best_epoch=result.best_epoch,
+            stopped_epoch=result.stopped_epoch,
             config_symbols_hash=backfill_digest,
         )
 
@@ -431,6 +437,8 @@ class _PatchTSTMainTrainingArtifacts:
     feature_scaler: Any
     train_loss: float
     val_loss: float
+    best_epoch: int
+    stopped_epoch: int
     available_symbols: list[str]
 
 
@@ -480,6 +488,8 @@ def _run_patchtst_snapshot_phase(
                 config=config,
                 train_loss=main_artifacts.train_loss,
                 val_loss=main_artifacts.val_loss,
+                best_epoch=main_artifacts.best_epoch,
+                stopped_epoch=main_artifacts.stopped_epoch,
                 config_symbols_hash=end_snap_digest,
             )
             snapshot_storage.write_snapshot(
@@ -648,6 +658,8 @@ def _backfill_patchtst_snapshots(
             config=config,
             train_loss=result.train_loss,
             val_loss=result.val_loss,
+            best_epoch=result.best_epoch,
+            stopped_epoch=result.stopped_epoch,
             config_symbols_hash=backfill_digest,
         )
 

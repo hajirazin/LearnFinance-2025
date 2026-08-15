@@ -19,6 +19,8 @@ def create_training_metadata(
     train_loss: float,
     val_loss: float,
     baseline_loss: float,
+    best_epoch: int,
+    stopped_epoch: int,
     promoted: bool,
     prior_version: str | None,
     failure_reasons: list[str] | None = None,
@@ -42,6 +44,8 @@ def create_training_metadata(
         train_loss: Final training loss
         val_loss: Validation loss
         baseline_loss: Baseline (persistence) loss
+        best_epoch: 1-indexed epoch of the restored checkpoint (0 if none)
+        stopped_epoch: 1-indexed last epoch actually run (0 if none)
         promoted: Whether this version was promoted to current
         prior_version: Previous current version (if any)
         failure_reasons: Human-readable strings explaining why
@@ -77,6 +81,8 @@ def create_training_metadata(
             "train_loss": train_loss,
             "val_loss": val_loss,
             "baseline_loss": baseline_loss,
+            "best_epoch": best_epoch,
+            "stopped_epoch": stopped_epoch,
         },
         "promoted": promoted,
         "prior_version": prior_version,

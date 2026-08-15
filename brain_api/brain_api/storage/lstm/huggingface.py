@@ -76,6 +76,8 @@ LSTM model for predicting weekly stock returns.
 - Train Loss: {metadata.get("metrics", {}).get("train_loss", "N/A")}
 - Validation Loss: {metadata.get("metrics", {}).get("val_loss", "N/A")}
 - Baseline Loss: {metadata.get("metrics", {}).get("baseline_loss", "N/A")}
+- Best Epoch: {metadata.get("metrics", {}).get("best_epoch", "N/A")}
+- Stopped Epoch: {metadata.get("metrics", {}).get("stopped_epoch", "N/A")}
 
 ## Usage
 

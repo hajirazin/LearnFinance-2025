@@ -83,6 +83,8 @@ def mock_trainer(X, y, feature_scaler, config, shutdown_event=None) -> TrainingR
         train_loss=0.01,
         val_loss=0.02,
         baseline_loss=0.05,
+        best_epoch=1,
+        stopped_epoch=1,
     )
 
 
@@ -105,6 +107,8 @@ def mock_trainer_worse_than_baseline(
         train_loss=0.10,
         val_loss=0.10,
         baseline_loss=0.05,
+        best_epoch=1,
+        stopped_epoch=1,
     )
 
 
@@ -125,6 +129,8 @@ def mock_trainer_nan_val_loss(
         train_loss=0.01,
         val_loss=float("nan"),
         baseline_loss=0.05,
+        best_epoch=1,
+        stopped_epoch=1,
     )
 
 
@@ -306,7 +312,7 @@ def test_train_lstm_returns_resolved_window(client_with_mocks):
     assert data["data_window_start"] == "2014-01-01"
 
 
-def test_train_lstm_returns_required_fields(client_with_mocks):
+def test_train_lstm_returns_required_fields(client_with_mocks, temp_storage):
     """POST /train/lstm returns all required response fields."""
     response1 = client_with_mocks.post(TRAIN_URL_NO_SNAPSHOT, json={})
     assert response1.status_code == 202
@@ -322,6 +328,12 @@ def test_train_lstm_returns_required_fields(client_with_mocks):
     assert "promoted" in data
 
     assert isinstance(data["metrics"], dict)
+    assert data["metrics"]["best_epoch"] == 1
+    assert data["metrics"]["stopped_epoch"] == 1
+    on_disk = temp_storage.read_metadata(data["version"])
+    assert on_disk is not None
+    assert on_disk["metrics"]["best_epoch"] == 1
+    assert on_disk["metrics"]["stopped_epoch"] == 1
 
 
 # ============================================================================

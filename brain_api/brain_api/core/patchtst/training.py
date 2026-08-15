@@ -38,6 +38,8 @@ class TrainingResult:
     train_loss: float
     val_loss: float
     baseline_loss: float
+    best_epoch: int  # 1-indexed checkpoint restored; 0 if none
+    stopped_epoch: int  # 1-indexed last epoch actually run; 0 if none
 
 
 def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
@@ -166,6 +168,8 @@ def train_model_pytorch(
             train_loss=float("inf"),
             val_loss=float("inf"),
             baseline_loss=float("inf"),
+            best_epoch=0,
+            stopped_epoch=0,
         )
 
     X_train, X_val, y_train, y_val = _chrono_train_val_split(
@@ -219,6 +223,7 @@ def train_model_pytorch(
     best_val_loss = float("inf")
     best_model_state = None
     best_epoch = 0
+    stopped_epoch = 0
     patience_counter = 0
 
     print("[PatchTST] Starting training...")
@@ -299,6 +304,7 @@ def train_model_pytorch(
                 n_val_batches += 1
                 del val_X, val_y, preds
         val_loss = total_val_loss / n_val_batches
+        stopped_epoch = epoch + 1
 
         scheduler.step(val_loss)
         current_lr = optimizer.param_groups[0]["lr"]
@@ -401,4 +407,6 @@ def train_model_pytorch(
         train_loss=final_train_loss,
         val_loss=final_val_loss,
         baseline_loss=baseline_loss,
+        best_epoch=best_epoch,
+        stopped_epoch=stopped_epoch,
     )

@@ -238,6 +238,8 @@ class TestCreateSnapshotMetadata:
             config=mock_config,
             train_loss=0.01,
             val_loss=0.02,
+            best_epoch=3,
+            stopped_epoch=18,
             config_symbols_hash="bbbbbbbbbbbb",
         )
 
@@ -249,6 +251,8 @@ class TestCreateSnapshotMetadata:
         assert metadata["config_symbols_hash"] == "bbbbbbbbbbbb"
         assert metadata["metrics"]["train_loss"] == 0.01
         assert metadata["metrics"]["val_loss"] == 0.02
+        assert metadata["metrics"]["best_epoch"] == 3
+        assert metadata["metrics"]["stopped_epoch"] == 18
         assert "training_timestamp" in metadata
 
 
