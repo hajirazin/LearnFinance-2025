@@ -581,20 +581,6 @@ Before merging changes that touch ML/model code:
 - [ ] Confirm SAC `n_stocks` is resolved from the bucket symbol count via `make_sac_config_for_n_stocks(DEFAULT_SAC_CONFIG, len(symbols))` and NOT from a process-wide config (the parallel `sac_halal_filtered` / `sac_halal` workflows share a process and must each pick their own action dim)
 - [ ] Confirm `sac_halal_filtered` and `sac_halal` never share a `current` pointer, on-disk path, or HF repo (`HF_SAC_HALAL_FILTERED_MODEL_REPO` vs `HF_SAC_HALAL_MODEL_REPO`)
 
-## QuantBMAD (research / math peers — opt-in)
-
-In-repo Quant peers for math, model, allocator, universe, promotion, and broker-cost work. **No default plan/implement workflow skill** — invoke agents or party only when you ask.
-
-- **Agents (peers):** `qb-agent-researcher`, `qb-agent-pm`, `qb-agent-ml`, `qb-agent-risk`, `qb-agent-skeptic`, `qb-agent-validation`, `qb-agent-dev`, `qb-agent-architect`. Registered in `_bmad/custom/bmad-party-mode.toml` under party id `quantbmad`.
-- **Party (manual):** `bmad-party-mode --party quantbmad --mode subagent` — unanimous Agree, or after **3** disagreement loops ask **Razin**. No agent is boss of any other.
-- **Skills install:** literal copies under `.agents/skills/`, `.cursor/skills/`, `.gemini/skills/` from `_bmad/quantbmad/skills/` (no symlinks). Sync: `python3 _bmad/quantbmad/scripts/sync_skill_mirrors.py`.
-- **Research paths:** `_bmad/quantbmad/research_globs.py` (used by optional gates / helpers).
-- **Approval:** no agent may write `Status: Approved` on `docs/plans/**/plan.md` (human edit only).
-- **Evidence:** only `qb-agent-skeptic` may write `evidence-cert.md` with `verdict: PASS` (prefer a different model provider than the author).
-- **Helpers:** `validate_party_consensus.py`, `check_repo_green.py`, `search_ledger.py`; ledger at [`docs/research-ledger.md`](docs/research-ledger.md).
-- **CI/pre-commit:** `quantbmad-research-gate` may still require plan/cert/consensus artifacts when Research-glob paths are staged — do not use `--no-verify` to bypass without intent.
-- **Tests:** `python3 -m pytest _bmad/quantbmad/tests`
-
 ## AI assistant behavioral rules
 
 1. **Never add silent fallbacks without asking first.** Fallbacks mask real bugs and break correctness. For example, falling back to momentum when a snapshot fails to load means the system silently produces garbage instead of surfacing the error. Always raise exceptions for unexpected failures; ask the user before adding any degraded-mode fallback.

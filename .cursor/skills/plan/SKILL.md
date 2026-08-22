@@ -5,10 +5,6 @@ description: Create structured implementation plans for features, fixes, and ref
 
 # Implementation Planning
 
-## QuantBMAD note (optional)
-
-If the plan touches Research-glob paths (`python3 {project-root}/_bmad/quantbmad/research_globs.py --check <paths>` exit 1), mention that in the plan. The user may optionally invoke Quant agents (`qb-agent-*`) or party `quantbmad` manually — do **not** auto-switch into a QuantBMAD workflow skill or refuse ordinary planning.
-
 Produce structured, actionable implementation plans that enforce engineering discipline before any code is written.
 
 ## Core Principles (enforce in every plan)
