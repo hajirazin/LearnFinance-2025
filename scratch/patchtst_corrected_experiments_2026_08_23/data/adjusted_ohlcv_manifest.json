@@ -1,0 +1,105 @@
+{
+  "auto_adjust": true,
+  "downloaded_at_utc": "2026-08-22T17:29:39.510527+00:00",
+  "files": {
+    "AAPL": {
+      "end": "2025-12-31",
+      "file": "AAPL_adjusted.csv",
+      "rows": 2766,
+      "sha256": "a38fac5f6ad220c57293f7743cde7157396e9277f9c3eea7baff1c051ed76fb5",
+      "start": "2015-01-02"
+    },
+    "AMD": {
+      "end": "2025-12-31",
+      "file": "AMD_adjusted.csv",
+      "rows": 2766,
+      "sha256": "0d3923f08ff8c2554ee52d7b081d441680b33a0b2a71a7a9533222595a4f5cbc",
+      "start": "2015-01-02"
+    },
+    "AVGO": {
+      "end": "2025-12-31",
+      "file": "AVGO_adjusted.csv",
+      "rows": 2766,
+      "sha256": "1c3fccf79611335e8699d342969bc10042214ef855515105f08cfe4d0ea66f97",
+      "start": "2015-01-02"
+    },
+    "GOOGL": {
+      "end": "2025-12-31",
+      "file": "GOOGL_adjusted.csv",
+      "rows": 2766,
+      "sha256": "22337dc1e0f49d8da1fa88f93c5e18a037bd1388d284b3381310841f6880fb04",
+      "start": "2015-01-02"
+    },
+    "LLY": {
+      "end": "2025-12-31",
+      "file": "LLY_adjusted.csv",
+      "rows": 2766,
+      "sha256": "cc030502287bbec4d8eee989bcddeaf72dff07c3bc3f8072ebbcc0bb4e761b88",
+      "start": "2015-01-02"
+    },
+    "META": {
+      "end": "2025-12-31",
+      "file": "META_adjusted.csv",
+      "rows": 2766,
+      "sha256": "5583ee47c93b9866d806154931fe46217bd8579df4dcd2f74ee9730d75f10cc9",
+      "start": "2015-01-02"
+    },
+    "MSFT": {
+      "end": "2025-12-31",
+      "file": "MSFT_adjusted.csv",
+      "rows": 2766,
+      "sha256": "00956f9b7711d58c1523ab66982979128cc0ba216de0319bad704c2d939e69b0",
+      "start": "2015-01-02"
+    },
+    "MU": {
+      "end": "2025-12-31",
+      "file": "MU_adjusted.csv",
+      "rows": 2766,
+      "sha256": "7c1279de16a75600ec2062d934b4e68070d3bb3a95a499cea6c9797bd8750194",
+      "start": "2015-01-02"
+    },
+    "NVDA": {
+      "end": "2025-12-31",
+      "file": "NVDA_adjusted.csv",
+      "rows": 2766,
+      "sha256": "ef1e974ea966ec899d6a8f633e9411fc2b109083566631e25e622800426f56fb",
+      "start": "2015-01-02"
+    },
+    "TSLA": {
+      "end": "2025-12-31",
+      "file": "TSLA_adjusted.csv",
+      "rows": 2766,
+      "sha256": "66ffdc2287f0adce6d167a7f22b1641d0842df23a90900757408fd95aeafd619",
+      "start": "2015-01-02"
+    },
+    "TSM": {
+      "end": "2025-12-31",
+      "file": "TSM_adjusted.csv",
+      "rows": 2766,
+      "sha256": "2fabefb604c29ddc103ff324eefff72af34fd64134d14f73c70a4e000f9f7f69",
+      "start": "2015-01-02"
+    },
+    "XOM": {
+      "end": "2025-12-31",
+      "file": "XOM_adjusted.csv",
+      "rows": 2766,
+      "sha256": "322cb0cfbb63a50319c3a48cbf2b7abdd1863d945d1fce399423e9757207051c",
+      "start": "2015-01-02"
+    }
+  },
+  "provider": "yfinance",
+  "requested_symbols": [
+    "AAPL",
+    "AMD",
+    "AVGO",
+    "GOOGL",
+    "LLY",
+    "META",
+    "MSFT",
+    "MU",
+    "NVDA",
+    "TSLA",
+    "TSM",
+    "XOM"
+  ]
+}

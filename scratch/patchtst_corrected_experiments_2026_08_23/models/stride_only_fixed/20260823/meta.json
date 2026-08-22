@@ -1,0 +1,66 @@
+{
+  "architecture": {
+    "channel_attention": false,
+    "legacy_stride_keyword": false,
+    "name": "stride_only_fixed",
+    "num_channels": 5,
+    "patch_stride": 8,
+    "pooling_type": "mean"
+  },
+  "best_epoch": 1,
+  "best_validation_loss": 0.0005241231853142381,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.000647156771983167,
+      "validation_loss": 0.0005241231853142381
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.0006454150823533143,
+      "validation_loss": 0.0005246512036925803
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.0006427176995202899,
+      "validation_loss": 0.0005258234640738616
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.0006421145670557101,
+      "validation_loss": 0.0005264855304267257
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.0006423830238514041,
+      "validation_loss": 0.0005271073574355493
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.000641537257347648,
+      "validation_loss": 0.0005284874141216278
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.0006404113618804044,
+      "validation_loss": 0.0005285874901649853
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.0006392916119167287,
+      "validation_loss": 0.0005292694340460003
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.000638318912885887,
+      "validation_loss": 0.0005310869604970018
+    }
+  ],
+  "n_train": 4788,
+  "n_validation": 600,
+  "objective": "daily_mse",
+  "seed": 20260823,
+  "stopped_epoch": 9,
+  "training_fingerprint": "dd2ebb44ec7726ebe7e0bc78f4809992c2d8866a3ba8ad83c68572a4cdc4c0b6",
+  "weights_sha256": "49321efa140c0eab27e073b00851f4864313c769223d5a2896c0aa7d6bce2d0f"
+}

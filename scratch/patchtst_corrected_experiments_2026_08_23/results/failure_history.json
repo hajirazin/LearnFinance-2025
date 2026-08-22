@@ -1,0 +1,8 @@
+[
+  {
+    "attempt_id": "suite-start-failure",
+    "error": "RuntimeError('tracked worktree/index differs from the preregistered baseline')",
+    "recorded_at_utc": "2026-08-22T18:04:10.032054+00:00",
+    "stage": "suite"
+  }
+]

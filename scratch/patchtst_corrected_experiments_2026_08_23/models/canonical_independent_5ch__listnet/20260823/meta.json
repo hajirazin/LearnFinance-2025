@@ -1,0 +1,104 @@
+{
+  "architecture": {
+    "channel_attention": false,
+    "legacy_stride_keyword": false,
+    "name": "canonical_independent_5ch",
+    "num_channels": 5,
+    "patch_stride": 8,
+    "pooling_type": null
+  },
+  "best_epoch": 9,
+  "best_validation_loss": 2.475630044937134,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 2.4830269813537598,
+      "validation_loss": 2.48384428024292
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.4798405075073244,
+      "validation_loss": 2.481091022491455
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.474400072097778,
+      "validation_loss": 2.4767723083496094
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.468530311584473,
+      "validation_loss": 2.4768874645233154
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.4678693866729735,
+      "validation_loss": 2.47763729095459
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.4651782608032224,
+      "validation_loss": 2.4788706302642822
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.464380941390991,
+      "validation_loss": 2.4779205322265625
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.465884876251221,
+      "validation_loss": 2.4777307510375977
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.4625413703918455,
+      "validation_loss": 2.475630044937134
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.459469814300537,
+      "validation_loss": 2.478013753890991
+    },
+    {
+      "epoch": 11,
+      "train_loss": 2.4569414901733397,
+      "validation_loss": 2.4818854331970215
+    },
+    {
+      "epoch": 12,
+      "train_loss": 2.455749177932739,
+      "validation_loss": 2.485787868499756
+    },
+    {
+      "epoch": 13,
+      "train_loss": 2.4509463691711426,
+      "validation_loss": 2.485819101333618
+    },
+    {
+      "epoch": 14,
+      "train_loss": 2.449105968475342,
+      "validation_loss": 2.4876391887664795
+    },
+    {
+      "epoch": 15,
+      "train_loss": 2.444535665512085,
+      "validation_loss": 2.487790107727051
+    },
+    {
+      "epoch": 16,
+      "train_loss": 2.4403491401672364,
+      "validation_loss": 2.490962266921997
+    },
+    {
+      "epoch": 17,
+      "train_loss": 2.438999662399292,
+      "validation_loss": 2.4946506023406982
+    }
+  ],
+  "n_train": 4788,
+  "n_validation": 600,
+  "objective": "listnet",
+  "seed": 20260823,
+  "stopped_epoch": 17
+}

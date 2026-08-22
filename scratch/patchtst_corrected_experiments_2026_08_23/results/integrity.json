@@ -1,0 +1,16 @@
+{
+  "artifacts_sha256": {
+    "config.json": "35b2d7e16bed58e1ce0f4fbc9a2ad96517a8df13435495c58a5589af0e88dd65",
+    "results/failure_history.json": "207f26f075b9c6d60b471b05d394a39bdbb0312e442c1a0f468103a1a887269a",
+    "results/failures.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "results/first_test_unlock.json": "60d83c00c11eecb1bf5957c632a42f0af0a7c409ee4108bcd2539e93fa2fed61",
+    "results/manifest.json": "6cc23a5c12bc2b94180c51cdd85e0c0105e2458a004c107997615403d29f6455",
+    "results/metrics.csv": "6d5d960d518bd7b6b2424c91d1b9db2ddcf1a7e92a0fe3acc54c46fe36420d73",
+    "results/predictions.csv": "b5a2b63e11113eb5d20d449d8b08f17927fe65e185cad44c534b23a8c2732d79",
+    "results/selection.json": "e98664de02d624b072f51c792ae947cb4a7a76fc58f134da674809587909b30c",
+    "results/summary.json": "99574bb58aab3e23498309295c848d4cc713979bd8d564fc913f9f8ce285d429",
+    "results/validation_predictions.csv": "169dac2c1ae3a2b54e0d4d8ce4df0ef1d8306b2355e06c1b5a5a027c3021a965",
+    "results/weekly_metrics.csv": "7784858ce71f46ab2b39565de047ec01a5c0b4c34ebe87f9e11d398aeffa8da7"
+  },
+  "attempt_id": "20260822T180450Z-7065a24a"
+}

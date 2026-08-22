@@ -1,0 +1,93 @@
+{
+  "attempt_id": "20260822T180450Z-7065a24a",
+  "common_symbols": [
+    "AAPL",
+    "AMD",
+    "AVGO",
+    "GOOGL",
+    "LLY",
+    "META",
+    "MSFT",
+    "MU",
+    "NVDA",
+    "TSLA",
+    "TSM",
+    "XOM"
+  ],
+  "config_sha256": "35b2d7e16bed58e1ce0f4fbc9a2ad96517a8df13435495c58a5589af0e88dd65",
+  "data_manifest_sha256": "c6f9403a511aeb59d40709194c22ab3835c9da8eaf7c25992b06d90d9f319131",
+  "exclusions": {},
+  "model_artifact_sha256": {
+    "models/canonical_close_only/20260823/meta.json": "9d8094e4e07c528ee946a57cb9b97fd906a55a090cc4582aac86be00492f7fa0",
+    "models/canonical_close_only/20260823/weights.pt": "8397706527d7fcb2f9c057f9f779f29df04b1ad97fc395cfa80c189e0b5a240c",
+    "models/canonical_close_only/20260824/meta.json": "33b0f997e2a8d2aca24319a9b3889618b74d7b8adcc3afcf41760c6da98943ad",
+    "models/canonical_close_only/20260824/weights.pt": "8d9260b58c55df1c6b4c37d2820aca08d7693d3c76b43efb44c807bd183454e5",
+    "models/canonical_close_only/20260825/meta.json": "753e7877458b157133f5d1510dc5b45dd560b69387f97534331dc7bb4da0617f",
+    "models/canonical_close_only/20260825/weights.pt": "b31f42d525b4e55b6d10e68fa45779a7c032131ee55b4efc86ee6b2d9f87f3c1",
+    "models/canonical_close_only__listnet/20260823/meta.json": "c28da23c019e5314dd2666f331352a03dc65a24ccd2611e7227df08af878089a",
+    "models/canonical_close_only__listnet/20260823/weights.pt": "2a3d7c6f458447f6e4f09c0c24649c54c1f57a0eda9747d9ab843cae3b548e4d",
+    "models/canonical_close_only__listnet/20260824/meta.json": "00010fe9ad6746acde260dbc82fe7de8f031f9c413e9545cc4da5a580d96ddc7",
+    "models/canonical_close_only__listnet/20260824/weights.pt": "5a8466dda373ee7b1aaecba31b51d20f7719584a93472a6e74f19c5c642b12a5",
+    "models/canonical_close_only__listnet/20260825/meta.json": "cd46881c1f5d927c1ae0212854c96c15a4c19e134eb8dd08d20ba617df347ac6",
+    "models/canonical_close_only__listnet/20260825/weights.pt": "4d1a5b2f075c14e4586ef07452b60a4b1aacb0a5176aa592d77b127eadc04cb6",
+    "models/canonical_independent_5ch/20260823/meta.json": "0b6425f82a8302865e969bb345a5a5f59eb66403e335495cd9d399010687cacd",
+    "models/canonical_independent_5ch/20260823/weights.pt": "d42c1661c45a9e0dfdf55b9dda0e83dd2755968436ee156b9479db20ff537122",
+    "models/canonical_independent_5ch/20260824/meta.json": "fd7c2a3c5392598ee14b5eda5f97c8922afb4080bb32a5d80e29a6190eda5196",
+    "models/canonical_independent_5ch/20260824/weights.pt": "8e9ce3e7022640198def450780c30158bab8309a842db617d19485ff304a2735",
+    "models/canonical_independent_5ch/20260825/meta.json": "9ba882c97ff7d163e55471e74dd93fcb880b4a6b4ec42e4c95e35e89a2d6d9d0",
+    "models/canonical_independent_5ch/20260825/weights.pt": "a815201d42ac7a738bf17d0d33ab2627de39c6904ae851863d77af0d8acb4339",
+    "models/canonical_mixing_5ch/20260823/meta.json": "bef09680fe586146a60b2e0f6f8e0f262c9624e9b683ef2c0aae52ca24116299",
+    "models/canonical_mixing_5ch/20260823/weights.pt": "7150a937fceb30e5b983335189174942c67d13caded8a4a4436f4490c66ee7ea",
+    "models/canonical_mixing_5ch/20260824/meta.json": "a14fb27c0456657203e221799aaa99cad2bcc9a09869533ec5258d0afa12e91b",
+    "models/canonical_mixing_5ch/20260824/weights.pt": "6893a95c20e4c93b87fbce1d237d22ca20b10f89cebedc3de644ee8b0ab32b03",
+    "models/canonical_mixing_5ch/20260825/meta.json": "ba3f56af5a912d109ab21ddc42cc8d9b75b14fe32f625fa04b9081ea417adfe4",
+    "models/canonical_mixing_5ch/20260825/weights.pt": "445155e932dbb4ffc01845b47b5eb82bd2417772592c9156ae069fe7acbb6724",
+    "models/legacy_effective/20260823/meta.json": "f511646847234172fe7b9bd4b910606413ad892f567add14e8469ee35e56d033",
+    "models/legacy_effective/20260823/weights.pt": "8dffa3cebe3d2fcdca400d81be3891a2b5f1624b1cb4c468c11fc028167f5dfa",
+    "models/legacy_effective/20260824/meta.json": "96ca770bbdb369b1c9755462c393e97e9501a15302a6364e2db216c990a9b0bc",
+    "models/legacy_effective/20260824/weights.pt": "6c639780eab3959d0a967eb4941be6722bf09774068c493cdb68f590767450ab",
+    "models/legacy_effective/20260825/meta.json": "f4d646359a1ac13dbd4718336130478e72741599cb004c67122aaf21d317546e",
+    "models/legacy_effective/20260825/weights.pt": "21374f5b552791ce228d113c40357bd3825ee08368ca1a5dcfd0a94c50a3a135",
+    "models/stride_only_fixed/20260823/meta.json": "61e25eb783299116e4ada00561aa109aa3a168b9619df37a3c450be771e71201",
+    "models/stride_only_fixed/20260823/weights.pt": "49321efa140c0eab27e073b00851f4864313c769223d5a2896c0aa7d6bce2d0f",
+    "models/stride_only_fixed/20260824/meta.json": "19e3c218747a8a405c6b96647872b9aa6aa04f5b0557eb4339e9a5a212814808",
+    "models/stride_only_fixed/20260824/weights.pt": "0ee5ee276f9a6c16741a650f390b4877b5d13722197a9da07cef9e02dee00e2a",
+    "models/stride_only_fixed/20260825/meta.json": "593622382005d043dceadeac478ec8902dcfcf8ec5c6f86a49e8f48efd614ef7",
+    "models/stride_only_fixed/20260825/weights.pt": "6175fe9149af1bd92724e1442ab8305d34449d23251705b0f83b6465ed4b7c62"
+  },
+  "result_artifact_sha256": {
+    "config.json": "35b2d7e16bed58e1ce0f4fbc9a2ad96517a8df13435495c58a5589af0e88dd65",
+    "results/first_test_unlock.json": "60d83c00c11eecb1bf5957c632a42f0af0a7c409ee4108bcd2539e93fa2fed61",
+    "results/metrics.csv": "6d5d960d518bd7b6b2424c91d1b9db2ddcf1a7e92a0fe3acc54c46fe36420d73",
+    "results/predictions.csv": "b5a2b63e11113eb5d20d449d8b08f17927fe65e185cad44c534b23a8c2732d79",
+    "results/selection.json": "e98664de02d624b072f51c792ae947cb4a7a76fc58f134da674809587909b30c",
+    "results/validation_predictions.csv": "169dac2c1ae3a2b54e0d4d8ce4df0ef1d8306b2355e06c1b5a5a027c3021a965",
+    "results/weekly_metrics.csv": "7784858ce71f46ab2b39565de047ec01a5c0b4c34ebe87f9e11d398aeffa8da7"
+  },
+  "row_counts": {
+    "test": 1236,
+    "train": 4788,
+    "validation": 600
+  },
+  "run_log_note": "run.log is append-only; prior failed/review attempts remain visible and are not part of the final-run integrity seal",
+  "source_sha256": {
+    "evaluation.py": "706086979209c224dd01a07fb33f820004b51f0ed2d60692af6fa6235dc4d8db",
+    "experiment_core.py": "a6044cad3d503f159d64197aea7d9773c0aa1b961ad09827000dd58fd96d27ac",
+    "run_experiments.py": "776f50e9775c017595361bb065695ea6b015e003825b63aed8a1c1b1420a2743",
+    "test_experiments.py": "bfe686fcbf80fb775c9286ac7a576c52b805f028d78986313b115db0c9376dd1"
+  },
+  "stale_model_artifacts_excluded": [
+    "models/canonical_independent_5ch__listnet/20260823/meta.json",
+    "models/canonical_independent_5ch__listnet/20260823/weights.pt",
+    "models/canonical_independent_5ch__listnet/20260824/meta.json",
+    "models/canonical_independent_5ch__listnet/20260824/weights.pt",
+    "models/canonical_independent_5ch__listnet/20260825/meta.json",
+    "models/canonical_independent_5ch__listnet/20260825/weights.pt"
+  ],
+  "test_labels_locked": true,
+  "week_counts": {
+    "test": 103,
+    "train": 399,
+    "validation": 50
+  }
+}

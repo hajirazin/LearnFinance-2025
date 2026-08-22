@@ -1,0 +1,11 @@
+{
+  "config_sha256": "35b2d7e16bed58e1ce0f4fbc9a2ad96517a8df13435495c58a5589af0e88dd65",
+  "selection_sha256": "e98664de02d624b072f51c792ae947cb4a7a76fc58f134da674809587909b30c",
+  "source_sha256": {
+    "evaluation.py": "706086979209c224dd01a07fb33f820004b51f0ed2d60692af6fa6235dc4d8db",
+    "experiment_core.py": "a6044cad3d503f159d64197aea7d9773c0aa1b961ad09827000dd58fd96d27ac",
+    "run_experiments.py": "776f50e9775c017595361bb065695ea6b015e003825b63aed8a1c1b1420a2743",
+    "test_experiments.py": "bfe686fcbf80fb775c9286ac7a576c52b805f028d78986313b115db0c9376dd1"
+  },
+  "validation_predictions_sha256": "169dac2c1ae3a2b54e0d4d8ce4df0ef1d8306b2355e06c1b5a5a027c3021a965"
+}
