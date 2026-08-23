@@ -1,0 +1,154 @@
+{
+  "arm": {
+    "attention_dropout": 0.0,
+    "ff_dropout": 0.05,
+    "head_dropout": 0.0,
+    "name": "coherent_candidate_10_5",
+    "objective": "scaled_ohlcv_daily_mse",
+    "patch_length": 10,
+    "patch_stride": 5,
+    "path_dropout": 0.05,
+    "pooling_type": null,
+    "positional_dropout": 0.05
+  },
+  "best_epoch": 7,
+  "best_validation_loss": 0.8885141150143652,
+  "best_validation_rank_ic": -0.010379095354397778,
+  "fingerprint": "f9a7b3f9e77fd38a465bd3a734488b9fe4c8bf7a8c27a9a443f8ff4ccc0be57a",
+  "history": [
+    {
+      "epoch": 1,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9891711518531988,
+      "validation_loss": 0.8914924305264597,
+      "validation_rank_ic": -0.01978734440791606
+    },
+    {
+      "epoch": 2,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9599865012326516,
+      "validation_loss": 0.8860144994483449,
+      "validation_rank_ic": -0.014959669350022117
+    },
+    {
+      "epoch": 3,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9460415253253023,
+      "validation_loss": 0.8845994593422745,
+      "validation_rank_ic": -0.013272636371930437
+    },
+    {
+      "epoch": 4,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9378445037029991,
+      "validation_loss": 0.8844398244768603,
+      "validation_rank_ic": -0.01618888985366177
+    },
+    {
+      "epoch": 5,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9293782861086948,
+      "validation_loss": 0.888864562905844,
+      "validation_rank_ic": -0.01668700681053422
+    },
+    {
+      "epoch": 6,
+      "learning_rate": 0.0003,
+      "train_loss": 0.924568878315697,
+      "validation_loss": 0.8916167138130837,
+      "validation_rank_ic": -0.014944804795995607
+    },
+    {
+      "epoch": 7,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9192240647379032,
+      "validation_loss": 0.8885141150143652,
+      "validation_rank_ic": -0.010379095354397778
+    },
+    {
+      "epoch": 8,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9146886472197604,
+      "validation_loss": 0.8931438542080206,
+      "validation_rank_ic": -0.012516645179623245
+    },
+    {
+      "epoch": 9,
+      "learning_rate": 0.0003,
+      "train_loss": 0.9106923291072373,
+      "validation_loss": 0.8934529550284264,
+      "validation_rank_ic": -0.017148607582073393
+    },
+    {
+      "epoch": 10,
+      "learning_rate": 0.00015,
+      "train_loss": 0.9068261490506574,
+      "validation_loss": 0.8955677563522069,
+      "validation_rank_ic": -0.018406657105837842
+    },
+    {
+      "epoch": 11,
+      "learning_rate": 0.00015,
+      "train_loss": 0.8990423015153113,
+      "validation_loss": 0.8958920334842464,
+      "validation_rank_ic": -0.017076720744814998
+    },
+    {
+      "epoch": 12,
+      "learning_rate": 0.00015,
+      "train_loss": 0.8959350324473105,
+      "validation_loss": 0.8952718689753001,
+      "validation_rank_ic": -0.017125556482291096
+    },
+    {
+      "epoch": 13,
+      "learning_rate": 0.00015,
+      "train_loss": 0.8939367853093738,
+      "validation_loss": 0.8934894997615606,
+      "validation_rank_ic": -0.013744450594214426
+    },
+    {
+      "epoch": 14,
+      "learning_rate": 0.00015,
+      "train_loss": 0.8926828146784759,
+      "validation_loss": 0.8943454746063516,
+      "validation_rank_ic": -0.02029207135104054
+    },
+    {
+      "epoch": 15,
+      "learning_rate": 0.00015,
+      "train_loss": 0.8903730468576605,
+      "validation_loss": 0.8942566719018226,
+      "validation_rank_ic": -0.018350914884512234
+    }
+  ],
+  "n_train": 151250,
+  "n_validation": 20777,
+  "runtime_seconds": 117.55193987499979,
+  "seed": 20260823,
+  "stopped_epoch": 15,
+  "target_scales": [
+    0.023017054423689842,
+    0.020588131621479988,
+    0.021785113960504532,
+    0.02259220741689205,
+    0.5241941809654236
+  ],
+  "training_config": {
+    "batch_size": 256,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "learning_rate": 0.0003,
+    "max_epochs": 60,
+    "max_grad_norm": 1.0,
+    "optimizer": "Adam",
+    "patience": 8,
+    "scheduler": "ReduceLROnPlateau(factor=0.5,patience=5)",
+    "selection": "max validation weekly rank IC; validation loss tie-break",
+    "weight_decay": 0.0
+  },
+  "weights_sha256": "2c19a378ff0792e7f5a882e3bf09b2df9242fc1be2b863f6322982d3edfa24cf"
+}

@@ -110,10 +110,10 @@ class PatchTSTConfig:
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             ffn_dim=self.ffn_dim,
-            dropout=self.dropout,
             prediction_length=self.prediction_length,
             # RevIN defaults to scaling="std" -- handles per-channel normalization
-            # Additional settings to match training
+            # Hugging Face PatchTST has no generic ``dropout`` setting. Apply the
+            # domain value only to the two dropout sites used by this model.
             attention_dropout=self.dropout,
             positional_dropout=self.dropout,
             use_cls_token=False,  # Use pooling instead
