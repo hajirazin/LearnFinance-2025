@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260823T071624Z",
+  "checkpoint_count": 6,
+  "checkpoints": {
+    "confirmatory_2026/flatten/20260823": {
+      "created_at_utc": "2026-08-23T07:44:58.066600+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/flatten/20260823/weights.pt",
+      "weights_sha256": "c94cc0d5998807e99cb3cd189fb44bc03a2d531af1e5270289e9b0e020c865c4"
+    },
+    "confirmatory_2026/flatten/20260824": {
+      "created_at_utc": "2026-08-23T07:46:17.882832+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/flatten/20260824/weights.pt",
+      "weights_sha256": "9d942afc30a9ad6b145c4a21efa6d149df51db65fd37f904a2bc3005b7f013e7"
+    },
+    "confirmatory_2026/flatten/20260825": {
+      "created_at_utc": "2026-08-23T07:47:38.228812+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/flatten/20260825/weights.pt",
+      "weights_sha256": "7d43943b83269821d1b909414df8ab4c4833309d508cf1382dd601ad99248eb5"
+    },
+    "confirmatory_2026/mean/20260823": {
+      "created_at_utc": "2026-08-23T07:39:14.059086+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/mean/20260823/weights.pt",
+      "weights_sha256": "c2d7e07f6dbd6a55451c01298893da5398353697bc4dc0b1fd9b73320ae0ddc3"
+    },
+    "confirmatory_2026/mean/20260824": {
+      "created_at_utc": "2026-08-23T07:40:55.050763+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/mean/20260824/weights.pt",
+      "weights_sha256": "0a4092fd1dc98b31d44914b6730e95ff42482749b1c51754fa2ae4f01d667ba6"
+    },
+    "confirmatory_2026/mean/20260825": {
+      "created_at_utc": "2026-08-23T07:43:42.726745+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_pooling_sweep_2026_08_23/models/confirmatory_2026/mean/20260825/weights.pt",
+      "weights_sha256": "66f772b0685f139cc423ec36fc9b6c419ec1633b45ed65ca11969e9d075161cc"
+    }
+  },
+  "evaluation_labels_read_before_unlock": false,
+  "locked_non_evaluation_panel_sha256": "5a3b99a4fe1fe200b2dc8d678bd09db96ba8a144f06d0ffa7f448820790ff040",
+  "unlocked_at_utc": "2026-08-23T07:47:38.279386+00:00"
+}
