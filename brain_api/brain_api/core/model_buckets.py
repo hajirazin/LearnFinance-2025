@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from brain_api.core.config import (
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     pass
 
 
-class ModelType(str, Enum):
+class ModelType(StrEnum):
     """Model families that own a bucket registry entry per universe."""
 
     LSTM = "lstm"

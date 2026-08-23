@@ -209,19 +209,20 @@ def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> No
             aligned_features, prices, config
         ),
     )
-    monkeypatch.setattr(
-        snapshot_phase,
-        "patchtst_train_model",
-        lambda X,
+
+    def _train(
+        X,
         y,
         feature_scaler,
         config,
         shutdown_event=None,
         anchor_dates=None,
-        sample_symbols=None: mock_trainer(
-            X, y, feature_scaler, config, shutdown_event=shutdown_event
-        ),
-    )
+        sample_symbols=None,
+    ):
+        del anchor_dates, sample_symbols
+        return mock_trainer(X, y, feature_scaler, config, shutdown_event=shutdown_event)
+
+    monkeypatch.setattr(snapshot_phase, "patchtst_train_model", _train)
 
 
 @pytest.fixture
@@ -229,8 +230,8 @@ def client_with_mocks(temp_storage, monkeypatch):
     """Create test client with mocked dependencies for the *main* training path."""
     _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
@@ -257,8 +258,8 @@ def client_with_backfill_mocks(temp_storage, monkeypatch):
     """
     _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
     _patch_us_patchtst_backfill_internals(monkeypatch)
@@ -436,8 +437,8 @@ def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
 
         _override_us_patchtst_bucket(monkeypatch, fresh_storage)
         app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-        app.dependency_overrides[get_patchtst_dataset_builder] = (
-            lambda: mock_dataset_builder
+        app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+            mock_dataset_builder
         )
         app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
@@ -455,8 +456,8 @@ def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
             first_version = response1b.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
-            app.dependency_overrides[get_patchtst_trainer] = (
-                lambda: mock_trainer_worse_than_baseline
+            app.dependency_overrides[get_patchtst_trainer] = lambda: (
+                mock_trainer_worse_than_baseline
             )
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 
@@ -488,8 +489,8 @@ def test_train_patchtst_not_promoted_when_val_loss_is_nan(temp_storage, monkeypa
 
     _override_us_patchtst_bucket(monkeypatch, temp_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 

@@ -41,7 +41,7 @@ a duplicate.
 from __future__ import annotations
 
 import logging
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -76,7 +76,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-class IBKRAccount(str, Enum):
+class IBKRAccount(StrEnum):
     """Supported IBKR trading accounts.
 
     Only ``sac_halal`` is wired today (cloned from the legacy halal SAC

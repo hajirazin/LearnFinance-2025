@@ -249,7 +249,7 @@ class TestBackfillSnapshotRange:
             ),
             patch(
                 "brain_api.routes.training.snapshot_phase.create_snapshot_metadata",
-                side_effect=lambda **kw: (captured_metadata.append(kw) or {}),
+                side_effect=lambda **kw: captured_metadata.append(kw) or {},
             ),
             patch("brain_api.routes.training.snapshot_phase.gc"),
             patch("brain_api.routes.training.snapshot_phase.torch"),

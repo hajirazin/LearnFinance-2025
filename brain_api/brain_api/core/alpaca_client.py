@@ -36,7 +36,7 @@ the wrong account (AGENTS.md rule #1).
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 
 
-class AlpacaAccount(str, Enum):
+class AlpacaAccount(StrEnum):
     """Supported Alpaca trading accounts (paper by default; live opt-in per-account).
 
     - ``sac``: SAC RL allocator (US, ``halal_filtered`` universe -- sticky-15

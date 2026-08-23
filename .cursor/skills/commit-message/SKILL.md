@@ -19,6 +19,7 @@ When this skill is invoked, the user wants to commit **now**. Do NOT ask "shall 
 ### Never bypass pre-commit hooks
 
 - **FORBIDDEN:** `--no-verify`, `-n`, `noqa`, skip-test, skip-ruff
+- **Never do `-n` / `--no-verify` — hooks MUST run; this is non-negotiable**
 - **CORRECT:** `git commit -S -m "message"` (hooks run normally)
 - If hooks fail, **fix the issue** instead of bypassing
 

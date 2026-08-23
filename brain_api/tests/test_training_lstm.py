@@ -430,8 +430,8 @@ def test_train_lstm_promotes_even_when_worse_than_prior(monkeypatch):
 
             # Second run with WORSE val_loss than the prior. Under the
             # old gate this would not promote; under guardrails it does.
-            app.dependency_overrides[get_trainer] = (
-                lambda: mock_trainer_worse_than_baseline
+            app.dependency_overrides[get_trainer] = lambda: (
+                mock_trainer_worse_than_baseline
             )
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 

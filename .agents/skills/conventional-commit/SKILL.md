@@ -89,6 +89,7 @@ Choose `chore(research)` for `scratch/**` audits that must not trigger a release
 
 ## Rules
 
+- **Never do `-n` / `--no-verify` — pre-commit hooks MUST run; fix failures instead of bypassing**
 - NEVER use `WIP`, `update`, `fix stuff`. Always conventional.
 - NEVER add silent fallbacks in code to make a commit pass; surface errors.
 - NEVER create markdown files unless required (the commit body is the documentation).

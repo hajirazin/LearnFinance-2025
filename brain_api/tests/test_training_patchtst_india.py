@@ -175,27 +175,30 @@ def _patch_india_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) ->
             aligned_features, prices, config
         ),
     )
-    monkeypatch.setattr(
-        snapshot_phase,
-        "patchtst_train_model",
-        lambda X,
+
+    def _train(
+        X,
         y,
         feature_scaler,
         config,
         shutdown_event=None,
         anchor_dates=None,
-        sample_symbols=None: _mock_trainer(
+        sample_symbols=None,
+    ):
+        del anchor_dates, sample_symbols
+        return _mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
-        ),
-    )
+        )
+
+    monkeypatch.setattr(snapshot_phase, "patchtst_train_model", _train)
 
 
 @pytest.fixture
 def client_india(temp_india_storage, monkeypatch):
     _override_india_patchtst_bucket(monkeypatch, temp_india_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: _mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        _mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 
@@ -220,8 +223,8 @@ def client_india_with_backfill_mocks(temp_india_storage, monkeypatch):
     """
     _override_india_patchtst_bucket(monkeypatch, temp_india_storage)
     app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: _mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        _mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
     _patch_india_patchtst_backfill_internals(monkeypatch)
@@ -271,8 +274,8 @@ def test_train_patchtst_india_rejects_missing_ns_suffix(
         monkeypatch, temp_india_storage, symbols_fn=_mock_india_symbols_missing_suffix
     )
     app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = (
-        lambda: _mock_dataset_builder
+    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+        _mock_dataset_builder
     )
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 
@@ -350,8 +353,8 @@ def test_train_patchtst_india_promotes_even_when_worse_than_prior(monkeypatch):
         app.dependency_overrides.clear()
         _override_india_patchtst_bucket(monkeypatch, storage)
         app.dependency_overrides[get_patchtst_price_loader] = lambda: _mock_price_loader
-        app.dependency_overrides[get_patchtst_dataset_builder] = (
-            lambda: _mock_dataset_builder
+        app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
+            _mock_dataset_builder
         )
         app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 

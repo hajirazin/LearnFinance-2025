@@ -34,7 +34,7 @@ import json
 import logging
 import os
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 ENV_STORAGE_BACKEND = "STORAGE_BACKEND"
 
 
-class StoragePolicy(str, Enum):
+class StoragePolicy(StrEnum):
     """Read-priority policy for model artifacts and snapshots.
 
     Members are intentionally string-valued so the env var maps 1:1

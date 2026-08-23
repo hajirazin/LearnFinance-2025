@@ -587,6 +587,8 @@ Before merging changes that touch ML/model code:
 
 2. **Math correctness is the highest priority -- never break math to simplify code.** DRY, DDD, and clean code matter and you should factor out genuinely shared logic. The rule is about precedence, not duplication: when two algorithms have research-driven mathematical differences (even subtle ones), each must keep its own math even if the surface code looks similar. Concrete cautionary tale from this repo: PPO and SAC each have algorithm-specific mathematical steps; we once "reused" code between them for DRY and silently broke PPO's math. If the math is provably identical (e.g., a standard formula like Sharpe ratio, a generic covariance estimator, a shared data loader), share it; if there is any research-level difference, keep the implementations separate even if the code looks alike. When in doubt, ask before merging two model-specific code paths.
 
+3. **Never do `-n` / `--no-verify` — pre-commit hooks MUST run; fix ruff and test failures instead of bypassing.** Commits that bypass verification hide real failures and break the invariant that `main` is always green.
+
 ## AI assistant planning rules
 
 When operating in **plan mode**, the AI assistant must:
