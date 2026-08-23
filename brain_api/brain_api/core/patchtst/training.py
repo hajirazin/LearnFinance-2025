@@ -21,7 +21,6 @@ import torch
 import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
-from transformers import PatchTSTConfig as HFPatchTSTConfig
 from transformers import PatchTSTForPrediction
 
 from brain_api.core.patchtst.config import PatchTSTConfig
@@ -54,25 +53,7 @@ def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
     Returns:
         Initialized PatchTSTForPrediction model with RevIN enabled
     """
-    hf_config = HFPatchTSTConfig(
-        num_input_channels=config.num_input_channels,  # 5 (OHLCV)
-        context_length=config.context_length,
-        patch_length=config.patch_length,
-        patch_stride=config.stride,
-        d_model=config.d_model,
-        num_attention_heads=config.num_attention_heads,
-        num_hidden_layers=config.num_hidden_layers,
-        ffn_dim=config.ffn_dim,
-        dropout=config.dropout,
-        prediction_length=config.prediction_length,  # 5 (direct 5-day)
-        # RevIN defaults to scaling="std" -- DO NOT set scaling=None
-        # Additional settings
-        attention_dropout=config.dropout,
-        positional_dropout=config.dropout,
-        use_cls_token=False,  # Use pooling instead
-        pooling_type="mean",
-    )
-    return PatchTSTForPrediction(hf_config)
+    return PatchTSTForPrediction(config.to_hf_config())
 
 
 def _close_channel_index(config: PatchTSTConfig) -> int:

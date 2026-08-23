@@ -1,0 +1,147 @@
+{
+  "arm": {
+    "attention_dropout": 0.2,
+    "ff_dropout": 0.0,
+    "head_dropout": 0.0,
+    "name": "corrected_control_16_8",
+    "objective": "close_daily_mse",
+    "patch_length": 16,
+    "patch_stride": 8,
+    "path_dropout": 0.0,
+    "pooling_type": "mean",
+    "positional_dropout": 0.2
+  },
+  "best_epoch": 6,
+  "best_validation_loss": 0.0004242098886020234,
+  "best_validation_rank_ic": -0.004443885074042527,
+  "fingerprint": "86fc6a9ecfde78fbc14c62ae52acf849ed31ba92994867203ec5ef5186335871",
+  "history": [
+    {
+      "epoch": 1,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0005063060964992623,
+      "validation_loss": 0.00042158893766902313,
+      "validation_rank_ic": -0.010169570678508552
+    },
+    {
+      "epoch": 2,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0004945875413792808,
+      "validation_loss": 0.0004226698664648893,
+      "validation_rank_ic": -0.008088784921403119
+    },
+    {
+      "epoch": 3,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0004866553017711806,
+      "validation_loss": 0.00042529870293205984,
+      "validation_rank_ic": -0.011591131422624907
+    },
+    {
+      "epoch": 4,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0004791661668391821,
+      "validation_loss": 0.0004246446472580908,
+      "validation_rank_ic": -0.009421675238430134
+    },
+    {
+      "epoch": 5,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0004751405856079491,
+      "validation_loss": 0.0004244056957848699,
+      "validation_rank_ic": -0.009468721535814677
+    },
+    {
+      "epoch": 6,
+      "learning_rate": 0.0003,
+      "train_loss": 0.0004714081202279622,
+      "validation_loss": 0.0004242098886020234,
+      "validation_rank_ic": -0.004443885074042527
+    },
+    {
+      "epoch": 7,
+      "learning_rate": 0.00015,
+      "train_loss": 0.0004683226974865745,
+      "validation_loss": 0.0004253844616905812,
+      "validation_rank_ic": -0.014258060659163012
+    },
+    {
+      "epoch": 8,
+      "learning_rate": 0.00015,
+      "train_loss": 0.0004643103299262233,
+      "validation_loss": 0.00042550646790768615,
+      "validation_rank_ic": -0.009600027463587934
+    },
+    {
+      "epoch": 9,
+      "learning_rate": 0.00015,
+      "train_loss": 0.0004621992072363746,
+      "validation_loss": 0.0004266176278049124,
+      "validation_rank_ic": -0.012886965544904917
+    },
+    {
+      "epoch": 10,
+      "learning_rate": 0.00015,
+      "train_loss": 0.00046136585353211736,
+      "validation_loss": 0.0004271300465621421,
+      "validation_rank_ic": -0.014300099162262419
+    },
+    {
+      "epoch": 11,
+      "learning_rate": 0.00015,
+      "train_loss": 0.0004597359620773595,
+      "validation_loss": 0.0004267643090330702,
+      "validation_rank_ic": -0.012935742951339249
+    },
+    {
+      "epoch": 12,
+      "learning_rate": 0.00015,
+      "train_loss": 0.00045854615654704,
+      "validation_loss": 0.0004267347199473337,
+      "validation_rank_ic": -0.01350586564704611
+    },
+    {
+      "epoch": 13,
+      "learning_rate": 7.5e-05,
+      "train_loss": 0.0004570265083639182,
+      "validation_loss": 0.0004274553663228143,
+      "validation_rank_ic": -0.02081485430661932
+    },
+    {
+      "epoch": 14,
+      "learning_rate": 7.5e-05,
+      "train_loss": 0.0004544015511377784,
+      "validation_loss": 0.00042735007247432044,
+      "validation_rank_ic": -0.02103863184316534
+    }
+  ],
+  "n_train": 151250,
+  "n_validation": 20777,
+  "runtime_seconds": 90.15079887499996,
+  "seed": 20260824,
+  "stopped_epoch": 14,
+  "target_scales": [
+    0.023017054423689842,
+    0.020588131621479988,
+    0.021785113960504532,
+    0.02259220741689205,
+    0.5241941809654236
+  ],
+  "training_config": {
+    "batch_size": 256,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "learning_rate": 0.0003,
+    "max_epochs": 60,
+    "max_grad_norm": 1.0,
+    "optimizer": "Adam",
+    "patience": 8,
+    "scheduler": "ReduceLROnPlateau(factor=0.5,patience=5)",
+    "selection": "max validation weekly rank IC; validation loss tie-break",
+    "weight_decay": 0.0
+  },
+  "weights_sha256": "e1f647b52e782647f23d122f14c608dfbffcd3ccabbb382a22fe7251e60f3e75"
+}
