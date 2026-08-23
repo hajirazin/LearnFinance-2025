@@ -192,16 +192,19 @@ def generate_orders_endpoint(request: GenerateOrdersRequest) -> GenerateOrdersRe
     2. **Minimum weight change**: Legs with absolute weight delta below 1% of NAV
        are skipped, except full exits (target weight 0 with an open position).
 
-    3. **Minimum trade filtering**: Orders below $10 value are skipped.
+    3. **Minimum trade filtering**: Orders below $10 value are skipped,
+       except full-exit sells (target weight 0 with an open position).
 
     4. **Buy funding cap**: If total buy notional exceeds cash plus expected
        proceeds from generated sells, buy quantities are scaled down proportionally
        (or buys dropped if no buying power).
 
     5. **Sell qty cap**: Sell quantity is capped at position quantity to avoid
-       requesting more shares than held.
+       requesting more shares than held. Full exits sell the entire broker qty
+       (not notional / Yahoo price).
 
-    6. **Fractional shares**: Quantities are calculated to 4 decimal places.
+    6. **Fractional shares**: Partial rebalance quantities are rounded to 4
+       decimal places. Full-exit sells keep the broker lot size unrounded.
 
     The generated orders can be submitted directly to Alpaca's POST /v2/orders
     endpoint. Alpaca will reject orders with duplicate client_order_ids,

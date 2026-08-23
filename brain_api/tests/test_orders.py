@@ -61,7 +61,9 @@ class TestGenerateOrdersEndpoint:
 
         assert response.status_code == 200
         assert [order["side"] for order in response.json()["orders"]] == ["sell"]
-        fetch.assert_called_once_with(["AAPL"])
+        assert response.json()["orders"][0]["qty"] == 10.0
+        # Full-exit sells flatten at broker qty and do not fetch Yahoo prices.
+        fetch.assert_called_once_with([])
 
     def test_buy_phase_fetches_price_when_phase_runs(self):
         payload = {
@@ -105,6 +107,33 @@ class TestGenerateOrdersEndpoint:
         assert response.status_code == 422
         assert "missing_or_invalid=['AAPL']" in response.json()["detail"]
         fetch_ohlc.assert_not_called()
+
+    def test_full_exit_below_min_trade_value_returns_sell(self):
+        """Router: a sub-$10 target-0 position still generates a flatten sell."""
+        payload = {
+            "target_weights": {"AAPL": 0.0, "CASH": 1.0},
+            "portfolio": {
+                "cash": 995.0,
+                "currency": "USD",
+                "positions": [{"symbol": "AAPL", "qty": 0.05, "market_value": 5.0}],
+            },
+            "run_id": "paper:2026-01-20",
+            "attempt": 1,
+            "algorithm": "sac",
+        }
+
+        with patch(
+            "brain_api.core.orders.fetch_current_prices", return_value={}
+        ) as fetch:
+            response = client.post("/orders/generate", json=payload)
+
+        assert response.status_code == 200
+        orders = response.json()["orders"]
+        assert len(orders) == 1
+        assert orders[0]["side"] == "sell"
+        assert orders[0]["symbol"] == "AAPL"
+        assert orders[0]["qty"] == 0.05
+        fetch.assert_called_once_with([])
 
 
 class TestOrderGeneration:
@@ -165,6 +194,7 @@ class TestOrderGeneration:
         assert result.summary.skipped_below_threshold == 1
 
     def test_missing_price_is_allowed_for_below_minimum_full_exit(self):
+        """Sub-$10 full exit still sells exact broker qty with no Yahoo price."""
         result = generate_orders(
             target_weights={"AAPL": 0.0, "CASH": 1.0},
             portfolio=PortfolioInput(
@@ -178,8 +208,132 @@ class TestOrderGeneration:
             atr_map={},
         )
 
+        assert len(result.orders) == 1
+        order = result.orders[0]
+        assert order.side == "sell"
+        assert order.symbol == "AAPL"
+        assert order.qty == 0.05
+        assert result.summary.skipped_small_orders == 0
+
+    def test_full_exit_with_price_sells_exact_qty_below_ten_dollars(self):
+        """AMD-class dust: sub-$10 full exit with a mark still flattens."""
+        result = generate_orders(
+            target_weights={"AMD": 0.0, "CASH": 1.0},
+            portfolio=PortfolioInput(
+                cash=993.66,
+                positions=[PositionInput(symbol="AMD", qty=0.0134, market_value=6.34)],
+            ),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            prices={"AMD": 473.25},
+            atr_map={},
+        )
+
+        assert len(result.orders) == 1
+        assert result.orders[0].side == "sell"
+        assert result.orders[0].qty == 0.0134
+
+    def test_full_exit_uses_position_qty_not_notional_over_yahoo(self):
+        """CRWD-class: Yahoo mark above Alpaca MV must not undershoot flatten qty."""
+        position_qty = 25.6862
+        alpaca_mv = 2568.62
+        yahoo_price = 100.4  # 0.4% above the Alpaca mark of $100
+        result = generate_orders(
+            target_weights={"CRWD": 0.0, "CASH": 1.0},
+            portfolio=PortfolioInput(
+                cash=7431.38,
+                positions=[
+                    PositionInput(
+                        symbol="CRWD", qty=position_qty, market_value=alpaca_mv
+                    )
+                ],
+            ),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            prices={"CRWD": yahoo_price},
+            atr_map={},
+        )
+
+        assert len(result.orders) == 1
+        assert result.orders[0].qty == position_qty
+        undershot = round(alpaca_mv / yahoo_price, 4)
+        assert result.orders[0].qty != undershot
+
+    def test_full_exit_does_not_round_qty_to_four_decimals(self):
+        """Broker qty longer than 4 decimals is not truncated on flatten."""
+        result = generate_orders(
+            target_weights={"SNDK": 0.0, "CASH": 1.0},
+            portfolio=PortfolioInput(
+                cash=9999.84,
+                positions=[
+                    PositionInput(symbol="SNDK", qty=0.00012, market_value=0.16)
+                ],
+            ),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            prices={},
+            atr_map={},
+        )
+
+        assert len(result.orders) == 1
+        assert result.orders[0].qty == 0.00012
+        assert result.orders[0].qty != round(0.00012, 4)
+
+    def test_buy_only_qty_still_uses_notional_over_price_rounded_four_dp(self):
+        """Buy path is unchanged: trade_value / price rounded to 4 decimals."""
+        result = generate_orders(
+            target_weights={"AAPL": 0.5, "CASH": 0.5},
+            portfolio=PortfolioInput(cash=10000.0, positions=[]),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            prices={"AAPL": 150.0},
+            atr_map={},
+        )
+
+        assert len(result.orders) == 1
+        assert result.orders[0].side == "buy"
+        assert result.orders[0].qty == round(5000.0 / 150.0, 4)
+
+    def test_full_exit_omitted_when_order_side_is_buy(self):
+        """Sell-wait-buy: the buy phase must not emit a flatten sell."""
+        result = generate_orders(
+            target_weights={"AAPL": 0.0, "CASH": 1.0},
+            portfolio=PortfolioInput(
+                cash=0.0,
+                positions=[PositionInput(symbol="AAPL", qty=10.0, market_value=1000.0)],
+            ),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            order_side="buy",
+            prices={},
+            atr_map={},
+        )
+
         assert result.orders == []
-        assert result.summary.skipped_small_orders == 1
+
+    def test_full_exit_emitted_when_order_side_is_sell(self):
+        result = generate_orders(
+            target_weights={"AAPL": 0.0, "CASH": 1.0},
+            portfolio=PortfolioInput(
+                cash=0.0,
+                positions=[PositionInput(symbol="AAPL", qty=10.0, market_value=1000.0)],
+            ),
+            run_id="paper:2026-01-20",
+            attempt=1,
+            algorithm="sac",
+            order_side="sell",
+            prices={},
+            atr_map={},
+        )
+
+        assert len(result.orders) == 1
+        assert result.orders[0].side == "sell"
+        assert result.orders[0].qty == 10.0
 
     def test_generate_sell_orders_to_cash(self):
         """Full position sell: qty capped at position qty."""

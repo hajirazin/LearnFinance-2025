@@ -3,9 +3,10 @@
 Converts allocation weights into actionable market orders with:
 - Idempotent client_order_id generation
 - Minimum absolute weight change (1% of NAV per leg; full exit exempt)
-- Minimum trade value filtering
+- Minimum trade value filtering (full-exit sells exempt)
+- Full-exit flatten uses broker position qty, not notional / Yahoo price
 - Buy funding cap (scale buys to cash + surviving sell proceeds)
-- Sell qty capped at position quantity
+- Partial sell qty capped at position quantity
 """
 
 import math
@@ -20,7 +21,8 @@ from brain_api.core.stop_loss import compute_stop_loss, stop_loss_for_sell
 # Configuration constants
 # ============================================================================
 
-# Skip orders smaller than this value (in dollars)
+# Skip non-flatten orders smaller than this value (in dollars).
+# Full-exit sells (target weight 0 with an open position) are exempt.
 MIN_TRADE_VALUE: float = 10.0
 
 # Skip rebalance legs smaller than this absolute weight delta (fraction of NAV; 0.01 = 1%)
@@ -169,6 +171,47 @@ def generate_client_order_id(
         Deterministic client order ID
     """
     return f"{run_id}:attempt-{attempt}:{symbol}:{side.upper()}"
+
+
+def is_full_exit(target_weight: float, current_weight: float) -> bool:
+    """True when a held name is targeted to zero (flatten / sell-all)."""
+    return target_weight == 0.0 and current_weight > 0.0
+
+
+def full_exit_sell_qty(position: PositionInput) -> float:
+    """Broker share quantity to flatten a position to target weight 0.
+
+    Uses the held lot size as-is. Sizing from notional / Yahoo price
+    undershoots when marks differ; rounding to 4 decimals leaves dust.
+    """
+    if position.qty <= 0:
+        raise ValueError(
+            f"full-exit sell for {position.symbol} requires qty > 0; got {position.qty}"
+        )
+    return position.qty
+
+
+def _full_exit_order(
+    *,
+    symbol: str,
+    position: PositionInput,
+    run_id: str,
+    attempt: int,
+) -> Order:
+    """Market sell of the entire broker lot. Qty is not rounded."""
+    stop = stop_loss_for_sell()
+    return Order(
+        client_order_id=generate_client_order_id(run_id, attempt, symbol, "sell"),
+        symbol=symbol,
+        side="sell",
+        qty=full_exit_sell_qty(position),
+        order_type="market",
+        time_in_force="day",
+        stop_loss_price=stop.price,
+        stop_loss_distance_pct=stop.distance_pct,
+        stop_loss_reason=stop.reason,
+        cash_qty=round(position.market_value, 2),
+    )
 
 
 def fetch_current_prices(symbols: list[str]) -> dict[str, float]:
@@ -407,7 +450,8 @@ def generate_orders(
         attempt: Attempt number
         algorithm: Algorithm name (for logging)
         order_side: Generate ``all``, ``sell``, or ``buy`` legs only.
-        prices: Optional pre-fetched prices (if None, will fetch)
+        prices: Optional pre-fetched prices (if None, will fetch). Full-exit
+            sells do not require a price; they flatten at ``position.qty``.
         atr_map: Optional pre-computed ATR(14) per symbol. When ``None``,
             ATR is fetched alongside prices so the email layer can render
             a stop-loss reference next to each buy. Symbols with
@@ -463,8 +507,10 @@ def generate_orders(
         side = "buy" if weight_diff > 0 else "sell"
         if order_side != "all" and side != order_side:
             continue
-        is_full_exit = target_weight == 0.0 and current_weight > 0.0
-        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA and not is_full_exit:
+        if is_full_exit(target_weight, current_weight):
+            # Flatten uses broker qty; do not require a Yahoo price.
+            continue
+        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA:
             continue
         if abs(weight_diff) * total_value < MIN_TRADE_VALUE:
             continue
@@ -516,16 +562,30 @@ def generate_orders(
         if order_side != "all" and side != order_side:
             continue
 
-        # Skip negligible change (always allow full exit: target 0 with a position)
-        is_full_exit = target_weight == 0.0 and current_weight > 0.0
-        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA and not is_full_exit:
+        if is_full_exit(target_weight, current_weight):
+            position = current_positions.get(symbol)
+            if position is None:
+                raise ValueError(f"full-exit sell for {symbol} has no open position")
+            orders.append(
+                _full_exit_order(
+                    symbol=symbol,
+                    position=position,
+                    run_id=run_id,
+                    attempt=attempt,
+                )
+            )
+            total_sell_value += position.market_value
+            continue
+
+        # Skip negligible change (full exits handled above)
+        if abs(weight_diff) < MIN_REBALANCE_WEIGHT_DELTA:
             skipped_below_threshold += 1
             continue
 
         # Calculate trade value
         trade_value = abs(weight_diff) * total_value
 
-        # Skip small trades
+        # Skip small trades (buys and partial trims; full exits already returned)
         if trade_value < MIN_TRADE_VALUE:
             skipped_small_orders += 1
             continue
