@@ -289,9 +289,23 @@ def test_sac_full_endpoint_hf_cold_start_short_circuits_via_helper(
             app.dependency_overrides.clear()
 
 
+def _fail_if_live_yfinance(*_args, **_kwargs):
+    raise AssertionError(
+        "test_sac_full_endpoint_force_true_bypasses_hf_helper must not "
+        "call load_prices_yfinance; stub _run_sac_full_training"
+    )
+
+
 @pytest.mark.parametrize("universe", ["halal_filtered", "halal"])
 def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: str):
-    """SAC full: force=True bypasses the HF short-circuit helper and returns 202."""
+    """SAC full: force=True bypasses the HF short-circuit helper and returns 202.
+
+    Starlette TestClient drains BackgroundTasks before ``client.post``
+    returns, so without a stub the route would invoke real
+    ``load_prices_yfinance`` / ``train_sac``. The scheduling contract
+    this test pins -- force bypasses the HF helper and enqueues a job
+    -- does not depend on the actual training run.
+    """
     from datetime import datetime
 
     from brain_api.core import model_buckets
@@ -342,6 +356,14 @@ def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: 
                         errors=[],
                     ),
                 ),
+                patch(
+                    "brain_api.routes.training.sac.full.load_prices_yfinance",
+                    side_effect=_fail_if_live_yfinance,
+                ),
+                patch(
+                    "brain_api.routes.training.sac.full._run_sac_full_training",
+                    return_value=None,
+                ) as training_spy,
             ):
                 client = TestClient(app)
                 response = client.post(
@@ -349,6 +371,7 @@ def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: 
                 )
 
             assert response.status_code == 202, response.text
+            assert training_spy.call_count == 1
         finally:
             app.dependency_overrides.clear()
 
