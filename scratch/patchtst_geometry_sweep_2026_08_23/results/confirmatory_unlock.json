@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260823T053324Z",
+  "checkpoint_count": 9,
+  "checkpoints": {
+    "confirmatory_2026/patch_10_stride_5/20260823": {
+      "created_at_utc": "2026-08-23T06:13:25.546202+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_10_stride_5/20260823/weights.pt",
+      "weights_sha256": "c2d7e07f6dbd6a55451c01298893da5398353697bc4dc0b1fd9b73320ae0ddc3"
+    },
+    "confirmatory_2026/patch_10_stride_5/20260824": {
+      "created_at_utc": "2026-08-23T06:15:04.855971+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_10_stride_5/20260824/weights.pt",
+      "weights_sha256": "0a4092fd1dc98b31d44914b6730e95ff42482749b1c51754fa2ae4f01d667ba6"
+    },
+    "confirmatory_2026/patch_10_stride_5/20260825": {
+      "created_at_utc": "2026-08-23T06:18:09.657600+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_10_stride_5/20260825/weights.pt",
+      "weights_sha256": "66f772b0685f139cc423ec36fc9b6c419ec1633b45ed65ca11969e9d075161cc"
+    },
+    "confirmatory_2026/patch_16_stride_8/20260823": {
+      "created_at_utc": "2026-08-23T06:19:46.895526+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_16_stride_8/20260823/weights.pt",
+      "weights_sha256": "b9e8cf72d92fd6eff6b3c6b474df6e4c471e0883cd27bf498c0c8b0b8824b098"
+    },
+    "confirmatory_2026/patch_16_stride_8/20260824": {
+      "created_at_utc": "2026-08-23T06:21:18.504741+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_16_stride_8/20260824/weights.pt",
+      "weights_sha256": "2a460c5f6555a184f05d207615cbbcbfd3ea967182ee88c646aa5fc6a5437da5"
+    },
+    "confirmatory_2026/patch_16_stride_8/20260825": {
+      "created_at_utc": "2026-08-23T06:22:39.518885+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_16_stride_8/20260825/weights.pt",
+      "weights_sha256": "0f3a1df827fb9860febc9eca3c6e20393cfe52c1e151920fedaf5e543385ecb2"
+    },
+    "confirmatory_2026/patch_8_stride_4/20260823": {
+      "created_at_utc": "2026-08-23T06:06:02.830004+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_8_stride_4/20260823/weights.pt",
+      "weights_sha256": "8eed04f4d7bcfb19d7c52edca2a09b886802f568993f98f0a867ab8c8471fde5"
+    },
+    "confirmatory_2026/patch_8_stride_4/20260824": {
+      "created_at_utc": "2026-08-23T06:10:42.245611+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_8_stride_4/20260824/weights.pt",
+      "weights_sha256": "964ca207af26aa1939a889f0ea630c3bdebdae92d8a231287341fdb2d218882d"
+    },
+    "confirmatory_2026/patch_8_stride_4/20260825": {
+      "created_at_utc": "2026-08-23T06:11:49.815622+00:00",
+      "weights_path": "/Users/razin/personal/LearnFinance-2025/scratch/patchtst_geometry_sweep_2026_08_23/models/confirmatory_2026/patch_8_stride_4/20260825/weights.pt",
+      "weights_sha256": "43083b6bbb06f0b04daa9bb84b839dc2bd011289d1bdf861165128198851b874"
+    }
+  },
+  "evaluation_labels_read_before_unlock": false,
+  "locked_non_evaluation_panel_sha256": "5a3b99a4fe1fe200b2dc8d678bd09db96ba8a144f06d0ffa7f448820790ff040",
+  "unlocked_at_utc": "2026-08-23T06:22:39.570529+00:00"
+}

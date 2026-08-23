@@ -1,0 +1,14 @@
+{
+  "device": "mps",
+  "hardware": {
+    "chip": "Apple M5 Pro",
+    "gpu_cores": 20,
+    "unified_memory_gb": 48
+  },
+  "passed": true,
+  "prediction_sha256": "5fe3017ea66fee488fd96da4b5e15e360175925bc30ee0bd46f9013cf0671157",
+  "repeat_prediction_sha256": "5fe3017ea66fee488fd96da4b5e15e360175925bc30ee0bd46f9013cf0671157",
+  "repeat_state_sha256": "37e48f888be0b30a8d4778fb441ac2112497c601621d9be026abee30437e705e",
+  "runtime_seconds": 0.30401829200036445,
+  "state_sha256": "37e48f888be0b30a8d4778fb441ac2112497c601621d9be026abee30437e705e"
+}
