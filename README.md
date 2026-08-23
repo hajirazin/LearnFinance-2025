@@ -40,7 +40,7 @@ This repo compares multiple approaches at each stage:
 | Model | Input | Output | Status |
 |-------|-------|--------|--------|
 | LSTM | OHLCV only (pure price) | 5 daily close log returns | ✅ Active |
-| PatchTST | OHLCV 5-channel (open, high, low, close, volume) | 5 daily close log returns | ✅ Active |
+| PatchTST | Close log returns (1 channel) | 5 daily close log returns | ✅ Active |
 
 ### Portfolio Allocators (decide weights)
 
@@ -83,7 +83,7 @@ fallbacks.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
-- **PatchTST** = OHLCV forecaster (5-channel log returns, direct 5-day prediction)
+- **PatchTST** = close-only forecaster (1-channel close log returns, direct 5-day prediction)
 - **SAC** = RL allocator (receives five news/momentum signals + PatchTST return forecast)
 
 ## Prerequisites
@@ -477,8 +477,8 @@ We store three kinds of data:
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /inference/lstm` | LSTM 5-day return predictions (US, pure price OHLCV-close) |
-| `POST /inference/patchtst` | PatchTST 5-day return predictions (US, OHLCV 5-channel) |
-| `POST /inference/patchtst/india` | PatchTST 5-day return predictions (India, OHLCV 5-channel, `PatchTSTIndiaModelStorage`) |
+| `POST /inference/patchtst` | PatchTST 5-day return predictions (US, close-only) |
+| `POST /inference/patchtst/india` | PatchTST 5-day return predictions (India, close-only, `PatchTSTIndiaModelStorage`) |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST alpha screen (US or India via `market` param) -> `{symbol -> predicted_weekly_return_pct}` |
 | ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ (Retired) |
 | `POST /inference/sac` | SAC allocation (PatchTST forecasts on the chosen stock slate) |

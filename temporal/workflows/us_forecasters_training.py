@@ -6,7 +6,7 @@ production cadence). Steps:
 1. Fetch ``halal_new`` universe (~410 symbols, fail fast if scraping
    broken).
 2. Train LSTM on ``halal_new`` (pure-price forecaster).
-3. Train PatchTST on ``halal_new`` (5-channel OHLCV forecaster).
+3. Train PatchTST on ``halal_new`` (close-only log-return forecaster).
 4. Generate forecasters-only LLM summary (LSTM + PatchTST).
 5. Send forecasters-only email.
 

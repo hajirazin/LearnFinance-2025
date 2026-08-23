@@ -120,7 +120,7 @@ Check the plan against non-negotiable invariants:
 - Promotion requires evaluation gate
 - Endpoints remain stateless
 - Storage abstraction used (not hardcoded paths)
-- LSTM = pure price (no signals), PatchTST = OHLCV 5-channel, SAC = RL with PatchTST forecast features
+- LSTM = pure price (no signals), PatchTST = close-only log returns, SAC = RL with PatchTST forecast features
 
 ## Project-Specific Context
 

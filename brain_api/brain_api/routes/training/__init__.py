@@ -2,7 +2,7 @@
 
 This module provides training endpoints for various model types:
 - LSTM: Pure price-based weekly return prediction
-- PatchTST: OHLCV 5-channel weekly return prediction
+- PatchTST: close-only weekly return prediction
 - SAC: Portfolio allocator using PatchTST forecast features
 """
 

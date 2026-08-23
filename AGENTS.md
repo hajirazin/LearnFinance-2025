@@ -36,7 +36,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news + price momentum)
-  - price forecasting (LSTM pure-price, PatchTST OHLCV 5-channel)
+  - price forecasting (LSTM pure-price, PatchTST close-only)
   - portfolio allocation (HRP math baseline, SAC variants)
   - order generation (convert weights to limit orders with idempotent IDs)
   - Alpaca integration (portfolio queries, order submission)
@@ -236,8 +236,8 @@ Invariants:
 | Model | Market | Input | Output |
 |-------|--------|-------|--------|
 | LSTM | US | Close-only log returns (pure price) | Weekly return prediction |
-| PatchTST | US | OHLCV (5-channel log returns) | Weekly return prediction |
-| PatchTST India | India (NiftyShariah500) | OHLCV (5-channel log returns) | Weekly return prediction |
+| PatchTST | US | Close log returns (1 channel) | Weekly return prediction |
+| PatchTST India | India (NiftyShariah500) | Close log returns (1 channel) | Weekly return prediction |
 
 ### Portfolio Allocators
 
@@ -296,8 +296,8 @@ remains standalone and is not a SAC input.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close returns only, US only)
-- **PatchTST** (US) = OHLCV forecaster (5-channel: open, high, low, close, volume log returns)
-- **PatchTST India** = OHLCV forecaster (5-channel, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
+- **PatchTST** (US) = close-only forecaster (1-channel close log returns)
+- **PatchTST India** = close-only forecaster (1-channel close log returns, India NiftyShariah500, independent storage + versioning under `data/models/patchtst_nifty_shariah_500/`)
 - **SAC** = RL allocator that receives 5 signals + PatchTST forecast per stock plus portfolio weights, US only
 
 ## Data storage rules
