@@ -24,7 +24,20 @@ from transformers import PatchTSTConfig as HFPatchTSTConfig
 from transformers import PatchTSTForPrediction
 
 
-SYMBOLS = ["AAPL", "AMD", "AVGO", "GOOGL", "LLY", "META", "MSFT", "MU", "NVDA", "TSLA", "TSM", "XOM"]
+SYMBOLS = [
+    "AAPL",
+    "AMD",
+    "AVGO",
+    "GOOGL",
+    "LLY",
+    "META",
+    "MSFT",
+    "MU",
+    "NVDA",
+    "TSLA",
+    "TSM",
+    "XOM",
+]
 SEEDS = [20260823, 20260824, 20260825]
 FEATURES = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
 CONTEXT = 60
@@ -50,7 +63,9 @@ ARCHITECTURES = {
     "legacy_effective": Architecture("legacy_effective", 5, 1, "mean", False, True),
     "stride_only_fixed": Architecture("stride_only_fixed", 5, 8, "mean", False),
     "canonical_close_only": Architecture("canonical_close_only", 1, 8, None, False),
-    "canonical_independent_5ch": Architecture("canonical_independent_5ch", 5, 8, None, False),
+    "canonical_independent_5ch": Architecture(
+        "canonical_independent_5ch", 5, 8, None, False
+    ),
     "canonical_mixing_5ch": Architecture("canonical_mixing_5ch", 5, 8, None, True),
 }
 
@@ -69,7 +84,10 @@ def json_dump(path: Path, value: Any) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(safe(value), indent=2, sort_keys=True, default=str, allow_nan=False) + "\n")
+    temporary.write_text(
+        json.dumps(safe(value), indent=2, sort_keys=True, default=str, allow_nan=False)
+        + "\n"
+    )
     temporary.replace(path)
 
 
@@ -97,8 +115,22 @@ def training_fingerprint(
     identity = {
         "architecture": asdict(architecture),
         "objective": objective,
-        "training": {"context": CONTEXT, "horizon": HORIZON, "patch": 16, "d_model": 64, "heads": 4, "layers": 2, "ffn": 128, "lr": 3e-4, "weight_decay": 0.0, "max_epochs": 60, "patience": 8},
-        "implementation_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "training": {
+            "context": CONTEXT,
+            "horizon": HORIZON,
+            "patch": 16,
+            "d_model": 64,
+            "heads": 4,
+            "layers": 2,
+            "ffn": 128,
+            "lr": 3e-4,
+            "weight_decay": 0.0,
+            "max_epochs": 60,
+            "patience": 8,
+        },
+        "implementation_sha256": hashlib.sha256(
+            Path(__file__).read_bytes()
+        ).hexdigest(),
         "runtime": {
             "torch": torch.__version__,
             "transformers": transformers.__version__,
@@ -121,7 +153,12 @@ def validate_split_contract(splits: dict[str, tuple[date, date]]) -> None:
     for name, (start, end) in splits.items():
         if start > end:
             raise ValueError(f"{name} starts after it ends")
-    if not splits["train"][1] < splits["validation"][0] < splits["validation"][1] < splits["test"][0]:
+    if (
+        not splits["train"][1]
+        < splits["validation"][0]
+        < splits["validation"][1]
+        < splits["test"][0]
+    ):
         raise ValueError("splits overlap or are not chronological")
     if (splits["validation"][0] - splits["train"][1]).days < 21:
         raise ValueError("train/validation embargo is shorter than two weeks")
@@ -164,7 +201,9 @@ def architecture_manifest() -> dict[str, Any]:
         result[name] = {
             **asdict(arch),
             "effective_patch_stride": model.config.patch_stride,
-            "effective_patch_count": patch_count(CONTEXT, 16, model.config.patch_stride),
+            "effective_patch_count": patch_count(
+                CONTEXT, 16, model.config.patch_stride
+            ),
         }
     return result
 
@@ -207,7 +246,9 @@ def build_weekly_panel(
     exclusions: dict[str, int] = {}
     split_names = list(splits)
     next_split_start = {
-        name: (splits[split_names[index + 1]][0] if index + 1 < len(split_names) else None)
+        name: (
+            splits[split_names[index + 1]][0] if index + 1 < len(split_names) else None
+        )
         for index, name in enumerate(split_names)
     }
     for anchor in mondays:
@@ -215,17 +256,28 @@ def build_weekly_panel(
         if split is None:
             continue
         future_by_symbol = {
-            symbol: tuple(returns[symbol].index[returns[symbol].index >= anchor][:HORIZON])
+            symbol: tuple(
+                returns[symbol].index[returns[symbol].index >= anchor][:HORIZON]
+            )
             for symbol in sorted(prices)
         }
-        complete_futures = [value for value in future_by_symbol.values() if len(value) == HORIZON]
+        complete_futures = [
+            value for value in future_by_symbol.values() if len(value) == HORIZON
+        ]
         if len(complete_futures) != len(prices) or len(set(complete_futures)) != 1:
-            exclusions["misaligned_or_short_target_calendar"] = exclusions.get("misaligned_or_short_target_calendar", 0) + len(prices)
+            exclusions["misaligned_or_short_target_calendar"] = exclusions.get(
+                "misaligned_or_short_target_calendar", 0
+            ) + len(prices)
             continue
         common_future_index = pd.DatetimeIndex(complete_futures[0])
         following_start = next_split_start[split]
-        if following_start is not None and common_future_index[-1].date() >= following_start:
-            exclusions["target_crosses_next_split"] = exclusions.get("target_crosses_next_split", 0) + len(prices)
+        if (
+            following_start is not None
+            and common_future_index[-1].date() >= following_start
+        ):
+            exclusions["target_crosses_next_split"] = exclusions.get(
+                "target_crosses_next_split", 0
+            ) + len(prices)
             continue
         week_rows: list[dict[str, Any]] = []
         for symbol in sorted(prices):
@@ -264,7 +316,13 @@ def build_weekly_panel(
                     "past_week_return": float(close[-5:].sum()),
                     "momentum_4w": float(close[-20:].sum()),
                     "ridge_features": np.array(
-                        [close[-5:].sum(), close[-20:].sum(), close.sum(), close[-20:].std(ddof=1), x[-20:, 4].std(ddof=1)],
+                        [
+                            close[-5:].sum(),
+                            close[-20:].sum(),
+                            close.sum(),
+                            close[-20:].std(ddof=1),
+                            x[-20:, 4].std(ddof=1),
+                        ],
                         dtype=np.float32,
                     ),
                 }
@@ -272,7 +330,9 @@ def build_weekly_panel(
         if len(week_rows) == len(prices):
             rows.extend(week_rows)
         else:
-            exclusions["incomplete_week_missing_rows"] = exclusions.get("incomplete_week_missing_rows", 0) + (len(prices) - len(week_rows))
+            exclusions["incomplete_week_missing_rows"] = exclusions.get(
+                "incomplete_week_missing_rows", 0
+            ) + (len(prices) - len(week_rows))
     panel = pd.DataFrame(rows)
     if panel.empty:
         raise RuntimeError(f"no common panel rows; exclusions={exclusions}")
@@ -281,7 +341,9 @@ def build_weekly_panel(
     return panel.sort_values(["decision_date", "symbol"]).reset_index(drop=True)
 
 
-def panel_arrays(panel: pd.DataFrame, split: str, architecture: Architecture) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def panel_arrays(
+    panel: pd.DataFrame, split: str, architecture: Architecture
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     rows = panel[panel["split"] == split]
     if rows["y"].isna().any():
         raise RuntimeError(f"{split} labels are locked")
@@ -309,22 +371,46 @@ def _objective(
         raise ValueError("ListNet batch must contain whole weeks")
     predicted = pred[:, :, close_idx].sum(dim=1).reshape(-1, group_size)
     actual = y[:, :, close_idx].sum(dim=1).reshape(-1, group_size)
-    actual_z = (actual - actual.mean(dim=1, keepdim=True)) / actual.std(dim=1, keepdim=True).clamp_min(1e-6)
-    rank_loss = -(torch.softmax(actual_z, dim=1) * torch.log_softmax(predicted, dim=1)).sum(dim=1).mean()
+    actual_z = (actual - actual.mean(dim=1, keepdim=True)) / actual.std(
+        dim=1, keepdim=True
+    ).clamp_min(1e-6)
+    rank_loss = (
+        -(torch.softmax(actual_z, dim=1) * torch.log_softmax(predicted, dim=1))
+        .sum(dim=1)
+        .mean()
+    )
     return rank_loss + 0.1 * F.huber_loss(predicted, actual)
 
 
-def _validation_loss(model: PatchTSTForPrediction, x: np.ndarray, y: np.ndarray, mode: str, group_size: int) -> float:
+def _validation_loss(
+    model: PatchTSTForPrediction,
+    x: np.ndarray,
+    y: np.ndarray,
+    mode: str,
+    group_size: int,
+) -> float:
     model.eval()
     device = next(model.parameters()).device
     with torch.no_grad():
         if mode == "listnet":
-            return float(_objective(model, torch.from_numpy(x).to(device), torch.from_numpy(y).to(device), mode, group_size))
+            return float(
+                _objective(
+                    model,
+                    torch.from_numpy(x).to(device),
+                    torch.from_numpy(y).to(device),
+                    mode,
+                    group_size,
+                )
+            )
         weighted_loss = 0.0
         count = 0
-        loader = DataLoader(TensorDataset(torch.from_numpy(x), torch.from_numpy(y)), batch_size=512)
+        loader = DataLoader(
+            TensorDataset(torch.from_numpy(x), torch.from_numpy(y)), batch_size=512
+        )
         for bx, by in loader:
-            weighted_loss += float(_objective(model, bx.to(device), by.to(device), mode, group_size)) * len(bx)
+            weighted_loss += float(
+                _objective(model, bx.to(device), by.to(device), mode, group_size)
+            ) * len(bx)
             count += len(bx)
     return weighted_loss / count
 
@@ -357,33 +443,60 @@ def train_model(
         losses: list[float] = []
         if objective == "daily_mse":
             generator = torch.Generator().manual_seed(seed + epoch)
-            loader = DataLoader(TensorDataset(torch.from_numpy(train_x), torch.from_numpy(train_y)), batch_size=256, shuffle=True, generator=generator)
+            loader = DataLoader(
+                TensorDataset(torch.from_numpy(train_x), torch.from_numpy(train_y)),
+                batch_size=256,
+                shuffle=True,
+                generator=generator,
+            )
             batches = [(bx, by) for bx, by in loader]
         else:
             rng = np.random.default_rng(seed + epoch)
             order = rng.permutation(len(weeks))
             batches = []
             for start in range(0, len(order), 16):
-                idx = np.concatenate([np.arange(i * group_size, (i + 1) * group_size) for i in order[start : start + 16]])
-                batches.append((torch.from_numpy(train_x[idx]), torch.from_numpy(train_y[idx])))
+                idx = np.concatenate(
+                    [
+                        np.arange(i * group_size, (i + 1) * group_size)
+                        for i in order[start : start + 16]
+                    ]
+                )
+                batches.append(
+                    (torch.from_numpy(train_x[idx]), torch.from_numpy(train_y[idx]))
+                )
         for bx, by in batches:
             optimizer.zero_grad()
-            loss = _objective(model, bx.to(device), by.to(device), objective, group_size)
+            loss = _objective(
+                model, bx.to(device), by.to(device), objective, group_size
+            )
             if not torch.isfinite(loss):
-                raise FloatingPointError(f"non-finite {objective} loss for {architecture.name}/{seed}")
+                raise FloatingPointError(
+                    f"non-finite {objective} loss for {architecture.name}/{seed}"
+                )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             losses.append(float(loss.detach()))
         val_loss = _validation_loss(model, val_x, val_y, objective, group_size)
         if not math.isfinite(val_loss):
-            raise FloatingPointError(f"non-finite validation loss for {architecture.name}/{seed}")
-        history.append({"epoch": epoch, "train_loss": float(np.mean(losses)), "validation_loss": val_loss})
+            raise FloatingPointError(
+                f"non-finite validation loss for {architecture.name}/{seed}"
+            )
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": float(np.mean(losses)),
+                "validation_loss": val_loss,
+            }
+        )
         if val_loss < best_loss - 1e-10:
             best_loss = val_loss
             best_epoch = epoch
             patience = 0
-            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+            best_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.state_dict().items()
+            }
         else:
             patience += 1
             if patience >= 8:
@@ -412,7 +525,9 @@ def train_model(
     return restored, meta
 
 
-def load_model_artifact(architecture: Architecture, model_dir: Path) -> tuple[PatchTSTForPrediction, dict[str, Any]]:
+def load_model_artifact(
+    architecture: Architecture, model_dir: Path
+) -> tuple[PatchTSTForPrediction, dict[str, Any]]:
     weights = model_dir / "weights.pt"
     metadata = model_dir / "meta.json"
     if not weights.exists() or not metadata.exists():
@@ -431,7 +546,9 @@ def predict(model: PatchTSTForPrediction, x: np.ndarray) -> np.ndarray:
     outputs: list[np.ndarray] = []
     with torch.no_grad():
         for start in range(0, len(x), 512):
-            value = model(past_values=torch.from_numpy(x[start : start + 512])).prediction_outputs
+            value = model(
+                past_values=torch.from_numpy(x[start : start + 512])
+            ).prediction_outputs
             close_idx = 0 if value.shape[-1] == 1 else 3
             outputs.append(value[:, :, close_idx].sum(dim=1).cpu().numpy())
     result = np.concatenate(outputs).astype(float)
@@ -440,7 +557,9 @@ def predict(model: PatchTSTForPrediction, x: np.ndarray) -> np.ndarray:
     return result
 
 
-def model_sensitivity(model: PatchTSTForPrediction, x: np.ndarray, close_idx: int) -> dict[str, float]:
+def model_sensitivity(
+    model: PatchTSTForPrediction, x: np.ndarray, close_idx: int
+) -> dict[str, float]:
     model.eval()
     base = torch.from_numpy(x.copy()).requires_grad_(True)
     perturbed = x.copy()
@@ -448,11 +567,15 @@ def model_sensitivity(model: PatchTSTForPrediction, x: np.ndarray, close_idx: in
     rng = np.random.default_rng(991)
     perturbed[:, :, non_close] = rng.normal(0, 0.05, perturbed[:, :, non_close].shape)
     baseline_out = model(past_values=base).prediction_outputs[:, :, close_idx]
-    changed_out = model(past_values=torch.from_numpy(perturbed)).prediction_outputs[:, :, close_idx]
+    changed_out = model(past_values=torch.from_numpy(perturbed)).prediction_outputs[
+        :, :, close_idx
+    ]
     baseline_out.sum().backward()
     grad = base.grad.detach().numpy()
     return {
-        "forecast_max_abs_delta": float(torch.max(torch.abs(changed_out - baseline_out)).detach()),
+        "forecast_max_abs_delta": float(
+            torch.max(torch.abs(changed_out - baseline_out)).detach()
+        ),
         "non_close_grad_l1": float(np.abs(grad[:, :, non_close]).sum()),
     }
 
@@ -460,10 +583,18 @@ def model_sensitivity(model: PatchTSTForPrediction, x: np.ndarray, close_idx: in
 def control_predictions(panel: pd.DataFrame) -> pd.DataFrame:
     ordered = panel.sort_values(["decision_date", "symbol"]).copy()
     momentum_4w_source = ordered["momentum_4w"].to_numpy(copy=True)
-    for name in ["zero_return", "historical_mean", "majority_sign", "persistence_1w", "reversal_1w"]:
+    for name in [
+        "zero_return",
+        "historical_mean",
+        "majority_sign",
+        "persistence_1w",
+        "reversal_1w",
+    ]:
         ordered[name] = math.nan
     ordered["momentum_4w"] = momentum_4w_source
-    known: dict[str, list[float]] = {symbol: [] for symbol in ordered["symbol"].unique()}
+    known: dict[str, list[float]] = {
+        symbol: [] for symbol in ordered["symbol"].unique()
+    }
     known_universe: list[float] = []
     pending: list[tuple[date, str, float]] = []
     for decision, indices in ordered.groupby("decision_date", sort=True).groups.items():
@@ -473,8 +604,14 @@ def control_predictions(panel: pd.DataFrame) -> pd.DataFrame:
             known[symbol].append(actual)
             if actual != 0:
                 known_universe.append(actual)
-        universe_magnitude = float(np.median(np.abs(known_universe))) if known_universe else 0.0
-        universe_sign = 1.0 if not known_universe or np.mean(np.asarray(known_universe) > 0) >= 0.5 else -1.0
+        universe_magnitude = (
+            float(np.median(np.abs(known_universe))) if known_universe else 0.0
+        )
+        universe_sign = (
+            1.0
+            if not known_universe or np.mean(np.asarray(known_universe) > 0) >= 0.5
+            else -1.0
+        )
         for idx in indices:
             symbol = ordered.at[idx, "symbol"]
             history = known[symbol]
@@ -489,7 +626,13 @@ def control_predictions(panel: pd.DataFrame) -> pd.DataFrame:
         for idx in indices:
             actual = ordered.at[idx, "actual_weekly_return"]
             if np.isfinite(actual):
-                pending.append((ordered.at[idx, "target_end"], ordered.at[idx, "symbol"], float(actual)))
+                pending.append(
+                    (
+                        ordered.at[idx, "target_end"],
+                        ordered.at[idx, "symbol"],
+                        float(actual),
+                    )
+                )
     return ordered
 
 

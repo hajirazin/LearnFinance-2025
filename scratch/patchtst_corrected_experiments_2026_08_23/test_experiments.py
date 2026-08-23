@@ -79,10 +79,12 @@ class MetricContractTest(unittest.TestCase):
         expected = px * py + (1 - px) * (1 - py)
         variance_observed = expected * (1 - expected) / n
         variance_expected = (
-            ((2 * py - 1) ** 2 * px * (1 - px) + (2 * px - 1) ** 2 * py * (1 - py)) / n
-            + 4 * px * py * (1 - px) * (1 - py) / (n * n)
+            (2 * py - 1) ** 2 * px * (1 - px) + (2 * px - 1) ** 2 * py * (1 - py)
+        ) / n + 4 * px * py * (1 - px) * (1 - py) / (n * n)
+        self.assertAlmostEqual(
+            pesaran_timmermann(pred, actual),
+            (observed - expected) / np.sqrt(variance_observed - variance_expected),
         )
-        self.assertAlmostEqual(pesaran_timmermann(pred, actual), (observed - expected) / np.sqrt(variance_observed - variance_expected))
 
     def test_reported_magnitude_is_compounded_simple_return(self) -> None:
         panel = pd.DataFrame(
@@ -113,7 +115,10 @@ class MetricContractTest(unittest.TestCase):
 
     def test_selection_has_explicit_tie_break(self) -> None:
         scores = {"close": 0.1, "independent": 0.1, "mixing": 0.0}
-        self.assertEqual(_select_with_declared_tie_break(scores, ["close", "independent", "mixing"]), "close")
+        self.assertEqual(
+            _select_with_declared_tie_break(scores, ["close", "independent", "mixing"]),
+            "close",
+        )
 
     def test_model_loader_rejects_tampered_weights(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -128,16 +133,27 @@ class MetricContractTest(unittest.TestCase):
 class PanelContractTest(unittest.TestCase):
     def test_split_dates_are_disjoint_and_embargoed(self) -> None:
         validate_split_contract(SPLITS)
-        eras = [set(pd.date_range(v[0], v[1], freq="W-MON").date) for v in SPLITS.values()]
+        eras = [
+            set(pd.date_range(v[0], v[1], freq="W-MON").date) for v in SPLITS.values()
+        ]
         self.assertFalse(eras[0] & eras[1])
         self.assertFalse(eras[1] & eras[2])
 
     def test_test_labels_stay_absent_until_explicit_unlock(self) -> None:
         prices = _synthetic_prices()
         custom = {
-            "train": (pd.Timestamp("2020-05-04").date(), pd.Timestamp("2021-12-20").date()),
-            "validation": (pd.Timestamp("2022-01-10").date(), pd.Timestamp("2022-06-20").date()),
-            "test": (pd.Timestamp("2022-07-11").date(), pd.Timestamp("2023-05-29").date()),
+            "train": (
+                pd.Timestamp("2020-05-04").date(),
+                pd.Timestamp("2021-12-20").date(),
+            ),
+            "validation": (
+                pd.Timestamp("2022-01-10").date(),
+                pd.Timestamp("2022-06-20").date(),
+            ),
+            "test": (
+                pd.Timestamp("2022-07-11").date(),
+                pd.Timestamp("2023-05-29").date(),
+            ),
         }
         locked = build_weekly_panel(prices, custom, include_test_labels=False)
         test_rows = locked[locked["split"] == "test"]
@@ -148,28 +164,53 @@ class PanelContractTest(unittest.TestCase):
         for split_name, (_start, _end) in list(custom.items())[:-1]:
             next_name = list(custom)[list(custom).index(split_name) + 1]
             split_rows = unlocked[unlocked["split"] == split_name]
-            self.assertTrue((pd.to_datetime(split_rows["target_end"]).dt.date < custom[next_name][0]).all())
+            self.assertTrue(
+                (
+                    pd.to_datetime(split_rows["target_end"]).dt.date
+                    < custom[next_name][0]
+                ).all()
+            )
 
     def test_misaligned_symbol_target_calendar_removes_the_whole_week(self) -> None:
         prices = _synthetic_prices()
         missing_session = prices["S00"].index[700]
         prices["S00"] = prices["S00"].drop(missing_session)
         custom = {
-            "train": (pd.Timestamp("2020-05-04").date(), pd.Timestamp("2021-12-20").date()),
-            "validation": (pd.Timestamp("2022-01-10").date(), pd.Timestamp("2022-06-20").date()),
-            "test": (pd.Timestamp("2022-07-11").date(), pd.Timestamp("2023-05-29").date()),
+            "train": (
+                pd.Timestamp("2020-05-04").date(),
+                pd.Timestamp("2021-12-20").date(),
+            ),
+            "validation": (
+                pd.Timestamp("2022-01-10").date(),
+                pd.Timestamp("2022-06-20").date(),
+            ),
+            "test": (
+                pd.Timestamp("2022-07-11").date(),
+                pd.Timestamp("2023-05-29").date(),
+            ),
         }
         panel = build_weekly_panel(prices, custom, include_test_labels=True)
         target_counts = panel.groupby("decision_date")["target_end"].nunique()
         self.assertTrue((target_counts == 1).all())
-        self.assertGreater(panel.attrs["exclusions"].get("misaligned_or_short_target_calendar", 0), 0)
+        self.assertGreater(
+            panel.attrs["exclusions"].get("misaligned_or_short_target_calendar", 0), 0
+        )
 
     def test_controls_do_not_use_current_or_future_labels(self) -> None:
         prices = _synthetic_prices()
         custom = {
-            "train": (pd.Timestamp("2020-05-04").date(), pd.Timestamp("2021-12-20").date()),
-            "validation": (pd.Timestamp("2022-01-10").date(), pd.Timestamp("2022-06-20").date()),
-            "test": (pd.Timestamp("2022-07-11").date(), pd.Timestamp("2023-05-29").date()),
+            "train": (
+                pd.Timestamp("2020-05-04").date(),
+                pd.Timestamp("2021-12-20").date(),
+            ),
+            "validation": (
+                pd.Timestamp("2022-01-10").date(),
+                pd.Timestamp("2022-06-20").date(),
+            ),
+            "test": (
+                pd.Timestamp("2022-07-11").date(),
+                pd.Timestamp("2023-05-29").date(),
+            ),
         }
         panel = build_weekly_panel(prices, custom, include_test_labels=True)
         original = control_predictions(panel)
@@ -177,9 +218,18 @@ class PanelContractTest(unittest.TestCase):
         self.assertTrue((majority_by_week == 1).all())
         mutated = panel.copy()
         first_test = mutated.loc[mutated["split"] == "test", "decision_date"].min()
-        mutated.loc[mutated["decision_date"] >= first_test, "actual_weekly_return"] *= -100
+        mutated.loc[
+            mutated["decision_date"] >= first_test, "actual_weekly_return"
+        ] *= -100
         changed = control_predictions(mutated)
-        keys = ["zero_return", "historical_mean", "majority_sign", "persistence_1w", "reversal_1w", "momentum_4w"]
+        keys = [
+            "zero_return",
+            "historical_mean",
+            "majority_sign",
+            "persistence_1w",
+            "reversal_1w",
+            "momentum_4w",
+        ]
         mask = original["decision_date"] == first_test
         for key in keys:
             self.assertTrue(np.isfinite(original.loc[mask, key]).all(), key)
@@ -190,14 +240,21 @@ class PanelContractTest(unittest.TestCase):
         decisions = sorted(panel["decision_date"].unique())
         previous, current = decisions[10], decisions[11]
         pending_panel = panel.copy()
-        pending_panel.loc[pending_panel["decision_date"] == previous, "target_end"] = current
+        pending_panel.loc[pending_panel["decision_date"] == previous, "target_end"] = (
+            current
+        )
         pending_original = control_predictions(pending_panel)
         mutated_pending = pending_panel.copy()
-        mutated_pending.loc[mutated_pending["decision_date"] == previous, "actual_weekly_return"] *= -100
+        mutated_pending.loc[
+            mutated_pending["decision_date"] == previous, "actual_weekly_return"
+        ] *= -100
         pending_changed = control_predictions(mutated_pending)
         current_mask = pending_original["decision_date"] == current
         for key in ["historical_mean", "majority_sign"]:
-            np.testing.assert_allclose(pending_original.loc[current_mask, key], pending_changed.loc[current_mask, key])
+            np.testing.assert_allclose(
+                pending_original.loc[current_mask, key],
+                pending_changed.loc[current_mask, key],
+            )
 
 
 if __name__ == "__main__":
