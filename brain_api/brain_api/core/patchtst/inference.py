@@ -1,10 +1,10 @@
 """PatchTST inference helpers.
 
-5-channel OHLCV direct 5-day multi-task inference.
+Close-only direct 5-day inference.
 
-Single forward pass produces (batch, 5, 5) output -- 5 days x 5 channels.
+Single forward pass produces (batch, 5, 1) output -- 5 days x 1 close channel.
 RevIN automatically denormalizes output to original log-return scale.
-Extract close_ret channel for weekly return prediction. NO inverse-transform
+Compound the five close log returns for the weekly return. NO inverse-transform
 needed.
 """
 
@@ -34,10 +34,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class InferenceFeatures:
-    """Multi-channel features prepared for inference for a single symbol (OHLCV only)."""
+    """Close-return features prepared for inference for a single symbol."""
 
     symbol: str
-    features: np.ndarray | None  # Shape: (context_length, 5) -- OHLCV only, or None
+    features: np.ndarray | None  # Shape: (context_length, 1) -- close_ret, or None
     has_enough_history: bool
     history_days_used: int
     data_end_date: date | None
@@ -67,7 +67,7 @@ def build_inference_features(
     config: PatchTSTConfig,
     cutoff_date: date,
 ) -> InferenceFeatures:
-    """Build 5-channel OHLCV feature sequence for inference (no signals).
+    """Build close-only feature sequence for inference (no signals).
 
     Args:
         symbol: Ticker symbol
@@ -76,7 +76,7 @@ def build_inference_features(
         cutoff_date: Features end before this date (typically target_week_start)
 
     Returns:
-        InferenceFeatures with 5-channel OHLCV feature sequence (UNSCALED)
+        InferenceFeatures with close-return sequence (UNSCALED)
     """
     if prices_df.empty:
         return InferenceFeatures(
@@ -115,7 +115,7 @@ def build_inference_features(
             starting_price=None,
         )
 
-    # Compute OHLCV log returns (5 channels)
+    # Compute OHLCV log returns; select locked close-only channels
     features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
 
     # Normalize index to timezone-naive for consistent comparisons
@@ -134,9 +134,9 @@ def build_inference_features(
             starting_price=None,
         )
 
-    # Extract only 5 OHLCV columns for model input
-    ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
-    sequence = features_df[ohlcv_cols].iloc[-config.context_length :].values  # (60, 5)
+    sequence = (
+        features_df[list(config.feature_names)].iloc[-config.context_length :].values
+    )  # (context_length, n_channels)
     data_end_date = features_df.index[-1].date()
 
     # Get starting price: last close price before cutoff_date (for weekly return calculation)
@@ -151,7 +151,7 @@ def build_inference_features(
 
     return InferenceFeatures(
         symbol=symbol,
-        features=sequence,  # (context_length, 5) -- OHLCV only, UNSCALED
+        features=sequence,  # (context_length, n_channels) -- UNSCALED
         has_enough_history=True,
         history_days_used=len(features_df),
         data_end_date=data_end_date,
@@ -166,11 +166,11 @@ def run_inference(
     week_boundaries: WeekBoundaries,
     config: PatchTSTConfig,
 ) -> list[SymbolPrediction]:
-    """Run PatchTST inference -- single forward pass, 5-day direct prediction.
+    """Run PatchTST inference -- single forward pass, 5-day close prediction.
 
-    Single forward pass produces (batch, 5, 5) output. RevIN automatically
+    Single forward pass produces (batch, 5, 1) output. RevIN automatically
     denormalizes output to original log-return scale. Extract close_ret
-    channel for weekly return. NO scaler inverse-transform needed.
+    (index 0) for weekly return. NO scaler inverse-transform needed.
 
     Args:
         model: Loaded PatchTSTForPrediction model in eval mode
@@ -208,10 +208,9 @@ def run_inference(
     if not valid_features:
         return predictions
 
-    # close_ret channel index in the 5-channel OHLCV output
-    close_ret_idx = config.feature_names.index("close_ret")  # = 3
+    close_ret_idx = config.feature_names.index("close_ret")
 
-    # Prepare input batch: (n_samples, context_length, 5) -- raw OHLCV log returns
+    # Prepare input batch: (n_samples, context_length, n_channels)
     X_batch = np.array([f.features for _, f in valid_features])
 
     model.eval()
@@ -220,10 +219,8 @@ def run_inference(
     # Single forward pass -- NO scaler transform, RevIN normalizes internally
     # Output is (batch, 5, 5) already in ORIGINAL scale (denormalized by RevIN)
     with torch.no_grad():
-        X_tensor = torch.from_numpy(X_batch).float().to(device)  # (batch, 60, 5)
-        outputs = model(
-            past_values=X_tensor
-        ).prediction_outputs  # (batch, 5, 5) original scale
+        X_tensor = torch.from_numpy(X_batch).float().to(device)
+        outputs = model(past_values=X_tensor).prediction_outputs
         # Extract close_ret channel -- already in log-return scale (denormalized by RevIN)
         daily_preds = outputs[:, :, close_ret_idx].cpu().numpy()  # (batch, 5)
         del X_tensor, outputs
@@ -278,7 +275,7 @@ def run_batch_inference(
     artifacts: Any = None,
     exchange: str = "XNYS",
 ) -> BatchInferenceResult:
-    """Run PatchTST inference on arbitrary symbols (OHLCV only).
+    """Run PatchTST inference on arbitrary symbols (close-only).
 
     End-to-end pipeline: load model -> fetch prices -> build features -> run model.
     Predictions are sorted by predicted_weekly_return_pct descending.

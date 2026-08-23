@@ -347,7 +347,7 @@ def _run_patchtst_snapshot_inference(
     """Run PatchTST snapshot inference for a symbol.
 
     Loads daily OHLCV data only (no external signals -- PatchTST uses
-    5-channel OHLCV input). Single forward pass per week produces
+    close-only log-return input). Single forward pass per week produces
     direct 5-day predictions.
 
     Args:
@@ -423,9 +423,9 @@ def _predict_single_week_patchtst(
 ) -> float:
     """Generate PatchTST weekly prediction using direct 5-day forecasting.
 
-    Single forward pass produces (1, 5, 5) output -- 5 days x 5 channels.
+    Single forward pass produces (1, prediction_length, n_channels) output.
     RevIN denormalizes output to original log-return scale automatically.
-    Extract close_ret channel. NO scaler inverse-transform needed.
+    Compound the close_ret channel. NO scaler inverse-transform needed.
 
     Bug fixes applied:
     - Bug #E: Removed .permute(0, 2, 1) that crashed PatchTST
@@ -472,19 +472,19 @@ def _predict_single_week_patchtst(
             f"need {context_length}, got {len(features_df)} (cutoff={cutoff})"
         )
 
-    ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+    channel_names = list(config.feature_names)
     ohlcv_features = (
-        features_df[ohlcv_cols].iloc[-context_length:].values
-    )  # (context_length, 5)
+        features_df[channel_names].iloc[-context_length:].values
+    )  # (context_length, n_channels)
 
-    close_ret_idx = 3
+    close_ret_idx = config.feature_names.index("close_ret")
 
     # NO scaler transform -- RevIN normalizes internally
     # Single forward pass -- NO permute! (Bug #E fix)
     x = torch.tensor(ohlcv_features, dtype=torch.float32).unsqueeze(
         0
-    )  # (1, context_length, 5)
-    output = model(past_values=x).prediction_outputs  # (1, 5, 5) ORIGINAL scale
+    )  # (1, context_length, n_channels)
+    output = model(past_values=x).prediction_outputs  # ORIGINAL scale
 
     daily_log_returns = output[0, :, close_ret_idx].cpu().numpy()  # (5,)
 

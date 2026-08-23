@@ -69,14 +69,14 @@ def align_multivariate_data(
     prices: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> dict[str, pd.DataFrame]:
-    """Align OHLCV data into feature channels for PatchTST (5-channel OHLCV only).
+    """Align OHLCV data into feature channels for PatchTST.
 
-    Computes OHLCV log returns and filters to config.feature_names (5 channels:
-    open_ret, high_ret, low_ret, close_ret, volume_ret). The model uses no signals.
+    Computes OHLCV log returns and filters to ``config.feature_names``.
+    Locked production config uses one close-return channel.
 
     Args:
         prices: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
-        config: PatchTST configuration (num_input_channels=5, feature_names=OHLCV only)
+        config: PatchTST configuration (feature_names selects channels)
 
     Returns:
         Dict of symbol -> aligned DataFrame with config.num_input_channels columns
@@ -87,7 +87,7 @@ def align_multivariate_data(
         if len(price_df) < config.context_length + 5:
             continue
 
-        # OHLCV log returns only (5 channels)
+        # OHLCV log returns; config.feature_names selects the model channels
         features_df = compute_ohlcv_log_returns(
             price_df, use_returns=config.use_returns
         )

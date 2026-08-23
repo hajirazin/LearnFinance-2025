@@ -198,7 +198,8 @@ def _train_patchtst_core(
         raise ValueError("No training samples could be built from aligned features")
 
     X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
-    anchor_dates = getattr(dataset, "anchor_dates", None)
+    anchor_dates = dataset.anchor_dates
+    sample_symbols = dataset.symbols
     del dataset
     gc.collect()
 
@@ -213,6 +214,7 @@ def _train_patchtst_core(
         config,
         shutdown_event=shutdown_event,
         anchor_dates=anchor_dates,
+        sample_symbols=sample_symbols,
     )
     t_train = time.time() - t0
     logger.info(f"{log_prefix} Training complete in {t_train:.1f}s")
@@ -256,6 +258,7 @@ def _train_patchtst_core(
         promoted=False,  # placeholder
         prior_version=prior_version,
         failure_reasons=[],  # placeholder
+        val_rank_ic=result.val_rank_ic,
     )
 
     logger.info(f"{log_prefix} Writing artifacts for version {version}...")
@@ -296,6 +299,7 @@ def _train_patchtst_core(
         promoted=promoted,
         prior_version=prior_version,
         failure_reasons=health.failure_reasons,
+        val_rank_ic=result.val_rank_ic,
     )
     storage.write_artifacts(
         version=version,
@@ -368,6 +372,7 @@ def _train_patchtst_core(
             "baseline_loss": result.baseline_loss,
             "best_epoch": result.best_epoch,
             "stopped_epoch": result.stopped_epoch,
+            "val_rank_ic": result.val_rank_ic,
         },
         promoted=promoted,
         prior_version=prior_version,

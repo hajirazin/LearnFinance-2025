@@ -1,12 +1,13 @@
 """Dataset building for PatchTST training.
 
-Builds week-aligned samples for direct 5-day OHLCV targets (loss uses close
-only at train time). Each sample is anchored at the **last trading day of an
-ISO week** with at least ``config.min_week_days`` sessions.
+Builds week-aligned samples for direct 5-day close-return targets. Each
+sample is anchored at the **last trading day of an ISO week** with at
+least ``config.min_week_days`` sessions.
 
-The input is a sequence of OHLCV log returns ending at the anchor day
-(inclusive), and the target is all 5 OHLCV log returns for the next 5 trading
-days (targets stored for all channels; training optimizes close only).
+The input is a sequence of ``config.feature_names`` log returns ending at
+the anchor day (inclusive), and the target is the same channels for the
+next ``prediction_length`` trading days. Locked production config uses
+one close-return channel.
 
 Targets and inputs are UNSCALED -- RevIN inside PatchTST handles
 per-channel per-sample normalization internally.
@@ -24,18 +25,21 @@ from brain_api.core.patchtst.config import PatchTSTConfig
 
 @dataclass
 class DatasetResult:
-    """Result of dataset building for direct 5-day multi-channel targets.
+    """Result of dataset building for direct 5-day close-return targets.
 
-    X: Input sequences of OHLCV log returns (UNSCALED -- RevIN normalizes internally).
-    y: Targets of ALL 5 OHLCV channels for next 5 trading days (UNSCALED).
+    X: Input sequences of configured log-return channels (UNSCALED -- RevIN
+       normalizes internally).
+    y: Targets of the same channels for the next prediction_length days.
     feature_scaler: Fitted for diagnostics only (data drift monitoring). NOT used for model normalization.
     anchor_dates: Per-sample week-end anchor dates (chronological split).
+    symbols: Per-sample symbol labels aligned with X/y/anchor_dates.
     """
 
-    X: np.ndarray  # (n_samples, context_length, 5)
-    y: np.ndarray  # (n_samples, 5, 5)
+    X: np.ndarray  # (n_samples, context_length, n_channels)
+    y: np.ndarray  # (n_samples, prediction_length, n_channels)
     feature_scaler: StandardScaler
     anchor_dates: np.ndarray  # dtype=object, date objects length n_samples
+    symbols: np.ndarray  # dtype=object, str labels length n_samples
 
 
 def _week_end_anchors(dates: pd.DatetimeIndex, min_week_days: int) -> list[int]:
@@ -69,38 +73,42 @@ def build_dataset(
     prices: dict[str, pd.DataFrame],
     config: PatchTSTConfig,
 ) -> DatasetResult:
-    """Build training dataset for direct 5-day OHLCV targets.
+    """Build training dataset for direct 5-day close-return targets.
 
     Creates week-aligned samples:
     - Anchors at the last trading day of each ISO week with >= min_week_days
-    - Input: context_length days of OHLCV log returns ending at anchor (inclusive)
-    - Target: ALL 5 OHLCV channels for the next 5 trading days
+    - Input: context_length days of configured channels ending at anchor
+    - Target: the same channels for the next prediction_length trading days
 
     X and y are UNSCALED raw log returns. Samples are returned sorted by
     ``anchor_dates`` ascending for chronological train/val splits.
     """
-    ohlcv_cols = ["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"]
+    del prices  # unused; kept so call sites stay (aligned, prices, config)
+    channel_names = list(config.feature_names)
+    n_channels = config.num_input_channels
+    horizon = config.prediction_length
 
     all_sequences = []
     all_targets = []
     all_anchors: list[date] = []
+    all_symbols: list[str] = []
 
     print(f"[PatchTST] Building dataset from {len(aligned_features)} symbols...")
     symbols_used = 0
     total_samples = 0
 
-    for _symbol, features_df in aligned_features.items():
-        missing_cols = [c for c in ohlcv_cols if c not in features_df.columns]
+    for symbol, features_df in aligned_features.items():
+        missing_cols = [c for c in channel_names if c not in features_df.columns]
         if missing_cols:
-            print(f"[PatchTST] Skipping {_symbol}: missing columns {missing_cols}")
+            print(f"[PatchTST] Skipping {symbol}: missing columns {missing_cols}")
             continue
 
-        ohlcv_df = features_df[ohlcv_cols]
+        channel_df = features_df[channel_names]
 
-        if len(ohlcv_df) < config.context_length + 5:
+        if len(channel_df) < config.context_length + horizon:
             continue
 
-        dates = ohlcv_df.index
+        dates = channel_df.index
         n_dates = len(dates)
         week_ends = _week_end_anchors(dates, config.min_week_days)
 
@@ -109,19 +117,19 @@ def build_dataset(
         for t in week_ends:
             if t < config.context_length - 1:
                 continue
-            if t + 5 >= n_dates:
+            if t + horizon >= n_dates:
                 continue
 
             seq_start = t - config.context_length + 1
             seq_end = t + 1
-            sequence = ohlcv_df.iloc[seq_start:seq_end].values
+            sequence = channel_df.iloc[seq_start:seq_end].values
 
             if len(sequence) != config.context_length:
                 continue
 
-            target = ohlcv_df.iloc[t + 1 : t + 6].values
+            target = channel_df.iloc[t + 1 : t + 1 + horizon].values
 
-            if target.shape != (5, 5):
+            if target.shape != (horizon, n_channels):
                 continue
 
             if np.any(np.isnan(sequence)) or np.any(np.isinf(sequence)):
@@ -139,6 +147,7 @@ def build_dataset(
             all_sequences.append(sequence)
             all_targets.append(target)
             all_anchors.append(anchor_d)
+            all_symbols.append(symbol)
             symbol_samples += 1
 
         if symbol_samples > 0:
@@ -151,18 +160,20 @@ def build_dataset(
     )
 
     if not all_sequences:
-        empty_X = np.empty((0, config.context_length, 5), dtype=np.float32)
-        empty_y = np.empty((0, 5, 5), dtype=np.float32)
+        empty_X = np.empty((0, config.context_length, n_channels), dtype=np.float32)
+        empty_y = np.empty((0, horizon, n_channels), dtype=np.float32)
         return DatasetResult(
             X=empty_X,
             y=empty_y,
             feature_scaler=StandardScaler(),
             anchor_dates=np.array([], dtype=object),
+            symbols=np.array([], dtype=object),
         )
 
     X = np.array(all_sequences, dtype=np.float32)
     y = np.array(all_targets, dtype=np.float32)
     anchor_dates = np.array(all_anchors, dtype=object)
+    symbols = np.array(all_symbols, dtype=object)
     del all_sequences, all_targets
 
     # Chronological order for time-based train/val (Phase D)
@@ -170,22 +181,29 @@ def build_dataset(
     X = X[order]
     y = y[order]
     anchor_dates = anchor_dates[order]
+    symbols = symbols[order]
 
-    assert X.shape[2] == 5, f"CRITICAL: Expected 5 channels in X, got {X.shape[2]}"
-    assert y.shape[1:] == (5, 5), f"CRITICAL: Expected y shape (n, 5, 5), got {y.shape}"
+    assert X.shape[2] == n_channels, (
+        f"CRITICAL: Expected {n_channels} channels in X, got {X.shape[2]}"
+    )
+    assert y.shape[1:] == (horizon, n_channels), (
+        f"CRITICAL: Expected y shape (n, {horizon}, {n_channels}), got {y.shape}"
+    )
 
     print("[PatchTST] VERIFY DATASET:")
     print(
-        f"  X shape: {X.shape} (samples, context_length={config.context_length}, channels=5)"
+        f"  X shape: {X.shape} (samples, context_length={config.context_length}, "
+        f"channels={n_channels})"
     )
-    print(f"  y shape: {y.shape} (samples, 5 days, 5 channels)")
-    print(f"  Channels: {ohlcv_cols}")
+    print(f"  y shape: {y.shape} (samples, {horizon} days, {n_channels} channels)")
+    print(f"  Channels: {channel_names}")
     print(
         f"  Anchors: ISO-week last session, min_week_days={config.min_week_days}; "
         f"sorted {anchor_dates[0]} .. {anchor_dates[-1]}"
     )
     print(
-        "  Targets: ALL 5 channels for next 5 trading days (UNSCALED); loss uses close only"
+        f"  Targets: {channel_names} for next {horizon} trading days (UNSCALED); "
+        "loss uses close only"
     )
 
     x_nan_count = np.isnan(X).sum()
@@ -202,7 +220,7 @@ def build_dataset(
         print(f"  WARNING: y has {y_inf_count} Inf values")
 
     feature_scaler = StandardScaler()
-    feature_scaler.fit(X.reshape(-1, 5))
+    feature_scaler.fit(X.reshape(-1, n_channels))
 
     print("[PatchTST] Data statistics (raw, unscaled -- RevIN normalizes internally):")
     print(
@@ -217,4 +235,5 @@ def build_dataset(
         y=y,
         feature_scaler=feature_scaler,
         anchor_dates=anchor_dates,
+        symbols=symbols,
     )

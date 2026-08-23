@@ -111,7 +111,7 @@ tags:
 
 # LearnFinance PatchTST Model - {version}
 
-OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
+Close-only PatchTST transformer for predicting weekly stock returns.
 
 ## Model Details
 
@@ -120,10 +120,9 @@ OHLCV 5-channel PatchTST transformer model for predicting weekly stock returns.
 - **Training Window**: {metadata.get("data_window", {}).get("start", "N/A")} to {metadata.get("data_window", {}).get("end", "N/A")}
 - **Symbols**: {len(metadata.get("symbols", []))} stocks
 
-## Input Channels (11 total)
+## Input Channels
 
-- OHLCV log returns (5): open, high, low, close, volume
-- News sentiment (1)
+- Close log return (1): ``close_ret``
 
 ## Metrics
 

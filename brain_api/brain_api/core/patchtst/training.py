@@ -1,20 +1,21 @@
 """PatchTST model training.
 
-5-channel OHLCV input with **close-channel-only** training loss.
+Locked contract: one close-return channel with denormalized close MSE
+and validation weekly rank-IC checkpointing.
 
 RevIN (scaling="std") still normalizes inputs per-channel per-sample inside
-HuggingFace PatchTST. We do **not** use ``outputs.loss`` (equal-weight MSE on
-all denormalized OHLCV channels — volume-dominated). Instead we optimize:
+HuggingFace PatchTST. We do **not** use ``outputs.loss``. Instead we optimize:
 
     MSE(prediction_outputs[:, :, close_idx], batch_y[:, :, close_idx])
 
-which matches Alpha-HRP / score-batch ranking on compounded close returns.
-OHLCV channels remain in the input; only the loss is close-only.
+and restore the checkpoint with the highest validation weekly rank IC
+(close-only validation MSE is the tie-break).
 """
 
 import threading
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import NamedTuple
 
 import numpy as np
 import torch
@@ -24,6 +25,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from transformers import PatchTSTForPrediction
 
 from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.weekly_rank_ic import (
+    checkpoint_is_better,
+    mean_weekly_rank_ic,
+)
 from brain_api.core.training_utils import TrainingCancelledError, get_device
 
 
@@ -39,6 +44,7 @@ class TrainingResult:
     baseline_loss: float
     best_epoch: int  # 1-indexed checkpoint restored; 0 if none
     stopped_epoch: int  # 1-indexed last epoch actually run; 0 if none
+    val_rank_ic: float  # checkpoint validation weekly rank IC; non-finite only if empty
 
 
 def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
@@ -48,7 +54,7 @@ def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
     normalization internally. DO NOT set scaling=None.
 
     Args:
-        config: Our PatchTSTConfig (num_input_channels=5, prediction_length=5)
+        config: Our PatchTSTConfig (num_input_channels=1, prediction_length=5)
 
     Returns:
         Initialized PatchTSTForPrediction model with RevIN enabled
@@ -67,18 +73,34 @@ def _close_mse(
     return F.mse_loss(preds[:, :, close_idx], targets[:, :, close_idx])
 
 
+class ChronoSplit(NamedTuple):
+    """Chronological train/validation arrays after horizon purge."""
+
+    X_train: np.ndarray
+    X_val: np.ndarray
+    y_train: np.ndarray
+    y_val: np.ndarray
+    val_dates: np.ndarray | None
+    val_symbols: np.ndarray | None
+
+
 def _chrono_train_val_split(
     X: np.ndarray,
     y: np.ndarray,
     anchor_dates: np.ndarray | None,
     validation_split: float,
     horizon_purge_calendar_days: int = 7,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    sample_symbols: np.ndarray | None = None,
+) -> ChronoSplit:
     """Sort by anchor date (if provided) and split train/earlier vs val/later.
 
     Purges train samples whose target window may overlap the first val anchor
     (conservative calendar-day purge of ``horizon_purge_calendar_days``).
     """
+    if sample_symbols is not None and len(sample_symbols) != len(X):
+        raise ValueError(
+            f"sample_symbols length {len(sample_symbols)} != X length {len(X)}"
+        )
     if anchor_dates is not None:
         if len(anchor_dates) != len(X):
             raise ValueError(
@@ -88,6 +110,8 @@ def _chrono_train_val_split(
         X = X[order]
         y = y[order]
         anchor_dates = anchor_dates[order]
+        if sample_symbols is not None:
+            sample_symbols = sample_symbols[order]
 
     split_idx = int(len(X) * (1 - validation_split))
     if split_idx <= 0 or split_idx >= len(X):
@@ -96,7 +120,14 @@ def _chrono_train_val_split(
         )
 
     if anchor_dates is None:
-        return X[:split_idx], X[split_idx:], y[:split_idx], y[split_idx:]
+        return ChronoSplit(
+            X[:split_idx],
+            X[split_idx:],
+            y[:split_idx],
+            y[split_idx:],
+            None,
+            None if sample_symbols is None else sample_symbols[split_idx:],
+        )
 
     min_val_anchor: date = anchor_dates[split_idx]
     purge_before = min_val_anchor - timedelta(days=horizon_purge_calendar_days)
@@ -111,7 +142,9 @@ def _chrono_train_val_split(
 
     X_train, y_train = X[train_idx], y[train_idx]
     X_val, y_val = X[split_idx:], y[split_idx:]
-    return X_train, X_val, y_train, y_val
+    val_dates = anchor_dates[split_idx:]
+    val_symbols = None if sample_symbols is None else sample_symbols[split_idx:]
+    return ChronoSplit(X_train, X_val, y_train, y_val, val_dates, val_symbols)
 
 
 def train_model_pytorch(
@@ -121,19 +154,21 @@ def train_model_pytorch(
     config: PatchTSTConfig,
     shutdown_event: threading.Event | None = None,
     anchor_dates: np.ndarray | None = None,
+    sample_symbols: np.ndarray | None = None,
 ) -> TrainingResult:
     """Train PatchTST with close-channel-only MSE (denormalized outputs).
 
     Args:
-        X: Input sequences, shape (n_samples, context_length, 5) -- UNSCALED OHLCV
-        y: Targets, shape (n_samples, 5, 5) -- UNSCALED OHLCV (5 days x 5 channels)
+        X: Input sequences, shape (n_samples, context_length, n_channels)
+        y: Targets, shape (n_samples, prediction_length, n_channels)
         feature_scaler: Fitted scaler (diagnostic only, not used in training)
         config: Model configuration
         shutdown_event: Optional cancellation event
-        anchor_dates: Optional per-sample anchor dates for chronological split
+        anchor_dates: Per-sample anchor dates (required when len(X) > 0)
+        sample_symbols: Per-sample symbol labels (required when len(X) > 0)
 
     Returns:
-        TrainingResult with best checkpoint and close-only metrics
+        TrainingResult with rank-IC checkpoint and close-only metrics
     """
     device = get_device()
     print(f"[PatchTST] Training on device: {device}")
@@ -151,10 +186,31 @@ def train_model_pytorch(
             baseline_loss=float("inf"),
             best_epoch=0,
             stopped_epoch=0,
+            val_rank_ic=float("nan"),
         )
 
-    X_train, X_val, y_train, y_val = _chrono_train_val_split(
-        X, y, anchor_dates, config.validation_split
+    if anchor_dates is None or sample_symbols is None:
+        raise ValueError(
+            "anchor_dates and sample_symbols are required when training on non-empty data"
+        )
+    if len(anchor_dates) != len(X) or len(sample_symbols) != len(X):
+        raise ValueError(
+            f"anchor_dates length {len(anchor_dates)} and sample_symbols "
+            f"length {len(sample_symbols)} must match X length {len(X)}"
+        )
+
+    split = _chrono_train_val_split(
+        X,
+        y,
+        anchor_dates,
+        config.validation_split,
+        sample_symbols=sample_symbols,
+    )
+    X_train, X_val, y_train, y_val = (
+        split.X_train,
+        split.X_val,
+        split.y_train,
+        split.y_val,
     )
 
     print(
@@ -202,6 +258,7 @@ def train_model_pytorch(
     )
 
     best_val_loss = float("inf")
+    best_val_rank_ic = float("-inf")
     best_model_state = None
     best_epoch = 0
     stopped_epoch = 0
@@ -234,10 +291,14 @@ def train_model_pytorch(
                 first_batch_logged = True
                 print("[PatchTST] VERIFY MODEL OUTPUT (epoch 0, batch 0):")
                 print(
-                    f"  prediction_outputs shape: {pred_outputs.shape} (batch, pred_len=5, channels=5)"
+                    f"  prediction_outputs shape: {pred_outputs.shape} "
+                    f"(batch, pred_len={config.prediction_length}, "
+                    f"channels={config.num_input_channels})"
                 )
                 print(
-                    f"  batch_y shape: {batch_y.shape} (batch, pred_len=5, channels=5)"
+                    f"  batch_y shape: {batch_y.shape} "
+                    f"(batch, pred_len={config.prediction_length}, "
+                    f"channels={config.num_input_channels})"
                 )
                 print(f"  close-only loss: {loss.item():.6f}")
                 for ch_idx, ch_name in enumerate(config.feature_names):
@@ -276,15 +337,31 @@ def train_model_pytorch(
         model.eval()
         total_val_loss = 0.0
         n_val_batches = 0
+        pred_weeks: list[np.ndarray] = []
         with torch.no_grad():
             for val_X, val_y in val_loader:
                 val_X = val_X.to(device)
                 val_y = val_y.to(device)
                 preds = model(past_values=val_X).prediction_outputs
                 total_val_loss += _close_mse(preds, val_y, close_idx).item()
+                pred_weeks.append(
+                    preds[:, :, close_idx].sum(dim=1).detach().cpu().numpy()
+                )
                 n_val_batches += 1
                 del val_X, val_y, preds
         val_loss = total_val_loss / n_val_batches
+        predicted_weekly_logs = np.concatenate(pred_weeks)
+        actual_weekly_logs = y_val[:, :, close_idx].sum(axis=1)
+        if split.val_dates is None or split.val_symbols is None:
+            raise ValueError(
+                "chronological split must retain validation dates and symbols"
+            )
+        val_rank_ic = mean_weekly_rank_ic(
+            split.val_dates,
+            split.val_symbols,
+            predicted_weekly_logs,
+            actual_weekly_logs,
+        )
         stopped_epoch = epoch + 1
 
         scheduler.step(val_loss)
@@ -295,11 +372,13 @@ def train_model_pytorch(
         print(
             f"[PatchTST] Epoch {epoch + 1}/{config.epochs}: "
             f"train_loss={avg_train_loss:.6f}, val_loss={val_loss:.6f}, "
+            f"val_rank_ic={val_rank_ic:.6f}, "
             f"gap={loss_gap:.6f} {overfitting_indicator}, "
             f"lr={current_lr:.6e}, patience={patience_counter}/{config.early_stopping_patience}"
         )
 
-        if val_loss < best_val_loss:
+        if checkpoint_is_better(val_rank_ic, val_loss, best_val_rank_ic, best_val_loss):
+            best_val_rank_ic = val_rank_ic
             best_val_loss = val_loss
             best_epoch = epoch + 1
             patience_counter = 0
@@ -311,7 +390,8 @@ def train_model_pytorch(
             if patience_counter >= config.early_stopping_patience:
                 print(
                     f"[PatchTST] Early stopping triggered at epoch {epoch + 1} "
-                    f"(val_loss didn't improve for {config.early_stopping_patience} epochs)"
+                    f"(rank-IC checkpoint did not improve for "
+                    f"{config.early_stopping_patience} epochs)"
                 )
                 break
 
@@ -322,7 +402,7 @@ def train_model_pytorch(
 
     print(
         f"[PatchTST] Best model at epoch {best_epoch} with "
-        f"val_loss={best_val_loss:.6f} (close-only)"
+        f"val_rank_ic={best_val_rank_ic:.6f}, val_loss={best_val_loss:.6f} (close-only)"
     )
 
     # Restore best weights onto the training device model for final metrics
@@ -390,4 +470,5 @@ def train_model_pytorch(
         baseline_loss=baseline_loss,
         best_epoch=best_epoch,
         stopped_epoch=stopped_epoch,
+        val_rank_ic=best_val_rank_ic,
     )

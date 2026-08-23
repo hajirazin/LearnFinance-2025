@@ -25,6 +25,7 @@ def create_training_metadata(
     prior_version: str | None,
     failure_reasons: list[str] | None = None,
     config_symbols_hash: str | None = None,
+    val_rank_ic: float | None = None,
 ) -> dict[str, Any]:
     """Create metadata dict for a training run.
 
@@ -57,6 +58,9 @@ def create_training_metadata(
             ``(model_type_bucket, window, symbols, config)`` for audit;
             mirrors forecaster snapshot folder suffixes. When omitted,
             computed automatically from the other fields.
+        val_rank_ic: PatchTST validation weekly rank IC of the restored
+            checkpoint. Omitted from metrics when None so LSTM hashes and
+            callers stay unchanged.
 
     Returns:
         Metadata dictionary
@@ -66,6 +70,15 @@ def create_training_metadata(
     audit_hash = config_symbols_hash or compute_model_hash(
         model_type, ws, we, symbols, config_dict
     )
+    metrics: dict[str, Any] = {
+        "train_loss": train_loss,
+        "val_loss": val_loss,
+        "baseline_loss": baseline_loss,
+        "best_epoch": best_epoch,
+        "stopped_epoch": stopped_epoch,
+    }
+    if val_rank_ic is not None:
+        metrics["val_rank_ic"] = val_rank_ic
     return {
         "model_type": model_type,
         "version": version,
@@ -77,13 +90,7 @@ def create_training_metadata(
         "symbols": symbols,
         "config": config_dict,
         "config_symbols_hash": audit_hash,
-        "metrics": {
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "baseline_loss": baseline_loss,
-            "best_epoch": best_epoch,
-            "stopped_epoch": stopped_epoch,
-        },
+        "metrics": metrics,
         "promoted": promoted,
         "prior_version": prior_version,
         "failure_reasons": list(failure_reasons) if failure_reasons else [],

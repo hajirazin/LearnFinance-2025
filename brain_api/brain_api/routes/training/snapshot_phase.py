@@ -624,6 +624,7 @@ def _backfill_patchtst_snapshots(
             dataset.feature_scaler,
             config,
             anchor_dates=dataset.anchor_dates,
+            sample_symbols=dataset.symbols,
         )
 
         backfill_digest = compute_model_hash(
