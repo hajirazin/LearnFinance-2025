@@ -52,24 +52,36 @@ def mock_price_loader(symbols, start_date, end_date):
 
 
 def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
-    """Return a mock dataset result for 5-channel OHLCV multi-task prediction."""
+    """Return a mock dataset result for close-only PatchTST."""
     from datetime import date, timedelta
 
     n_samples = 10
+    n_channels = config.num_input_channels
     anchors = np.array(
         [date(2024, 1, 5) + timedelta(days=7 * i) for i in range(n_samples)],
         dtype=object,
     )
+    symbols = np.array(
+        ["AAPL" if i % 2 == 0 else "MSFT" for i in range(n_samples)],
+        dtype=object,
+    )
     return DatasetResult(
-        X=np.random.randn(n_samples, config.context_length, 5),
-        y=np.random.randn(n_samples, 5, 5),
+        X=np.random.randn(n_samples, config.context_length, n_channels),
+        y=np.random.randn(n_samples, config.prediction_length, n_channels),
         feature_scaler=StandardScaler(),
         anchor_dates=anchors,
+        symbols=symbols,
     )
 
 
 def mock_trainer(
-    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+    X,
+    y,
+    feature_scaler,
+    config,
+    shutdown_event=None,
+    anchor_dates=None,
+    sample_symbols=None,
 ) -> TrainingResult:
     """Return a mock training result with controllable metrics."""
     hf_config = config.to_hf_config()
@@ -83,11 +95,18 @@ def mock_trainer(
         baseline_loss=0.05,
         best_epoch=1,
         stopped_epoch=1,
+        val_rank_ic=0.15,
     )
 
 
 def mock_trainer_worse_than_baseline(
-    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+    X,
+    y,
+    feature_scaler,
+    config,
+    shutdown_event=None,
+    anchor_dates=None,
+    sample_symbols=None,
 ) -> TrainingResult:
     """Mock trainer worse than baseline.
 
@@ -109,11 +128,18 @@ def mock_trainer_worse_than_baseline(
         baseline_loss=0.05,
         best_epoch=1,
         stopped_epoch=1,
+        val_rank_ic=0.05,
     )
 
 
 def mock_trainer_nan_val_loss(
-    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+    X,
+    y,
+    feature_scaler,
+    config,
+    shutdown_event=None,
+    anchor_dates=None,
+    sample_symbols=None,
 ) -> TrainingResult:
     """Mock trainer that returns NaN val_loss to trip the guardrail."""
     hf_config = config.to_hf_config()
@@ -127,6 +153,7 @@ def mock_trainer_nan_val_loss(
         baseline_loss=0.05,
         best_epoch=1,
         stopped_epoch=1,
+        val_rank_ic=0.15,
     )
 
 
@@ -190,7 +217,8 @@ def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> No
         feature_scaler,
         config,
         shutdown_event=None,
-        anchor_dates=None: mock_trainer(
+        anchor_dates=None,
+        sample_symbols=None: mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
         ),
     )
@@ -326,9 +354,11 @@ def test_train_patchtst_returns_required_fields(client_with_mocks, temp_storage)
     assert on_disk is not None
     assert on_disk["metrics"]["best_epoch"] == 1
     assert on_disk["metrics"]["stopped_epoch"] == 1
+    assert on_disk["metrics"]["val_rank_ic"] == pytest.approx(0.15)
 
-    assert data["num_input_channels"] == 5
+    assert data["num_input_channels"] == 1
     assert data["signals_used"] == ["ohlcv"]
+    assert data["metrics"]["val_rank_ic"] == pytest.approx(0.15)
 
 
 # ============================================================================

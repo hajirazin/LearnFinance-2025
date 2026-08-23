@@ -34,7 +34,7 @@ def mock_training():
         metrics={"train_loss": 0.01, "val_loss": 0.02},
         promoted=True,
         failure_reasons=[],
-        num_input_channels=5,
+        num_input_channels=1,
         signals_used=["ohlcv"],
     )
 

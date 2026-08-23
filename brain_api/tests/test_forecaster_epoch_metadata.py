@@ -1,6 +1,6 @@
 """Epoch counters on forecaster TrainingResult and metadata.json."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -31,6 +31,7 @@ def test_create_training_metadata_includes_epoch_counters() -> None:
     assert metadata["metrics"]["best_epoch"] == 2
     assert metadata["metrics"]["stopped_epoch"] == 17
     assert metadata["metrics"]["train_loss"] == 0.01
+    assert "val_rank_ic" not in metadata["metrics"]
 
 
 def test_lstm_empty_data_records_zero_epochs() -> None:
@@ -68,7 +69,6 @@ def test_lstm_tiny_train_records_epoch_counters() -> None:
 
 def test_patchtst_tiny_train_records_epoch_counters() -> None:
     rng = np.random.default_rng(0)
-    n_samples = 20
     config = PatchTSTConfig(
         context_length=32,
         patch_length=8,
@@ -81,23 +81,39 @@ def test_patchtst_tiny_train_records_epoch_counters() -> None:
         early_stopping_patience=10,
         batch_size=4,
     )
+    n_channels = config.num_input_channels
+    symbols_list = ("AAA", "BBB", "CCC", "DDD")
+    train_weeks = 4
+    n_samples = train_weeks * len(symbols_list) + len(symbols_list)
+    X = rng.normal(size=(n_samples, config.context_length, n_channels)).astype(
+        np.float32
+    )
+    y = rng.normal(size=(n_samples, config.prediction_length, n_channels)).astype(
+        np.float32
+    )
+    dates: list[date] = []
+    labels: list[str] = []
+    for week in range(train_weeks):
+        week_date = date(2024, 1, 5) + timedelta(days=7 * week)
+        for symbol in symbols_list:
+            dates.append(week_date)
+            labels.append(symbol)
+    val_date = date(2024, 3, 1)
+    for symbol in symbols_list:
+        dates.append(val_date)
+        labels.append(symbol)
     result = train_patchtst(
-        rng.normal(
-            size=(n_samples, config.context_length, config.num_input_channels)
-        ).astype(np.float32),
-        rng.normal(
-            size=(
-                n_samples,
-                config.prediction_length,
-                config.num_input_channels,
-            )
-        ).astype(np.float32),
+        X,
+        y,
         StandardScaler(),
         config,
+        anchor_dates=np.array(dates, dtype=object),
+        sample_symbols=np.array(labels, dtype=object),
     )
     assert result.stopped_epoch == 2
     assert 1 <= result.best_epoch <= result.stopped_epoch
     assert result.stopped_epoch <= config.epochs
+    assert np.isfinite(result.val_rank_ic)
 
 
 def test_lstm_patience_one_can_stop_before_max_epochs() -> None:
@@ -138,6 +154,10 @@ def test_create_training_metadata_hash_ignores_epoch_counters() -> None:
         "prior_version": None,
     }
     a = create_training_metadata(**kwargs, best_epoch=2, stopped_epoch=17)
-    b = create_training_metadata(**kwargs, best_epoch=58, stopped_epoch=73)
+    b = create_training_metadata(
+        **kwargs, best_epoch=58, stopped_epoch=73, val_rank_ic=0.41
+    )
     assert a["config_symbols_hash"] == b["config_symbols_hash"]
     assert date.fromisoformat(a["data_window"]["start"]) == date(2016, 1, 1)
+    assert "val_rank_ic" not in a["metrics"]
+    assert b["metrics"]["val_rank_ic"] == 0.41

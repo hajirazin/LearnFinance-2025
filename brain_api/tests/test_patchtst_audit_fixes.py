@@ -126,7 +126,7 @@ def _synthetic_ohlcv(n: int, idx: pd.DatetimeIndex, volume: np.ndarray) -> pd.Da
 
 
 def test_align_multivariate_data_zero_volume_no_inf_warning(capsys):
-    """FERG-like zero-volume days: Inf warning must not fire; NaN+skip is OK."""
+    """FERG-like zero-volume days: Inf warning must not fire; close-only keeps samples."""
     n = 80
     idx = pd.bdate_range("2023-01-02", periods=n)
     # One late zero-volume cluster (thin ADR pattern) so early week windows stay valid
@@ -146,17 +146,15 @@ def test_align_multivariate_data_zero_volume_no_inf_warning(capsys):
     assert "Inf values" not in captured
     assert not any("divide" in str(w.message).lower() for w in caught)
     assert set(aligned) == {"FERG", "BDRFY", "CLEAN"}
-    for sym in ("FERG", "BDRFY"):
-        feat = aligned[sym]
-        assert not bool(np.isinf(feat.to_numpy()).any()), sym
-        assert bool(feat["volume_ret"].isna().any()), sym
-    # Dataset still builds finite samples and skips windows that touch NaN volume days
+    for feat in aligned.values():
+        assert list(feat.columns) == ["close_ret"]
+        assert not bool(np.isinf(feat.to_numpy()).any())
     dirty_only = {k: aligned[k] for k in ("FERG", "BDRFY")}
     clean_only = {"CLEAN": aligned["CLEAN"]}
     dirty_result = build_dataset(dirty_only, dirty_only, config)
     clean_result = build_dataset(clean_only, clean_only, config)
     assert len(dirty_result.X) > 0
-    assert len(dirty_result.X) < 2 * len(clean_result.X)
+    assert len(dirty_result.X) == 2 * len(clean_result.X)
     assert not bool(np.isinf(dirty_result.X).any())
     assert not bool(np.isnan(dirty_result.X).any())
 
@@ -164,20 +162,31 @@ def test_align_multivariate_data_zero_volume_no_inf_warning(capsys):
 def test_chrono_split_val_after_train():
     """Phase D: chronological split keeps val after train with purge."""
     n = 20
-    X = np.zeros((n, 4, 5), dtype=np.float32)
-    y = np.zeros((n, 5, 5), dtype=np.float32)
+    X = np.zeros((n, 4, 1), dtype=np.float32)
+    y = np.zeros((n, 5, 1), dtype=np.float32)
     anchors = np.array(
         [date(2024, 1, 5) + dt.timedelta(days=7 * i) for i in range(n)],
         dtype=object,
     )
-    X_tr, X_va, _y_tr, _y_va = _chrono_train_val_split(
-        X, y, anchors, validation_split=0.2, horizon_purge_calendar_days=7
+    symbols = np.array([f"S{i % 4}" for i in range(n)], dtype=object)
+    split = _chrono_train_val_split(
+        X,
+        y,
+        anchors,
+        validation_split=0.2,
+        horizon_purge_calendar_days=7,
+        sample_symbols=symbols,
     )
     split_idx = int(n * 0.8)
     min_val = anchors[split_idx]
     purge_before = min_val - dt.timedelta(days=7)
-    assert len(X_va) == n - split_idx
-    assert len(X_tr) == sum(1 for a in anchors[:split_idx] if a < purge_before)
+    assert len(split.X_val) == n - split_idx
+    assert len(split.X_train) == sum(1 for a in anchors[:split_idx] if a < purge_before)
+    assert split.val_symbols is not None
+    assert len(split.val_symbols) == len(split.X_val)
+    assert list(split.val_symbols) == list(symbols[split_idx:])
+    assert split.val_dates is not None
+    assert list(split.val_dates) == list(anchors[split_idx:])
 
 
 def test_india_mlk_week_start_includes_monday_on_xbom():
@@ -206,3 +215,32 @@ def test_build_dataset_returns_sorted_anchor_dates():
     result = build_dataset({"AAA": df}, {"AAA": df}, config)
     assert len(result.anchor_dates) == len(result.X)
     assert list(result.anchor_dates) == sorted(result.anchor_dates)
+
+
+def test_default_config_dataset_is_close_only_with_symbol_labels() -> None:
+    rng = np.random.default_rng(0)
+    n = 80
+    idx = pd.bdate_range("2023-01-02", periods=n)
+    close_ret = rng.normal(0, 0.01, n)
+    df = pd.DataFrame({"close_ret": close_ret}, index=idx)
+    result = build_dataset({"AAA": df, "BBB": df.copy()}, {}, DEFAULT_CONFIG)
+
+    assert result.X.shape[2] == 1
+    assert result.y.shape[1:] == (5, 1)
+    assert len(result.symbols) == len(result.X)
+    assert set(result.symbols) == {"AAA", "BBB"}
+
+
+def test_build_inference_features_is_close_only_context_by_one() -> None:
+    from brain_api.core.patchtst.inference import build_inference_features
+
+    n = 80
+    idx = pd.bdate_range("2023-01-02", periods=n)
+    prices = _synthetic_ohlcv(n, idx, np.full(n, 1_000_000.0))
+    cutoff = idx[-1].date() + dt.timedelta(days=1)
+
+    features = build_inference_features("AAA", prices, DEFAULT_CONFIG, cutoff)
+
+    assert features.features is not None
+    assert features.features.shape == (DEFAULT_CONFIG.context_length, 1)
+    assert DEFAULT_CONFIG.feature_names.index("close_ret") == 0

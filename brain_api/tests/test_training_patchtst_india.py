@@ -59,20 +59,32 @@ def _mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
     from datetime import date, timedelta
 
     n_samples = 10
+    n_channels = config.num_input_channels
     anchors = np.array(
         [date(2024, 1, 5) + timedelta(days=7 * i) for i in range(n_samples)],
         dtype=object,
     )
+    symbols = np.array(
+        ["INFY.NS" if i % 2 == 0 else "TCS.NS" for i in range(n_samples)],
+        dtype=object,
+    )
     return DatasetResult(
-        X=np.random.randn(n_samples, config.context_length, 5),
-        y=np.random.randn(n_samples, 5, 5),
+        X=np.random.randn(n_samples, config.context_length, n_channels),
+        y=np.random.randn(n_samples, config.prediction_length, n_channels),
         feature_scaler=StandardScaler(),
         anchor_dates=anchors,
+        symbols=symbols,
     )
 
 
 def _mock_trainer(
-    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+    X,
+    y,
+    feature_scaler,
+    config,
+    shutdown_event=None,
+    anchor_dates=None,
+    sample_symbols=None,
 ) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -85,11 +97,18 @@ def _mock_trainer(
         baseline_loss=0.05,
         best_epoch=1,
         stopped_epoch=1,
+        val_rank_ic=0.15,
     )
 
 
 def _mock_trainer_worse(
-    X, y, feature_scaler, config, shutdown_event=None, anchor_dates=None
+    X,
+    y,
+    feature_scaler,
+    config,
+    shutdown_event=None,
+    anchor_dates=None,
+    sample_symbols=None,
 ) -> TrainingResult:
     hf_config = config.to_hf_config()
     model = PatchTSTForPrediction(hf_config)
@@ -102,6 +121,7 @@ def _mock_trainer_worse(
         baseline_loss=0.05,
         best_epoch=1,
         stopped_epoch=1,
+        val_rank_ic=0.05,
     )
 
 
@@ -163,7 +183,8 @@ def _patch_india_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) ->
         feature_scaler,
         config,
         shutdown_event=None,
-        anchor_dates=None: _mock_trainer(
+        anchor_dates=None,
+        sample_symbols=None: _mock_trainer(
             X, y, feature_scaler, config, shutdown_event=shutdown_event
         ),
     )
@@ -284,14 +305,16 @@ def test_train_patchtst_india_returns_required_fields(client_india, temp_india_s
     assert "promoted" in data
     assert "num_input_channels" in data
     assert "signals_used" in data
-    assert data["num_input_channels"] == 5
+    assert data["num_input_channels"] == 1
     assert data["signals_used"] == ["ohlcv"]
     assert data["metrics"]["best_epoch"] == 1
     assert data["metrics"]["stopped_epoch"] == 1
+    assert data["metrics"]["val_rank_ic"] == pytest.approx(0.15)
     on_disk = temp_india_storage.read_metadata(data["version"])
     assert on_disk is not None
     assert on_disk["metrics"]["best_epoch"] == 1
     assert on_disk["metrics"]["stopped_epoch"] == 1
+    assert on_disk["metrics"]["val_rank_ic"] == pytest.approx(0.15)
 
 
 def test_train_patchtst_india_idempotent_version(client_india):

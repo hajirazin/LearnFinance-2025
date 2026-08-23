@@ -40,7 +40,7 @@ def mock_forecasters_summary_request():
             "data_window_end": "2025-12-31",
             "metrics": {"mae": 0.020, "rmse": 0.030},
             "promoted": True,
-            "num_input_channels": 5,
+            "num_input_channels": 1,
             "signals_used": ["ohlcv"],
         },
     }

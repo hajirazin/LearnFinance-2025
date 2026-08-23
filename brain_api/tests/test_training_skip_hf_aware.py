@@ -158,7 +158,7 @@ def test_patchtst_us_endpoint_hf_cold_start_short_circuits_via_helper(monkeypatc
         )
 
         # Override the config dep so the route uses a deterministic
-        # (n_channels=5) config -- otherwise the route would import
+        # close-only config -- otherwise the route would import
         # the production config which may drift over time.
         app.dependency_overrides[get_patchtst_config] = lambda: PatchTSTConfig()
 
@@ -173,7 +173,7 @@ def test_patchtst_us_endpoint_hf_cold_start_short_circuits_via_helper(monkeypatc
             assert response.status_code == 200, response.text
             data = response.json()
             assert data["promoted"] is True
-            assert data["num_input_channels"] == 5
+            assert data["num_input_channels"] == 1
             assert data["signals_used"] == ["ohlcv"]
         finally:
             app.dependency_overrides.clear()
@@ -222,7 +222,7 @@ def test_patchtst_india_endpoint_hf_cold_start_short_circuits_via_helper(monkeyp
             assert response.status_code == 200, response.text
             data = response.json()
             assert data["promoted"] is True
-            assert data["num_input_channels"] == 5
+            assert data["num_input_channels"] == 1
             assert data["signals_used"] == ["ohlcv"]
         finally:
             app.dependency_overrides.clear()

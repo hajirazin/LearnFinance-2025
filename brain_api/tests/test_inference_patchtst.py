@@ -34,7 +34,7 @@ def create_mock_patchtst_artifacts(
     model = PatchTSTForPrediction(hf_config)
 
     scaler = StandardScaler()
-    dummy_data = np.random.randn(100, 5)
+    dummy_data = np.random.randn(100, config.num_input_channels)
     scaler.fit(dummy_data)
 
     metadata = {
