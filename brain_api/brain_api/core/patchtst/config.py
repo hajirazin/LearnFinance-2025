@@ -27,8 +27,8 @@ class PatchTSTConfig:
     num_input_channels: int = 5  # OHLCV log returns only
     context_length: int = 60  # 60 trading days lookback (same as LSTM)
     prediction_length: int = 5  # Direct 5-day prediction
-    patch_length: int = 16  # Standard patch size for PatchTST
-    stride: int = 8  # 50% overlap between patches
+    patch_length: int = 10  # Two trading weeks per patch
+    stride: int = 5  # Advance one trading week; 50% overlap
 
     # Transformer architecture
     d_model: int = 64  # Hidden dimension
@@ -105,7 +105,7 @@ class PatchTSTConfig:
             num_input_channels=self.num_input_channels,
             context_length=self.context_length,
             patch_length=self.patch_length,
-            stride=self.stride,
+            patch_stride=self.stride,
             d_model=self.d_model,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,

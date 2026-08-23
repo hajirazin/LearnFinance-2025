@@ -58,7 +58,7 @@ def _create_patchtst_model(config: PatchTSTConfig) -> PatchTSTForPrediction:
         num_input_channels=config.num_input_channels,  # 5 (OHLCV)
         context_length=config.context_length,
         patch_length=config.patch_length,
-        stride=config.stride,
+        patch_stride=config.stride,
         d_model=config.d_model,
         num_attention_heads=config.num_attention_heads,
         num_hidden_layers=config.num_hidden_layers,
