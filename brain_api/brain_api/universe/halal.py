@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 import yfinance as yf
 
+from brain_api.core.prices import yfinance_io_lock
 from brain_api.universe.cache import load_cached_universe, save_universe_cache
 
 logger = logging.getLogger(__name__)
@@ -53,11 +54,11 @@ def _fetch_etf_holdings(ticker: str) -> list[dict]:
         List of holdings with symbol, name, weight
     """
     try:
-        etf = yf.Ticker(ticker)
-        if not hasattr(etf, "funds_data") or etf.funds_data is None:
-            return []
-
-        top_holdings = etf.funds_data.top_holdings
+        with yfinance_io_lock():
+            etf = yf.Ticker(ticker)
+            if not hasattr(etf, "funds_data") or etf.funds_data is None:
+                return []
+            top_holdings = etf.funds_data.top_holdings
         if top_holdings is None or top_holdings.empty:
             return []
 

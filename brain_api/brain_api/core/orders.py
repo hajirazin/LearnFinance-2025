@@ -11,10 +11,9 @@ Converts allocation weights into actionable market orders with:
 
 import math
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
-import pandas as pd
-import yfinance as yf
-
+from brain_api.core.prices import load_prices_yfinance
 from brain_api.core.stop_loss import compute_stop_loss, stop_loss_for_sell
 
 # ============================================================================
@@ -215,7 +214,7 @@ def _full_exit_order(
 
 
 def fetch_current_prices(symbols: list[str]) -> dict[str, float]:
-    """Fetch current prices for symbols using yfinance.
+    """Fetch current prices for symbols using the shared yfinance loader.
 
     Args:
         symbols: List of stock symbols
@@ -224,56 +223,20 @@ def fetch_current_prices(symbols: list[str]) -> dict[str, float]:
         Dict mapping symbol -> current price (last close)
     """
     prices: dict[str, float] = {}
-
     if not symbols:
         return prices
 
-    try:
-        # Use batch download for efficiency
-        tickers_str = " ".join(symbols)
-        data = yf.download(
-            tickers_str,
-            period="1d",
-            progress=False,
-        )
-
-        if data is not None and not data.empty:
-            if len(symbols) == 1:
-                # Single ticker returns flat DataFrame
-                symbol = symbols[0]
-                if "Close" in data.columns:
-                    last_close = data["Close"].iloc[-1]
-                    if last_close > 0:
-                        prices[symbol] = float(last_close)
-            else:
-                # Multiple tickers: get Close prices
-                if "Close" in data.columns:
-                    close_data = data["Close"]
-                    for symbol in symbols:
-                        if symbol in close_data.columns:
-                            last_close = close_data[symbol].iloc[-1]
-                            if last_close > 0:
-                                prices[symbol] = float(last_close)
-
-    except Exception as e:
-        print(f"[Orders] Batch price fetch failed: {e}")
-
-    # Fallback: fetch missing symbols individually
-    missing = [s for s in symbols if s not in prices]
-    for symbol in missing:
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.fast_info
-            if hasattr(info, "last_price") and info.last_price and info.last_price > 0:
-                prices[symbol] = float(info.last_price)
-            else:
-                # Fallback to history
-                hist = ticker.history(period="1d")
-                if hist is not None and not hist.empty and "Close" in hist.columns:
-                    prices[symbol] = float(hist["Close"].iloc[-1])
-        except Exception as e:
-            print(f"[Orders] Failed to fetch price for {symbol}: {e}")
-
+    today = date.today()
+    frames = load_prices_yfinance(
+        symbols,
+        today - timedelta(days=7),
+        today + timedelta(days=1),
+        log_prefix="[Orders]",
+    )
+    for symbol, frame in frames.items():
+        last_close = float(frame["close"].iloc[-1])
+        if last_close > 0:
+            prices[symbol] = last_close
     return prices
 
 
@@ -284,9 +247,9 @@ def fetch_ohlc_window(
     """Fetch ``(high, low, close)`` daily bars for each symbol.
 
     Used as the input to :func:`compute_atr_map`. Returns whatever
-    yfinance gives back; symbols with no data are simply absent from
-    the result dict (no silent fake-data fallback per AGENTS.md rule
-    #1).
+    the shared loader gives back; symbols with no data are simply
+    absent from the result dict (no silent fake-data fallback per
+    AGENTS.md rule #1).
 
     Math invariant: each emitted ``(high, low, close)`` tuple comes
     from the **same trading date**. NaN handling is a joint
@@ -304,67 +267,24 @@ def fetch_ohlc_window(
         tuples, one per available trading day, oldest first.
     """
     bars: dict[str, list[tuple[float, float, float]]] = {}
-
     if not symbols:
         return bars
 
-    try:
-        tickers_str = " ".join(symbols)
-        data = yf.download(
-            tickers_str,
-            period=f"{days}d",
-            progress=False,
-        )
-    except Exception as e:
-        print(f"[Orders] OHLC batch fetch failed: {e}")
-        return bars
-
-    if data is None or data.empty:
-        return bars
-
-    if len(symbols) == 1:
-        symbol = symbols[0]
-        if {"High", "Low", "Close"}.issubset(data.columns):
-            sub = data[["High", "Low", "Close"]].dropna(how="any")
-            bars[symbol] = [
-                (float(row.High), float(row.Low), float(row.Close))
-                for row in sub.itertuples(index=False)
-            ]
-            if not bars[symbol]:
-                bars.pop(symbol)
-        return bars
-
-    if (
-        "High" not in data.columns
-        or "Low" not in data.columns
-        or "Close" not in data.columns
-    ):
-        return bars
-
-    high_df = data["High"]
-    low_df = data["Low"]
-    close_df = data["Close"]
-    for symbol in symbols:
-        if symbol not in high_df.columns:
-            continue
-        # Joint dropna: every surviving row carries H/L/C for the
-        # same date. Per-column dropna would silently misalign
-        # columns and produce a fictional True Range.
-        sub = pd.concat(
-            [
-                high_df[symbol].rename("High"),
-                low_df[symbol].rename("Low"),
-                close_df[symbol].rename("Close"),
-            ],
-            axis=1,
-        ).dropna(how="any")
+    today = date.today()
+    frames = load_prices_yfinance(
+        symbols,
+        today - timedelta(days=days),
+        today + timedelta(days=1),
+        log_prefix="[Orders]",
+    )
+    for symbol, frame in frames.items():
+        sub = frame[["high", "low", "close"]].dropna(how="any")
         if sub.empty:
             continue
         bars[symbol] = [
-            (float(row.High), float(row.Low), float(row.Close))
+            (float(row.high), float(row.low), float(row.close))
             for row in sub.itertuples(index=False)
         ]
-
     return bars
 
 

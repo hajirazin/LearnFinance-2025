@@ -7,6 +7,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 
+from brain_api.core.prices import load_prices_yfinance
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,18 +17,16 @@ def load_daily_ohlcv(
 ) -> pd.DataFrame | None:
     """Load a bounded daily OHLCV window for one symbol."""
     try:
-        import yfinance as yf
-
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(
-            start=start_date.isoformat(),
-            end=(end_date + timedelta(days=1)).isoformat(),
-            interval="1d",
+        prices = load_prices_yfinance(
+            [symbol],
+            start_date,
+            end_date + timedelta(days=1),
+            log_prefix="[WalkForward]",
         )
-        if df.empty:
+        frame = prices.get(symbol)
+        if frame is None or frame.empty:
             return None
-        df.columns = df.columns.str.lower()
-        return df[["open", "high", "low", "close", "volume"]]
+        return frame[["open", "high", "low", "close", "volume"]]
     except Exception as exc:
         logger.debug("[WalkForward] Failed to load OHLCV for %s: %s", symbol, exc)
         return None

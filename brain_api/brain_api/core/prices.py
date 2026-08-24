@@ -5,12 +5,29 @@ both LSTM and PatchTST models.
 """
 
 import logging
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
+
+_YFINANCE_IO_LOCK = threading.Lock()
+
+
+@contextmanager
+def yfinance_io_lock() -> Iterator[None]:
+    """Serialize all yfinance I/O in this process.
+
+    yfinance keeps process-global download state. Concurrent FastAPI
+    threads (PatchTST + SAC prices + news) must not interleave Yahoo
+    calls or histories get truncated to whichever download finished last.
+    """
+    with _YFINANCE_IO_LOCK:
+        yield
 
 
 def load_prices_yfinance(
@@ -22,17 +39,22 @@ def load_prices_yfinance(
     """Load OHLCV price data for symbols using yfinance.
 
     Attempts batch download first for efficiency, then falls back to
-    individual symbol fetching if batch fails.
-
-    Args:
-        symbols: List of ticker symbols
-        start_date: Start of data window
-        end_date: End of data window
-        log_prefix: Prefix for log messages (e.g., "[LSTM]" or "[PatchTST]")
-
-    Returns:
-        Dict mapping symbol -> DataFrame with OHLCV columns and DatetimeIndex
+    individual symbol fetching if batch fails. Holds the process
+    yfinance I/O lock for the entire download so concurrent callers
+    cannot corrupt each other's histories.
     """
+    with yfinance_io_lock():
+        return _load_prices_yfinance_unlocked(
+            symbols, start_date, end_date, log_prefix=log_prefix
+        )
+
+
+def _load_prices_yfinance_unlocked(
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    log_prefix: str = "[Prices]",
+) -> dict[str, pd.DataFrame]:
     prices: dict[str, pd.DataFrame] = {}
     failed_symbols: list[str] = []
 
@@ -51,6 +73,7 @@ def load_prices_yfinance(
             progress=False,
             group_by="ticker",
             auto_adjust=True,
+            threads=False,
         )
 
         # Check if download returned valid data

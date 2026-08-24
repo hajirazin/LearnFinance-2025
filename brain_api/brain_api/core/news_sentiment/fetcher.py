@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import yfinance as yf
 
 from brain_api.core.news_sentiment.models import Article
+from brain_api.core.prices import yfinance_io_lock
 
 
 class NewsProviderError(RuntimeError):
@@ -26,8 +27,9 @@ class YFinanceNewsFetcher:
             List of Article objects
         """
         try:
-            ticker = yf.Ticker(symbol)
-            news_data = ticker.news or []
+            with yfinance_io_lock():
+                ticker = yf.Ticker(symbol)
+                news_data = ticker.news or []
         except Exception as exc:
             raise NewsProviderError(
                 f"yfinance news request failed for {symbol}: {exc}"

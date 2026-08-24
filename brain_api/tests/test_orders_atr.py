@@ -11,7 +11,7 @@ This is the integration point that lets the email layer render the
 stop-loss column without re-implementing the math.
 
 Finally, ``fetch_ohlc_window`` is exercised against synthetic
-``yf.download`` outputs to assert that NaN rows in any of H/L/C
+``load_prices_yfinance`` frames to assert that NaN rows in any of H/L/C
 remove the **whole row** (joint ``dropna``) -- per-column dropna
 would silently misalign columns and break the True Range math.
 """
@@ -257,36 +257,35 @@ class TestFetchOhlcWindowNaNAlignment:
     pair the wrong day's bars and emit a fictional TR.
     """
 
-    def _build_multi_symbol_frame(self) -> pd.DataFrame:
-        """Two symbols, one with a NaN High on day 2.
-
-        Date layout (oldest first):
-            2026-04-23: AAPL H=102 L=98  C=100  | MSFT H=210 L=200 C=205
-            2026-04-24: AAPL H=NaN L=99  C=101  | MSFT H=212 L=201 C=208  <- NaN
-            2026-04-25: AAPL H=104 L=100 C=103  | MSFT H=213 L=205 C=210
-            2026-04-26: AAPL H=105 L=101 C=104  | MSFT H=214 L=206 C=212
-
-        After joint dropna on AAPL columns, day 2 must be removed
-        from AAPL entirely (so close=101 is dropped too). MSFT must
-        be unaffected because its own columns are clean.
-        """
+    def _aapl_frame(self) -> pd.DataFrame:
         index = pd.to_datetime(["2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26"])
-        cols = pd.MultiIndex.from_product([["High", "Low", "Close"], ["AAPL", "MSFT"]])
-        df = pd.DataFrame(
-            [
-                [102.0, 210.0, 98.0, 200.0, 100.0, 205.0],
-                [float("nan"), 212.0, 99.0, 201.0, 101.0, 208.0],
-                [104.0, 213.0, 100.0, 205.0, 103.0, 210.0],
-                [105.0, 214.0, 101.0, 206.0, 104.0, 212.0],
-            ],
+        return pd.DataFrame(
+            {
+                "open": [99.0, 100.0, 101.0, 102.0],
+                "high": [102.0, float("nan"), 104.0, 105.0],
+                "low": [98.0, 99.0, 100.0, 101.0],
+                "close": [100.0, 101.0, 103.0, 104.0],
+                "volume": [1.0, 1.0, 1.0, 1.0],
+            },
             index=index,
-            columns=cols,
         )
-        return df
+
+    def _msft_frame(self) -> pd.DataFrame:
+        index = pd.to_datetime(["2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26"])
+        return pd.DataFrame(
+            {
+                "open": [204.0, 207.0, 209.0, 211.0],
+                "high": [210.0, 212.0, 213.0, 214.0],
+                "low": [200.0, 201.0, 205.0, 206.0],
+                "close": [205.0, 208.0, 210.0, 212.0],
+                "volume": [1.0, 1.0, 1.0, 1.0],
+            },
+            index=index,
+        )
 
     def test_multi_symbol_drops_nan_row_from_one_symbol_only(self):
-        df = self._build_multi_symbol_frame()
-        with patch("brain_api.core.orders.yf.download", return_value=df):
+        frames = {"AAPL": self._aapl_frame(), "MSFT": self._msft_frame()}
+        with patch("brain_api.core.orders.load_prices_yfinance", return_value=frames):
             bars = fetch_ohlc_window(["AAPL", "MSFT"])
 
         # AAPL: day 2 (NaN High) is removed entirely. The surviving 3
@@ -295,13 +294,11 @@ class TestFetchOhlcWindowNaNAlignment:
         aapl_closes = [c for _h, _l, c in bars["AAPL"]]
         assert 101.0 not in aapl_closes
         assert aapl_closes == [100.0, 103.0, 104.0]
-        # H/L/C alignment per row:
         assert bars["AAPL"] == [
             (102.0, 98.0, 100.0),
             (104.0, 100.0, 103.0),
             (105.0, 101.0, 104.0),
         ]
-        # MSFT rows untouched because none of its columns had a NaN.
         assert bars["MSFT"] == [
             (210.0, 200.0, 205.0),
             (212.0, 201.0, 208.0),
@@ -310,19 +307,12 @@ class TestFetchOhlcWindowNaNAlignment:
         ]
 
     def test_single_symbol_drops_nan_row(self):
-        index = pd.to_datetime(["2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26"])
-        df = pd.DataFrame(
-            {
-                "High": [102.0, float("nan"), 104.0, 105.0],
-                "Low": [98.0, 99.0, 100.0, 101.0],
-                "Close": [100.0, 101.0, 103.0, 104.0],
-            },
-            index=index,
-        )
-        with patch("brain_api.core.orders.yf.download", return_value=df):
+        with patch(
+            "brain_api.core.orders.load_prices_yfinance",
+            return_value={"AAPL": self._aapl_frame()},
+        ):
             bars = fetch_ohlc_window(["AAPL"])
 
-        # Day 2's close (101) must be dropped along with the NaN high.
         assert bars["AAPL"] == [
             (102.0, 98.0, 100.0),
             (104.0, 100.0, 103.0),
