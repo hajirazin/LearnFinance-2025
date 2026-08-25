@@ -16,6 +16,15 @@ import yfinance as yf
 logger = logging.getLogger(__name__)
 
 _YFINANCE_IO_LOCK = threading.Lock()
+_OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
+
+
+def _symbol_ohlcv_from_yahoo_download(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """Return one symbol's lowercase OHLCV from a yfinance download DataFrame."""
+    frame = data[symbol] if isinstance(data.columns, pd.MultiIndex) else data
+    ohlcv = frame.loc[:, _OHLCV_COLUMNS].copy()
+    ohlcv.columns = ["open", "high", "low", "close", "volume"]
+    return ohlcv.dropna()
 
 
 @contextmanager
@@ -78,43 +87,16 @@ def _load_prices_yfinance_unlocked(
 
         # Check if download returned valid data
         if data is not None and not data.empty and hasattr(data, "columns"):
-            if len(symbols) == 1:
-                symbol = symbols[0]
+            for symbol in symbols:
                 try:
-                    df = data[["Open", "High", "Low", "Close", "Volume"]].copy()
-                    df.columns = ["open", "high", "low", "close", "volume"]
-                    df = df.dropna()
+                    df = _symbol_ohlcv_from_yahoo_download(data, symbol)
                     if len(df) > 0:
                         prices[symbol] = df
                     else:
                         failed_symbols.append(symbol)
-                except (KeyError, TypeError) as e:
+                except (KeyError, TypeError, IndexError) as e:
                     print(f"{log_prefix} Failed to parse {symbol}: {e}")
                     failed_symbols.append(symbol)
-            else:
-                # Multiple tickers: data is multi-level columns
-                try:
-                    available_tickers = set(data.columns.get_level_values(0))
-                    for symbol in symbols:
-                        if symbol in available_tickers:
-                            try:
-                                df = data[symbol][
-                                    ["Open", "High", "Low", "Close", "Volume"]
-                                ].copy()
-                                df.columns = ["open", "high", "low", "close", "volume"]
-                                df = df.dropna()
-                                if len(df) > 0:
-                                    prices[symbol] = df
-                                else:
-                                    failed_symbols.append(symbol)
-                            except (KeyError, TypeError) as e:
-                                print(f"{log_prefix} Failed to parse {symbol}: {e}")
-                                failed_symbols.append(symbol)
-                        else:
-                            failed_symbols.append(symbol)
-                except (AttributeError, TypeError) as e:
-                    print(f"{log_prefix} Batch download parsing failed: {e}")
-                    failed_symbols = list(symbols)
         else:
             print(f"{log_prefix} Batch download returned empty or invalid data")
             failed_symbols = list(symbols)
