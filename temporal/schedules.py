@@ -51,6 +51,8 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_ppo_discovery_allocation import USPPODiscoveryAllocationWorkflow
+from workflows.us_ppo_discovery_training import USPPODiscoveryTrainingWorkflow
 from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
 from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
@@ -66,6 +68,16 @@ def first_sunday_of_month_at(hour: int, minute: int) -> ScheduleCalendarSpec:
     """Calendar spec firing on the first Sunday of each month at HH:MM UTC."""
     return ScheduleCalendarSpec(
         day_of_month=(ScheduleRange(1, 7),),
+        day_of_week=(ScheduleRange(0),),
+        hour=(ScheduleRange(hour),),
+        minute=(ScheduleRange(minute),),
+    )
+
+
+def second_sunday_of_month_at(hour: int, minute: int) -> ScheduleCalendarSpec:
+    """Calendar spec firing on the second Sunday of each month at HH:MM UTC."""
+    return ScheduleCalendarSpec(
+        day_of_month=(ScheduleRange(8, 14),),
         day_of_week=(ScheduleRange(0),),
         hour=(ScheduleRange(hour),),
         minute=(ScheduleRange(minute),),
@@ -199,6 +211,29 @@ SCHEDULES = [
         "time_zone_name": "UTC",
         "task_queue": QUEUE_TRAINING,
         "description": "India PatchTST training first Sunday of month 18:01 UTC",
+    },
+    {
+        "id": "us-ppo-discovery-allocate",
+        "workflow": USPPODiscoveryAllocationWorkflow,
+        "workflow_id": "us-ppo-discovery-allocate",
+        "calendar": monday_at(9, 0),
+        "time_zone_name": "America/New_York",
+        "task_queue": QUEUE_INFERENCE,
+        "description": (
+            "US PPO discovery weekly allocation Monday 09:00 America/New_York"
+        ),
+    },
+    {
+        "id": "us-ppo-discovery-training",
+        "workflow": USPPODiscoveryTrainingWorkflow,
+        "workflow_id": "us-ppo-discovery-training",
+        "calendar": second_sunday_of_month_at(0, 1),
+        "time_zone_name": "UTC",
+        "task_queue": QUEUE_TRAINING,
+        "description": (
+            "US PPO discovery training second Sunday of month 00:01 UTC "
+            "(candidate only; no auto-promote)"
+        ),
     },
 ]
 

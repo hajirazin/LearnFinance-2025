@@ -19,7 +19,7 @@ Each Monday the system runs independent Temporal workflows that allocate halal p
 - **brain_api** (FastAPI) owns all business logic: universe scraping, signal collection, price forecasting (LSTM + PatchTST, US + India), allocation (HRP, SAC, Alpha-HRP, Double-HRP), Alpaca trading (paper by default, live opt-in), OpenAI/LLM summaries, and Gmail SMTP delivery.
 - Storage: local Postgres for run records, local SQLite (`data/allocation/sticky_history.db`, two sibling tables -- `stage1_weight_history` for two-stage HRP strategies on weekly cadence, `screening_history` for single-stage screening strategies on monthly cadence) for sticky-selection history, filesystem for raw evidence + model artifacts.
 
-**Workflows (5 independent schedules):**
+**Workflows (independent schedules):**
 
 | Workflow | Schedule (UTC / IST) | Market | Strategy | Key brain_api endpoints |
 |----------|----------------------|--------|----------|-------------------------|
@@ -28,6 +28,7 @@ Each Monday the system runs independent Temporal workflows that allocate halal p
 | `us-alpha-hrp` (`USAlphaHRPWorkflow`) | Mon 12:00 UTC / 17:30 IST | US | PatchTST alpha screen -> rank-band sticky top-15 -> HRP | `/universe/halal_new`, `/inference/patchtst/score-batch`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/us-alpha-hrp-summary`, `/email/us-alpha-hrp-report` |
 | `india-weekly-allocate` (`IndiaWeeklyAllocationWorkflow`) | Mon 03:30 UTC / 09:00 IST | India | PatchTST alpha screen -> rank-band sticky top-15 -> HRP (paper-only, no broker) | `/universe/nifty_shariah_500`, `/inference/patchtst/score-batch?market=india`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/india-alpha-hrp-summary`, `/email/india-alpha-hrp-report` |
 | `india-double-hrp` (`IndiaDoubleHRPWorkflow`) | Mon 04:00 UTC / 09:30 IST | India | Stage-1 HRP on `nifty_shariah_500` -> sticky top-15 -> Stage-2 HRP | `/universe/nifty_shariah_500`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/india-double-hrp-summary`, `/email/india-double-hrp-report` |
+| `us-ppo-discovery-allocate` (`USPPODiscoveryAllocationWorkflow`) | Mon 09:00 America/New_York | US | News-conditioned PPO on frozen `halal_new` (PatchTST-independent; paper default; incomplete news aborts with zero orders) | `/signals/ppo-discovery/state`, `/inference/ppo-discovery`, `/orders/generate` (`algorithm=ppo_discovery`), `/alpaca/submit-orders`, `/llm/ppo-discovery-weekly-summary`, `/email/ppo-discovery-weekly-report` |
 
 Training schedules (US Forecasters training Saturday 11:00 UTC, US SAC training Sunday 14:00 UTC — kept 12+ hours apart so the host never has to run two trainers concurrently — and India PatchTST weekly training Sunday 04:30 UTC) are defined in `schedules.py` but are intentionally not registered on the default (Raspberry Pi) host — they require a beefier machine.
 
@@ -48,9 +49,10 @@ This repo compares multiple approaches at each stage:
 |-------|-------|--------|
 | HRP | Covariance matrix | ✅ Active |
 | ~~PPO~~ | ~~Legacy state vector~~ | Retired |
+| PPO discovery | 250-session OHLCV embeddings + mandatory compact news on frozen `halal_new` | ✅ Experiment (candidate-only until manual promote; isolated from the retired PPO) |
 | SAC v3 | 30-slot masked token state + PatchTST/HMM features | ✅ Active |
 
-> **Note:** After 3 months of paper-trading experimentation, HRP and SAC consistently outperformed PPO. PPO has been retired from the codebase.
+> **Note:** After 3 months of paper-trading experimentation, HRP and SAC consistently outperformed the original PPO, which was retired. `ppo_discovery` is a separate news-conditioned experiment on frozen `halal_new`; it does not restore the retired PPO path and does not read PatchTST/SAC `current` pointers. Training applies today's `halal_new` roster historically (survivorship bias, disclosed on every report). Incomplete Alpaca/Benzinga news aborts the week with no orders; verified zero-news is valid. Paper is the default (`ALPACA_PPO_DISCOVERY_URL` unset). To disable only this experiment, pause/delete Temporal schedules `us-ppo-discovery-allocate` and `us-ppo-discovery-training`.
 
 ### Signals
 

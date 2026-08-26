@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>US PPO Discovery Weekly Report</h1>
+  <p>Universe: {{ universe }} | Date: {{ as_of }} | Candidate/promoted version: {{ model_version }}</p>
+  <p><strong>Survivorship:</strong> historical training uses today's halal_new roster retrospectively.</p>
+  <p><strong>News:</strong> mandatory. Incomplete queries abort the week. Paper is default.</p>
+  <h2>Allocation</h2>
+  <p>K={{ k }} cash={{ cash_weight }}</p>
+  <ul>
+  {% for symbol, weight in percentage_weights.items() %}
+    <li>{{ symbol }}: {{ "%.2f"|format(weight * 100) }}%</li>
+  {% endfor %}
+  </ul>
+  <h2>AI summary</h2>
+  <p>{{ para_1_overall_summary }}</p>
+  <p>{{ para_2_selection }}</p>
+  <p>{{ para_3_risks }}</p>
+  <p>{{ para_4_research }}</p>
+  {% if skipped %}
+  <p>Skipped: {{ skip_reason }}</p>
+  {% endif %}
+</body>
+</html>

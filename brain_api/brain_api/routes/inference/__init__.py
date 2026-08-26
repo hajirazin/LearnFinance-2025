@@ -43,6 +43,7 @@ from .models import (
     WeightChange,
 )
 from .patchtst import router as patchtst_router
+from .ppo_discovery import router as ppo_discovery_router
 from .sac import router as sac_router
 
 # Create combined router
@@ -52,6 +53,7 @@ router = APIRouter()
 router.include_router(lstm_router)
 router.include_router(patchtst_router)
 router.include_router(sac_router)
+router.include_router(ppo_discovery_router)
 
 __all__ = [
     # Request/Response models

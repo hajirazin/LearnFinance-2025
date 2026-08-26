@@ -32,7 +32,9 @@ The goal is to learn which approaches work best, not to pick a single method upf
   - India Double HRP workflow (`IndiaDoubleHRPWorkflow`): full Nifty Shariah 500 universe -> Stage 1 HRP (lookback=756d) -> weight-band sticky top 15 (`halal_india_double_hrp` partition in `stage1_weight_history`, K_in=15, stickiness threshold 1.0pp) -> Stage 2 HRP (lookback=252d) on the chosen 15 -> record final weights -> AI summary -> email (paper-only, no broker). Mirrors `USDoubleHRPWorkflow` minus the Alpaca order-execution legs; the strategy-named partition keeps its carry-set isolated from `halal_india_alpha` (rank-band, sister India strategy) and from `halal_new` (US Double HRP).
   - US forecasters training workflow (`USForecastersTrainingWorkflow`): halal_new universe -> train LSTM -> train PatchTST (strictly serial, single trainer at a time) -> forecasters-only LLM summary -> forecasters-only email
   - US SAC training workflow (`USSACTrainingWorkflow`): runs 6 hours after the forecasters workflow on the same first-Sunday-of-month slot (06:01 UTC); halal_filtered top-15 (uses whatever PatchTST `current` pointer is live at trigger time) -> fill sentiment gaps with mandatory Hugging Face publication -> train SAC -> SAC-only LLM summary -> SAC-only email. Serialization guarantee: the Mac training worker runs with `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`, so even if the forecasters run overshoots 6h this activity waits for it to finish rather than starting in parallel.
-  - US SAC (halal) training workflow (`USSACHalalTrainingWorkflow`): parallel A/B sibling of `USSACTrainingWorkflow` running 6 hours later on the same first-Sunday-of-month slot (12:01 UTC) on the legacy yfinance halal universe (variable size, ~12-15 stocks); fill sentiment gaps with mandatory Hugging Face publication -> train SAC (`sac_halal` bucket, independent `current` pointer) -> SAC-only LLM summary tagged `universe=halal` -> SAC-only email tagged `universe=halal`. Same single-activity serialization applies via the training worker's concurrency cap.
+  - US PPO discovery workflow (`USPPODiscoveryAllocationWorkflow`): frozen current `halal_new` roster -> mandatory Alpaca/Benzinga news + OHLCV state (`/signals/ppo-discovery/state`) -> news-conditioned PPO inference (`/inference/ppo-discovery`) -> sell-wait-buy via the dedicated `ppo_discovery` Alpaca account (orders tagged `algorithm='ppo_discovery'`) -> AI summary + email. `run_id` is `paper:halal_new:YYYY-MM-DD`. PatchTST/LSTM are not inputs. Incomplete news aborts the week with zero orders. Training never auto-promotes.
+  - US PPO discovery training workflow (`USPPODiscoveryTrainingWorkflow`): freeze `halal_new` snapshot (today's roster applied historically; survivorship bias disclosed) -> PPO weekly news ETL -> preflight -> two-stage train -> candidate artifact only -> training email. Manual `POST /train/ppo-discovery/promote` with `approved_by` is required to write `current`.
+
 - **brain_api (Python brain)** owns:
   - universe build + screening
   - signal collection (news + price momentum)
@@ -118,6 +120,7 @@ temporal/                         # Temporal workflow orchestration
 | `POST /inference/patchtst/india` | India PatchTST price predictions (loads `patchtst_india` storage) |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST score endpoint (US or India) -- returns `{symbol -> predicted_weekly_return_pct}` and enforces finite-score / `min_predictions` invariants used by Alpha-HRP |
 | `POST /inference/sac` | SAC allocation using PatchTST forecasts in the state vector; `universe` query param is mandatory (`halal_filtered` or `halal`) |
+| `POST /inference/ppo-discovery` | News-conditioned PPO allocation on frozen `halal_new`; `universe` must be `halal_new`. No PatchTST/LSTM input. Incomplete news never reaches this route. |
 | `POST /allocation/hrp` | HRP risk-parity allocation (requires `universe` param) |
 
 **Orders** (called by Monday run via Temporal after allocations):
@@ -134,6 +137,7 @@ temporal/                         # Temporal workflow orchestration
 | `POST /signals/news/historical` | News sentiment (historical) |
 | `POST /signals/prices` | Adjusted daily closes, current execution prices, and provenance for SAC v3 eligibility/features |
 | `POST /signals/market-history` | Gap-checked aligned SPY adjusted-close/VIX history after the active SAC artifact's HMM cutoff |
+| `POST /signals/ppo-discovery/state` | Canonical 9+7 ppo_discovery state (OHLCV + mandatory Alpaca/Benzinga news + HMM globals). Incomplete news is 422; verified zero-news is valid. |
 
 **Training** (called by Saturday/Sunday cron or manual):
 
@@ -143,6 +147,9 @@ temporal/                         # Temporal workflow orchestration
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
 | `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
+| `POST /train/ppo-discovery/preflight` | Freeze `halal_new` snapshot and report readiness (survivorship disclosed). Universe must be `halal_new`. |
+| `POST /train/ppo-discovery/full` | Two-stage ppo_discovery train; writes a **candidate** only (`current` unchanged). |
+| `POST /train/ppo-discovery/promote` | Manual promotion. Requires `approved_by`, matching config hash, 12% CAGR floor, not below Alpha-HRP, positive paired point estimate, `experiment_variant="full"`. No-news ablations cannot be `current`. |
 
 **Alpaca** (called by Monday run via Temporal for order execution):
 
@@ -169,6 +176,10 @@ temporal/                         # Temporal workflow orchestration
 | `POST /email/india-training-summary` | Send India training summary email via Gmail SMTP |
 | `POST /email/forecasters-training-summary` | Send US Forecasters (LSTM + PatchTST) training summary email via Gmail SMTP |
 | `POST /email/sac-training-summary` | Send US SAC training summary email via Gmail SMTP. Subject is `f"US SAC ({universe}) Training: ..."` so the two parallel A/B reports (`halal_filtered`, `halal`) are distinguishable in the inbox. |
+| `POST /llm/ppo-discovery-weekly-summary` | AI summary of the US PPO discovery weekly run (cannot change weights) |
+| `POST /llm/ppo-discovery-training-summary` | AI summary of a ppo_discovery candidate training run |
+| `POST /email/ppo-discovery-weekly-report` | PPO discovery weekly email. Subject includes the `halal_new` universe. Incomplete-news / no-current skips still send the email. |
+| `POST /email/ppo-discovery-training-summary` | PPO discovery training email (candidate; never claims auto-promote) |
 
 **Other**:
 
@@ -180,6 +191,9 @@ temporal/                         # Temporal workflow orchestration
 | `GET /models/active-symbols` | Active SAC symbols plus schema version and HMM training cutoff; `universe` query param is mandatory (`halal_filtered` or `halal`) |
 | `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
 | `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
+| `POST /etl/ppo-discovery/news-history` | PPO-only weekly news parquet from Alpaca/Benzinga (does not write `daily_sentiment.parquet`) |
+| `GET /models/ppo-discovery/active` | Promoted ppo_discovery artifact identity; `universe=halal_new` is required |
+| `POST /experience/label/ppo-discovery` | Label ppo_discovery experience using the dedicated Alpaca account; records must set `universe="halal_new"` explicitly |
 | `POST /experience/store` | Store RL experience |
 | `POST /experience/update-execution` | Update experience with execution results |
 | `POST /experience/label` | Label experience with rewards |
@@ -245,6 +259,7 @@ Invariants:
 |-------|-------|--------|
 | HRP | Covariance matrix | Allocation weights |
 | SAC | State vector + PatchTST forecast features | Allocation weights |
+| PPO discovery | 250-session OHLCV embeddings + compact news (4 asset + 2 global) on frozen `halal_new` | K in 0..15 names plus CASH |
 
 ### SAC v3 token state and action contract
 
@@ -343,11 +358,15 @@ data/models/
 │   └── (same structure, India PatchTST; independent current pointer)
 ├── sac_halal_filtered/
 │   └── (same structure, SAC trained on top-15 halal_filtered; n_stocks=15 fixed)
-└── sac_halal/
-    └── (same structure, SAC trained on the legacy yfinance halal universe;
-         variable n_stocks bound to the bucket's symbol count at training
-         time -- independent current pointer, parallel A/B sibling of
-         sac_halal_filtered)
+├── sac_halal/
+│   └── (same structure, SAC trained on the legacy yfinance halal universe;
+│        variable n_stocks bound to the bucket's symbol count at training
+│        time -- independent current pointer, parallel A/B sibling of
+│        sac_halal_filtered)
+└── ppo_discovery_halal_new/
+    └── (news-conditioned PPO on frozen halal_new; independent current pointer;
+         training writes candidates only until POST /train/ppo-discovery/promote)
+
 ```
 
 - Active version per bucket: `data/models/{bucket_name}/current`.
@@ -443,7 +462,7 @@ If tests are added later, they should be:
 
 - `run_date` is the **Monday date in IST** (calendar date)
 - `run_id = paper:YYYY-MM-DD` (default form for the original `sac` / `hrp` / `dhrp` strategies)
-- `run_id = paper:<universe>:YYYY-MM-DD` is an **accepted variant** when a strategy uses a dedicated Alpaca account (currently only `sac_halal` -> `paper:halal:YYYY-MM-DD`). The variant exists so two strategies that share a Monday slot do not collide on `client_order_id` or experience-file paths. Only allowed when:
+- `run_id = paper:<universe>:YYYY-MM-DD` is an **accepted variant** when a strategy uses a dedicated Alpaca account (currently `sac_halal` -> `paper:halal:YYYY-MM-DD` and `ppo_discovery` -> `paper:halal_new:YYYY-MM-DD`). The variant exists so two strategies that share a Monday slot do not collide on `client_order_id` or experience-file paths. Only allowed when:
   1. The strategy submits orders through a **dedicated Alpaca account** (different `ALPACA_<ACCOUNT>_KEY` / `_SECRET`), so per-account `client_order_id` dedup is automatic, AND
   2. The variant prefix is exactly the strategy's `universe` string.
 - `attempt` starts at `1`
@@ -456,7 +475,7 @@ If tests are added later, they should be:
 All submitted orders must include deterministic `client_order_id`:
 
 - `paper:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>` (default)
-- `paper:<universe>:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>` (variant; only when the strategy uses a dedicated Alpaca account, e.g. `paper:halal:...` for `sac_halal`)
+- `paper:<universe>:YYYY-MM-DD:attempt-<N>:<SYMBOL>:<SIDE>` (variant; only when the strategy uses a dedicated Alpaca account, e.g. `paper:halal:...` for `sac_halal` and `paper:halal_new:...` for `ppo_discovery`). Do not put `algorithm` in the ID.
 
 The system must:
 
@@ -487,9 +506,11 @@ The system must:
 | Monthly (first Sunday 06:01 UTC) | US SAC training on `halal_filtered` (consumes whatever PatchTST `current` pointer is live at trigger time; 6 h gap from forecasters slot) | Cron (Temporal, Mac training queue) |
 | Monthly (first Sunday 12:01 UTC) | US SAC training on the legacy `halal` universe (parallel A/B sibling of `sac_halal_filtered`; 6 h gap from halal_filtered SAC) | Cron (Temporal, Mac training queue) |
 | Monthly (first Sunday 18:01 UTC) | Full PatchTST retrain (India) | Cron (Temporal, Mac training queue) |
+| Monthly (second Sunday 00:01 UTC) | US PPO discovery training on frozen `halal_new` (candidate only; no auto-promote). Uses `second_sunday_of_month_at`; do not change `first_sunday_of_month_at`. | Cron (Temporal, Mac training queue) |
+| Monday 09:00 America/New_York | US PPO discovery inference (`us-ppo-discovery-allocate`) | Cron (Temporal, Pi inference queue) |
 | Monday 6 PM IST | US inference only | Cron (Temporal, Pi inference queue) |
 
-Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. The four training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker).
+Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. PPO discovery training uses `second_sunday_of_month_at` (`day_of_month=[8..14]`). The first-Sunday training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker). To disable only PPO discovery, pause or delete `us-ppo-discovery-allocate` and `us-ppo-discovery-training` on the Temporal server; do not edit other `SCHEDULES` entries.
 
 - Training produces a **new versioned artifact**; inference loads from `current` pointer
 - **Promotion requires guardrails**: new model must pass model-specific health checks (artifact integrity, finite metrics, SAC CAGR floor of 0.12, SAC symbol-count match against the bucket). Universe drift no longer suppresses healthy promotions; rollback is the recovery mechanism (separate story).

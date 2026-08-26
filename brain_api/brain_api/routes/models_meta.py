@@ -89,3 +89,39 @@ def get_active_symbols(
         training_cutoff_date=artifacts.v3_auxiliary.training_cutoff_date,
         sac_schema_version=artifacts.metadata["sac_schema_version"],
     )
+
+
+class PPODiscoveryActiveResponse(BaseModel):
+    """Promoted ppo_discovery artifact identity."""
+
+    universe: str
+    model_type: str
+    model_version: str
+    snapshot_sha256: str | None
+    news_required: bool
+
+
+@router.get("/ppo-discovery/active", response_model=PPODiscoveryActiveResponse)
+def get_ppo_discovery_active(
+    universe: str = Query(..., description="Must be halal_new"),
+) -> PPODiscoveryActiveResponse:
+    try:
+        bucket = get_bucket(ModelType.PPO_DISCOVERY, universe)
+    except UnknownBucketError as exc:
+        allowed = sorted(list_universes_for(ModelType.PPO_DISCOVERY))
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown universe '{universe}' for ppo_discovery. Allowed: {allowed}",
+        ) from exc
+    artifacts = load_current_artifacts_for_bucket(
+        bucket=bucket,
+        model_label=bucket.model_label,
+        cold_start_status_code=503,
+    )
+    return PPODiscoveryActiveResponse(
+        universe=universe,
+        model_type="ppo_discovery",
+        model_version=artifacts.version,
+        snapshot_sha256=(artifacts.universe_manifest or {}).get("snapshot_sha256"),
+        news_required=bool(artifacts.metadata.get("news_required")),
+    )

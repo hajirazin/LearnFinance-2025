@@ -38,7 +38,9 @@ from brain_api.routes import (
     alpaca,
     email,
     etl,
+    etl_ppo_discovery,
     experience,
+    experience_ppo_discovery,
     health,
     ibkr,
     inference,
@@ -97,7 +99,11 @@ app.include_router(inference.router, prefix="/inference", tags=["inference"])
 app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(allocation.router, prefix="/allocation", tags=["allocation"])
 app.include_router(etl.router, prefix="/etl", tags=["etl"])
+app.include_router(etl_ppo_discovery.router, prefix="/etl", tags=["etl"])
 app.include_router(experience.router, prefix="/experience", tags=["experience"])
+app.include_router(
+    experience_ppo_discovery.router, prefix="/experience", tags=["experience"]
+)
 app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(llm.router, prefix="/llm", tags=["llm"])
 app.include_router(email.router, prefix="/email", tags=["email"])

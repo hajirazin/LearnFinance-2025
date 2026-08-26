@@ -24,8 +24,7 @@ devbox run temporal:run:us-double-hrp
 
 ## Workflows
 
-Ten schedules are registered: 6 weekly inference + 4 monthly first-Sunday
-training schedules. Inference schedules land on the `learnfinance-inference`
+Ten weekly-ish inference schedules plus five monthly training schedules are registered. Inference schedules land on the `learnfinance-inference`
 queue (Pi worker, optional Mac inference backup); training schedules land on the
 `learnfinance-training` queue (Mac trainer, `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1`
 to serialise heavy GPU activities).
@@ -38,10 +37,14 @@ to serialise heavy GPU activities).
 | USSACHalalAllocation | Monday 08:30 America/New_York | inference | `halal` SAC allocation through the dedicated IBKR account + email |
 | IndiaWeeklyAllocation | Monday 09:00 Asia/Kolkata | inference | India Alpha-HRP (PatchTST screen → rank-band sticky → HRP) + email (paper-only, no broker) |
 | IndiaDoubleHRP | Monday 09:30 Asia/Kolkata | inference | Two-stage HRP (Nifty Shariah 500 → top 15) + email (paper-only, no broker) |
+| USPPODiscoveryAllocation | Monday 09:00 America/New_York | inference | News-conditioned PPO on frozen `halal_new` via the `ppo_discovery` Alpaca account + email. Incomplete news / missing `current` skip with zero orders. |
 | USForecastersTraining | First Sunday of month, 00:01 UTC | training | LSTM + PatchTST training (strictly serial) + email |
 | USSACTraining | First Sunday of month, 06:01 UTC | training | SAC training on `halal_filtered` bucket + email |
 | USSACHalalTraining | First Sunday of month, 12:01 UTC | training | SAC training on `halal` legacy yfinance bucket (parallel A/B sibling) + email |
 | IndiaMonthlyTraining | First Sunday of month, 18:01 UTC | training | India PatchTST training + email |
+| USPPODiscoveryTraining | Second Sunday of month, 00:01 UTC | training | PPO discovery train on frozen `halal_new` (candidate only; no auto-promote) + email |
+
+To disable only PPO discovery, pause or delete `us-ppo-discovery-allocate` and `us-ppo-discovery-training` on the Temporal server. Do not edit other `SCHEDULES` entries or `first_sunday_of_month_at`.
 
 ## Schedule registration is idempotent
 
@@ -50,7 +53,7 @@ place while preserving their paused state. The docker-compose
 `temporal-schedules-init` one-shot service can therefore safely run on every
 `docker compose up -d --build`, including after a calendar or timezone change.
 
-All ten schedules above live in a single `SCHEDULES` list in `schedules.py`.
+All twelve schedules above live in a single `SCHEDULES` list in `schedules.py`.
 Training cadence cannot be expressed as a single cron string ("first Sunday of
 month" requires AND-ing day-of-month and day-of-week, which Vixie cron OR's), so
 training entries use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0],

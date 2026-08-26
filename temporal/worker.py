@@ -57,6 +57,30 @@ from activities.portfolio import (
     submit_orders_ibkr_sac_halal,
     submit_orders_sac,
 )
+from activities.ppo_discovery_execution import (
+    generate_orders_ppo_discovery,
+    get_order_history_ppo_discovery,
+    label_ppo_discovery_experience,
+    store_experience_ppo_discovery,
+    submit_orders_ppo_discovery,
+    update_execution_ppo_discovery,
+)
+from activities.ppo_discovery_inference import (
+    build_ppo_discovery_state,
+    get_ppo_discovery_portfolio,
+    infer_ppo_discovery,
+)
+from activities.ppo_discovery_reporting import (
+    generate_ppo_discovery_summary,
+    generate_ppo_discovery_training_summary,
+    send_ppo_discovery_email,
+    send_ppo_discovery_training_email,
+)
+from activities.ppo_discovery_training import (
+    etl_ppo_discovery_news,
+    preflight_ppo_discovery_training,
+    train_ppo_discovery,
+)
 from activities.reporting import (
     generate_double_hrp_summary,
     generate_india_alpha_hrp_summary,
@@ -96,6 +120,8 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_ppo_discovery_allocation import USPPODiscoveryAllocationWorkflow
+from workflows.us_ppo_discovery_training import USPPODiscoveryTrainingWorkflow
 from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
 from workflows.us_sac_halal_training import USSACHalalTrainingWorkflow
 from workflows.us_sac_training import USSACTrainingWorkflow
@@ -114,6 +140,8 @@ ALL_WORKFLOWS = [
     USAlphaHRPWorkflow,
     USDoubleHRPWorkflow,
     USForecastersTrainingWorkflow,
+    USPPODiscoveryAllocationWorkflow,
+    USPPODiscoveryTrainingWorkflow,
     USSACHalalAllocationWorkflow,
     USSACHalalTrainingWorkflow,
     USSACTrainingWorkflow,
@@ -190,6 +218,23 @@ ALL_ACTIVITIES = [
     send_sac_training_email,
     generate_india_training_summary,
     send_india_training_email,
+    # PPO discovery
+    get_ppo_discovery_portfolio,
+    build_ppo_discovery_state,
+    infer_ppo_discovery,
+    generate_orders_ppo_discovery,
+    submit_orders_ppo_discovery,
+    store_experience_ppo_discovery,
+    get_order_history_ppo_discovery,
+    update_execution_ppo_discovery,
+    label_ppo_discovery_experience,
+    generate_ppo_discovery_summary,
+    send_ppo_discovery_email,
+    etl_ppo_discovery_news,
+    preflight_ppo_discovery_training,
+    train_ppo_discovery,
+    generate_ppo_discovery_training_summary,
+    send_ppo_discovery_training_email,
 ]
 
 

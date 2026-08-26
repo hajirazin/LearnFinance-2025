@@ -10,6 +10,7 @@ from .models import (
     TrainingSummaryResponse,
     WeeklySummaryResponse,
 )
+from .ppo_discovery import router as ppo_discovery_router
 from .providers import (
     LLMProvider,
     LLMResponse,
@@ -27,6 +28,7 @@ router = APIRouter()
 # Include sub-routers
 router.include_router(training_summary_router)
 router.include_router(weekly_summary_router)
+router.include_router(ppo_discovery_router)
 
 __all__ = [
     "AlphaHRPSummaryRequest",

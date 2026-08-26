@@ -55,6 +55,9 @@ class AlpacaAccount(StrEnum):
       Alpha-HRP workflow).
     - ``dhrp``: Double HRP allocator (US, ``halal_new`` universe,
       sticky-selected).
+    - ``ppo_discovery``: news-conditioned PPO discovery allocator
+      (US, ``halal_new`` universe). Dedicated account so Monday-slot
+      ``client_order_id`` values stay disjoint from SAC/HRP/DHRP.
 
     The ``halal`` SAC variant (formerly ``sac_halal``) trades through
     IBKR rather than Alpaca; see :mod:`brain_api.routes.ibkr`.
@@ -63,6 +66,7 @@ class AlpacaAccount(StrEnum):
     SAC = "sac"
     HRP = "hrp"
     DHRP = "dhrp"
+    PPO_DISCOVERY = "ppo_discovery"
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +94,7 @@ def get_alpaca_credentials(account: AlpacaAccount) -> tuple[str, str]:
     - ``ALPACA_SAC_KEY``,   ``ALPACA_SAC_SECRET``
     - ``ALPACA_HRP_KEY``,   ``ALPACA_HRP_SECRET``
     - ``ALPACA_DHRP_KEY``,  ``ALPACA_DHRP_SECRET``
+    - ``ALPACA_PPO_DISCOVERY_KEY``, ``ALPACA_PPO_DISCOVERY_SECRET``
 
     Raises:
         ValueError: if either env var is missing or empty. Per AGENTS.md
@@ -285,6 +290,11 @@ def get_dhrp_client() -> AlpacaClient:
     return get_alpaca_client(AlpacaAccount.DHRP)
 
 
+def get_ppo_discovery_client() -> AlpacaClient:
+    """Get Alpaca client for the ppo_discovery paper account."""
+    return get_alpaca_client(AlpacaAccount.PPO_DISCOVERY)
+
+
 # ---------------------------------------------------------------------------
 # (model_type, universe) -> AlpacaAccount routing.
 # ---------------------------------------------------------------------------
@@ -298,25 +308,26 @@ _SAC_UNIVERSE_TO_ACCOUNT: dict[str, AlpacaAccount] = {
     "halal_filtered": AlpacaAccount.SAC,
 }
 
+_PPO_DISCOVERY_UNIVERSE_TO_ACCOUNT: dict[str, AlpacaAccount] = {
+    "halal_new": AlpacaAccount.PPO_DISCOVERY,
+}
+
 
 def resolve_alpaca_account(model_type: str, universe: str) -> AlpacaAccount:
     """Resolve the Alpaca account for an ``(model_type, universe)`` pair.
 
-    Currently only ``('sac', 'halal_filtered')`` has a mapping. The
-    ``('sac', 'halal')`` pair has NO Alpaca account by design: that
+    Routable pairs:
+
+    - ``('sac', 'halal_filtered')`` -> ``sac``
+    - ``('ppo_discovery', 'halal_new')`` -> ``ppo_discovery``
+
+    The ``('sac', 'halal')`` pair has NO Alpaca account by design: that
     bucket trades through IBKR (see :mod:`brain_api.routes.ibkr`) so
     any halal experience record that reaches the labeller without
     ``actual_weights`` already plumbed in MUST surface as an error
     rather than silently labelling against an Alpaca account that
     never held the IBKR positions. Per AGENTS.md rule #1 the function
     raises on any unknown pair instead of falling back.
-
-    Args:
-        model_type: ``"sac"`` (currently the only routable model type;
-            extend this when other RL allocators get an Alpaca-backed
-            labelling story).
-        universe: SAC bucket universe -- only ``"halal_filtered"`` is
-            currently routable (``"halal"`` lives on IBKR).
 
     Raises:
         ValueError: if no Alpaca account is mapped for the given pair.
@@ -330,7 +341,16 @@ def resolve_alpaca_account(model_type: str, universe: str) -> AlpacaAccount:
                 f"No Alpaca account mapped for SAC universe {universe!r}. "
                 f"Known SAC universes: {valid}."
             ) from e
+    if model_type == "ppo_discovery":
+        try:
+            return _PPO_DISCOVERY_UNIVERSE_TO_ACCOUNT[universe]
+        except KeyError as e:
+            valid = sorted(_PPO_DISCOVERY_UNIVERSE_TO_ACCOUNT)
+            raise ValueError(
+                f"No Alpaca account mapped for ppo_discovery universe "
+                f"{universe!r}. Known ppo_discovery universes: {valid}."
+            ) from e
     raise ValueError(
         f"No Alpaca account mapped for model_type {model_type!r}. "
-        f"Only model_type='sac' is currently routable."
+        f"Routable model_types: 'sac', 'ppo_discovery'."
     )

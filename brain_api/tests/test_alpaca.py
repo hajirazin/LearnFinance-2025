@@ -14,7 +14,12 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from brain_api.core.alpaca_client import AlpacaAccount, resolve_alpaca_account
+from brain_api.core.alpaca_client import (
+    AlpacaAccount,
+    get_alpaca_base_url,
+    get_alpaca_credentials,
+    resolve_alpaca_account,
+)
 from brain_api.main import app
 
 
@@ -40,6 +45,8 @@ def mock_alpaca_credentials():
             "ALPACA_HRP_SECRET": "test-hrp-secret",
             "ALPACA_DHRP_KEY": "test-dhrp-key",
             "ALPACA_DHRP_SECRET": "test-dhrp-secret",
+            "ALPACA_PPO_DISCOVERY_KEY": "test-ppo-key",
+            "ALPACA_PPO_DISCOVERY_SECRET": "test-ppo-secret",
         },
     ):
         yield
@@ -734,6 +741,33 @@ class TestResolveAlpacaAccount:
             resolve_alpaca_account("sac", "unknown_universe")
 
     def test_unknown_model_type_raises(self):
-        """A non-SAC model_type raises (only SAC is currently routable)."""
+        """A non-routable model_type raises."""
         with pytest.raises(ValueError, match="No Alpaca account mapped for model_type"):
             resolve_alpaca_account("hrp", "halal_filtered")
+
+    def test_ppo_discovery_halal_new_returns_dedicated_account(self):
+        """ppo_discovery + halal_new routes to the dedicated Alpaca account."""
+        assert (
+            resolve_alpaca_account("ppo_discovery", "halal_new")
+            == AlpacaAccount.PPO_DISCOVERY
+        )
+
+    def test_ppo_discovery_unknown_universe_raises(self):
+        with pytest.raises(
+            ValueError, match="No Alpaca account mapped for ppo_discovery universe"
+        ):
+            resolve_alpaca_account("ppo_discovery", "halal_filtered")
+
+
+def test_ppo_discovery_paper_host_when_url_unset(monkeypatch) -> None:
+    monkeypatch.delenv("ALPACA_PPO_DISCOVERY_URL", raising=False)
+    from brain_api.core.alpaca_client import PAPER_BASE_URL
+
+    assert get_alpaca_base_url(AlpacaAccount.PPO_DISCOVERY) == PAPER_BASE_URL
+
+
+def test_ppo_discovery_missing_credentials_raise(monkeypatch) -> None:
+    monkeypatch.delenv("ALPACA_PPO_DISCOVERY_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_PPO_DISCOVERY_SECRET", raising=False)
+    with pytest.raises(ValueError, match="Alpaca credentials not configured"):
+        get_alpaca_credentials(AlpacaAccount.PPO_DISCOVERY)

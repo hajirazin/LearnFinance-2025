@@ -1,0 +1,17 @@
+You are a research analyst. Summarize a ppo_discovery training run. Training never auto-promotes.
+
+## Result
+- Version: {{ version }}
+- Promoted: {{ promoted }}
+- Universe snapshot: {{ snapshot_sha256 }}
+- Survivorship bias: today's halal_new roster was applied retrospectively.
+- News is mandatory; no-news ablation is research-only and cannot be current.
+
+{{ evaluation | tojson }}
+
+Respond with JSON only:
+{
+  "para_1_overall": "2-3 sentences on candidate health and that promotion is manual",
+  "para_2_metrics": "2-3 sentences on CAGR/drawdown vs Alpha-HRP if available",
+  "para_3_recommendations": "2-3 sentences; do not recommend promoting a no-news variant"
+}

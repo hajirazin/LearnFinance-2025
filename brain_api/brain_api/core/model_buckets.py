@@ -34,6 +34,7 @@ from brain_api.core.config import (
     get_hf_lstm_halal_new_model_repo,
     get_hf_patchtst_halal_new_model_repo,
     get_hf_patchtst_nifty_shariah_500_model_repo,
+    get_hf_ppo_discovery_halal_new_model_repo,
     get_hf_sac_halal_filtered_model_repo,
     get_hf_sac_halal_model_repo,
 )
@@ -47,6 +48,10 @@ from brain_api.storage.patchtst.local import (
     PatchTSTHalalNewModelStorage,
     PatchTSTNiftyShariah500ModelStorage,
 )
+from brain_api.storage.ppo_discovery.huggingface import (
+    PPODiscoveryHuggingFaceModelStorage,
+)
+from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
 from brain_api.storage.sac.huggingface import SACHuggingFaceModelStorage
 from brain_api.storage.sac.local import (
     SACHalalFilteredModelStorage,
@@ -67,6 +72,7 @@ class ModelType(StrEnum):
     LSTM = "lstm"
     PATCHTST = "patchtst"
     SAC = "sac"
+    PPO_DISCOVERY = "ppo_discovery"
 
 
 class UnknownBucketError(ValueError):
@@ -288,6 +294,36 @@ _register(
         # SAC's ``n_stocks`` and ``target_entropy`` via
         # ``make_sac_config_for_n_stocks`` to match the resolved slate.
         symbol_validator=_validate_halal_min_count,
+    )
+)
+
+
+def _validate_ppo_discovery_capacity(symbols: list[str]) -> None:
+    """Forbid more than 512 names; never truncate."""
+    from brain_api.core.ppo_discovery.config import MAX_ASSETS, MIN_ELIGIBLE_ASSETS
+
+    if len(symbols) > MAX_ASSETS:
+        raise ValueError(
+            f"ppo_discovery capacity is {MAX_ASSETS} assets; got {len(symbols)}"
+        )
+    if len(symbols) < MIN_ELIGIBLE_ASSETS:
+        raise ValueError(
+            f"ppo_discovery requires at least {MIN_ELIGIBLE_ASSETS} symbols, "
+            f"got {len(symbols)}"
+        )
+
+
+_register(
+    BucketConfig(
+        model_type=ModelType.PPO_DISCOVERY,
+        universe="halal_new",
+        bucket_name="ppo_discovery_halal_new",
+        model_label="PPO discovery halal_new",
+        local_storage_class=PPODiscoveryHalalNewModelStorage,
+        hf_storage_class=PPODiscoveryHuggingFaceModelStorage,
+        hf_repo_getter=get_hf_ppo_discovery_halal_new_model_repo,
+        symbols_resolver=get_halal_new_symbols,
+        symbol_validator=_validate_ppo_discovery_capacity,
     )
 )
 
