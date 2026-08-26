@@ -14,6 +14,10 @@ from brain_api.core.ppo_discovery.news_evidence import (
     NewsEvidenceError,
     materialize_news_evidence,
 )
+from brain_api.core.ppo_discovery.regime import (
+    live_regime_probabilities,
+    spy_vix_rows_after_cutoff,
+)
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.state_builder import (
     StateBuildRequest,
@@ -21,6 +25,7 @@ from brain_api.core.ppo_discovery.state_builder import (
 )
 from brain_api.core.ppo_discovery.universe_snapshot import resolve_universe_snapshot
 from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.sac.regime_hmm import RegimeHMMArtifact
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 router = APIRouter()
@@ -47,28 +52,43 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
             as_of = as_of.replace(tzinfo=UTC)
         snapshot = resolve_universe_snapshot(as_of)
         news = materialize_news_evidence(snapshot.sorted_symbols, as_of)
+        price_start = (as_of - timedelta(days=450)).date()
+        decision_date = as_of.date()
         prices = load_prices_yfinance(
-            list(snapshot.sorted_symbols),
-            (as_of - timedelta(days=450)).date(),
-            as_of.date(),
+            [*list(snapshot.sorted_symbols), "SPY", "^VIX"],
+            price_start,
+            decision_date,
         )
-        spy_map = load_prices_yfinance(
-            ["SPY"], (as_of - timedelta(days=450)).date(), as_of.date()
-        )
-        spy = spy_map.get("SPY")
+        spy = prices.get("SPY")
         if spy is None or spy.empty:
             raise PPODiscoveryError("SPY history missing")
+        if "^VIX" not in prices:
+            raise PPODiscoveryError("^VIX history missing")
         bucket = get_bucket(ModelType.PPO_DISCOVERY, UNIVERSE_NAME)
         artifacts = load_current_artifacts_for_bucket(
             bucket=bucket, model_label=bucket.model_label
         )
         scalers = artifacts.feature_scalers
-        hmm = artifacts.regime_hmm or {}
-        if "p_calm" not in hmm or "p_stress" not in hmm:
-            raise PPODiscoveryError("regime_hmm artifact missing p_calm/p_stress")
-        p_calm = float(hmm["p_calm"])
-        p_stress = float(hmm["p_stress"])
-        ohlcv = {symbol: frame for symbol, frame in prices.items() if frame is not None}
+        hmm_payload = artifacts.regime_hmm or {}
+        try:
+            hmm_artifact = RegimeHMMArtifact.from_dict(hmm_payload)
+        except ValueError as exc:
+            raise PPODiscoveryError(
+                f"regime_hmm artifact cannot continue causally: {exc}"
+            ) from exc
+        rows = spy_vix_rows_after_cutoff(
+            prices,
+            cutoff=hmm_artifact.training_cutoff_date,
+            decision_date=decision_date,
+        )
+        p_calm, p_stress = live_regime_probabilities(
+            hmm_payload, spy_vix_rows=rows, decision_date=decision_date
+        )
+        ohlcv = {
+            symbol: frame
+            for symbol, frame in prices.items()
+            if frame is not None and symbol not in {"SPY", "^VIX"}
+        }
         state = build_ppo_discovery_state(
             StateBuildRequest(
                 as_of=as_of,

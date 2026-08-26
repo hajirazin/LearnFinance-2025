@@ -13,11 +13,10 @@ from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.rollout import (
     RolloutStep,
-    collect_rollout,
     compute_gae,
     normalize_advantages,
 )
-from brain_api.core.ppo_discovery.schemas import CanonicalPPOState, PPODiscoveryError
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 
 
 def _assert_finite(tensor: torch.Tensor, name: str) -> None:
@@ -90,12 +89,12 @@ def ppo_update(
 
 def train_ppo_discovery(
     policy: PPODiscoveryActorCritic,
-    episode_fn: Callable[[], tuple[list[CanonicalPPOState], list[float], list[bool]]],
+    episode_fn: Callable[[PPODiscoveryActorCritic], list[RolloutStep]],
     *,
     config: PPODiscoveryConfig,
     seed: int,
 ) -> dict[str, float]:
-    """Run PPO for ``config.total_timesteps`` environment steps."""
+    """Run PPO for ``config.total_timesteps`` closed-loop environment steps."""
     torch.manual_seed(seed)
     np.random.seed(seed)
     encoder_params = list(policy.temporal.parameters())
@@ -116,10 +115,9 @@ def train_ppo_discovery(
     update_index = 0
     last_metrics: dict[str, float] = {}
     while steps_done < config.total_timesteps:
-        states, rewards, dones = episode_fn()
-        if not states:
+        rollout = episode_fn(policy)
+        if not rollout:
             raise PPODiscoveryError("PPO episode produced no transitions")
-        rollout = collect_rollout(policy, states, rewards, dones, config=config)
         last_metrics = ppo_update(
             policy, rollout, optimizer, config=config, update_index=update_index
         )

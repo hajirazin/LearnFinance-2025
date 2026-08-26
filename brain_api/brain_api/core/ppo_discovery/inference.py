@@ -21,6 +21,7 @@ from brain_api.core.ppo_discovery.schemas import (
     PPODiscoveryError,
     PPOInferenceResult,
     sha256_digest,
+    state_to_digest_payload,
 )
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 from brain_api.storage.ppo_discovery.local import PPODiscoveryArtifacts
@@ -55,7 +56,9 @@ def run_ppo_discovery_inference(
     artifacts: PPODiscoveryArtifacts | None = None,
 ) -> PPOInferenceResult:
     """Deterministic inference. Incomplete news never reaches this function."""
-    if expected_digest != state.state_digest:
+    recomputed = sha256_digest(state_to_digest_payload(state))
+    state.state_digest = recomputed
+    if expected_digest != recomputed:
         raise PPODiscoveryError("state_digest mismatch")
     if artifacts is None:
         bucket = get_bucket(ModelType.PPO_DISCOVERY, UNIVERSE_NAME)

@@ -37,7 +37,9 @@ def _eval(**overrides):
         "test_max_drawdown": 0.10,
         "alpha_hrp_test_max_drawdown": 0.12,
         "paired_vs_alpha_hrp_point": 0.001,
-        "ablations": {name: {"status": "ok"} for name in REQUIRED_ABLATIONS},
+        "ablations": {
+            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+        },
         "failed_seeds": [],
     }
     payload.update(overrides)
@@ -108,6 +110,20 @@ def test_ablations_marked_unavailable() -> None:
     report = mark_ablations({"full_ppo": {"cagr": 0.2}})
     assert report["no_news_features"]["status"] == "unavailable"
     assert "full_ppo" in report
+
+
+def test_promotion_rejects_unavailable_ablations() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(ablations=mark_ablations({})),
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert check.is_healthy is False
+    assert any(
+        "unavailable" in reason or "ablation" in reason
+        for reason in check.failure_reasons
+    )
 
 
 def test_cagr_formula() -> None:

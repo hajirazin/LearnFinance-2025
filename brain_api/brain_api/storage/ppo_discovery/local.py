@@ -139,6 +139,7 @@ class PPODiscoveryHalalNewModelStorage:
             raise ValueError(
                 f"Cannot promote incomplete ppo_discovery version {version}"
             )
+        self.verify_checksums(version)
         self._model_path.mkdir(parents=True, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             dir=self._model_path, prefix=".current_", suffix=".tmp"
@@ -154,10 +155,29 @@ class PPODiscoveryHalalNewModelStorage:
                 os.unlink(temp_path)
             raise
 
+    def verify_checksums(self, version: str) -> None:
+        version_path = self._version_path(version)
+        checksum_file = version_path / "checksums.sha256"
+        if not checksum_file.is_file():
+            raise ValueError(f"missing checksums.sha256 for {version}")
+        expected: dict[str, str] = {}
+        for line in checksum_file.read_text().splitlines():
+            if not line.strip():
+                continue
+            digest, name = line.split("  ", 1)
+            expected[name] = digest
+        for name in REQUIRED_FILES:
+            if name == "checksums.sha256":
+                continue
+            actual = _sha256_file(version_path / name)
+            if name not in expected or expected[name] != actual:
+                raise ValueError(f"checksum mismatch for {name} in {version}")
+
     def load_artifacts(self, version: str) -> PPODiscoveryArtifacts:
         version_path = self._version_path(version)
         if not self.version_exists(version):
             raise FileNotFoundError(f"incomplete ppo_discovery version {version}")
+        self.verify_checksums(version)
         config = PPODiscoveryConfig.from_dict(
             json.loads((version_path / "config.json").read_text())
         )

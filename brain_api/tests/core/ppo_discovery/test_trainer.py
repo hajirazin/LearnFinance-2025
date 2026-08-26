@@ -31,6 +31,8 @@ def test_gae_and_advantage_normalization() -> None:
 
 
 def test_tiny_synthetic_ppo_runs() -> None:
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+
     state = build_ppo_discovery_state(_request())
     config = PPODiscoveryConfig(
         total_timesteps=8,
@@ -42,8 +44,10 @@ def test_tiny_synthetic_ppo_runs() -> None:
     )
     policy = PPODiscoveryActorCritic(config)
 
-    def episode():
-        return [state, state], [0.01, 0.0], [False, True]
+    def episode(current):
+        return collect_rollout(
+            current, [state, state], [0.01, 0.0], [False, True], config=config
+        )
 
     metrics = train_ppo_discovery(policy, episode, config=config, seed=42)
     assert metrics["timesteps"] >= 8

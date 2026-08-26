@@ -169,7 +169,7 @@ class CanonicalPPOState:
             symbol: SymbolNewsFeatures(**row)
             for symbol, row in payload.get("news_by_symbol", {}).items()
         }
-        return cls(
+        state = cls(
             symbols=tuple(payload["symbols"]),
             asset_mask=np.asarray(payload["asset_mask"], dtype=bool),
             price_history=np.asarray(payload["price_history"], dtype=np.float64),
@@ -190,10 +190,16 @@ class CanonicalPPOState:
                 snapshot_sha256=snapshot["snapshot_sha256"],
             ),
             evidence_manifest=payload.get("evidence_manifest") or {},
-            state_digest=payload["state_digest"],
+            state_digest="",
             as_of=payload["as_of"],
             held_symbols=tuple(payload.get("held_symbols") or ()),
         )
+        recomputed = sha256_digest(state_to_digest_payload(state))
+        state.state_digest = recomputed
+        claimed = payload.get("state_digest")
+        if claimed and claimed != recomputed:
+            raise PPODiscoveryError("state_digest does not match reconstructed tensors")
+        return state
 
 
 @dataclass(frozen=True)

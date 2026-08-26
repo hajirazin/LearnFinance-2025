@@ -148,10 +148,9 @@ def update_execution_ppo_discovery(
 
 
 @activity.defn
-def label_ppo_discovery_experience(run_id: str) -> dict:
+def label_ppo_discovery_experience(run_id: str | None = None) -> dict:
     with get_client() as client:
-        response = client.post(
-            "/experience/label/ppo-discovery", json={"run_id": run_id}
-        )
+        payload = {} if not run_id else {"run_id": run_id}
+        response = client.post("/experience/label/ppo-discovery", json=payload)
         response.raise_for_status()
     return response.json()

@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from brain_api.core.finbert import SentimentScore
-from brain_api.core.news_api.alpaca import AlpacaNewsArticle, AlpacaNewsProviderError
+from brain_api.core.news_api.alpaca import (
+    AlpacaNewsArticle,
+    AlpacaNewsClient,
+    AlpacaNewsProviderError,
+)
 from brain_api.core.ppo_discovery.news_evidence import (
     NewsEvidenceError,
     article_dedupe_key,
@@ -82,6 +86,25 @@ def test_provider_error_and_429_abort() -> None:
         fetch_news_exhaustive(MagicMock(), ["AAPL"], window, fetch_page=boom)
 
 
+def test_alpaca_page_retries_429_then_succeeds() -> None:
+    cutoff = datetime(2026, 8, 31, tzinfo=UTC)
+    window = news_window_for_cutoff(cutoff, None)
+    client = AlpacaNewsClient(api_key="k", api_secret="s", rate_limit_delay=0)
+    busy = MagicMock(status_code=429)
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"news": [], "next_page_token": None}
+    ok.raise_for_status = MagicMock()
+    with (
+        patch("brain_api.core.news_api.alpaca.requests.get", side_effect=[busy, ok]),
+        patch("brain_api.core.news_api.alpaca.time.sleep"),
+    ):
+        articles, token = client.fetch_news_page(
+            symbols=["AAPL"], start=window.start, end=window.end
+        )
+    assert articles == []
+    assert token is None
+
+
 def test_page_cap_with_remaining_token_aborts() -> None:
     cutoff = datetime(2026, 8, 31, tzinfo=UTC)
     window = news_window_for_cutoff(cutoff, None)
@@ -153,6 +176,37 @@ def test_finbert_exception_aborts() -> None:
     scorer._pipeline = MagicMock(side_effect=RuntimeError("cuda boom"))
     with pytest.raises(NewsEvidenceError, match="FinBERT scoring failed"):
         score_texts_or_abort(scorer, ["hello world"])
+
+
+def test_persist_cutoff_is_idempotent_without_force(tmp_path) -> None:
+    cutoff = datetime(2026, 8, 31, tzinfo=UTC)
+
+    def fetch_page(**kwargs):
+        return [], None
+
+    features = materialize_news_evidence(
+        ["AAPL"], cutoff, fetch_page=fetch_page, score_fn=lambda texts: []
+    )
+    window = news_window_for_cutoff(cutoff, None)
+    persist_weekly_news_features(
+        cutoff, features, window=window, base_path=tmp_path, force=False
+    )
+    persist_weekly_news_features(
+        cutoff, features, window=window, base_path=tmp_path, force=False
+    )
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(
+        tmp_path / "ppo_discovery" / "news" / "weekly_features.parquet"
+    )
+    assert table.num_rows == 1
+    persist_weekly_news_features(
+        cutoff, features, window=window, base_path=tmp_path, force=True
+    )
+    table = pq.read_table(
+        tmp_path / "ppo_discovery" / "news" / "weekly_features.parquet"
+    )
+    assert table.num_rows == 1
 
 
 def test_yfinance_is_not_called(tmp_path) -> None:

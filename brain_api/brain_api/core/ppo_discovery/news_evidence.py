@@ -32,7 +32,6 @@ from brain_api.core.ppo_discovery.schemas import (
     SymbolNewsFeatures,
     sha256_digest,
 )
-from brain_api.storage.base import DEFAULT_DATA_PATH
 
 PROVIDER_NAME = "alpaca_benzinga"
 FINBERT_REVISION = FINBERT_MODEL
@@ -102,7 +101,12 @@ def fetch_news_exhaustive(
                     page_token=token,
                 )
             else:
-                articles, token = _client_page(client, list(symbols), window, token)
+                articles, token = client.fetch_news_page(
+                    symbols=list(symbols),
+                    start=window.start,
+                    end=window.end,
+                    page_token=token,
+                )
         except AlpacaNewsProviderError as exc:
             raise NewsEvidenceError(f"Alpaca news provider failure: {exc}") from exc
         except Exception as exc:
@@ -128,41 +132,6 @@ def fetch_news_exhaustive(
         "window_end": window.end.isoformat(),
     }
     return collected, manifest
-
-
-def _client_page(
-    client: AlpacaNewsClient,
-    symbols: list[str],
-    window: NewsWindow,
-    page_token: str | None,
-) -> tuple[list[AlpacaNewsArticle], str | None]:
-    """One authenticated Alpaca page. Does not truncate remaining pages."""
-    client._require_credentials()
-    client._rate_limit()
-    client._call_count += 1
-    params: dict[str, Any] = {
-        "symbols": ",".join(symbols),
-        "start": window.start.isoformat(),
-        "end": window.end.isoformat(),
-        "limit": 50,
-        "sort": "desc",
-    }
-    if page_token:
-        params["page_token"] = page_token
-    import requests
-
-    try:
-        response = requests.get(
-            client.BASE_URL,
-            headers=client._get_headers(),
-            params=params,
-            timeout=30,
-        )
-        response.raise_for_status()
-        news_items, next_token = client._parse_response(response)
-    except requests.RequestException as exc:
-        raise AlpacaNewsProviderError("Alpaca news request failed") from exc
-    return client._parse_articles(news_items), next_token
 
 
 def score_texts_or_abort(
@@ -343,46 +312,14 @@ def persist_weekly_news_features(
     *,
     window: NewsWindow,
     base_path: Path | str | None = None,
+    force: bool = False,
 ) -> Path:
     """Append audit rows to the PPO-specific weekly parquet."""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    path = (
-        Path(base_path or DEFAULT_DATA_PATH)
-        / "ppo_discovery"
-        / "news"
-        / "weekly_features.parquet"
+    from brain_api.core.ppo_discovery.news_store import (
+        persist_weekly_news_features as _persist,
     )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for symbol, row in sorted(features.items()):
-        rows.append(
-            {
-                "decision_cutoff": cutoff.astimezone(UTC).isoformat(),
-                "symbol": symbol,
-                "window_start": window.start.isoformat(),
-                "window_end": window.end.isoformat(),
-                "raw_sentiment": row.raw_sentiment,
-                "article_count": row.article_count,
-                "average_confidence": row.average_confidence,
-                "sentiment_dispersion": row.sentiment_dispersion,
-                "hours_since_latest": row.hours_since_latest,
-                "unique_source_count": row.unique_source_count,
-                "has_news": row.has_news,
-                "query_complete": int(row.query_complete),
-                "provider": PROVIDER_NAME,
-                "finbert_revision": FINBERT_REVISION,
-                "article_ids_sha256": row.article_ids_sha256,
-                "request_manifest_sha256": row.request_manifest_sha256,
-            }
-        )
-    table = pa.Table.from_pylist(rows)
-    if path.exists():
-        existing = pq.read_table(path)
-        table = pa.concat_tables([existing, table])
-    pq.write_table(table, path)
-    return path
+
+    return _persist(cutoff, features, window=window, base_path=base_path, force=force)
 
 
 __all__ = [

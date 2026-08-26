@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from brain_api.core.ppo_discovery.config import (
@@ -14,8 +15,16 @@ from brain_api.core.ppo_discovery.config import (
 )
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.promotion import FULL_VARIANT
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.storage.ppo_discovery.huggingface import maybe_upload_ppo_discovery
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
+
+
+def ppo_discovery_source_digest() -> str:
+    """Hash of the ppo_discovery package sources. Included in the version id."""
+    root = Path(__file__).resolve().parent
+    payload = b"".join(path.read_bytes() for path in sorted(root.glob("*.py")))
+    return hashlib.sha256(payload).hexdigest()[:12]
 
 
 def config_hash(config: PPODiscoveryConfig, extra: dict[str, Any]) -> str:
@@ -40,13 +49,25 @@ def write_candidate_artifact(
     end_date: str | None = None,
 ) -> str:
     """Persist a candidate version. ``promote`` stays false."""
+    if news_manifest is None or price_manifest is None:
+        raise PPODiscoveryError("news_manifest and price_manifest are required")
+    if news_manifest.get("complete") is not True:
+        raise PPODiscoveryError("news_manifest.complete must be true")
+    if price_manifest.get("complete") is not True:
+        raise PPODiscoveryError("price_manifest.complete must be true")
+    if not regime_hmm:
+        raise PPODiscoveryError("regime_hmm artifact is required")
     end_date = end_date or datetime.now(UTC).date().isoformat()
+    code_revision = ppo_discovery_source_digest()
     digest = config_hash(
         config,
         {
             "universe_snapshot_sha256": universe_manifest.get("snapshot_sha256"),
             "experiment_id": experiment_id,
             "seeds": list(config.seeds),
+            "news_manifest": news_manifest,
+            "price_manifest": price_manifest,
+            "code_revision": code_revision,
         },
     )
     version = f"v{end_date}-{digest}"
@@ -64,6 +85,7 @@ def write_candidate_artifact(
         "news_required": True,
         "trained_at": datetime.now(UTC).isoformat(),
         "end_date": end_date,
+        "code_revision": code_revision,
     }
     storage.write_artifacts(
         version,
@@ -71,11 +93,11 @@ def write_candidate_artifact(
         pretrained_encoder_state_dict=policy.temporal.state_dict(),
         config=config,
         feature_scalers=feature_scalers or {},
-        regime_hmm=regime_hmm or {},
+        regime_hmm=regime_hmm,
         metadata=metadata,
         universe_manifest=universe_manifest,
-        news_manifest=news_manifest or {"complete": True},
-        price_manifest=price_manifest or {"complete": True},
+        news_manifest=news_manifest,
+        price_manifest=price_manifest,
         experiment_lock=experiment_lock or {"experiment_id": experiment_id},
         evaluation=evaluation,
         promote=False,
@@ -84,4 +106,4 @@ def write_candidate_artifact(
     return version
 
 
-__all__ = ["config_hash", "write_candidate_artifact"]
+__all__ = ["config_hash", "ppo_discovery_source_digest", "write_candidate_artifact"]

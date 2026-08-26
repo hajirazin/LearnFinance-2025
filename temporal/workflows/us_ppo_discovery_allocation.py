@@ -20,6 +20,7 @@ with workflow.unsafe.imports_passed_through():
     from activities.ppo_discovery_execution import (
         generate_orders_ppo_discovery,
         get_order_history_ppo_discovery,
+        label_ppo_discovery_experience,
         store_experience_ppo_discovery,
         submit_orders_ppo_discovery,
         update_execution_ppo_discovery,
@@ -174,6 +175,11 @@ class USPPODiscoveryAllocationWorkflow:
         await workflow.execute_activity(
             update_execution_ppo_discovery,
             args=[run_id, orders, history, post_trade],
+            start_to_close_timeout=SHORT_TIMEOUT,
+        )
+        await workflow.execute_activity(
+            label_ppo_discovery_experience,
+            args=[None],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
         summary = await workflow.execute_activity(

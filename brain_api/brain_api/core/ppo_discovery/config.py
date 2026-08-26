@@ -122,6 +122,7 @@ class PPODiscoveryConfig:
     pretrain_huber_beta: float = 0.01
     hhi_penalty_scale: float = 0.4
     reward_scale: float = 1.0
+    training_nav_usd: float = 100_000.0
     seeds: tuple[int, ...] = EXPERIMENT_SEEDS
     universe: str = UNIVERSE_NAME
 
@@ -167,6 +168,7 @@ class PPODiscoveryConfig:
             "pretrain_huber_beta": self.pretrain_huber_beta,
             "hhi_penalty_scale": self.hhi_penalty_scale,
             "reward_scale": self.reward_scale,
+            "training_nav_usd": self.training_nav_usd,
             "seeds": list(self.seeds),
             "universe": self.universe,
             "asset_feature_names": list(ASSET_FEATURE_NAMES),

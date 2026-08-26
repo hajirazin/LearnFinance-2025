@@ -17,6 +17,14 @@ from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStora
 FULL_VARIANT = "full"
 
 
+def _finite_number(value: Any) -> bool:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return number == number and abs(number) != float("inf")
+
+
 def evaluate_ppo_discovery_promotion(
     *,
     metadata: dict[str, Any],
@@ -56,9 +64,16 @@ def evaluate_ppo_discovery_promotion(
     if paired is None or float(paired) <= 0:
         reasons.append("paired PPO-minus-Alpha-HRP point estimate is not positive")
     ablations = evaluation.get("ablations") or {}
-    missing = [name for name in REQUIRED_ABLATIONS if name not in ablations]
-    if missing:
-        reasons.append(f"missing required ablations: {missing}")
+    for name in REQUIRED_ABLATIONS:
+        row = ablations.get(name)
+        if not isinstance(row, dict) or row.get("status") != "ok":
+            reasons.append(
+                f"required ablation {name!r} is missing, failed, or unavailable"
+            )
+            continue
+        cagr = row.get("cagr")
+        if cagr is None or not _finite_number(cagr):
+            reasons.append(f"required ablation {name!r} has a non-finite CAGR")
     if evaluation.get("failed_seeds"):
         reasons.append("one or more seeds failed")
     if reasons:

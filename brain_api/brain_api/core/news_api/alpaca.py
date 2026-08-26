@@ -148,6 +148,62 @@ class AlpacaNewsClient:
             time.sleep(self.rate_limit_delay - elapsed)
         self._last_request_time = time.time()
 
+    def fetch_news_page(
+        self,
+        *,
+        symbols: list[str],
+        start: datetime,
+        end: datetime,
+        page_token: str | None = None,
+        limit: int = 50,
+        max_retries: int = 3,
+    ) -> tuple[list[AlpacaNewsArticle], str | None]:
+        """Fetch one Alpaca news page. Retries 429 and transient 5xx."""
+        self._require_credentials()
+        params: dict[str, object] = {
+            "symbols": ",".join(symbols),
+            "start": start.isoformat() + "Z"
+            if start.tzinfo is None
+            else start.isoformat(),
+            "end": end.isoformat() + "Z" if end.tzinfo is None else end.isoformat(),
+            "limit": limit,
+            "sort": "desc",
+        }
+        if page_token:
+            params["page_token"] = page_token
+        last_error: Exception | None = None
+        for attempt in range(max_retries + 1):
+            self._rate_limit()
+            self._call_count += 1
+            try:
+                response = requests.get(
+                    self.BASE_URL,
+                    headers=self._get_headers(),
+                    params=params,
+                    timeout=30,
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt >= max_retries:
+                    raise AlpacaNewsProviderError("Alpaca news request failed") from exc
+                time.sleep(0.5 * (2**attempt))
+                continue
+            if response.status_code == 429 or 500 <= response.status_code < 600:
+                last_error = AlpacaNewsProviderError(
+                    f"Alpaca news HTTP {response.status_code}"
+                )
+                if attempt >= max_retries:
+                    raise last_error
+                time.sleep(0.5 * (2**attempt))
+                continue
+            try:
+                response.raise_for_status()
+                news_items, next_token = self._parse_response(response)
+            except (requests.RequestException, AlpacaNewsProviderError) as exc:
+                raise AlpacaNewsProviderError("Alpaca news request failed") from exc
+            return self._parse_articles(news_items), next_token
+        raise AlpacaNewsProviderError("Alpaca news request failed") from last_error
+
     def fetch_news(
         self,
         symbols: list[str],

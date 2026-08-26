@@ -31,7 +31,9 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
         "test_max_drawdown": 0.10,
         "alpha_hrp_test_max_drawdown": 0.12,
         "paired_vs_alpha_hrp_point": 0.001,
-        "ablations": {name: {"status": "ok"} for name in REQUIRED_ABLATIONS},
+        "ablations": {
+            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+        },
         "failed_seeds": [],
     }
     with (
@@ -53,7 +55,9 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
             },
             experiment_id="ci",
             end_date="2026-08-31",
-            regime_hmm={"p_calm": 0.4, "p_stress": 0.3},
+            regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+            news_manifest={"complete": True, "cutoffs": []},
+            price_manifest={"complete": True, "source": "synthetic"},
         )
         assert storage.read_current_version() is None
         artifacts = storage.load_artifacts(version)
