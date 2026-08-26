@@ -1,6 +1,6 @@
 """US weekly allocation workflow (SAC-only) with durable sell-wait-buy.
 
-Runs every Monday at 08:00 America/New_York.
+Runs every Monday at 09:00 America/New_York.
 
 History note (post-refactor): this workflow used to run a "naive HRP"
 allocator side-by-side with SAC on SAC's 15-stock universe. That naive
@@ -55,9 +55,11 @@ with workflow.unsafe.imports_passed_through():
     from activities.inference import (
         get_adjusted_closes,
         get_market_history,
-        get_news_sentiment,
+        get_monday_decision_window,
         get_patchtst_forecast,
         infer_sac,
+        materialize_news_window,
+        query_news_window,
     )
     from activities.portfolio import (
         get_active_symbols,
@@ -71,8 +73,22 @@ with workflow.unsafe.imports_passed_through():
         send_weekly_email,
     )
     from models import SkippedAllocation
+    from models.news import SACNewsAudit
 
 INFERENCE_TIMEOUT = timedelta(minutes=20)
+INFER_SAC_TIMEOUT = timedelta(minutes=15)
+
+
+def _news_audit_for_summary(sac_alloc, window) -> SACNewsAudit:
+    audit = getattr(sac_alloc, "news_audit", None)
+    if audit is not None:
+        return audit
+    return SACNewsAudit(
+        as_of=window.cutoff,
+        start_exclusive=window.start_exclusive,
+        end_inclusive=window.end_inclusive,
+        per_symbol=[],
+    )
 
 
 @workflow.defn
@@ -122,11 +138,20 @@ class USWeeklyAllocationWorkflow:
         if not run_sac:
             skipped_algorithms.append("SAC")
 
-        # Phase 1: Get point-in-time raw evidence in parallel.
-        news, patchtst, prices, market = await asyncio.gather(
+        decision_window = await workflow.execute_activity(
+            get_monday_decision_window,
+            args=[as_of_date],
+            start_to_close_timeout=SHORT_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )
+        as_of = decision_window.cutoff
+
+        # Phase 1: materialize news in parallel with price/forecast evidence,
+        # then query the parse-only DTO.
+        _, patchtst, prices, market = await asyncio.gather(
             workflow.execute_activity(
-                get_news_sentiment,
-                args=[symbols, as_of_date, run_id],
+                materialize_news_window,
+                args=[symbols, decision_window],
                 start_to_close_timeout=INFERENCE_TIMEOUT,
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
@@ -149,6 +174,12 @@ class USWeeklyAllocationWorkflow:
                 retry_policy=RetryPolicy(maximum_attempts=3),
             ),
         )
+        news_window = await workflow.execute_activity(
+            query_news_window,
+            args=[symbols, decision_window],
+            start_to_close_timeout=SHORT_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=3),
+        )
 
         target_week_start = patchtst.target_week_start or as_of_date
         target_week_end = patchtst.target_week_end or as_of_date
@@ -162,12 +193,13 @@ class USWeeklyAllocationWorkflow:
                     as_of_date,
                     "halal_filtered",
                     symbols,
-                    news,
+                    as_of,
+                    news_window,
                     patchtst,
                     prices,
                     market,
                 ],
-                start_to_close_timeout=INFERENCE_TIMEOUT,
+                start_to_close_timeout=INFER_SAC_TIMEOUT,
             )
         else:
             sac_alloc = SkippedAllocation(algorithm="sac")
@@ -258,7 +290,12 @@ class USWeeklyAllocationWorkflow:
         # Phase 6: Generate summary + send email
         summary = await workflow.execute_activity(
             generate_summary,
-            args=[patchtst, news, sac_alloc, "halal_filtered"],
+            args=[
+                patchtst,
+                _news_audit_for_summary(sac_alloc, decision_window),
+                sac_alloc,
+                "halal_filtered",
+            ],
             start_to_close_timeout=SHORT_TIMEOUT,
         )
 

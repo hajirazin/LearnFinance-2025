@@ -86,19 +86,14 @@ class USSACTrainingWorkflow:
                 "model_version": filtered_result.get("model_version"),
                 "selection_method": filtered_result.get("selection_method"),
             },
-            "refresh": {
-                "rows_added": refresh_result.rows_added if refresh_result else 0,
-                "remaining_gaps": (
-                    refresh_result.remaining_gaps if refresh_result else 0
-                ),
-                "gaps_pre_api_date": (
-                    refresh_result.gaps_pre_api_date if refresh_result else 0
-                ),
-                "duration_seconds": (
-                    refresh_result.duration_seconds if refresh_result else 0.0
-                ),
-                "hf_url": refresh_result.hf_url if refresh_result else None,
-                "published": refresh_result.published if refresh_result else False,
+            "refresh": None
+            if refresh_result is None
+            else {
+                "job_id": refresh_result.job_id,
+                "status": refresh_result.status,
+                "windows_done": refresh_result.windows_done,
+                "windows_total": refresh_result.windows_total,
+                "events_scored": refresh_result.events_scored,
             },
             "readiness": {
                 "ready": readiness.ready,

@@ -37,6 +37,7 @@ class PPOTrainingEmailRequest(BaseModel):
     version: str
     promoted: bool = False
     snapshot_sha256: str
+    evaluation: dict[str, Any] | None = None
     para_1_overall: str = ""
     para_2_metrics: str = ""
     para_3_recommendations: str = ""

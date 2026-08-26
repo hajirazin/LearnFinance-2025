@@ -1,7 +1,6 @@
 """Shared dependency injection for inference endpoints."""
 
 from datetime import date
-from pathlib import Path
 
 from brain_api.core.config import resolve_cutoff_date
 from brain_api.core.lstm import compute_week_boundaries, load_prices_yfinance
@@ -74,12 +73,6 @@ def get_patchtst_as_of_date(request: PatchTSTInferenceRequest) -> date:
     """Get cutoff date (always Friday) from request or computed from today."""
     reference = date.fromisoformat(request.as_of_date) if request.as_of_date else None
     return resolve_cutoff_date(reference)
-
-
-def get_sentiment_parquet_path() -> Path:
-    """Get the path to the historical sentiment parquet file."""
-    project_root = Path(__file__).parent.parent.parent.parent
-    return project_root / "data" / "output" / "daily_sentiment.parquet"
 
 
 # ============================================================================

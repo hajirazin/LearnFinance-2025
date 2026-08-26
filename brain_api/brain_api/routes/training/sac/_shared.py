@@ -13,6 +13,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from brain_api.core.model_buckets import ModelType, list_universes_for
+from brain_api.news.models import NEWS_SCHEMA_VERSION, NEWS_SENTIMENT_REVISION
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,21 @@ class SACTrainRequest(BaseModel):
     force: bool = Field(
         default=False,
         description=(
-            "When False (default), if the bucket's current model was trained "
-            "on the exact same symbol set, return 200 with the current "
-            "model's metadata instead of starting a new training job. "
-            "Set True to bypass this short-circuit and force retraining."
+            "When False (default), reuse current only when symbols, SAC v3 "
+            "schema, news schema v1, and the pinned FinBERT revision all "
+            "match. Set True to bypass this short-circuit and force retraining."
         ),
+    )
+
+
+def sac_current_is_reusable(metadata: dict | None, symbols: list[str]) -> bool:
+    """True when the promoted artifact can still serve live SAC inference."""
+    if metadata is None:
+        return False
+    return (
+        metadata.get("sac_schema_version") == 3
+        and metadata.get("architecture") == "masked_attention"
+        and metadata.get("news_schema_version") == NEWS_SCHEMA_VERSION
+        and metadata.get("finbert_revision") == NEWS_SENTIMENT_REVISION
+        and set(metadata.get("symbols", [])) == set(symbols)
     )

@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from brain_api.core.news_api.alpaca import AlpacaNewsClient
 from brain_api.core.ppo_discovery.config import (
     HISTORY_BARS,
     MIN_ELIGIBLE_ASSETS,
@@ -23,7 +22,10 @@ from brain_api.core.ppo_discovery.config import (
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.inference import run_ppo_discovery_inference
-from brain_api.core.ppo_discovery.news_history import materialize_weekly_news_history
+from brain_api.core.ppo_discovery.news_adapter import (
+    PPOSymbolNewsFeatures,
+    features_to_schema,
+)
 from brain_api.core.ppo_discovery.pipeline import run_ppo_discovery_training
 from brain_api.core.ppo_discovery.promotion import evaluate_ppo_discovery_promotion
 from brain_api.core.ppo_discovery.schemas import CanonicalPPOState, PPODiscoveryError
@@ -34,7 +36,7 @@ from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStora
 SYMBOLS = [f"T{i:02d}" for i in range(MIN_ELIGIBLE_ASSETS + 1)]
 
 
-def _sessions(n: int = 280) -> pd.DatetimeIndex:
+def _sessions(n: int = 400) -> pd.DatetimeIndex:
     calendar = xcals.get_calendar("XNYS")
     sessions = calendar.sessions_in_range(
         pd.Timestamp("2024-01-02"), pd.Timestamp("2026-08-01")
@@ -79,7 +81,7 @@ def _yahoo_multiindex(index: pd.DatetimeIndex, tickers: list[str]) -> pd.DataFra
 
 @pytest.fixture
 def xnys_index() -> pd.DatetimeIndex:
-    return _sessions(280)
+    return _sessions(400)
 
 
 def test_historical_train_eval_candidate_with_yfinance_mocked(
@@ -109,19 +111,30 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
     def _download(*_args, **_kwargs):
         return yahoo
 
+    def _empty_news(cutoff, symbols, store=None):
+        empty = PPOSymbolNewsFeatures(
+            raw_sentiment=0.0,
+            article_count=0,
+            log1p_article_count=0.0,
+            recency=0.0,
+            sentiment_dispersion=0.0,
+        )
+        return {
+            symbol: features_to_schema(symbol, empty, [], cutoff=cutoff)
+            for symbol in symbols
+        }
+
     with (
         patch("brain_api.core.prices.yf.download", side_effect=_download),
-        patch.object(AlpacaNewsClient, "fetch_news_page", return_value=([], None)),
+        patch(
+            "brain_api.core.ppo_discovery.pipeline.load_weekly_ppo_news_features",
+            side_effect=_empty_news,
+        ),
         patch("brain_api.core.prices.yf.Ticker") as ticker_cls,
     ):
         ticker_cls.return_value.history.side_effect = AssertionError(
             "Ticker.history must not run when yahoo download parses"
         )
-        etl = materialize_weekly_news_history(
-            SYMBOLS, start, end, base_path=tmp_path, fetch_page=lambda **_k: ([], None)
-        )
-        assert etl["written"] + etl["skipped"] == etl["cutoffs"]
-        assert etl["cutoffs"] > 1
         result = run_ppo_discovery_training(
             snapshot,
             config=config,
@@ -129,6 +142,7 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
             end_date=end,
             start_date=start,
             experiment_id="e2e",
+            experiment_variant="diagnostic",
             base_path=tmp_path,
             alpha_hrp_weekly_log=None,
         )
@@ -136,6 +150,7 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
     assert result["promoted"] is False
     assert storage.read_current_version() is None
     artifacts = storage.load_artifacts(result["version"])
+    assert artifacts.metadata["experiment_variant"] == "diagnostic"
     assert artifacts.regime_hmm.get("schema_version") == 3
     assert "terminal_posterior" in artifacts.regime_hmm
     evaluation = result["evaluation"]
@@ -156,8 +171,8 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
     with pytest.raises(PPODiscoveryError, match="state_digest"):
         CanonicalPPOState.from_dict(payload)
     state = make_synthetic_state()
-    inferred = run_ppo_discovery_inference(
-        state, expected_digest=state.state_digest, artifacts=artifacts
-    )
-    assert abs(sum(inferred.percentage_weights.values()) - 1.0) < 1e-6
+    with pytest.raises(PPODiscoveryError, match="full experiment variant"):
+        run_ppo_discovery_inference(
+            state, expected_digest=state.state_digest, artifacts=artifacts
+        )
     assert HISTORY_BARS == 253

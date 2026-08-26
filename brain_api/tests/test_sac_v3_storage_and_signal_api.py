@@ -326,13 +326,18 @@ def test_sac_api_rejects_bundle_over_capacity_before_artifact_loading():
     response = TestClient(app).post(
         "/inference/sac?universe=halal_filtered",
         json={
-            "portfolio": {"cash": 1_000.0, "positions": []},
+            "as_of": "2026-08-10T09:00:00-04:00",
             "as_of_date": "2026-08-07",
+            "portfolio": {"cash": 1_000.0, "positions": []},
+            "news_window": {
+                "start_exclusive": "2026-08-03T09:00:00-04:00",
+                "end_inclusive": "2026-08-10T09:00:00-04:00",
+                "coverage": [],
+                "events": [],
+            },
             "feature_bundle": {
                 "symbols": symbols,
                 "adjusted_closes": {},
-                "news_sentiment": {},
-                "news_article_counts": {},
                 "patchtst_forecasts": {},
                 "market_history": [],
                 "provenance": {},
@@ -346,13 +351,28 @@ def test_sac_api_rejects_nonpositive_market_evidence_at_boundary():
     response = TestClient(app).post(
         "/inference/sac?universe=halal_filtered",
         json={
-            "portfolio": {"cash": 1_000.0, "positions": []},
+            "as_of": "2026-08-10T09:00:00-04:00",
             "as_of_date": "2026-08-07",
+            "portfolio": {"cash": 1_000.0, "positions": []},
+            "news_window": {
+                "start_exclusive": "2026-08-03T09:00:00-04:00",
+                "end_inclusive": "2026-08-10T09:00:00-04:00",
+                "coverage": [
+                    {
+                        "symbol": "AAPL",
+                        "status": "verified_empty",
+                        "event_count": 0,
+                        "future_revision_excluded_count": 0,
+                        "sentiment_model_revision": (
+                            "4556d13015211d73dccd3fdd39d39232506f3e43"
+                        ),
+                    }
+                ],
+                "events": [],
+            },
             "feature_bundle": {
                 "symbols": ["AAPL"],
                 "adjusted_closes": {"AAPL": []},
-                "news_sentiment": {"AAPL": 0.0},
-                "news_article_counts": {"AAPL": 0},
                 "patchtst_forecasts": {},
                 "market_history": [
                     {

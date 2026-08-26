@@ -105,8 +105,6 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
         "adjusted_closes": {
             symbol: [100.0 + index * 0.1 for index in range(253)] for symbol in symbols
         },
-        "news_sentiment": dict.fromkeys(symbols, 0.1),
-        "news_article_counts": dict.fromkeys(symbols, 1),
         "patchtst_forecasts": _mock_forecasts(symbols),
         "market_history": [
             {
@@ -117,6 +115,46 @@ def _mock_feature_bundle(symbols: list[str] | None = None) -> dict:
             for index, value in enumerate(pd.bdate_range("2026-08-03", "2026-08-07"))
         ],
         "provenance": {"test": True},
+    }
+
+
+_SAC_AS_OF = "2026-08-10T09:00:00-04:00"
+_SAC_NEWS_START = "2026-08-03T09:00:00-04:00"
+_FINBERT_SHA = "4556d13015211d73dccd3fdd39d39232506f3e43"
+
+
+def _mock_news_window(symbols: list[str] | None = None) -> dict:
+    symbols = symbols if symbols is not None else mock_symbols()
+    return {
+        "start_exclusive": _SAC_NEWS_START,
+        "end_inclusive": _SAC_AS_OF,
+        "coverage": [
+            {
+                "symbol": symbol,
+                "status": "verified_empty",
+                "event_count": 0,
+                "future_revision_excluded_count": 0,
+                "sentiment_model_revision": _FINBERT_SHA,
+            }
+            for symbol in symbols
+        ],
+        "events": [],
+    }
+
+
+def _inference_body(
+    *,
+    portfolio: dict,
+    feature_bundle: dict | None = None,
+    as_of_date: str = "2026-08-10",
+) -> dict:
+    bundle = feature_bundle if feature_bundle is not None else _mock_feature_bundle()
+    return {
+        "as_of": _SAC_AS_OF,
+        "as_of_date": as_of_date,
+        "portfolio": portfolio,
+        "news_window": _mock_news_window(bundle["symbols"]),
+        "feature_bundle": bundle,
     }
 
 
@@ -312,17 +350,15 @@ class TestSACLSTMInference:
         """Test that inference returns weights summing to 1."""
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 10000.0,
                     "positions": [
                         {"symbol": "AAPL", "market_value": 2000.0},
                         {"symbol": "MSFT", "market_value": 2000.0},
                     ],
-                },
-                "feature_bundle": _mock_feature_bundle(),
-            },
+                }
+            ),
         )
 
         assert response.status_code == 200, response.text
@@ -349,11 +385,10 @@ class TestSACLSTMInference:
         )
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {"cash": 10000.0, "positions": []},
-                "feature_bundle": feature_bundle,
-            },
+            json=_inference_body(
+                portfolio={"cash": 10000.0, "positions": []},
+                feature_bundle=feature_bundle,
+            ),
         )
         assert response.status_code == 422
         assert "extra=['2026-08-10']" in response.json()["detail"]
@@ -362,16 +397,14 @@ class TestSACLSTMInference:
         """Test that CASH weight >= cash_buffer (2%)."""
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 100.0,  # Small cash
                     "positions": [
                         {"symbol": "AAPL", "market_value": 9900.0},
                     ],
-                },
-                "feature_bundle": _mock_feature_bundle(),
-            },
+                }
+            ),
         )
 
         assert response.status_code == 200
@@ -389,17 +422,16 @@ class TestSACLSTMInference:
         feature_bundle = _mock_feature_bundle()
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 0.0,
                     "positions": [
                         {"symbol": "AAPL", "market_value": 5000.0},
                         {"symbol": "NFLX", "market_value": 5000.0},
                     ],
                 },
-                "feature_bundle": feature_bundle,
-            },
+                feature_bundle=feature_bundle,
+            ),
         )
 
         assert response.status_code == 200
@@ -433,14 +465,12 @@ class TestSACLSTMInference:
         client = TestClient(app)
         response = client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 10000.0,
                     "positions": [],
-                },
-                "feature_bundle": _mock_feature_bundle(),
-            },
+                }
+            ),
         )
 
         assert response.status_code == 503
@@ -673,6 +703,28 @@ class TestSACFullTraining:
             lambda **kwargs: {
                 "version": "legacy-flat",
                 "symbols": mock_symbols(),
+            },
+        )
+
+        response = TestClient(app).post("/train/sac/full")
+        assert response.status_code == 202
+
+    def test_legacy_news_schema_never_short_circuits_v3_training(
+        self, temp_storage, monkeypatch
+    ):
+        """A symbol-matching v3 artifact without news schema v1 must retrain."""
+        from brain_api.routes.training.sac import full as sac_full_route
+
+        _patch_sac_full_training_internals(monkeypatch)
+        _override_sac_bucket(monkeypatch, temp_storage, mock_symbols)
+        monkeypatch.setattr(
+            sac_full_route,
+            "get_prior_metadata_for_bucket",
+            lambda **kwargs: {
+                "version": "v-old-news",
+                "symbols": mock_symbols(),
+                "sac_schema_version": 3,
+                "architecture": "masked_attention",
             },
         )
 
@@ -1192,14 +1244,12 @@ class TestStateDimensionValidation:
         """Test inference with all-cash portfolio (no positions)."""
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 10000.0,
                     "positions": [],  # All cash, no positions
-                },
-                "feature_bundle": _mock_feature_bundle(),
-            },
+                }
+            ),
         )
 
         assert response.status_code == 200
@@ -1215,9 +1265,8 @@ class TestStateDimensionValidation:
         feature_bundle = _mock_feature_bundle()
         response = inference_client.post(
             "/inference/sac?universe=halal_filtered",
-            json={
-                "as_of_date": "2026-08-10",
-                "portfolio": {
+            json=_inference_body(
+                portfolio={
                     "cash": 5000.0,
                     "positions": [
                         {"symbol": "AAPL", "market_value": 2500.0},  # In model
@@ -1227,8 +1276,8 @@ class TestStateDimensionValidation:
                         },  # NOT in model
                     ],
                 },
-                "feature_bundle": feature_bundle,
-            },
+                feature_bundle=feature_bundle,
+            ),
         )
 
         # Off-slate liquidation is safe only because its raw execution price

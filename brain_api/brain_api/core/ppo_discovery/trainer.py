@@ -31,6 +31,7 @@ def ppo_update(
     *,
     config: PPODiscoveryConfig,
     update_index: int,
+    last_value: float = 0.0,
 ) -> dict[str, float]:
     """One PPO optimization pass over a rollout."""
     if update_index >= config.freeze_encoder_updates:
@@ -45,18 +46,25 @@ def ppo_update(
     values = [step.value for step in steps]
     dones = [step.done for step in steps]
     advantages, returns = compute_gae(
-        rewards, values, dones, gamma=config.gamma, gae_lambda=config.gae_lambda
+        rewards,
+        values,
+        dones,
+        gamma=config.gamma,
+        gae_lambda=config.gae_lambda,
+        last_value=last_value,
     )
     advantages = normalize_advantages(advantages)
     indices = np.arange(len(steps))
+    policy.eval()
     last_loss = 0.0
-    policy.train()
     for _ in range(config.ppo_epochs):
         np.random.shuffle(indices)
         for start in range(0, len(steps), config.minibatch_size):
             batch = indices[start : start + config.minibatch_size]
             policy_losses = []
             value_losses = []
+            count_entropies = []
+            selection_entropies = []
             for offset in batch:
                 step = steps[int(offset)]
                 new_logp = policy.log_prob(step.state, step.action)
@@ -74,9 +82,19 @@ def ppo_update(
                 new_value = policy.value(step.state)
                 target = torch.tensor(returns[int(offset)], dtype=new_value.dtype)
                 value_losses.append((new_value - target).pow(2))
+                h_count, h_selection = policy.count_and_selection_entropy(
+                    step.state, step.action
+                )
+                _assert_finite(h_count, "count_entropy")
+                _assert_finite(h_selection, "selection_entropy")
+                count_entropies.append(h_count)
+                selection_entropies.append(h_selection)
             loss = (
                 torch.stack(policy_losses).mean()
                 + config.value_loss_coef * torch.stack(value_losses).mean()
+                - config.count_entropy_coef * torch.stack(count_entropies).mean()
+                - config.selection_entropy_coef
+                * torch.stack(selection_entropies).mean()
             )
             _assert_finite(loss, "ppo_loss")
             optimizer.zero_grad()
@@ -118,11 +136,26 @@ def train_ppo_discovery(
         rollout = episode_fn(policy)
         if not rollout:
             raise PPODiscoveryError("PPO episode produced no transitions")
-        last_metrics = ppo_update(
-            policy, rollout, optimizer, config=config, update_index=update_index
-        )
+        horizon = config.rollout_length
+        if horizon < 1:
+            raise PPODiscoveryError("rollout_length must be at least 1")
+        for start in range(0, len(rollout), horizon):
+            chunk = rollout[start : start + horizon]
+            next_index = start + len(chunk)
+            if next_index < len(rollout) and not chunk[-1].done:
+                bootstrap = float(rollout[next_index].value)
+            else:
+                bootstrap = 0.0
+            last_metrics = ppo_update(
+                policy,
+                chunk,
+                optimizer,
+                config=config,
+                update_index=update_index,
+                last_value=bootstrap,
+            )
+            update_index += 1
         steps_done += len(rollout)
-        update_index += 1
     last_metrics["timesteps"] = float(steps_done)
     last_metrics["seed"] = float(seed)
     return last_metrics

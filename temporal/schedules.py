@@ -98,11 +98,11 @@ SCHEDULES = [
         "id": "us-weekly-allocate",
         "workflow": USWeeklyAllocationWorkflow,
         "workflow_id": "us-weekly-allocate",
-        "calendar": monday_at(8, 0),
+        "calendar": monday_at(9, 0),
         "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
         "description": (
-            "US SAC (halal_filtered) weekly allocation Monday 08:00 America/New_York"
+            "US SAC (halal_filtered) weekly allocation Monday 09:00 America/New_York"
         ),
     },
     {
@@ -155,12 +155,12 @@ SCHEDULES = [
         # via brain_api's /ibkr/* routes -- different broker entirely
         # so client_order_id collisions across the two SAC variants are
         # impossible.
-        "calendar": monday_at(8, 30),
+        "calendar": monday_at(9, 5),
         "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
         "description": (
             "US SAC (halal) weekly allocation (IBKR sac_halal account, "
-            "universe=halal) Monday 08:30 America/New_York"
+            "universe=halal) Monday 09:05 America/New_York"
         ),
     },
     # Training schedules -- first Sunday of month, staggered 6h apart
@@ -216,11 +216,11 @@ SCHEDULES = [
         "id": "us-ppo-discovery-allocate",
         "workflow": USPPODiscoveryAllocationWorkflow,
         "workflow_id": "us-ppo-discovery-allocate",
-        "calendar": monday_at(9, 0),
+        "calendar": monday_at(9, 10),
         "time_zone_name": "America/New_York",
         "task_queue": QUEUE_INFERENCE,
         "description": (
-            "US PPO discovery weekly allocation Monday 09:00 America/New_York"
+            "US PPO discovery weekly allocation Monday 09:10 America/New_York"
         ),
     },
     {

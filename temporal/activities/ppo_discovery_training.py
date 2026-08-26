@@ -9,24 +9,15 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
+from activities.training import run_news_backfill
 
 logger = logging.getLogger(__name__)
 
 
 @activity.defn
-def etl_ppo_discovery_news(start_date: str, end_date: str) -> dict:
-    with get_training_client() as client:
-        response = client.post(
-            "/etl/ppo-discovery/news-history",
-            json={
-                "start_date": start_date,
-                "end_date": end_date,
-                "universe": "halal_new",
-                "force": False,
-            },
-        )
-        response.raise_for_status()
-    return response.json()
+def etl_ppo_discovery_news(start: str, end: str, symbols: list[str]) -> dict:
+    result = run_news_backfill(symbols, start, end)
+    return result.model_dump(mode="json")
 
 
 @activity.defn
@@ -47,6 +38,7 @@ def preflight_ppo_discovery_training(end_date: str, experiment_id: str) -> dict:
 def _poll_ppo_training_job(
     end_date: str,
     experiment_id: str,
+    snapshot_sha256: str,
     *,
     poll_interval: float = 60.0,
 ) -> dict:
@@ -57,6 +49,7 @@ def _poll_ppo_training_job(
                 "universe": "halal_new",
                 "end_date": end_date,
                 "experiment_id": experiment_id,
+                "snapshot_sha256": snapshot_sha256,
             },
         )
         response.raise_for_status()
@@ -86,5 +79,7 @@ def _poll_ppo_training_job(
 
 
 @activity.defn
-def train_ppo_discovery(end_date: str, experiment_id: str) -> dict:
-    return _poll_ppo_training_job(end_date, experiment_id)
+def train_ppo_discovery(
+    end_date: str, experiment_id: str, snapshot_sha256: str
+) -> dict:
+    return _poll_ppo_training_job(end_date, experiment_id, snapshot_sha256)

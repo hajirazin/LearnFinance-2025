@@ -10,15 +10,15 @@ from pydantic import BaseModel, Field
 
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.ppo_discovery.config import UNIVERSE_NAME
-from brain_api.core.ppo_discovery.news_evidence import (
-    NewsEvidenceError,
-    materialize_news_evidence,
+from brain_api.core.ppo_discovery.news_adapter import (
+    build_ppo_news_features,
+    features_to_schema,
 )
 from brain_api.core.ppo_discovery.regime import (
     live_regime_probabilities,
     spy_vix_rows_after_cutoff,
 )
-from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError, SymbolNewsFeatures
 from brain_api.core.ppo_discovery.state_builder import (
     StateBuildRequest,
     build_ppo_discovery_state,
@@ -26,9 +26,21 @@ from brain_api.core.ppo_discovery.state_builder import (
 from brain_api.core.ppo_discovery.universe_snapshot import resolve_universe_snapshot
 from brain_api.core.prices import load_prices_yfinance
 from brain_api.core.sac.regime_hmm import RegimeHMMArtifact
+from brain_api.core.weekly_decision import (
+    MondayCutoffError,
+    monday_window_bounds,
+    require_monday_decision_cutoff,
+)
+from brain_api.news.errors import NewsError
+from brain_api.news.models import NewsWindow
+from brain_api.news.service import NewsService, raise_http_status
+from brain_api.news.store import NewsStore
+from brain_api.storage.base import DEFAULT_DATA_PATH
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 router = APIRouter()
+
+ENCODER_CALENDAR_LOOKBACK_DAYS = 450
 
 
 class PPOStateRequest(BaseModel):
@@ -50,20 +62,28 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
         as_of = datetime.fromisoformat(request.as_of)
         if as_of.tzinfo is None:
             as_of = as_of.replace(tzinfo=UTC)
+        cutoff = require_monday_decision_cutoff(as_of)
         snapshot = resolve_universe_snapshot(as_of)
-        news = materialize_news_evidence(snapshot.sorted_symbols, as_of)
-        price_start = (as_of - timedelta(days=450)).date()
-        decision_date = as_of.date()
-        prices = load_prices_yfinance(
-            [*list(snapshot.sorted_symbols), "SPY", "^VIX"],
-            price_start,
-            decision_date,
+        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
+        window = NewsWindow(
+            start_exclusive=start_exclusive, end_inclusive=end_inclusive
         )
-        spy = prices.get("SPY")
-        if spy is None or spy.empty:
-            raise PPODiscoveryError("SPY history missing")
-        if "^VIX" not in prices:
-            raise PPODiscoveryError("^VIX history missing")
+        _coverage, events = NewsService(NewsStore(DEFAULT_DATA_PATH)).materialize(
+            list(snapshot.sorted_symbols), window
+        )
+        events_by_symbol: dict[str, list] = {
+            symbol: [] for symbol in snapshot.sorted_symbols
+        }
+        for event in events:
+            if event.symbol in events_by_symbol:
+                events_by_symbol[event.symbol].append(event)
+        adapter = build_ppo_news_features(events_by_symbol, cutoff=cutoff)
+        news: dict[str, SymbolNewsFeatures] = {
+            symbol: features_to_schema(
+                symbol, adapter[symbol], events_by_symbol[symbol], cutoff=cutoff
+            )
+            for symbol in snapshot.sorted_symbols
+        }
         bucket = get_bucket(ModelType.PPO_DISCOVERY, UNIVERSE_NAME)
         artifacts = load_current_artifacts_for_bucket(
             bucket=bucket, model_label=bucket.model_label
@@ -76,19 +96,31 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
             raise PPODiscoveryError(
                 f"regime_hmm artifact cannot continue causally: {exc}"
             ) from exc
+        decision_date = as_of.date()
+        encoder_start = (as_of - timedelta(days=ENCODER_CALENDAR_LOOKBACK_DAYS)).date()
+        ohlcv = load_prices_yfinance(
+            list(snapshot.sorted_symbols),
+            encoder_start,
+            decision_date,
+        )
+        spy_vix = load_prices_yfinance(
+            ["SPY", "^VIX"],
+            hmm_artifact.training_cutoff_date,
+            decision_date,
+        )
+        spy = spy_vix.get("SPY")
+        if spy is None or spy.empty:
+            raise PPODiscoveryError("SPY history missing")
+        if "^VIX" not in spy_vix:
+            raise PPODiscoveryError("^VIX history missing")
         rows = spy_vix_rows_after_cutoff(
-            prices,
+            spy_vix,
             cutoff=hmm_artifact.training_cutoff_date,
             decision_date=decision_date,
         )
         p_calm, p_stress = live_regime_probabilities(
             hmm_payload, spy_vix_rows=rows, decision_date=decision_date
         )
-        ohlcv = {
-            symbol: frame
-            for symbol, frame in prices.items()
-            if frame is not None and symbol not in {"SPY", "^VIX"}
-        }
         state = build_ppo_discovery_state(
             StateBuildRequest(
                 as_of=as_of,
@@ -102,11 +134,12 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
                 feature_scalers=scalers,
             )
         )
-    except NewsEvidenceError as exc:
+    except MondayCutoffError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except NewsError as exc:
+        raise HTTPException(
+            status_code=raise_http_status(exc), detail=str(exc)
+        ) from exc
     except PPODiscoveryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    payload = state.to_dict()
-    payload["run_id"] = request.run_id
-    payload["attempt"] = request.attempt
-    return payload
+    return state.to_dict()

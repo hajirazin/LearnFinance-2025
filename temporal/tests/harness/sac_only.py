@@ -18,6 +18,8 @@ from models import (
     GenerateOrdersResponse,
     MarketClockResponse,
     MarketHistoryResponse,
+    MondayDecisionWindowResponse,
+    NewsWindowResult,
     OrderSummary,
     SkippedOrdersResponse,
     SkippedSubmitResponse,
@@ -140,9 +142,35 @@ def make_sac_only_activities(
         _forbid("submit_orders_hrp")
         return SkippedSubmitResponse(account="hrp")
 
-    @activity.defn(name="get_news_sentiment")
-    def mock_get_news_sentiment(symbols, as_of_date, run_id):
-        return news_resp
+    @activity.defn(name="get_monday_decision_window")
+    def mock_get_monday_decision_window(run_date) -> MondayDecisionWindowResponse:
+        return MondayDecisionWindowResponse(
+            cutoff=news_resp.as_of,
+            start_exclusive=news_resp.start_exclusive,
+            end_inclusive=news_resp.end_inclusive,
+        )
+
+    @activity.defn(name="materialize_news_window")
+    def mock_materialize_news_window(
+        symbols, window: MondayDecisionWindowResponse
+    ) -> NewsWindowResult:
+        return NewsWindowResult(
+            start_exclusive=window.start_exclusive,
+            end_inclusive=window.end_inclusive,
+            coverage=[],
+            events=[],
+        )
+
+    @activity.defn(name="query_news_window")
+    def mock_query_news_window(
+        symbols, window: MondayDecisionWindowResponse
+    ) -> NewsWindowResult:
+        return NewsWindowResult(
+            start_exclusive=window.start_exclusive,
+            end_inclusive=window.end_inclusive,
+            coverage=[],
+            events=[],
+        )
 
     @activity.defn(name="get_lstm_forecast")
     def mock_get_lstm_forecast(as_of_date, symbols=None):
@@ -183,7 +211,8 @@ def make_sac_only_activities(
         as_of_date,
         universe,
         symbols,
-        news,
+        as_of,
+        news_window,
         patchtst,
         prices,
         market,
@@ -313,7 +342,9 @@ def make_sac_only_activities(
         mock_get_hrp_portfolio,
         mock_allocate_hrp,
         mock_submit_orders_hrp,
-        mock_get_news_sentiment,
+        mock_get_monday_decision_window,
+        mock_materialize_news_window,
+        mock_query_news_window,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
         mock_get_adjusted_closes,

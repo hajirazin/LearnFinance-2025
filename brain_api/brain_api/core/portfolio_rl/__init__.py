@@ -13,6 +13,7 @@ Used by `sac` unified agent.
 """
 
 from brain_api.core.portfolio_rl.broker_costs import (
+    AlpacaUSCostConfig,
     IBKRSingaporeCostConfig,
     LegCost,
     RebalanceCost,
@@ -29,7 +30,6 @@ from brain_api.core.portfolio_rl.constraints import (
 from brain_api.core.portfolio_rl.data_loading import (
     align_signals_to_weekly,
     build_rl_training_signals,
-    load_historical_news_sentiment,
 )
 from brain_api.core.portfolio_rl.env import PortfolioEnv
 from brain_api.core.portfolio_rl.eval import (
@@ -62,6 +62,7 @@ from brain_api.core.portfolio_rl.walkforward import (
 
 __all__ = [
     "DEFAULT_RL_BASE_CONFIG",
+    "AlpacaUSCostConfig",
     "EvaluationMetrics",
     "IBKRSingaporeCostConfig",
     "LegCost",
@@ -94,5 +95,4 @@ __all__ = [
     "compute_turnover_from_allocations",
     "enforce_constraints",
     "evaluate_policy",
-    "load_historical_news_sentiment",
 ]

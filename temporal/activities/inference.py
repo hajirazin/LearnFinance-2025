@@ -1,7 +1,7 @@
 """Signals, forecasts, and allocator activities."""
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from temporalio import activity
 
@@ -16,7 +16,6 @@ from models import (
     HRPAllocationResponse,
     LSTMInferenceResponse,
     MarketHistoryResponse,
-    NewsSignalResponse,
     PatchTSTBatchScores,
     PatchTSTInferenceResponse,
     PreviousFinalAllocationResponse,
@@ -25,6 +24,7 @@ from models import (
     SACInferenceResponse,
     StickyTopNResponse,
 )
+from models.news import MondayDecisionWindowResponse, NewsWindowResult
 
 logger = logging.getLogger(__name__)
 
@@ -103,26 +103,87 @@ def get_market_history(
 
 
 @activity.defn
-def get_news_sentiment(
-    symbols: list[str], as_of_date: str, run_id: str
-) -> NewsSignalResponse:
-    """Fetch news sentiment for symbols."""
-    logger.info(f"Fetching news sentiment for {len(symbols)} symbols...")
+def get_monday_decision_window(run_date: str) -> MondayDecisionWindowResponse:
+    """Resolve Monday 09:00 NY bounds from the Brain calendar (not locally)."""
+    logger.info("Resolving Monday decision window for run_date=%s", run_date)
     with get_client() as client:
         response = client.post(
-            "/signals/news",
-            json={
-                "symbols": symbols,
-                "as_of_date": as_of_date,
-                "run_id": run_id,
-                "max_articles_per_symbol": 10,
-                "return_top_k": 3,
-            },
+            "/calendar/monday-decision-window",
+            json={"run_date": run_date},
         )
         response.raise_for_status()
-    result = NewsSignalResponse(**response.json())
-    logger.info(f"Got news sentiment for {len(result.per_symbol)} symbols")
+    result = MondayDecisionWindowResponse(**response.json())
+    logger.info(
+        "Monday decision window cutoff=%s start=%s end=%s",
+        result.cutoff.isoformat(),
+        result.start_exclusive.isoformat(),
+        result.end_inclusive.isoformat(),
+    )
     return result
+
+
+def _news_window_body(symbols: list[str], window: MondayDecisionWindowResponse) -> dict:
+    return {
+        "symbols": symbols,
+        "start_exclusive": window.start_exclusive.isoformat(),
+        "end_inclusive": window.end_inclusive.isoformat(),
+    }
+
+
+@activity.defn
+def materialize_news_window(
+    symbols: list[str], window: MondayDecisionWindowResponse
+) -> NewsWindowResult:
+    """Fetch+score the exact Monday window. Parse-only; no aggregation."""
+    logger.info(
+        "Materializing news window for %s symbols end=%s",
+        len(symbols),
+        window.end_inclusive.isoformat(),
+    )
+    with get_client() as client:
+        response = client.post(
+            "/news/windows/materialize",
+            json=_news_window_body(symbols, window),
+        )
+        response.raise_for_status()
+    result = NewsWindowResult(**response.json())
+    logger.info(
+        "Materialized news window events=%s coverage=%s",
+        len(result.events),
+        len(result.coverage),
+    )
+    return result
+
+
+@activity.defn
+def query_news_window(
+    symbols: list[str], window: MondayDecisionWindowResponse
+) -> NewsWindowResult:
+    """Read-only query of the exact Monday window. Parse-only DTO."""
+    logger.info(
+        "Querying news window for %s symbols end=%s",
+        len(symbols),
+        window.end_inclusive.isoformat(),
+    )
+    with get_client() as client:
+        response = client.post(
+            "/news/windows/query",
+            json=_news_window_body(symbols, window),
+        )
+        response.raise_for_status()
+    result = NewsWindowResult(**response.json())
+    logger.info(
+        "Queried news window events=%s coverage=%s",
+        len(result.events),
+        len(result.coverage),
+    )
+    return result
+
+
+def _as_of_iso(as_of: datetime | str) -> str:
+    if isinstance(as_of, datetime):
+        return as_of.isoformat()
+    return as_of
 
 
 @activity.defn
@@ -290,7 +351,8 @@ def infer_sac(
     as_of_date: str,
     universe: str,
     symbols: list[str],
-    news: NewsSignalResponse,
+    as_of: datetime | str,
+    news_window: NewsWindowResult,
     patchtst: PatchTSTInferenceResponse,
     prices: AdjustedClosesResponse,
     market: MarketHistoryResponse,
@@ -301,13 +363,13 @@ def infer_sac(
     SAC workflow declares its bucket explicitly. brain_api resolves
     the bucket via ``get_bucket(ModelType.SAC, universe)`` and loads
     that bucket's frozen ``symbol_order``. Per AGENTS.md rule #1.
-    Temporal sends point-in-time raw evidence only. Brain owns eligibility,
-    momentum/volatility, ranks, HMM filtering, and state packing.
+    Temporal sends the parse-only ``NewsWindowResult`` plus raw price
+    evidence. Brain owns adapter math, eligibility, ranks, HMM, and
+    state packing.
     """
     feature_bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date=as_of_date,
-        news=news,
         patchtst=patchtst,
         prices=prices,
         market=market,
@@ -322,7 +384,9 @@ def infer_sac(
                     "cash": portfolio.cash,
                     "positions": [p.model_dump() for p in portfolio.positions],
                 },
+                "as_of": _as_of_iso(as_of),
                 "as_of_date": as_of_date,
+                "news_window": news_window.model_dump(mode="json"),
                 "feature_bundle": feature_bundle,
             },
         )

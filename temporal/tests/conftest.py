@@ -8,6 +8,9 @@ to keep this file under the 600-line policy limit.
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from models import (
@@ -16,7 +19,8 @@ from models import (
     GenerateOrdersResponse,
     HRPAllocationResponse,
     LSTMInferenceResponse,
-    NewsSignalResponse,
+    MondayDecisionWindowResponse,
+    NewsWindowResult,
     OrderModel,
     OrderSummary,
     PatchTSTBatchScores,
@@ -25,6 +29,7 @@ from models import (
     RankBandTopNResponse,
     RecordFinalWeightsResponse,
     SACInferenceResponse,
+    SACNewsAudit,
     SubmitOrdersResponse,
     WeeklyReportEmailResponse,
     WeeklySummaryResponse,
@@ -316,9 +321,51 @@ def patchtst_resp():
 
 @pytest.fixture
 def news_resp():
-    return NewsSignalResponse(
-        per_symbol=[{"symbol": "AAPL", "sentiment_score": 0.5, "article_count": 10}],
-        as_of_date="2026-02-05",
+    ny = ZoneInfo("America/New_York")
+    cutoff = datetime(2026, 2, 2, 9, 0, tzinfo=ny)
+    start = datetime(2026, 1, 26, 9, 0, tzinfo=ny)
+    return SACNewsAudit(
+        as_of=cutoff,
+        start_exclusive=start,
+        end_inclusive=cutoff,
+        per_symbol=[
+            {
+                "symbol": "AAPL",
+                "sentiment_score": 0.5,
+                "article_count": 10,
+                "coverage_status": "complete",
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def decision_window():
+    ny = ZoneInfo("America/New_York")
+    cutoff = datetime(2026, 2, 2, 9, 0, tzinfo=ny)
+    start = datetime(2026, 1, 26, 9, 0, tzinfo=ny)
+    return MondayDecisionWindowResponse(
+        cutoff=cutoff,
+        start_exclusive=start,
+        end_inclusive=cutoff,
+    )
+
+
+@pytest.fixture
+def news_window(decision_window):
+    return NewsWindowResult(
+        start_exclusive=decision_window.start_exclusive,
+        end_inclusive=decision_window.end_inclusive,
+        coverage=[
+            {
+                "symbol": "AAPL",
+                "status": "complete",
+                "event_count": 10,
+                "future_revision_excluded_count": 0,
+                "sentiment_model_revision": "4556d13015211d73dccd3fdd39d39232506f3e43",
+            }
+        ],
+        events=[],
     )
 
 

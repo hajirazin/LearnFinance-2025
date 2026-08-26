@@ -12,6 +12,11 @@ from brain_api.core.sac.trade_clock import (
     build_sac_weekly_trade_clock,
     extract_session_open_prices,
 )
+from brain_api.core.weekly_decision import (
+    monday_cutoff_for_actor_friday,
+    monday_window_bounds,
+)
+from brain_api.news.models import NEWS_ARCHIVE_START_ISO
 
 DECISION_CLOCK_TIME = time(20, 0)
 
@@ -28,6 +33,14 @@ def cutoff_datetime(session_date: date) -> datetime:
 
 def actor_cutoff_datetimes(clock: SACWeeklyTradeClock) -> list[datetime]:
     return [cutoff_datetime(timestamp.date()) for timestamp in clock.actor_cutoffs]
+
+
+def news_window_starts_at_or_after_archive(cutoff: datetime) -> bool:
+    """True when the Monday news window for this Friday cutoff is in coverage."""
+    archive = datetime.fromisoformat(NEWS_ARCHIVE_START_ISO)
+    monday = monday_cutoff_for_actor_friday(cutoff.date())
+    start_exclusive, _end = monday_window_bounds(monday.date())
+    return start_exclusive >= archive
 
 
 def prices_as_of(frame: pd.DataFrame, cutoff: date) -> pd.DataFrame:
@@ -65,6 +78,7 @@ def open_to_open_return(
 __all__ = [
     "actor_cutoff_datetimes",
     "cutoff_datetime",
+    "news_window_starts_at_or_after_archive",
     "open_to_open_return",
     "prices_as_of",
     "weekly_trade_clock",

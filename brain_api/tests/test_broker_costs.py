@@ -314,3 +314,31 @@ def test_calibration_per_share_dominance_at_large_nav():
 
     bps = cost.total_fraction * 10_000
     assert 0.2 <= bps <= 1.5, f"expected sub-1.5 bps cost at $100k NAV, got {bps:.2f}"
+
+
+def test_alpaca_schedule_has_zero_commission_and_no_ibkr_minimum():
+    from brain_api.core.portfolio_rl.broker_costs import AlpacaUSCostConfig
+
+    symbol_order = ["AAPL"]
+    prices = np.array([100.0])
+    current = np.array([0.10, 0.90])
+    target = np.array([0.0, 1.0])
+    ibkr = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=current,
+        target_weights=target,
+        prices=prices,
+        cfg=IBKRSingaporeCostConfig.default().with_nav(1_000.0),
+    )
+    alpaca = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=current,
+        target_weights=target,
+        prices=prices,
+        cfg=AlpacaUSCostConfig.default().with_nav(1_000.0),
+    )
+    assert ibkr.legs[0].commission == pytest.approx(0.35)
+    assert alpaca.legs[0].commission == 0.0
+    assert alpaca.legs[0].clearing == 0.0
+    assert alpaca.legs[0].finra_cat == 0.0
+    assert alpaca.legs[0].sec_fee > 0.0

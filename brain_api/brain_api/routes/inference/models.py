@@ -1,12 +1,13 @@
 """Shared request/response models for inference endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from brain_api.core.lstm import SymbolPrediction as LSTMSymbolPrediction
 from brain_api.core.patchtst import SymbolPrediction as PatchTSTSymbolPrediction
+from brain_api.routes.news.models import NewsWindowResult
 
 # Re-export for backward compatibility
 SymbolPrediction = LSTMSymbolPrediction
@@ -196,13 +197,27 @@ class SACMarketHistoryRow(BaseModel):
 class SACFeatureBundleRequest(BaseModel):
     """Raw point-in-time evidence from which Brain builds SAC v3 features."""
 
+    model_config = ConfigDict(extra="forbid")
+
     symbols: Annotated[list[str], Field(min_length=1, max_length=30)]
     adjusted_closes: dict[str, list[float]]
-    news_sentiment: dict[str, float]
-    news_article_counts: dict[str, Annotated[int, Field(ge=0)]]
     patchtst_forecasts: dict[str, float]
     market_history: list[SACMarketHistoryRow]
     provenance: dict[str, object] = Field(default_factory=dict)
+
+
+class SACNewsSymbolAudit(BaseModel):
+    symbol: str
+    sentiment_score: float
+    article_count: int
+    coverage_status: Literal["complete", "verified_empty"]
+
+
+class SACNewsAudit(BaseModel):
+    as_of: datetime
+    start_exclusive: datetime
+    end_inclusive: datetime
+    per_symbol: list[SACNewsSymbolAudit]
 
 
 class SACInferenceRequest(BaseModel):
@@ -212,15 +227,17 @@ class SACInferenceRequest(BaseModel):
         ...,
         description="Current portfolio state (cash + positions)",
     )
+    as_of: datetime = Field(..., description="Monday 09:00 America/New_York cutoff")
     as_of_date: str | None = Field(
         None,
-        description="Reference date for inference (YYYY-MM-DD). Defaults to today.",
+        description="Reference date for price sessions (YYYY-MM-DD). Defaults to today.",
     )
+    news_window: NewsWindowResult
     feature_bundle: SACFeatureBundleRequest = Field(
         ...,
         description=(
-            "Raw adjusted-price history, news evidence, forecasts, "
-            "and SPY/VIX history. Brain owns all feature construction."
+            "Raw adjusted-price history, forecasts, and SPY/VIX history. "
+            "News is supplied via news_window; Brain owns adapter math."
         ),
     )
 
@@ -249,6 +266,7 @@ class SACInferenceResponse(BaseModel):
     regime_posterior: Annotated[list[float], Field(min_length=3, max_length=3)]
     sac_schema_version: Literal[3]
     architecture: Literal["masked_attention"]
+    news_audit: SACNewsAudit
 
 
 class SkippedSACInferenceResponse(BaseModel):

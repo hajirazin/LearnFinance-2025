@@ -62,7 +62,7 @@ def test_closed_loop_reward_matches_sampled_weights() -> None:
         config=config,
     )
     assert len(steps) == 1
-    expected, _gross, _cost = ppo_discovery_reward(
+    expected, _gross, _cost, economic = ppo_discovery_reward(
         prior_weights={"CASH": 1.0},
         target_weights=steps[0].action.percentage_weights,
         symbol_returns=_returns_for(
@@ -75,6 +75,49 @@ def test_closed_loop_reward_matches_sampled_weights() -> None:
         config=config,
     )
     assert steps[0].reward == expected
+    assert steps[0].realized_net_return == economic
+
+
+def test_missing_unheld_price_frame_is_masked_not_aborted() -> None:
+    index = _xnys_index(HISTORY_BARS + 10)
+    snapshot = make_snapshot(11)
+    ohlcv = {}
+    for i, symbol in enumerate(snapshot.sorted_symbols):
+        frame = make_ohlcv(n=len(index), seed=i + 1)
+        frame.index = index
+        ohlcv[symbol] = frame
+    dropped = snapshot.sorted_symbols[0]
+    ohlcv[dropped] = pd.DataFrame()
+    spy = make_ohlcv(n=len(index), seed=99)
+    spy.index = index
+    cutoff = datetime.combine(index[-6].date(), datetime.min.time(), tzinfo=UTC)
+    news = {
+        symbol: make_news(symbol, count=0, raw=0.0)
+        for symbol in snapshot.sorted_symbols
+    }
+    week = WeeklyTransition(
+        cutoff=cutoff.replace(hour=20),
+        rebalance_session=index[-5],
+        next_rebalance_session=index[-1],
+        news_by_symbol=news,
+        p_calm=0.4,
+        p_stress=0.2,
+    )
+    config = PPODiscoveryConfig(dropout=0.0, training_nav_usd=100_000.0)
+    policy = PPODiscoveryActorCritic(config)
+    torch.manual_seed(0)
+    steps = collect_closed_loop_rollout(
+        policy,
+        [week],
+        snapshot=snapshot,
+        ohlcv_by_symbol=ohlcv,
+        spy=spy,
+        feature_scalers={"log1p_article_count": {"mean": 0.0, "scale": 1.0}},
+        config=config,
+    )
+    assert len(steps) == 1
+    dropped_index = list(steps[0].state.symbols).index(dropped)
+    assert not bool(steps[0].state.asset_mask[dropped_index])
 
 
 def _returns_for(prior, weights, ohlcv, week):

@@ -46,8 +46,8 @@ uv run uvicorn brain_api.main:app --reload --host 0.0.0.0 --port 8000
 | GET | `/universe/halal` | Get halal stock universe |
 | POST | `/train/lstm` | Train LSTM model (Sunday cron) |
 | POST | `/inference/lstm` | LSTM weekly return predictions (Monday run). Returns predictions sorted highest gain → highest loss, with insufficient-history symbols at the end. |
-| POST | `/signals/news` | **Current** news sentiment for inference. Uses **yfinance + FinBERT**. Returns recency-weighted sentiment scores per symbol. |
-| POST | `/signals/news/historical` | **Historical** news sentiment for training. Uses **parquet file** (no rate limits). Takes date range, returns daily sentiment for all (date, symbol) combos. Missing data returns neutral (0.0). |
+| POST | `/news/windows/materialize` | Fetch+score Alpaca/Benzinga news for the Monday window into DuckDB. |
+| POST | `/news/windows/query` | Read-only query of a materialized Monday window. |
 | POST | `/signals/prices` | Adjusted closes, execution prices, and provenance for SAC v3. |
 | POST | `/signals/market-history` | Aligned post-cutoff SPY/VIX rows for causal SAC v3 HMM filtering. |
 
@@ -62,7 +62,6 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 | `HF_PATCHTST_MODEL_REPO` | HuggingFace PatchTST forecaster model repository | None |
 | `HF_PPO_LSTM_MODEL_REPO` | HuggingFace PPO+LSTM allocator model repository | None |
 | `HF_PPO_PATCHTST_MODEL_REPO` | HuggingFace PPO+PatchTST allocator model repository | None |
-| `HF_NEWS_SENTIMENT_REPO` | HuggingFace news sentiment dataset repository | None |
 | `HF_TWITTER_SENTIMENT_REPO` | HuggingFace twitter sentiment dataset repository | None |
 | `STORAGE_BACKEND` | Read policy: `local_first` (try local, fall back to HF) or `hf_first` (check HF main, short-circuit to local on version match). Writes always go to local AND HF whenever the bucket has an HF repo configured. | `local_first` |
 | `ALPACA_API_KEY` | Alpaca News API key (for sentiment backfill) | None |
@@ -74,8 +73,7 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 
 | Endpoint | Data Source | Rate Limit | Cache |
 |----------|-------------|------------|-------|
-| `/signals/news` | yfinance + FinBERT | None | Run-based (JSON files) |
-| `/signals/news/historical` | `data/output/daily_sentiment.parquet` | None | N/A (reads from file) |
+| `/news/windows/materialize` | Alpaca/Benzinga + FinBERT | Alpaca | DuckDB `data/news/news_v1.duckdb` |
 | `/signals/prices` | yfinance adjusted closes | Provider limits | Request-time |
 | `/signals/market-history` | yfinance SPY + VIX | Provider limits | Request-time |
 

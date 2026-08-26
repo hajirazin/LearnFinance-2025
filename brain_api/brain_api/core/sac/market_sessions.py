@@ -20,7 +20,7 @@ def xnys_session_dates(start_date: date, end_date: date) -> list[date]:
 def completed_xnys_session_dates(start_date: date, decision_date: date) -> list[date]:
     """Return evidence sessions completed before the pre-open decision date.
 
-    SAC decisions are scheduled for 18:00 IST (08:30 ET in standard time),
+    SAC decisions are scheduled for Monday 09:00 America/New_York,
     before XNYS opens. The decision-date session is therefore never complete.
     """
     return xnys_session_dates(start_date, decision_date - timedelta(days=1))

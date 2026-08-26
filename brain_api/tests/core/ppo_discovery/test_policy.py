@@ -14,7 +14,10 @@ from brain_api.core.ppo_discovery.distributions import (
     clamp_concentration,
     sample_factored_action,
 )
-from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
+from brain_api.core.ppo_discovery.policy import (
+    PPODiscoveryActorCritic,
+    tensors_from_state,
+)
 from brain_api.core.ppo_discovery.state_builder import build_ppo_discovery_state
 from brain_api.core.ppo_discovery.temporal_encoder import PPODiscoveryTemporalEncoder
 from tests.core.ppo_discovery.test_state_builder import _request
@@ -136,3 +139,63 @@ def test_deterministic_inference_simplex() -> None:
     weights = policy.infer_weights(state)
     assert abs(sum(weights.values()) - 1.0) < 1e-6
     assert "CASH" in weights
+
+
+def test_selection_order_follows_selection_logits_not_alpha() -> None:
+    policy = _tiny_policy()
+    state = build_ppo_discovery_state(_request())
+    _weights, order = policy.infer_decision(state)
+    if not order:
+        return
+    device = next(policy.parameters()).device
+    history, features, globals_, mask = tensors_from_state(state, device)
+    encoded, pooled = policy.encode(
+        history.unsqueeze(0),
+        features.unsqueeze(0),
+        globals_.unsqueeze(0),
+        mask.unsqueeze(0),
+    )
+    _count, selection_logits, _ = policy.heads(encoded, pooled)
+    valid_indices = [index for index, flag in enumerate(mask.tolist()) if flag]
+    ranked = sorted(
+        valid_indices,
+        key=lambda index: (
+            -float(selection_logits[0, index].item()),
+            state.symbols[index],
+        ),
+    )
+    expected = tuple(state.symbols[index] for index in ranked[: len(order)])
+    assert order == expected
+
+
+def test_selection_entropy_sums_all_plackett_luce_draws() -> None:
+    from brain_api.core.ppo_discovery.distributions import count_and_selection_entropy
+
+    count_logits = torch.zeros(16)
+    selection_logits = torch.zeros(MAX_ASSETS)
+    selection_logits[:4] = torch.tensor([3.0, 2.0, 1.0, 0.5])
+    mask = torch.zeros(MAX_ASSETS, dtype=torch.bool)
+    mask[:4] = True
+    _, first_only = count_and_selection_entropy(
+        count_logits=count_logits,
+        selection_logits=selection_logits,
+        asset_mask=mask,
+        selection_indices=(0,),
+        k=1,
+    )
+    _, all_draws = count_and_selection_entropy(
+        count_logits=count_logits,
+        selection_logits=selection_logits,
+        asset_mask=mask,
+        selection_indices=(0, 1, 2),
+        k=3,
+    )
+    _, zero = count_and_selection_entropy(
+        count_logits=count_logits,
+        selection_logits=selection_logits,
+        asset_mask=mask,
+        selection_indices=(),
+        k=0,
+    )
+    assert float(all_draws) > float(first_only)
+    assert float(zero) == 0.0

@@ -22,8 +22,8 @@ def _schedule(schedule_id: str) -> dict:
     [
         ("us-double-hrp", 7, 0),
         ("us-alpha-hrp", 7, 30),
-        ("us-weekly-allocate", 8, 0),
-        ("us-sac-halal-allocate", 8, 30),
+        ("us-weekly-allocate", 9, 0),
+        ("us-sac-halal-allocate", 9, 5),
     ],
 )
 def test_us_weekly_schedules_use_new_york_wall_clock(
@@ -94,5 +94,5 @@ async def test_existing_schedule_update_replaces_definition_and_preserves_state(
 
     updated = client.handle.update_result.schedule
     assert updated.spec.time_zone_name == "America/New_York"
-    assert updated.spec.calendars[0].hour[0].start == 8
+    assert updated.spec.calendars[0].hour[0].start == 9
     assert updated.state is paused_state

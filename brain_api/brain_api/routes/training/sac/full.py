@@ -60,7 +60,7 @@ from ..job_registry import (
 )
 from ..models import SACTrainResponse, TrainingJobResponse
 from ._market_history import extract_aligned_market_history
-from ._shared import SACTrainRequest, sac_us_allowed_universes
+from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
 from .preflight import assess_sac_training_readiness
 
 router = APIRouter()
@@ -127,17 +127,12 @@ def train_sac_endpoint(
             ),
         ) from exc
 
-    if (
-        not request.force
-        and prior_metadata is not None
-        and prior_metadata.get("sac_schema_version") == 3
-        and prior_metadata.get("architecture") == "masked_attention"
-        and set(prior_metadata.get("symbols", [])) == set(symbols)
-    ):
+    if not request.force and sac_current_is_reusable(prior_metadata, symbols):
+        assert prior_metadata is not None
         logger.info(
-            f"[SAC] Symbol-equality short-circuit: bucket={bucket.bucket_name} "
-            f"current version={prior_metadata['version']} symbols match resolved "
-            f"slate ({len(symbols)} stocks); returning current metadata "
+            f"[SAC] Reusable-current short-circuit: bucket={bucket.bucket_name} "
+            f"current version={prior_metadata['version']} symbols and news "
+            f"schema match ({len(symbols)} stocks); returning current metadata "
             f"(set force=True to bypass)."
         )
         return SACTrainResponse(

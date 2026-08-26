@@ -36,9 +36,8 @@ logger.info(
 from brain_api.routes import (
     allocation,
     alpaca,
+    calendar,
     email,
-    etl,
-    etl_ppo_discovery,
     experience,
     experience_ppo_discovery,
     health,
@@ -46,6 +45,8 @@ from brain_api.routes import (
     inference,
     llm,
     models_meta,
+    news,
+    news_etl,
     orders,
     root,
     signals,
@@ -97,9 +98,10 @@ app.include_router(universe.router, prefix="/universe", tags=["universe"])
 app.include_router(training.router, prefix="/train", tags=["training"])
 app.include_router(inference.router, prefix="/inference", tags=["inference"])
 app.include_router(signals.router, prefix="/signals", tags=["signals"])
+app.include_router(news.router, prefix="/news", tags=["news"])
+app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 app.include_router(allocation.router, prefix="/allocation", tags=["allocation"])
-app.include_router(etl.router, prefix="/etl", tags=["etl"])
-app.include_router(etl_ppo_discovery.router, prefix="/etl", tags=["etl"])
+app.include_router(news_etl.router, prefix="/etl", tags=["etl"])
 app.include_router(experience.router, prefix="/experience", tags=["experience"])
 app.include_router(
     experience_ppo_discovery.router, prefix="/experience", tags=["experience"]

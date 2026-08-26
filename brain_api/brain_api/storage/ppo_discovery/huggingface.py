@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 from pathlib import Path
@@ -68,6 +69,12 @@ class PPODiscoveryHuggingFaceModelStorage:
         local_dir = self.local_cache._version_path(version)
         if not self.local_cache.version_exists(version):
             raise FileNotFoundError(f"incomplete ppo_discovery version {version}")
+        with contextlib.suppress(Exception):
+            self.api.create_branch(
+                repo_id=self.repo_id,
+                branch=version,
+                repo_type="model",
+            )
         self.api.upload_folder(
             folder_path=str(local_dir),
             repo_id=self.repo_id,
@@ -91,9 +98,13 @@ def maybe_upload_ppo_discovery(
     *,
     make_current: bool,
 ) -> None:
-    """Upload when the HF repo env is configured; skip when it is blank."""
+    """Upload to the Hub. Promotion requires a configured repo and fails closed."""
     repo = get_hf_ppo_discovery_halal_new_model_repo()
     if not repo:
+        if make_current:
+            raise ValueError(
+                "HF_PPO_DISCOVERY_HALAL_NEW_MODEL_REPO is required to promote"
+            )
         return
     PPODiscoveryHuggingFaceModelStorage(repo_id=repo, local_cache=storage).upload_model(
         version, make_current=make_current

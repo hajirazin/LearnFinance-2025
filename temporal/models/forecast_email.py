@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from models.news import SACNewsAudit
+
 # ============================================================================
 # Alpaca Endpoint Models
 # ============================================================================
@@ -164,6 +166,7 @@ class SACInferenceResponse(BaseModel):
     regime_posterior: list[float]
     sac_schema_version: Literal[3]
     architecture: Literal["masked_attention"]
+    news_audit: SACNewsAudit | None = None
 
 
 class HRPAllocationResponse(BaseModel):
@@ -179,44 +182,6 @@ class HRPAllocationResponse(BaseModel):
 # ============================================================================
 # Signals Endpoint Models
 # ============================================================================
-
-
-class NewsArticle(BaseModel):
-    """A news article with sentiment."""
-
-    title: str
-    publisher: str = ""
-    link: str = ""
-    published: str | None = None
-    finbert_label: str = ""
-    finbert_p_pos: float = 0.0
-    finbert_p_neg: float = 0.0
-    finbert_p_neu: float = 0.0
-    article_score: float = 0.0
-    url: str | None = None
-    sentiment_score: float | None = None
-
-
-class PerSymbolNews(BaseModel):
-    """News sentiment for a single symbol."""
-
-    symbol: str
-    sentiment_score: float
-    article_count: int = 0
-    article_count_fetched: int = 0
-    article_count_used: int = 0
-    insufficient_news: bool = False
-    top_k_articles: list[NewsArticle] = []
-
-
-class NewsSignalResponse(BaseModel):
-    """Response from POST /signals/news."""
-
-    run_id: str = ""
-    attempt: int = 1
-    from_cache: bool = False
-    per_symbol: list[PerSymbolNews]
-    as_of_date: str
 
 
 class AdjustedClosesResponse(BaseModel):

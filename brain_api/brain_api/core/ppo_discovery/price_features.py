@@ -80,6 +80,31 @@ def encoder_channels_from_ohlcv(frame: pd.DataFrame) -> np.ndarray:
     return tensor
 
 
+def apply_encoder_channel_scaler(
+    tensor: np.ndarray, scalers: Mapping[str, object] | None
+) -> np.ndarray:
+    """Standardize the 4 encoder channels with the train-fold scaler."""
+    if scalers is None or "encoder_channels" not in scalers:
+        return tensor
+    payload = scalers["encoder_channels"]
+    if not isinstance(payload, Mapping):
+        raise PPODiscoveryError("encoder_channels scaler must be a mapping")
+    mean = np.asarray(payload["mean"], dtype=np.float64)
+    scale = np.asarray(payload["scale"], dtype=np.float64)
+    if mean.shape != (ENCODER_CHANNELS,) or scale.shape != (ENCODER_CHANNELS,):
+        raise PPODiscoveryError("encoder_channels scaler width mismatch")
+    if (
+        np.any(scale <= 0)
+        or not np.all(np.isfinite(mean))
+        or not np.all(np.isfinite(scale))
+    ):
+        raise PPODiscoveryError("invalid encoder_channels scaler")
+    scaled = (tensor - mean) / scale
+    if not np.all(np.isfinite(scaled)):
+        raise PPODiscoveryError("scaled encoder tensor contains non-finite values")
+    return scaled
+
+
 def explicit_price_signals(closes: Sequence[float]) -> dict[str, float]:
     """Momentum and realized-vol using the existing SAC helpers."""
     as_of_index = len(closes) - 1
@@ -115,6 +140,7 @@ def spy_return_20d(spy_closes: Sequence[float]) -> float:
 
 
 __all__ = [
+    "apply_encoder_channel_scaler",
     "encoder_channels_from_ohlcv",
     "explicit_price_signals",
     "rank_eligible",

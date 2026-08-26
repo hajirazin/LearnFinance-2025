@@ -66,6 +66,8 @@ def create_sac_metadata(
         "state_dim": STATE_DIM,
         "asset_feature_names": list(SAC_ASSET_FEATURE_NAMES),
         "global_feature_names": list(SAC_GLOBAL_FEATURE_NAMES),
+        "news_schema_version": 1,
+        "finbert_revision": "4556d13015211d73dccd3fdd39d39232506f3e43",
         "version": version,
         "training_timestamp": datetime.now(UTC).isoformat(),
         "data_window": {"start": data_window_start, "end": data_window_end},

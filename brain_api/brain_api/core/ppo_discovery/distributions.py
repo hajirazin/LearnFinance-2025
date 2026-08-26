@@ -249,6 +249,41 @@ def recompute_action_log_prob(
     )
 
 
+def count_and_selection_entropy(
+    *,
+    count_logits: torch.Tensor,
+    selection_logits: torch.Tensor,
+    asset_mask: torch.Tensor,
+    selection_indices: tuple[int, ...],
+    k: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Analytical entropy of the count head and the sampled Plackett-Luce path.
+
+    Cash and Dirichlet terms are excluded: their coefficients are not
+    applied to those heads. Selection entropy is the sum of sequential
+    Categorical entropies along ``selection_indices``, matching the
+    sampled action's log-probability.
+    """
+    if count_logits.ndim != 1 or selection_logits.ndim != 1:
+        raise ValueError("count_and_selection_entropy expects an unbatched state")
+    if k != len(selection_indices):
+        raise ValueError("selection entropy k must match selection_indices length")
+    n_eligible = asset_mask.to(dtype=torch.long).sum()
+    masked_counts = masked_count_logits(
+        count_logits.unsqueeze(0), n_eligible.unsqueeze(0)
+    )[0]
+    h_count = Categorical(logits=masked_counts).entropy()
+    if k == 0:
+        return h_count, count_logits.new_zeros(())
+    remaining = asset_mask.clone()
+    h_selection = count_logits.new_zeros(())
+    for index in selection_indices:
+        masked_selection = selection_logits.masked_fill(~remaining, float("-inf"))
+        h_selection = h_selection + Categorical(logits=masked_selection).entropy()
+        remaining[index] = False
+    return h_count, h_selection
+
+
 def deterministic_weights(
     *,
     count_logits: torch.Tensor,
@@ -298,6 +333,7 @@ def deterministic_weights(
 __all__ = [
     "cash_from_z",
     "clamp_concentration",
+    "count_and_selection_entropy",
     "deterministic_weights",
     "masked_count_logits",
     "recompute_action_log_prob",

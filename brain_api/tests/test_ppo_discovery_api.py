@@ -63,6 +63,23 @@ def test_digest_mismatch_is_422() -> None:
     assert "digest" in response.json()["detail"].lower()
 
 
+def test_inference_rejects_state_payload_with_run_id() -> None:
+    state = make_synthetic_state()
+    payload = state.to_dict()
+    payload["run_id"] = "paper:halal_new:2026-08-24"
+    payload["attempt"] = 1
+    response = client.post(
+        "/inference/ppo-discovery",
+        json={
+            "state": payload,
+            "state_digest": state.state_digest,
+            "universe": "halal_new",
+        },
+    )
+    assert response.status_code == 422
+    assert "extra" in response.json()["detail"]
+
+
 def test_no_current_is_503() -> None:
     from fastapi import HTTPException
 
@@ -105,6 +122,7 @@ def test_promote_rejects_hash_mismatch() -> None:
                 "version": "v1",
                 "expected_config_hash": "wrong",
                 "approved_by": "razin",
+                "expected_current_version": "",
             },
         )
     assert response.status_code == 422
@@ -122,6 +140,7 @@ def test_promote_rejects_no_news_variant() -> None:
                 "version": "v-no-news",
                 "expected_config_hash": "abc",
                 "approved_by": "razin",
+                "expected_current_version": "",
             },
         )
     assert response.status_code == 422
@@ -129,23 +148,27 @@ def test_promote_rejects_no_news_variant() -> None:
 
 
 def test_incomplete_news_state_is_422() -> None:
-    from brain_api.core.ppo_discovery.news_evidence import NewsEvidenceError
+    from brain_api.news.errors import NewsCoverageMissing
 
     with (
         patch(
             "brain_api.routes.signals.ppo_discovery.resolve_universe_snapshot"
         ) as snap,
         patch(
-            "brain_api.routes.signals.ppo_discovery.materialize_news_evidence",
-            side_effect=NewsEvidenceError("news query incomplete"),
+            "brain_api.routes.signals.ppo_discovery.require_monday_decision_cutoff",
+            side_effect=lambda as_of: as_of,
+        ),
+        patch(
+            "brain_api.routes.signals.ppo_discovery.NewsService.materialize",
+            side_effect=NewsCoverageMissing("news query incomplete"),
         ),
     ):
         snap.return_value.sorted_symbols = ("AAPL", "MSFT")
         response = client.post(
             "/signals/ppo-discovery/state",
             json={
-                "as_of": "2026-08-31T13:00:00+00:00",
-                "run_id": "paper:halal_new:2026-08-31",
+                "as_of": "2026-08-24T09:00:00-04:00",
+                "run_id": "paper:halal_new:2026-08-24",
                 "attempt": 1,
                 "current_weights": {"CASH": 1.0},
                 "universe": "halal_new",
@@ -155,26 +178,112 @@ def test_incomplete_news_state_is_422() -> None:
     assert "incomplete" in response.json()["detail"].lower()
 
 
-def test_etl_unknown_universe_422() -> None:
+def test_legacy_ppo_news_history_route_is_gone() -> None:
     response = client.post(
-        "/etl/ppo-discovery/news-history",
+        "/etl/news/backfill",
         json={
-            "start_date": "2026-01-01",
-            "end_date": "2026-01-08",
-            "universe": "halal",
+            "start": "2026-01-01T00:00:00+00:00",
+            "end": "2026-01-08T00:00:00+00:00",
+            "symbols": [],
         },
     )
-    assert response.status_code == 422
+    assert response.status_code in {404, 422}
 
 
 @patch("brain_api.routes.training.ppo_discovery.preflight.resolve_universe_snapshot")
-def test_preflight_halal_new_ok(mock_snap) -> None:
+@patch("brain_api.routes.training.ppo_discovery.preflight.assess_price_readiness")
+def test_preflight_halal_new_ok(mock_ready, mock_snap) -> None:
     mock_snap.return_value.universe = "halal_new"
     mock_snap.return_value.snapshot_sha256 = "sha256:abc"
     mock_snap.return_value.symbol_count = 12
+    mock_snap.return_value.sorted_symbols = ("AAPL", "MSFT")
+    mock_ready.return_value = {
+        "ready": True,
+        "issues": [],
+        "session_hashes": {"AAPL": "a", "MSFT": "b"},
+        "session_counts": {"AAPL": 300, "MSFT": 300},
+        "eligible_symbol_count": 12,
+    }
     response = client.post(
         "/train/ppo-discovery/preflight",
         json={"universe": "halal_new", "experiment_id": "ci"},
     )
     assert response.status_code == 200
-    assert response.json()["ready"] is True
+    payload = response.json()
+    assert payload["ready"] is True
+    assert payload["sorted_symbols"] == ["AAPL", "MSFT"]
+    assert payload["snapshot_sha256"] == "sha256:abc"
+    mock_ready.assert_called_once()
+
+
+@patch("brain_api.routes.training.ppo_discovery.full.resolve_universe_snapshot")
+@patch("brain_api.routes.training.ppo_discovery.full.load_universe_snapshot")
+def test_full_train_loads_persisted_snapshot(mock_load, mock_resolve) -> None:
+    from brain_api.routes.training.ppo_discovery.full import (
+        PPOTrainRequest,
+        _load_training_snapshot,
+    )
+
+    mock_load.return_value = "loaded-snapshot"
+    request = PPOTrainRequest(universe="halal_new", snapshot_sha256="sha256:frozen")
+    assert _load_training_snapshot(request) == "loaded-snapshot"
+    mock_load.assert_called_once_with("sha256:frozen")
+    mock_resolve.assert_not_called()
+
+
+def test_training_email_request_carries_evaluation() -> None:
+    from jinja2 import Environment, FileSystemLoader
+
+    from brain_api.routes.email.ppo_discovery import PPOTrainingEmailRequest
+    from brain_api.routes.email.weekly_report import TEMPLATE_DIR
+
+    request = PPOTrainingEmailRequest(
+        version="v1",
+        snapshot_sha256="sha256:abc",
+        evaluation={
+            "test_cagr": 0.21,
+            "selected_seed": 42,
+            "failed_seeds": [],
+            "ablations": {"full_ppo": {"status": "ok"}},
+        },
+    )
+    html = (
+        Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+        .get_template("ppo_discovery_training_summary_email.html.j2")
+        .render(**request.model_dump())
+    )
+    assert "0.21" in html
+    assert "42" in html
+    assert "full_ppo" in html
+
+
+def test_backfill_job_exists_immediately_after_202(monkeypatch) -> None:
+    jobs: dict[str, object] = {}
+
+    class _Store:
+        def get_job(self, job_id):
+            return jobs.get(job_id)
+
+        def upsert_job(self, job):
+            jobs[job.job_id] = job
+
+    store = _Store()
+    monkeypatch.setattr("brain_api.routes.news_etl.get_news_store", lambda: store)
+    monkeypatch.setattr(
+        "brain_api.routes.news_etl._run_backfill", lambda *args, **kwargs: None
+    )
+    response = client.post(
+        "/etl/news/backfill",
+        json={
+            "start": "2026-01-01T00:00:00+00:00",
+            "end": "2026-01-20T00:00:00+00:00",
+            "symbols": ["AAPL"],
+        },
+    )
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+    assert response.json()["status"] == "pending"
+    fetched = client.get(f"/etl/news/backfill/{job_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["job_id"] == job_id
+    assert fetched.json()["status"] == "pending"

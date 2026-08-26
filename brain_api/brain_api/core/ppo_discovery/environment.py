@@ -1,21 +1,24 @@
-"""Closed-loop weekly environment: sample action, then IBKR net reward."""
+"""Closed-loop weekly environment: sample action, then Alpaca net reward."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
 
+from brain_api.core.portfolio_rl.rewards import RebalanceTransition
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.rewards import ppo_discovery_reward
 from brain_api.core.ppo_discovery.rollout import RolloutStep
 from brain_api.core.ppo_discovery.schemas import (
     CanonicalPPOState,
+    PPODiscoveryError,
     SymbolNewsFeatures,
     UniverseSnapshot,
 )
@@ -24,6 +27,7 @@ from brain_api.core.ppo_discovery.state_builder import (
     build_ppo_discovery_state,
 )
 from brain_api.core.ppo_discovery.weeks import open_to_open_return, prices_as_of
+from brain_api.core.sac.experience_accounting import build_rebalance_arrays
 
 
 @dataclass(frozen=True)
@@ -50,7 +54,7 @@ def collect_closed_loop_rollout(
     snapshot: UniverseSnapshot,
     ohlcv_by_symbol: Mapping[str, pd.DataFrame],
     spy: pd.DataFrame,
-    feature_scalers: Mapping[str, Mapping[str, float]] | None,
+    feature_scalers: Mapping[str, Any] | None,
     config: PPODiscoveryConfig,
     initial_weights: Mapping[str, float] | None = None,
     deterministic: bool = False,
@@ -69,10 +73,12 @@ def collect_closed_loop_rollout(
     policy.eval()
     for index, week in enumerate(transitions):
         cutoff_date = week.cutoff.date()
-        ohlcv = {
-            symbol: prices_as_of(frame, cutoff_date)
-            for symbol, frame in ohlcv_by_symbol.items()
-        }
+        ohlcv: dict[str, pd.DataFrame] = {}
+        for symbol, frame in ohlcv_by_symbol.items():
+            try:
+                ohlcv[symbol] = prices_as_of(frame, cutoff_date)
+            except PPODiscoveryError:
+                continue
         news = dict(week.news_by_symbol)
         if zero_news_features:
             news = {
@@ -110,10 +116,11 @@ def collect_closed_loop_rollout(
         )
         if zero_history:
             state.price_history[...] = 0.0
+        prior = dict(weights)
         with torch.no_grad():
             if deterministic or force_k is not None or equal_weight_selected:
-                weights = policy.infer_weights(state)
-                action = _action_from_weights(state, weights, force_k=force_k)
+                target_weights = policy.infer_weights(state)
+                action = _action_from_weights(state, target_weights, force_k=force_k)
                 if equal_weight_selected:
                     action = _with_equal_stock_weights(action)
             else:
@@ -125,14 +132,14 @@ def collect_closed_loop_rollout(
                 log_p = float(policy.log_prob(state, action).item())
         target = dict(action.percentage_weights)
         symbol_returns, symbol_prices = _next_open_market(
-            weights,
+            prior,
             target,
             ohlcv_by_symbol,
             week.rebalance_session,
             week.next_rebalance_session,
         )
-        reward, _gross, _cost = ppo_discovery_reward(
-            prior_weights=weights,
+        reward, _gross, cost_fraction, economic_net_log = ppo_discovery_reward(
+            prior_weights=prior,
             target_weights=target,
             symbol_returns=symbol_returns,
             symbol_prices=symbol_prices,
@@ -149,9 +156,12 @@ def collect_closed_loop_rollout(
                 value=value,
                 log_p=log_p,
                 done=done,
+                realized_net_return=float(economic_net_log),
             )
         )
-        weights = target
+        weights = _post_rebalance_weights(
+            target, symbol_returns, symbol_prices, cost_fraction
+        )
     return steps
 
 
@@ -242,6 +252,31 @@ def _next_open_market(
         returns[symbol] = simple
         prices[symbol] = start_open
     return returns, prices
+
+
+def _post_rebalance_weights(
+    target: Mapping[str, float],
+    symbol_returns: Mapping[str, float],
+    symbol_prices: Mapping[str, float],
+    cost_fraction: float,
+) -> dict[str, float]:
+    """Next week's prior is the after-cost drifted portfolio, not the target."""
+    symbol_order, _prior, target_arr, _prices = build_rebalance_arrays(
+        dict(target), dict(target), dict(symbol_prices)
+    )
+    stock_returns = np.asarray(
+        [float(symbol_returns.get(symbol, 0.0)) for symbol in symbol_order],
+        dtype=np.float64,
+    )
+    transition = RebalanceTransition.calculate(target_arr, stock_returns, cost_fraction)
+    next_weights = {
+        symbol: float(weight)
+        for symbol, weight in zip(
+            symbol_order, transition.post_weights[:-1], strict=True
+        )
+    }
+    next_weights["CASH"] = float(transition.post_weights[-1])
+    return next_weights
 
 
 __all__ = ["WeeklyTransition", "collect_closed_loop_rollout"]

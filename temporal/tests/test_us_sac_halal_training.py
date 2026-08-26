@@ -7,7 +7,7 @@ ETF top-holdings, variable size). Per the registry contract, the
 workflow MUST:
 
 - Fetch the ``halal`` universe (NOT ``halal_filtered`` or ``halal_new``).
-- Call ``run_sentiment_gap_fill`` and ``train_sac`` with
+- Call ``run_news_backfill`` and ``train_sac`` with
   ``universe="halal"``.
 - Forward ``universe="halal"`` to the summary + email activities so
   downstream brain_api endpoints can branch the prompt and subject
@@ -24,9 +24,9 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from models import (
+    NewsBackfillResponse,
     SACReadinessIssue,
     SACTrainingReadiness,
-    SentimentGapFillResponse,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -46,12 +46,12 @@ def mock_halal():
 
 @pytest.fixture
 def mock_refresh():
-    return SentimentGapFillResponse(
-        rows_added=7,
-        remaining_gaps=0,
-        gaps_pre_api_date=2,
-        duration_seconds=4.2,
-        hf_url="https://huggingface.co/datasets/example/news",
+    return NewsBackfillResponse(
+        job_id="news-halal-1",
+        status="complete",
+        windows_done=3,
+        windows_total=3,
+        events_scored=7,
     )
 
 
@@ -104,12 +104,9 @@ def _make_sac_activities(halal, refresh, training, summary, email):
         call_log.append("fetch_halal_universe")
         return halal
 
-    @activity.defn(name="run_sentiment_gap_fill")
-    def mock_ref(universe: str):
-        call_log.append("run_sentiment_gap_fill")
-        assert universe == "halal", (
-            f"expected refresh on universe=halal, got {universe!r}"
-        )
+    @activity.defn(name="run_news_backfill")
+    def mock_ref(symbols, start, end) -> NewsBackfillResponse:
+        call_log.append("run_news_backfill")
         return refresh
 
     @activity.defn(name="preflight_sac_training")
@@ -131,6 +128,8 @@ def _make_sac_activities(halal, refresh, training, summary, email):
                         retryable=True,
                     )
                 ],
+                news_backfill_start="2020-10-01T09:00:00-04:00",
+                news_backfill_end="2026-02-02T09:00:00-05:00",
             )
         return SACTrainingReadiness(
             universe=universe,
@@ -205,9 +204,9 @@ class TestUSSACHalalTrainingWorkflow:
 
             assert result["halal"]["stocks"] == 14
             assert result["halal"]["total_stocks"] == 14
-            assert result["refresh"]["rows_added"] == 7
-            assert result["refresh"]["gaps_pre_api_date"] == 2
-            assert result["refresh"]["published"] is True
+            assert result["refresh"]["job_id"] == "news-halal-1"
+            assert result["refresh"]["status"] == "complete"
+            assert result["refresh"]["events_scored"] == 7
             assert result["sac"]["version"] == "v2026-03-01-sac-halal"
             assert result["sac"]["promoted"] is True
             assert result["sac"]["failure_reasons"] == []
@@ -228,6 +227,6 @@ class TestUSSACHalalTrainingWorkflow:
             # halal-fetch must precede refresh + SAC train.
             halal_idx = call_log.index("fetch_halal_universe")
             preflight_idx = call_log.index("preflight_sac_training")
-            ref_idx = call_log.index("run_sentiment_gap_fill")
+            ref_idx = call_log.index("run_news_backfill")
             sac_idx = call_log.index("train_sac")
             assert halal_idx < preflight_idx < ref_idx < sac_idx

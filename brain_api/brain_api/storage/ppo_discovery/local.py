@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,7 +89,7 @@ class PPODiscoveryHalalNewModelStorage:
     ) -> Path:
         """Persist a candidate version. Never overwrites differing bytes."""
         version_path = self._version_path(version)
-        if version_path.exists():
+        if version_path.exists() and self.version_exists(version):
             existing = self.load_artifacts(version)
             if existing.metadata.get("config_hash") != metadata.get("config_hash"):
                 raise ValueError(
@@ -96,7 +97,53 @@ class PPODiscoveryHalalNewModelStorage:
                     "with a different config hash"
                 )
             return version_path
-        version_path.mkdir(parents=True, exist_ok=True)
+        if version_path.exists():
+            shutil.rmtree(version_path)
+        tmp_path = self._model_path / f".{version}.tmp"
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self._write_version_files(
+                tmp_path,
+                policy_state_dict=policy_state_dict,
+                pretrained_encoder_state_dict=pretrained_encoder_state_dict,
+                config=config,
+                feature_scalers=feature_scalers,
+                regime_hmm=regime_hmm,
+                metadata=metadata,
+                universe_manifest=universe_manifest,
+                news_manifest=news_manifest,
+                price_manifest=price_manifest,
+                experiment_lock=experiment_lock,
+                evaluation=evaluation,
+            )
+            self._write_checksums_at(tmp_path)
+            os.replace(tmp_path, version_path)
+        except Exception:
+            if tmp_path.exists():
+                shutil.rmtree(tmp_path, ignore_errors=True)
+            raise
+        if promote:
+            self.promote_version(version)
+        return version_path
+
+    def _write_version_files(
+        self,
+        version_path: Path,
+        *,
+        policy_state_dict: dict[str, Any],
+        pretrained_encoder_state_dict: dict[str, Any],
+        config: PPODiscoveryConfig,
+        feature_scalers: dict[str, Any],
+        regime_hmm: dict[str, Any],
+        metadata: dict[str, Any],
+        universe_manifest: dict[str, Any],
+        news_manifest: dict[str, Any],
+        price_manifest: dict[str, Any],
+        experiment_lock: dict[str, Any],
+        evaluation: dict[str, Any],
+    ) -> None:
         torch.save(policy_state_dict, version_path / "policy.pt")
         torch.save(
             pretrained_encoder_state_dict,
@@ -123,16 +170,6 @@ class PPODiscoveryHalalNewModelStorage:
             json.dumps(experiment_lock, indent=2)
         )
         (version_path / "evaluation.json").write_text(json.dumps(evaluation, indent=2))
-        checksum_lines = []
-        for name in REQUIRED_FILES:
-            if name == "checksums.sha256":
-                continue
-            digest = _sha256_file(version_path / name)
-            checksum_lines.append(f"{digest}  {name}")
-        (version_path / "checksums.sha256").write_text("\n".join(checksum_lines) + "\n")
-        if promote:
-            self.promote_version(version)
-        return version_path
 
     def promote_version(self, version: str) -> None:
         if not self.version_exists(version):
@@ -154,6 +191,19 @@ class PPODiscoveryHalalNewModelStorage:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
+
+    def write_checksums(self, version: str) -> None:
+        """Regenerate ``checksums.sha256`` for every bound artifact file."""
+        self._write_checksums_at(self._version_path(version))
+
+    def _write_checksums_at(self, version_path: Path) -> None:
+        checksum_lines = []
+        for name in REQUIRED_FILES:
+            if name == "checksums.sha256":
+                continue
+            digest = _sha256_file(version_path / name)
+            checksum_lines.append(f"{digest}  {name}")
+        (version_path / "checksums.sha256").write_text("\n".join(checksum_lines) + "\n")
 
     def verify_checksums(self, version: str) -> None:
         version_path = self._version_path(version)

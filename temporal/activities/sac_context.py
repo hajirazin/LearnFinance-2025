@@ -16,7 +16,6 @@ from itertools import pairwise
 from models import (
     AdjustedClosesResponse,
     MarketHistoryResponse,
-    NewsSignalResponse,
     PatchTSTInferenceResponse,
 )
 
@@ -55,11 +54,6 @@ def _required_finite(value: float | None, *, field: str) -> float:
     if value is None or not math.isfinite(value):
         raise ValueError(f"{field} is required and must be finite")
     return float(value)
-
-
-def _normalize_news_items(news) -> list:
-    """Accept either a ``NewsSignalResponse`` wrapper or a raw list of items."""
-    return news.per_symbol if hasattr(news, "per_symbol") else news
 
 
 def _normalize_patchtst_items(forecasts) -> list:
@@ -125,7 +119,6 @@ def build_sac_feature_bundle(
     symbols: list[str],
     as_of_date: str | None = None,
     decision_date: str | None = None,
-    news: NewsSignalResponse | list,
     patchtst: PatchTSTInferenceResponse | list | None = None,
     patchtst_forecasts: PatchTSTInferenceResponse | list | None = None,
     prices: AdjustedClosesResponse,
@@ -133,12 +126,11 @@ def build_sac_feature_bundle(
 ) -> dict:
     """Build the point-in-time raw evidence bundle consumed by Brain.
 
-    ``as_of_date``/``decision_date`` are aliases (same meaning); callers
-    should use ``as_of_date``. ``patchtst``/``patchtst_forecasts`` are
-    likewise aliases. Temporal deliberately does not send derived momentum,
-    volatility, ranks, eligibility, or HMM probabilities. Brain owns that
-    business math and validates the raw evidence. The duplicated momentum
-    helpers above remain only for train/live formula-parity tests.
+    News is not part of this bundle. Temporal passes ``NewsWindowResult``
+    alongside the bundle; Brain owns adapter math. ``as_of_date`` /
+    ``decision_date`` are aliases. ``patchtst`` / ``patchtst_forecasts``
+    are likewise aliases. Temporal deliberately does not send derived
+    momentum, volatility, ranks, eligibility, or HMM probabilities.
     """
     if not symbols or len(set(symbols)) != len(symbols):
         raise ValueError("SAC symbols must be non-empty and unique")
@@ -151,9 +143,6 @@ def build_sac_feature_bundle(
         raise ValueError(
             "build_sac_feature_bundle requires patchtst/patchtst_forecasts"
         )
-    news_by_symbol = _exact_per_symbol(
-        _normalize_news_items(news), symbols, field="news"
-    )
     patchtst_by_symbol = _exact_per_symbol(
         _normalize_patchtst_items(forecasts_source), symbols, field="patchtst_forecasts"
     )
@@ -168,24 +157,6 @@ def build_sac_feature_bundle(
             f"decision date {resolved_date!r}"
         )
 
-    news_sentiment: dict[str, float] = {}
-    news_article_counts: dict[str, int] = {}
-    for symbol in symbols:
-        news_observation = news_by_symbol[symbol]
-        if news_observation.article_count_used < 0:
-            raise ValueError(f"news[{symbol}].article_count_used cannot be negative")
-        news_sentiment[symbol] = _required_finite(
-            news_observation.sentiment_score,
-            field=f"news[{symbol}].sentiment_score",
-        )
-        news_article_counts[symbol] = news_observation.article_count_used
-
-    news_provenance = {
-        "as_of_date": getattr(news, "as_of_date", resolved_date),
-        "run_id": getattr(news, "run_id", None),
-        "attempt": getattr(news, "attempt", None),
-        "from_cache": getattr(news, "from_cache", None),
-    }
     patchtst_provenance = {
         "as_of_date": getattr(forecasts_source, "as_of_date", resolved_date),
         "model_version": getattr(forecasts_source, "model_version", None),
@@ -196,8 +167,6 @@ def build_sac_feature_bundle(
         "adjusted_closes": {
             symbol: prices.adjusted_closes.get(symbol, []) for symbol in symbols
         },
-        "news_sentiment": news_sentiment,
-        "news_article_counts": news_article_counts,
         "patchtst_forecasts": {
             symbol: _required_finite(
                 patchtst_by_symbol[symbol].predicted_weekly_return_pct,
@@ -211,7 +180,6 @@ def build_sac_feature_bundle(
         "provenance": {
             "as_of_date": resolved_date,
             "adjusted_closes": prices.provenance,
-            "news": news_provenance,
             "patchtst": patchtst_provenance,
             "market_history": market.provenance,
         },

@@ -23,12 +23,12 @@ Each Monday the system runs independent Temporal workflows that allocate halal p
 
 | Workflow | Schedule (UTC / IST) | Market | Strategy | Key brain_api endpoints |
 |----------|----------------------|--------|----------|-------------------------|
-| `us-weekly-allocate` (`USWeeklyAllocationWorkflow`) | Mon 11:00 UTC / 18:00 IST | US | SAC (news + momentum + PatchTST) | `/universe/halal_filtered`, `/alpaca/portfolio`, `/signals/{news,prices}`, `/inference/{patchtst,sac}`, `/orders/generate`, `/alpaca/submit-orders`, `/llm/sac-weekly-summary`, `/email/sac-weekly-report` |
+| `us-weekly-allocate` (`USWeeklyAllocationWorkflow`) | Mon 09:00 America/New_York | US | SAC (news + momentum + PatchTST) | `/universe/halal_filtered`, `/alpaca/portfolio`, `/news/windows/{materialize,query}`, `/signals/prices`, `/inference/{patchtst,sac}`, `/orders/generate`, `/alpaca/submit-orders`, `/llm/sac-weekly-summary`, `/email/sac-weekly-report` |
 | `us-double-hrp` (`USDoubleHRPWorkflow`) | Mon 11:30 UTC / 17:00 IST | US | Stage-1 HRP on `halal_new` -> sticky top-15 -> Stage-2 HRP | `/universe/halal_new`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/us-double-hrp-summary`, `/email/us-double-hrp-report` |
 | `us-alpha-hrp` (`USAlphaHRPWorkflow`) | Mon 12:00 UTC / 17:30 IST | US | PatchTST alpha screen -> rank-band sticky top-15 -> HRP | `/universe/halal_new`, `/inference/patchtst/score-batch`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/us-alpha-hrp-summary`, `/email/us-alpha-hrp-report` |
 | `india-weekly-allocate` (`IndiaWeeklyAllocationWorkflow`) | Mon 03:30 UTC / 09:00 IST | India | PatchTST alpha screen -> rank-band sticky top-15 -> HRP (paper-only, no broker) | `/universe/nifty_shariah_500`, `/inference/patchtst/score-batch?market=india`, `/allocation/sticky-top-n`, `/allocation/hrp`, `/llm/india-alpha-hrp-summary`, `/email/india-alpha-hrp-report` |
 | `india-double-hrp` (`IndiaDoubleHRPWorkflow`) | Mon 04:00 UTC / 09:30 IST | India | Stage-1 HRP on `nifty_shariah_500` -> sticky top-15 -> Stage-2 HRP | `/universe/nifty_shariah_500`, `/allocation/hrp`, `/allocation/sticky-top-n`, `/allocation/record-final-weights`, `/llm/india-double-hrp-summary`, `/email/india-double-hrp-report` |
-| `us-ppo-discovery-allocate` (`USPPODiscoveryAllocationWorkflow`) | Mon 09:00 America/New_York | US | News-conditioned PPO on frozen `halal_new` (PatchTST-independent; paper default; incomplete news aborts with zero orders) | `/signals/ppo-discovery/state`, `/inference/ppo-discovery`, `/orders/generate` (`algorithm=ppo_discovery`), `/alpaca/submit-orders`, `/llm/ppo-discovery-weekly-summary`, `/email/ppo-discovery-weekly-report` |
+| `us-ppo-discovery-allocate` (`USPPODiscoveryAllocationWorkflow`) | Mon 09:10 America/New_York | US | News-conditioned PPO on frozen `halal_new` (PatchTST-independent; paper default; incomplete news aborts with zero orders) | `/signals/ppo-discovery/state`, `/inference/ppo-discovery`, `/orders/generate` (`algorithm=ppo_discovery`), `/alpaca/submit-orders`, `/llm/ppo-discovery-weekly-summary`, `/email/ppo-discovery-weekly-report` |
 
 Training schedules (US Forecasters training Saturday 11:00 UTC, US SAC training Sunday 14:00 UTC — kept 12+ hours apart so the host never has to run two trainers concurrently — and India PatchTST weekly training Sunday 04:30 UTC) are defined in `schedules.py` but are intentionally not registered on the default (Raspberry Pi) host — they require a beefier machine.
 
@@ -58,8 +58,8 @@ This repo compares multiple approaches at each stage:
 
 | Signal | Status | Endpoint |
 |--------|--------|----------|
-| News sentiment (FinBERT) | ✅ Active | `/signals/news` |
-| News sentiment (historical) | ✅ Active | `/signals/news/historical` |
+| News (Alpaca/Benzinga + FinBERT) | ✅ Active | `/news/windows/materialize` |
+| News window query | ✅ Active | `/news/windows/query` |
 | Price momentum (1w, 4w, 12-1) | ✅ Active | `/signals/prices` |
 | Twitter/Social sentiment | 🔜 To build | — |
 
@@ -73,7 +73,7 @@ CASH. Valid assets use exact cross-sectional ranks:
 |---------|--------|
 | PatchTST weekly return | `/inference/patchtst` |
 | Momentum 1w / 4w / 12-1 | adjusted closes from `/signals/prices` |
-| News sentiment | `/signals/news` (FinBERT) |
+| News | `/news/windows/materialize` (Alpaca/Benzinga + FinBERT) |
 | Realized volatility 20d | adjusted closes from `/signals/prices` |
 | Current weight | portfolio state (unscaled) |
 
@@ -212,7 +212,7 @@ devbox run temporal:run:india-training
 
 ## Weekly workflow setup
 
-The Temporal workflow runs every Monday at 18:00 IST.
+The Temporal workflow runs every Monday at 09:00 America/New_York.
 
 ### Register the schedule
 
@@ -235,7 +235,7 @@ sequenceDiagram
   Temporal->>Brain: GET /universe/halal
   Temporal->>Brain: GET /alpaca/portfolio (SAC)
   Brain->>Alpaca: Fetch positions and cash
-  Temporal->>Brain: POST /signals/news, /signals/prices
+  Temporal->>Brain: POST /news/windows/materialize, /signals/prices
   Temporal->>Brain: POST /inference/patchtst
   Temporal->>Brain: POST /inference/sac
   Temporal->>Brain: POST /orders/generate (SAC)
@@ -498,8 +498,8 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /signals/news` | News sentiment (FinBERT, real-time) |
-| `POST /signals/news/historical` | News sentiment (historical) |
+| `POST /news/windows/materialize` | Fetch+score the Monday news window |
+| `POST /news/windows/query` | Read-only query of that window |
 | `POST /signals/prices` | Adjusted closes and execution prices for SAC v3 |
 | `POST /signals/market-history` | Post-cutoff SPY/VIX rows for the causal HMM |
 
@@ -562,11 +562,10 @@ We store three kinds of data:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /etl/news-sentiment` | ETL pipeline for news sentiment |
-| `GET /etl/news-sentiment/jobs` | List ETL jobs |
-| `GET /etl/news-sentiment/{job_id}` | Get ETL job status |
-| `POST /etl/sentiment-gaps` | Gap detection and backfill |
-| `GET /etl/sentiment-gaps/{job_id}` | Get gap-fill job status |
+| `POST /etl/news/backfill` | DuckDB news backfill over canonical Monday windows |
+| `GET /etl/news/backfill/{job_id}` | News backfill job status |
+| `POST /etl/news/gaps` | Detect missing Monday windows and enqueue gap fill |
+| `GET /etl/news/gaps/{job_id}` | News gap-fill job status |
 
 ### Experience endpoints
 
@@ -757,7 +756,7 @@ brain_api/brain_api/
 │   ├── patchtst/             # dataset, data_loaders, inference, training
 │   ├── sac/                  # training, inference
 │   ├── portfolio_rl/         # env, rewards, state, constraints, scaler, sac_networks
-│   ├── news_sentiment/       # processor, fetcher, aggregation, persistence
+│   ├── news/                 # DuckDB event store, Alpaca provider, FinBERT
 │   ├── hrp.py
 │   ├── orders.py
 │   ├── alpaca_client.py

@@ -44,6 +44,8 @@ from models import (
     GenerateOrdersResponse,
     MarketClockResponse,
     MarketHistoryResponse,
+    MondayDecisionWindowResponse,
+    NewsWindowResult,
     OrderModel,
     OrderSummary,
     PositionModel,
@@ -179,9 +181,35 @@ def _make_sac_halal_activities(
         captured_calls["forbidden_get_sac_portfolio"] = True
         return AlpacaPortfolioResponse(cash=0.0, positions=[], open_orders_count=0)
 
-    @activity.defn(name="get_news_sentiment")
-    def mock_get_news_sentiment(symbols, as_of_date, run_id):
-        return news_resp
+    @activity.defn(name="get_monday_decision_window")
+    def mock_get_monday_decision_window(run_date) -> MondayDecisionWindowResponse:
+        return MondayDecisionWindowResponse(
+            cutoff=news_resp.as_of,
+            start_exclusive=news_resp.start_exclusive,
+            end_inclusive=news_resp.end_inclusive,
+        )
+
+    @activity.defn(name="materialize_news_window")
+    def mock_materialize_news_window(
+        symbols, window: MondayDecisionWindowResponse
+    ) -> NewsWindowResult:
+        return NewsWindowResult(
+            start_exclusive=window.start_exclusive,
+            end_inclusive=window.end_inclusive,
+            coverage=[],
+            events=[],
+        )
+
+    @activity.defn(name="query_news_window")
+    def mock_query_news_window(
+        symbols, window: MondayDecisionWindowResponse
+    ) -> NewsWindowResult:
+        return NewsWindowResult(
+            start_exclusive=window.start_exclusive,
+            end_inclusive=window.end_inclusive,
+            coverage=[],
+            events=[],
+        )
 
     @activity.defn(name="get_lstm_forecast")
     def mock_get_lstm_forecast(as_of_date, symbols=None):
@@ -219,7 +247,8 @@ def _make_sac_halal_activities(
         as_of_date,
         universe,
         symbols,
-        news,
+        as_of,
+        news_window,
         patchtst,
         prices,
         market,
@@ -370,7 +399,9 @@ def _make_sac_halal_activities(
         mock_get_ibkr_sac_halal_portfolio,
         mock_get_sac_halal_portfolio,
         mock_get_sac_portfolio,
-        mock_get_news_sentiment,
+        mock_get_monday_decision_window,
+        mock_materialize_news_window,
+        mock_query_news_window,
         mock_get_lstm_forecast,
         mock_get_patchtst_forecast,
         mock_get_adjusted_closes,

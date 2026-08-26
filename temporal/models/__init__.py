@@ -2,7 +2,6 @@
 
 from models.alpha_screen import PatchTSTBatchScores
 from models.email import TrainingSummaryEmailResponse
-from models.etl import SentimentGapFillResponse
 from models.forecast_email import (
     AdjustedClosesResponse,
     AllocationDetailModel,
@@ -11,7 +10,6 @@ from models.forecast_email import (
     HRPAllocationResponse,
     LSTMInferenceResponse,
     MarketHistoryResponse,
-    NewsSignalResponse,
     OrderDetail,
     OrderHistoryItem,
     OrderModel,
@@ -34,6 +32,12 @@ from models.forecast_email import (
 )
 from models.llm import TrainingSummaryResponse
 from models.market_clock import MarketClockResponse
+from models.news import (
+    MondayDecisionWindowResponse,
+    NewsBackfillResponse,
+    NewsWindowResult,
+    SACNewsAudit,
+)
 from models.sticky import (
     PreviousFinalAllocationResponse,
     RankBandTopNResponse,
@@ -49,18 +53,17 @@ from models.training import (
 from models.universe import ActiveSymbolsResponse
 
 __all__ = [
-    # Models
     "ActiveSymbolsResponse",
-    # ETL
-    "SentimentGapFillResponse",
-    # Training
+    "NewsBackfillResponse",
+    "MondayDecisionWindowResponse",
+    "NewsWindowResult",
+    "SACNewsAudit",
     "TrainingResponse",
     "SACReadinessIssue",
     "SACTrainingReadiness",
     "SACTrainingWorkflowInput",
     "TrainingSummaryEmailResponse",
     "TrainingSummaryResponse",
-    # Forecast Email Flow
     "AlpacaPortfolioResponse",
     "AllocationDetailModel",
     "AdjustedClosesResponse",
@@ -68,7 +71,6 @@ __all__ = [
     "HRPAllocationResponse",
     "LSTMInferenceResponse",
     "MarketHistoryResponse",
-    "NewsSignalResponse",
     "OrderDetail",
     "OrderHistoryItem",
     "OrderModel",
@@ -88,12 +90,10 @@ __all__ = [
     "UpdateExecutionResponse",
     "WeeklyReportEmailResponse",
     "WeeklySummaryResponse",
-    # Sticky-selection
     "StickyTopNResponse",
     "RecordFinalWeightsResponse",
     "RankBandTopNResponse",
     "PreviousFinalAllocationResponse",
     "PatchTSTBatchScores",
-    # Market clock
     "MarketClockResponse",
 ]

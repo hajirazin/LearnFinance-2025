@@ -90,7 +90,7 @@ def label_ppo_discovery_experience(
             prior = _extract_prior_weights(record)
             if record.nav_usd is None:
                 raise PPODiscoveryError(f"{record.run_id} missing nav_usd")
-            reward, gross, _cost = ppo_discovery_reward(
+            reward, _gross, _cost, economic_net_log = ppo_discovery_reward(
                 prior_weights=prior,
                 target_weights=actual,
                 symbol_returns=symbol_returns,
@@ -99,7 +99,7 @@ def label_ppo_discovery_experience(
                 config=PPODiscoveryConfig(),
             )
             record.reward = reward
-            record.realized_return = gross
+            record.realized_return = economic_net_log
             record.actual_weights = actual
             record.labeled_at = datetime.now(UTC).isoformat()
             storage.update(record)

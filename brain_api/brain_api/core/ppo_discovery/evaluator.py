@@ -18,7 +18,7 @@ from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 
 def weekly_net_cagr(weekly_net_log: Sequence[float]) -> float:
     """Convert additive weekly log returns into annualized CAGR."""
-    if not weekly_net_log:
+    if len(weekly_net_log) == 0:
         raise PPODiscoveryError("CAGR requires at least one week")
     total = float(np.sum(weekly_net_log))
     n = len(weekly_net_log)
@@ -26,8 +26,9 @@ def weekly_net_cagr(weekly_net_log: Sequence[float]) -> float:
 
 
 def max_drawdown(weekly_net_log: Sequence[float]) -> float:
-    """Maximum peak-to-trough drawdown of compounded wealth (positive number)."""
-    wealth = np.exp(np.cumsum(np.asarray(weekly_net_log, dtype=np.float64)))
+    """Maximum peak-to-trough drawdown of compounded wealth starting at 1.0."""
+    logs = np.asarray(weekly_net_log, dtype=np.float64)
+    wealth = np.concatenate(([1.0], np.exp(np.cumsum(logs))))
     peaks = np.maximum.accumulate(wealth)
     dd = 1.0 - wealth / np.maximum(peaks, 1e-12)
     return float(np.max(dd)) if len(dd) else 0.0
@@ -46,10 +47,13 @@ def block_bootstrap_mean_ci(
         raise PPODiscoveryError("bootstrap requires paired weekly differences")
     rng = np.random.default_rng(seed)
     n = len(series)
+    if n < 4:
+        raise PPODiscoveryError("bootstrap requires at least 4 paired weeks")
     n_blocks = int(np.ceil(n / block_size))
+    max_start = n - block_size
     means = np.empty(n_resamples, dtype=np.float64)
     for i in range(n_resamples):
-        starts = rng.integers(0, n, size=n_blocks)
+        starts = rng.integers(0, max_start + 1, size=n_blocks)
         sample = np.concatenate(
             [series[start : start + block_size] for start in starts]
         )[:n]

@@ -7,9 +7,9 @@ from brain_api.routes.alpha_models import AlphaScoreItem
 from brain_api.routes.inference.models import (
     PatchTSTInferenceResponse,
     SACInferenceResponse,
+    SACNewsAudit,
     SkippedSACInferenceResponse,
 )
-from brain_api.routes.signals.models import NewsSignalResponse
 from brain_api.routes.training.models import (
     LSTMTrainResponse,
     PatchTSTTrainResponse,
@@ -104,7 +104,7 @@ class SACWeeklySummaryRequest(BaseModel):
     """
 
     patchtst: PatchTSTInferenceResponse  # from POST /inference/patchtst
-    news: NewsSignalResponse  # from POST /signals/news
+    news: SACNewsAudit  # Brain-owned audit; Temporal does not aggregate
     sac: SACInferenceResponse | SkippedSACInferenceResponse
     universe: str  # "halal_filtered" or "halal"; mandatory
 

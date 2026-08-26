@@ -1,6 +1,8 @@
 """Tests for the SAC v3 raw-evidence handoff."""
 
 import math
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -17,7 +19,7 @@ from models import (
     AdjustedClosesResponse,
     AlpacaPortfolioResponse,
     MarketHistoryResponse,
-    NewsSignalResponse,
+    NewsWindowResult,
     PatchTSTInferenceResponse,
     SACInferenceResponse,
 )
@@ -26,17 +28,22 @@ from tests._fake_client import FakeClient, patch_client
 
 def _canonical_inputs():
     symbols = ["AAPL"]
-    news = NewsSignalResponse(
-        run_id="paper:2026-02-05",
-        as_of_date="2026-02-05",
-        per_symbol=[
+    ny = ZoneInfo("America/New_York")
+    cutoff = datetime(2026, 2, 2, 9, 0, tzinfo=ny)
+    start = datetime(2026, 1, 26, 9, 0, tzinfo=ny)
+    news_window = NewsWindowResult(
+        start_exclusive=start,
+        end_inclusive=cutoff,
+        coverage=[
             {
                 "symbol": "AAPL",
-                "sentiment_score": 0.0,
-                "article_count_fetched": 0,
-                "article_count_used": 0,
+                "status": "verified_empty",
+                "event_count": 0,
+                "future_revision_excluded_count": 0,
+                "sentiment_model_revision": "4556d13015211d73dccd3fdd39d39232506f3e43",
             }
         ],
+        events=[],
     )
     patchtst = PatchTSTInferenceResponse(
         predictions=[
@@ -50,7 +57,7 @@ def _canonical_inputs():
         model_version="patch-v1",
         as_of_date="2026-02-05",
     )
-    return symbols, news, patchtst
+    return symbols, news_window, patchtst
 
 
 def _canonical_prices(symbols: list[str]) -> AdjustedClosesResponse:
@@ -84,12 +91,11 @@ def _canonical_market() -> MarketHistoryResponse:
 
 
 def test_feature_bundle_contains_only_raw_evidence_and_provenance():
-    symbols, news, patchtst = _canonical_inputs()
+    symbols, _news_window, patchtst = _canonical_inputs()
 
     bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date="2026-02-05",
-        news=news,
         patchtst=patchtst,
         prices=_canonical_prices(symbols),
         market=_canonical_market(),
@@ -98,40 +104,33 @@ def test_feature_bundle_contains_only_raw_evidence_and_provenance():
     assert set(bundle) == {
         "symbols",
         "adjusted_closes",
-        "news_sentiment",
-        "news_article_counts",
         "patchtst_forecasts",
         "market_history",
         "provenance",
     }
-    assert bundle["news_sentiment"] == {"AAPL": 0.0}
-    assert bundle["news_article_counts"] == {"AAPL": 0}
     assert bundle["patchtst_forecasts"] == {"AAPL": 0.03}
     assert bundle["market_history"][0]["date"] == "2026-02-03"
     assert set(bundle["provenance"]) == {
         "as_of_date",
         "adjusted_closes",
-        "news",
         "patchtst",
         "market_history",
     }
     assert "signals" not in bundle
+    assert "news_sentiment" not in bundle
     assert "news_coverage" not in repr(bundle)
 
 
-@pytest.mark.parametrize("mutation", ["missing_news", "missing_forecast"])
+@pytest.mark.parametrize("mutation", ["missing_forecast"])
 def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
-    symbols, news, patchtst = _canonical_inputs()
-    if mutation == "missing_news":
-        news.per_symbol = []
-    elif mutation == "missing_forecast":
+    symbols, _news_window, patchtst = _canonical_inputs()
+    if mutation == "missing_forecast":
         patchtst.predictions = []
 
     with pytest.raises(ValueError):
         build_sac_feature_bundle(
             symbols=symbols,
             as_of_date="2026-02-05",
-            news=news,
             patchtst=patchtst,
             prices=_canonical_prices(symbols),
             market=_canonical_market(),
@@ -139,7 +138,7 @@ def test_feature_bundle_rejects_incomplete_inputs(mutation: str):
 
 
 def test_feature_bundle_preserves_incomplete_price_and_forecast_evidence():
-    symbols, news, patchtst = _canonical_inputs()
+    symbols, _news_window, patchtst = _canonical_inputs()
     patchtst.predictions[0].predicted_weekly_return_pct = None
     prices = _canonical_prices(symbols)
     prices.adjusted_closes["AAPL"] = []
@@ -147,7 +146,6 @@ def test_feature_bundle_preserves_incomplete_price_and_forecast_evidence():
     bundle = build_sac_feature_bundle(
         symbols=symbols,
         as_of_date="2026-02-05",
-        news=news,
         patchtst=patchtst,
         prices=prices,
         market=_canonical_market(),
@@ -257,7 +255,7 @@ class _InferenceClient(FakeClient):
 
 @pytest.mark.parametrize("universe", ["halal_filtered", "halal"])
 def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state(universe: str):
-    symbols, news, patchtst = _canonical_inputs()
+    symbols, news_window, patchtst = _canonical_inputs()
     decision_state = {
         "vector": [0.0],
         "context": {"as_of_date": "2026-02-05"},
@@ -290,7 +288,8 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state(universe: st
             as_of_date="2026-02-05",
             universe=universe,
             symbols=symbols,
-            news=news,
+            as_of=news_window.end_inclusive,
+            news_window=news_window,
             patchtst=patchtst,
             prices=_canonical_prices(symbols),
             market=_canonical_market(),
@@ -298,7 +297,8 @@ def test_infer_sac_sends_exact_feature_bundle_and_reads_audit_state(universe: st
 
     payload = fake.calls[0]["json"]
     assert fake.calls[0]["params"] == {"universe": universe}
-    assert payload["feature_bundle"]["news_sentiment"] == {"AAPL": 0.0}
+    assert "news_window" in payload
+    assert "news_sentiment" not in payload["feature_bundle"]
     assert "signals" not in payload["feature_bundle"]
     assert "news_coverage" not in repr(payload["feature_bundle"])
     assert result.decision_state == decision_state

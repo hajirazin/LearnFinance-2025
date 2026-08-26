@@ -1,20 +1,16 @@
 """Data loading utilities for portfolio RL training.
 
-Provides functions to load historical news and align news plus price momentum
-to weekly frequency for SAC training.
+Load weekly news scores from the DuckDB news store and align them with
+price-momentum features for SAC training.
 """
 
-from datetime import date, timedelta
-from pathlib import Path
+from __future__ import annotations
+
+from datetime import date
 
 import numpy as np
 import pandas as pd
 
-from brain_api.core.news_sentiment import (
-    DailyNewsObservation,
-    NewsObservationError,
-    aggregate_weekly_news_observation,
-)
 from brain_api.core.sac.momentum_signals import (
     MomentumSignalError,
     compute_momentum_1w,
@@ -22,115 +18,102 @@ from brain_api.core.sac.momentum_signals import (
     compute_momentum_12_1,
     compute_realized_vol_20d,
 )
+from brain_api.core.sac.news_adapter import build_sac_news_features
+from brain_api.core.weekly_decision import (
+    monday_cutoff_for_actor_friday,
+    monday_window_bounds,
+)
+from brain_api.news.errors import NewsCoverageMissing
+from brain_api.news.models import NewsWindow
+from brain_api.news.store import NewsStore
+from brain_api.storage.base import DEFAULT_DATA_PATH
+
+NewsObservationError = NewsCoverageMissing
 
 
-def load_historical_news_sentiment(
+def _store(store: NewsStore | None) -> NewsStore:
+    return store if store is not None else NewsStore(DEFAULT_DATA_PATH)
+
+
+def news_backfill_bounds(
+    weekly_cutoffs: pd.DatetimeIndex,
+) -> tuple[str, str]:
+    """Inclusive ISO bounds that fully contain Monday windows for actor Fridays."""
+    first = monday_cutoff_for_actor_friday(weekly_cutoffs[0].date())
+    last = monday_cutoff_for_actor_friday(weekly_cutoffs[-1].date())
+    start_exclusive, _ = monday_window_bounds(first.date())
+    _, end_inclusive = monday_window_bounds(last.date())
+    return start_exclusive.isoformat(), end_inclusive.isoformat()
+
+
+def require_weekly_news_coverage(
     symbols: list[str],
-    start_date: date,
-    end_date: date,
-    parquet_path: Path | None = None,
-) -> dict[str, pd.DataFrame]:
-    """Load historical news sentiment from parquet file.
-
-    Args:
-        symbols: List of ticker symbols
-        start_date: Start of data window
-        end_date: End of data window
-        parquet_path: Path to daily_sentiment.parquet
-
-    Returns:
-        Dict mapping symbol -> provider-checked daily observation DataFrame.
-    """
-    if parquet_path is None:
-        parquet_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "data"
-            / "output"
-            / "daily_sentiment.parquet"
+    weekly_cutoffs: pd.DatetimeIndex,
+    *,
+    store: NewsStore | None = None,
+) -> None:
+    """Raise if any (symbol, Monday window) lacks exact coverage."""
+    news_store = _store(store)
+    for timestamp in weekly_cutoffs:
+        cutoff = monday_cutoff_for_actor_friday(timestamp.date())
+        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
+        window = NewsWindow(
+            start_exclusive=start_exclusive, end_inclusive=end_inclusive
         )
+        news_store.require_coverage(symbols, window)
 
-    sentiment: dict[str, pd.DataFrame] = {}
 
-    if not parquet_path.exists():
-        raise FileNotFoundError(f"News sentiment parquet not found at {parquet_path}")
-
-    try:
-        df = pd.read_parquet(parquet_path)
-        required_columns = {
-            "date",
-            "symbol",
-            "sentiment_score",
-            "article_count",
-            "avg_confidence",
-        }
-        missing_columns = required_columns.difference(df.columns)
-        if missing_columns:
-            raise NewsObservationError(
-                f"News parquet missing required columns: {sorted(missing_columns)}"
-            )
-        df["date"] = pd.to_datetime(df["date"]).dt.date
-
+def load_weekly_news_scores(
+    symbols: list[str],
+    weekly_cutoffs: pd.DatetimeIndex,
+    *,
+    store: NewsStore | None = None,
+) -> dict[str, np.ndarray]:
+    """One adapter scalar per symbol per SAC Friday cutoff (Monday 09:00 window)."""
+    news_store = _store(store)
+    scores: dict[str, list[float]] = {symbol: [] for symbol in symbols}
+    for timestamp in weekly_cutoffs:
+        cutoff = monday_cutoff_for_actor_friday(timestamp.date())
+        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
+        window = NewsWindow(
+            start_exclusive=start_exclusive, end_inclusive=end_inclusive
+        )
+        coverage = news_store.require_coverage(symbols, window)
+        events = news_store.query_events(symbols, window)
+        events_by_symbol: dict[str, list] = {symbol: [] for symbol in symbols}
+        for event in events:
+            if event.symbol in events_by_symbol:
+                events_by_symbol[event.symbol].append(event)
+        status = {row.symbol: row.status for row in coverage}
+        week_scores = build_sac_news_features(
+            events_by_symbol, cutoff=cutoff, coverage_status=status
+        )
         for symbol in symbols:
-            symbol_df = df[
-                (df["symbol"] == symbol)
-                & (df["date"] >= start_date)
-                & (df["date"] <= end_date)
-            ][
-                [
-                    "date",
-                    "sentiment_score",
-                    "article_count",
-                    "avg_confidence",
-                ]
-            ].copy()
-
-            if symbol_df.empty:
-                raise NewsObservationError(
-                    f"No provider-checked news observations for {symbol}"
-                )
-            symbol_df["date"] = pd.to_datetime(symbol_df["date"])
-            symbol_df = symbol_df.set_index("date").sort_index()
-            if symbol_df.index.has_duplicates:
-                raise NewsObservationError(
-                    f"Duplicate daily news observations for {symbol}"
-                )
-            expected_dates = pd.date_range(start_date, end_date, freq="D")
-            missing_dates = expected_dates.difference(symbol_df.index)
-            if not missing_dates.empty:
-                preview = [value.date().isoformat() for value in missing_dates[:3]]
-                raise NewsObservationError(
-                    f"Unchecked news gaps for {symbol}: {preview}"
-                )
-            if symbol_df[["article_count", "avg_confidence"]].isna().any().any():
-                raise NewsObservationError(
-                    f"Unchecked news rows contain missing coverage for {symbol}"
-                )
-            sentiment[symbol] = symbol_df
-    except (OSError, ValueError, KeyError) as exc:
-        raise NewsObservationError(
-            f"Failed to load provider-checked news observations: {exc}"
-        ) from exc
-
-    return sentiment
+            scores[symbol].append(week_scores[symbol])
+    return {
+        symbol: np.asarray(values, dtype=float) for symbol, values in scores.items()
+    }
 
 
 def align_signals_to_weekly(
     prices_dict: dict[str, pd.DataFrame],
-    news_sentiment: dict[str, pd.DataFrame],
     symbols: list[str],
     weekly_cutoffs: pd.DatetimeIndex | None = None,
+    *,
+    store: NewsStore | None = None,
 ) -> dict[str, dict[str, np.ndarray]]:
-    """Align news and price-momentum signals to weekly frequency.
+    """Align weekly news scores and price-momentum signals.
 
     Args:
         prices_dict: Dict of symbol -> OHLCV DataFrame with DatetimeIndex
-        news_sentiment: Dict of symbol -> sentiment DataFrame
         symbols: Ordered list of symbols
+        weekly_cutoffs: SAC Friday actor cutoffs
 
     Returns:
         Dict of symbol -> dict of signal_name -> weekly numpy array
     """
     signals: dict[str, dict[str, np.ndarray]] = {}
+    news_scores: dict[str, np.ndarray] | None = None
 
     for symbol in symbols:
         if symbol not in prices_dict:
@@ -145,7 +128,6 @@ def align_signals_to_weekly(
             if weekly_cutoffs is not None
             else price_df["close"].resample("W-FRI").last().dropna().index
         )
-        # Normalize to timezone-naive for consistent comparisons
         if weekly_index.tz is not None:
             weekly_index = weekly_index.tz_localize(None)
         n_weeks = len(weekly_index)
@@ -153,48 +135,13 @@ def align_signals_to_weekly(
         if n_weeks < 2:
             continue
 
-        if symbol not in news_sentiment:
-            raise NewsObservationError(f"Missing news observations for {symbol}")
-        sentiment_df = news_sentiment[symbol]
-        if sentiment_df.index.tz is not None:
-            sentiment_df = sentiment_df.copy()
-            sentiment_df.index = sentiment_df.index.tz_localize(None)
-        weekly_news = []
-        for weekly_timestamp in weekly_index:
-            as_of = weekly_timestamp.date()
-            window_start = pd.Timestamp(as_of - timedelta(days=6))
-            window = sentiment_df.loc[window_start:weekly_timestamp]
-            if len(window) != 7:
-                raise NewsObservationError(
-                    f"Unchecked 7-day news window for {symbol} ending {as_of}"
-                )
-            observation = aggregate_weekly_news_observation(
-                (
-                    DailyNewsObservation(
-                        observation_date=index.date(),
-                        sentiment_score=float(row["sentiment_score"]),
-                        article_count=int(row["article_count"]),
-                        avg_confidence=float(row["avg_confidence"]),
-                    )
-                    for index, row in window.iterrows()
-                ),
-                as_of_date=as_of,
-            )
-            weekly_news.append(observation)
+        if news_scores is None:
+            news_scores = load_weekly_news_scores(symbols, weekly_index, store=store)
 
         symbol_signals: dict[str, np.ndarray] = {
-            "news_sentiment": np.asarray(
-                [observation.sentiment_score for observation in weekly_news]
-            ),
+            "news_sentiment": news_scores[symbol],
         }
 
-        # momentum_1w = P_t/P_t-5-1 (5 trading bars); momentum_4w =
-        # P_t/P_t-20-1 (20 trading bars); momentum_12_1 = P_t-21/P_t-252-1
-        # (skip 21 bars, then 252-bar/~12-month lookback). Same daily
-        # close series already loaded for `weekly_index` above -- locate
-        # each week's trading-day position in the raw (unresampled)
-        # daily series so the bar counts above are literal trading days,
-        # not calendar weeks.
         close_series = price_df["close"]
         if close_series.index.tz is not None:
             close_series = close_series.tz_localize(None)
@@ -228,9 +175,6 @@ def align_signals_to_weekly(
                     close_values, as_of_index=as_of_index
                 )
             except MomentumSignalError:
-                # Match live eligibility: insufficient history makes the
-                # symbol ineligible for that week (NaN → mask), never a
-                # silent zero-fill of the feature values.
                 momentum_1w[week_idx] = np.nan
                 momentum_4w[week_idx] = np.nan
                 momentum_12_1[week_idx] = np.nan
@@ -252,41 +196,17 @@ def build_rl_training_signals(
     start_date: date,
     end_date: date,
     weekly_cutoffs: pd.DatetimeIndex | None = None,
+    *,
+    store: NewsStore | None = None,
 ) -> dict[str, dict[str, np.ndarray]]:
-    """Build complete signals dict for RL training.
-
-    This is the main entry point for loading all historical signals
-    and aligning them to weekly frequency.
-
-    Args:
-        prices_dict: Dict of symbol -> OHLCV DataFrame
-        symbols: List of symbols
-        start_date: Training window start
-        end_date: Training window end
-
-    Returns:
-        Dict of symbol -> dict of signal_name -> weekly numpy array
-    """
+    """Build complete signals dict for RL training."""
+    del start_date, end_date
     print(f"[PortfolioRL] Loading historical signals for {len(symbols)} symbols...")
-
-    # Load news sentiment
-    news_start = start_date
-    news_end = end_date
-    if weekly_cutoffs is not None and len(weekly_cutoffs) > 0:
-        news_start = weekly_cutoffs[0].date()
-        news_end = weekly_cutoffs[-1].date()
-    news_sentiment = load_historical_news_sentiment(
-        symbols, news_start - timedelta(days=6), news_end
-    )
-    print(f"[PortfolioRL] Loaded news sentiment for {len(news_sentiment)} symbols")
-
-    # Align to weekly
     signals = align_signals_to_weekly(
         prices_dict,
-        news_sentiment,
         symbols,
         weekly_cutoffs=weekly_cutoffs,
+        store=store,
     )
     print(f"[PortfolioRL] Aligned signals for {len(signals)} symbols")
-
     return signals

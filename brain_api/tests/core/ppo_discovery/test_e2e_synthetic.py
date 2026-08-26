@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+import torch
+
 from brain_api.core.ppo_discovery.artifacts import write_candidate_artifact
 from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
@@ -12,11 +15,30 @@ from brain_api.core.ppo_discovery.config import (
     REQUIRED_ABLATIONS,
     PPODiscoveryConfig,
 )
-from brain_api.core.ppo_discovery.inference import run_ppo_discovery_inference
+from brain_api.core.ppo_discovery.inference import (
+    reject_schema_mismatch,
+    run_ppo_discovery_inference,
+)
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
-from brain_api.core.ppo_discovery.promotion import evaluate_ppo_discovery_promotion
+from brain_api.core.ppo_discovery.promotion import (
+    evaluate_ppo_discovery_promotion,
+    reevaluate_ppo_discovery,
+)
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.synthetic import make_synthetic_state
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
+
+
+def _hashed_manifests() -> tuple[dict, dict]:
+    hashes = {
+        "training_dataset_hash": "train-a",
+        "validation_dataset_hash": "val-a",
+        "evaluation_dataset_hash": "eval-a",
+    }
+    return (
+        {"complete": True, "cutoffs": [], **hashes},
+        {"complete": True, "source": "synthetic", **hashes},
+    )
 
 
 def test_candidate_write_promote_inference_does_not_touch_patchtst(
@@ -31,6 +53,7 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
         "test_max_drawdown": 0.10,
         "alpha_hrp_test_max_drawdown": 0.12,
         "paired_vs_alpha_hrp_point": 0.001,
+        "test_weekly_net_log": [0.01] * 52,
         "ablations": {
             name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
         },
@@ -56,8 +79,9 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
             experiment_id="ci",
             end_date="2026-08-31",
             regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
-            news_manifest={"complete": True, "cutoffs": []},
-            price_manifest={"complete": True, "source": "synthetic"},
+            news_manifest=_hashed_manifests()[0],
+            price_manifest=_hashed_manifests()[1],
+            pretrained_encoder_state_dict=policy.temporal.state_dict(),
         )
         assert storage.read_current_version() is None
         artifacts = storage.load_artifacts(version)
@@ -68,6 +92,8 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
             expected_config_hash=artifacts.metadata["config_hash"],
         )
         assert check.is_healthy is True
+        reevaluate_ppo_discovery(storage, version)
+        storage.load_artifacts(version)
         storage.promote_version(version)
         assert storage.read_current_version() == version
         state = make_synthetic_state()
@@ -83,3 +109,116 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
     assert artifacts.metadata["asset_feature_names"] == list(ASSET_FEATURE_NAMES)
     assert artifacts.metadata["global_feature_names"] == list(GLOBAL_FEATURE_NAMES)
     assert artifacts.metadata["news_required"] is True
+    assert artifacts.metadata["news_schema_version"] == 1
+    assert artifacts.metadata["finbert_revision"] == (
+        "4556d13015211d73dccd3fdd39d39232506f3e43"
+    )
+    assert artifacts.metadata["news_adapter_revision"]
+
+
+def test_pretrained_encoder_file_is_stage_a_not_post_ppo(tmp_path: Path) -> None:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    stage_a = {
+        key: tensor.detach().clone()
+        for key, tensor in policy.temporal.state_dict().items()
+    }
+    with torch.no_grad():
+        for parameter in policy.temporal.parameters():
+            parameter.add_(3.0)
+    version = write_candidate_artifact(
+        storage,
+        policy,
+        config=config,
+        evaluation={
+            "test_cagr": 0.20,
+            "alpha_hrp_test_cagr": 0.15,
+            "test_max_drawdown": 0.10,
+            "alpha_hrp_test_max_drawdown": 0.12,
+            "paired_vs_alpha_hrp_point": 0.001,
+            "test_weekly_net_log": [0.01] * 52,
+            "ablations": {
+                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+            },
+            "failed_seeds": [],
+        },
+        universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
+        experiment_id="ci",
+        end_date="2026-08-31",
+        regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+        news_manifest=_hashed_manifests()[0],
+        price_manifest=_hashed_manifests()[1],
+        pretrained_encoder_state_dict=stage_a,
+    )
+    path = (
+        tmp_path
+        / "models"
+        / "ppo_discovery_halal_new"
+        / version
+        / "pretrained_temporal_encoder.pt"
+    )
+    loaded = torch.load(path, map_location="cpu")
+    for key, tensor in stage_a.items():
+        torch.testing.assert_close(loaded[key], tensor)
+        assert not torch.allclose(loaded[key], policy.temporal.state_dict()[key])
+
+
+def test_reject_schema_mismatch_requires_news_pins() -> None:
+    metadata = {
+        "asset_feature_names": list(ASSET_FEATURE_NAMES),
+        "global_feature_names": list(GLOBAL_FEATURE_NAMES),
+        "news_required": True,
+        "experiment_variant": "full",
+    }
+    with pytest.raises(PPODiscoveryError, match="news_schema_version"):
+        reject_schema_mismatch(metadata)
+    metadata["news_schema_version"] = 1
+    with pytest.raises(PPODiscoveryError, match="FinBERT"):
+        reject_schema_mismatch(metadata)
+
+
+def test_incomplete_version_directory_is_rebuilt(tmp_path: Path) -> None:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    news, price = _hashed_manifests()
+
+    def _write() -> str:
+        return write_candidate_artifact(
+            storage,
+            policy,
+            config=config,
+            evaluation={
+                "test_cagr": 0.20,
+                "alpha_hrp_test_cagr": 0.15,
+                "test_max_drawdown": 0.10,
+                "alpha_hrp_test_max_drawdown": 0.12,
+                "paired_vs_alpha_hrp_point": 0.001,
+                "test_weekly_net_log": [0.01] * 52,
+                "ablations": {
+                    name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+                },
+                "failed_seeds": [],
+            },
+            universe_manifest={
+                "snapshot_sha256": "sha256:abc",
+                "sorted_symbols": ["S00"],
+            },
+            experiment_id="ci",
+            end_date="2026-08-31",
+            regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+            news_manifest=news,
+            price_manifest=price,
+            pretrained_encoder_state_dict=policy.temporal.state_dict(),
+        )
+
+    version = _write()
+    checksum = (
+        tmp_path / "models" / "ppo_discovery_halal_new" / version / "checksums.sha256"
+    )
+    checksum.unlink()
+    assert not storage.version_exists(version)
+    rebuilt = _write()
+    assert rebuilt == version
+    assert storage.version_exists(version)

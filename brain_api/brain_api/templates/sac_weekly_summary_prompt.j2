@@ -38,8 +38,10 @@ Top 5 Allocations:
 {% endif %}
 
 ## News Sentiment
+Cutoff: {{ news.as_of }}
+Window: {{ news.start_exclusive }} to {{ news.end_inclusive }}
 {% for item in news.per_symbol[:10] %}
-- {{ item.symbol }}: sentiment={{ "%.2f" | format(item.sentiment_score) }}{% if item.top_k_articles %} ({{ item.top_k_articles[0].title[:50] }}...){% endif %}
+- {{ item.symbol }}: sentiment={{ "%.2f" | format(item.sentiment_score) }} count={{ item.article_count }} coverage={{ item.coverage_status }}
 {% endfor %}
 
 ## Instructions

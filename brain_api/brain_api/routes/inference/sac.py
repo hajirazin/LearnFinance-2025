@@ -22,7 +22,14 @@ from brain_api.core.sac.decision_context import (
     SACDecisionState,
     SACFeatureBundle,
 )
+from brain_api.core.sac.news_window import sac_news_from_window
 from brain_api.core.training_utils import get_device
+from brain_api.core.weekly_decision import (
+    MondayCutoffError,
+    monday_window_bounds,
+    require_monday_decision_cutoff,
+)
+from brain_api.news.models import NEWS_SCHEMA_VERSION, NEWS_SENTIMENT_REVISION
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 
 from .dependencies import get_sac_as_of_date
@@ -91,6 +98,40 @@ def infer_sac(
         f"[SAC] Model loaded: version={artifacts.version}, "
         f"device={next(artifacts.actor.parameters()).device}"
     )
+    metadata = artifacts.metadata
+    if (
+        metadata.get("news_schema_version") != NEWS_SCHEMA_VERSION
+        or metadata.get("finbert_revision") != NEWS_SENTIMENT_REVISION
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "current SAC artifact was not trained on news schema v1 / pinned FinBERT"
+            ),
+        )
+
+    try:
+        cutoff = require_monday_decision_cutoff(request.as_of)
+    except MondayCutoffError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    expected_start, expected_end = monday_window_bounds(cutoff.date())
+    news_window = request.news_window
+    if (
+        news_window.start_exclusive != expected_start
+        or news_window.end_inclusive != expected_end
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="news_window bounds do not match the Monday 09:00 decision window",
+        )
+    try:
+        news_sentiment, news_article_counts, news_audit = sac_news_from_window(
+            news_window,
+            symbols=request.feature_bundle.symbols,
+            cutoff=cutoff,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     cash_value = request.portfolio.cash
     position_values = {
@@ -141,8 +182,8 @@ def infer_sac(
         feature_bundle = SACFeatureBundle.create(
             symbols=request.feature_bundle.symbols,
             adjusted_closes=request.feature_bundle.adjusted_closes,
-            news_sentiment=request.feature_bundle.news_sentiment,
-            news_article_counts=request.feature_bundle.news_article_counts,
+            news_sentiment=news_sentiment,
+            news_article_counts=news_article_counts,
             patchtst_forecasts=request.feature_bundle.patchtst_forecasts,
             market_history=[
                 row.model_dump(mode="json")
@@ -235,4 +276,5 @@ def infer_sac(
         regime_posterior=[float(value) for value in result.regime_posterior],
         sac_schema_version=artifacts.metadata["sac_schema_version"],
         architecture=artifacts.metadata["architecture"],
+        news_audit=news_audit,
     )

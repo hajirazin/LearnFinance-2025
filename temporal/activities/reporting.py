@@ -7,7 +7,6 @@ from temporalio import activity
 from activities.client import get_client
 from models import (
     HRPAllocationResponse,
-    NewsSignalResponse,
     OrderDetail,
     PaperAllocationResponse,
     PatchTSTBatchScores,
@@ -21,6 +20,7 @@ from models import (
     WeeklyReportEmailResponse,
     WeeklySummaryResponse,
 )
+from models.news import SACNewsAudit
 
 logger = logging.getLogger(__name__)
 
@@ -74,22 +74,23 @@ def _submit_to_dict(submit, order_details: list[OrderDetail] | None = None) -> d
 @activity.defn
 def generate_summary(
     patchtst: PatchTSTInferenceResponse,
-    news: NewsSignalResponse,
+    news: SACNewsAudit,
     sac: SACInferenceResponse | SkippedAllocation,
     universe: str,
 ) -> WeeklySummaryResponse:
     """Generate LLM summary of the SAC-only weekly run.
 
     ``universe`` is mandatory (no default) so the two parallel A/B SAC
-    weekly runs label their LLM payloads explicitly.
+    weekly runs label their LLM payloads explicitly. ``news`` is the
+    Brain-owned ``SACNewsAudit`` (not a Temporal-aggregated signal).
     """
     logger.info(f"Generating SAC weekly LLM summary (universe={universe})...")
     with get_client() as client:
         response = client.post(
             "/llm/sac-weekly-summary",
             json={
-                "patchtst": patchtst.model_dump(),
-                "news": news.model_dump(),
+                "patchtst": patchtst.model_dump(mode="json"),
+                "news": news.model_dump(mode="json"),
                 "sac": _alloc_to_dict(sac),
                 "universe": universe,
             },

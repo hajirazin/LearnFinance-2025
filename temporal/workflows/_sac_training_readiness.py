@@ -7,8 +7,8 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
-    from activities.training import preflight_sac_training, run_sentiment_gap_fill
-    from models import SACTrainingReadiness, SentimentGapFillResponse
+    from activities.training import preflight_sac_training, run_news_backfill
+    from models import NewsBackfillResponse, SACTrainingReadiness
 
 PREFLIGHT_TIMEOUT = timedelta(minutes=5)
 REFRESH_TIMEOUT = timedelta(hours=10)
@@ -20,7 +20,7 @@ async def await_sac_training_readiness(
     universe: str,
     *,
     force: bool,
-) -> tuple[SACTrainingReadiness, SentimentGapFillResponse | None, int]:
+) -> tuple[SACTrainingReadiness, NewsBackfillResponse | None, int]:
     """Wait durably for a complete SAC training dataset, for at most seven days."""
     latest_refresh = None
     retry_policy = RetryPolicy(maximum_attempts=2)
@@ -53,9 +53,18 @@ async def await_sac_training_readiness(
                 f"SAC training readiness deadline exceeded: {issues}",
                 non_retryable=True,
             )
+        if not readiness.news_backfill_start or not readiness.news_backfill_end:
+            raise ApplicationError(
+                "SAC preflight omitted news backfill window bounds",
+                non_retryable=True,
+            )
         latest_refresh = await workflow.execute_activity(
-            run_sentiment_gap_fill,
-            args=[universe],
+            run_news_backfill,
+            args=[
+                list(readiness.symbols),
+                readiness.news_backfill_start,
+                readiness.news_backfill_end,
+            ],
             start_to_close_timeout=REFRESH_TIMEOUT,
             heartbeat_timeout=REFRESH_HEARTBEAT_TIMEOUT,
             retry_policy=retry_policy,

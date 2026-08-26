@@ -56,21 +56,10 @@ def strict_preflight_dependencies(monkeypatch):
         lambda requested_symbols, start_date, end_date: prices,
     )
 
-    news_index = pd.date_range("2023-12-20", "2024-02-01", freq="D")
-    news = {
-        "AAA": pd.DataFrame(
-            {
-                "sentiment_score": 0.0,
-                "article_count": 0,
-                "avg_confidence": 0.0,
-            },
-            index=news_index,
-        )
-    }
     monkeypatch.setattr(
         preflight_module,
-        "load_historical_news_sentiment",
-        lambda requested_symbols, start_date, end_date: news,
+        "require_weekly_news_coverage",
+        lambda requested_symbols, weekly_cutoffs: None,
     )
 
     return prices
@@ -125,6 +114,8 @@ def test_sac_preflight_returns_exact_missing_and_errors(monkeypatch):
                 "retryable": True,
             }
         ],
+        "news_backfill_start": None,
+        "news_backfill_end": None,
     }
 
 
@@ -160,6 +151,33 @@ def test_sac_preflight_reports_missing_price_history(
             "retryable": True,
         }
     ]
+
+
+def test_sac_preflight_old_news_schema_does_not_skip_readiness(
+    monkeypatch,
+    strict_preflight_dependencies,
+):
+    monkeypatch.setattr(
+        preflight_module,
+        "get_prior_metadata_for_bucket",
+        lambda **kwargs: {
+            "version": "v-old-news",
+            "symbols": ["AAA"],
+            "sac_schema_version": 3,
+            "architecture": "masked_attention",
+        },
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "load_prices_yfinance",
+        lambda requested_symbols, start_date, end_date: {},
+    )
+
+    response = client.post("/train/sac/preflight", json={"universe": "halal_filtered"})
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is False
+    assert response.json()["missing"]
 
 
 @pytest.mark.parametrize(

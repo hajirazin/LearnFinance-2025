@@ -14,7 +14,11 @@ from brain_api.core.ppo_discovery.evaluator import (
     reject_current_patchtst_on_old_weeks,
     weekly_net_cagr,
 )
-from brain_api.core.ppo_discovery.promotion import evaluate_ppo_discovery_promotion
+from brain_api.core.ppo_discovery.promotion import (
+    evaluate_ppo_discovery_promotion,
+    ppo_discovery_source_digest,
+    protocol_file_digest,
+)
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 
 
@@ -25,6 +29,10 @@ def _meta(**overrides):
         "asset_feature_names": list(ASSET_FEATURE_NAMES),
         "global_feature_names": list(GLOBAL_FEATURE_NAMES),
         "news_required": True,
+        "protocol_digest": protocol_file_digest(),
+        "code_revision": ppo_discovery_source_digest(),
+        "evaluation_dataset_hash": "eval-a",
+        "model_config_hash": "cfg-a",
     }
     payload.update(overrides)
     return payload
@@ -63,7 +71,7 @@ def test_promotion_requires_approved_by_and_hash() -> None:
     assert check.is_healthy is False
 
 
-def test_promotion_rejects_cagr_floor_and_alpha_hrp_underrun() -> None:
+def test_promotion_rejects_cagr_floor_and_incumbent_underrun() -> None:
     check = evaluate_ppo_discovery_promotion(
         metadata=_meta(),
         evaluation=_eval(test_cagr=0.05),
@@ -73,11 +81,14 @@ def test_promotion_rejects_cagr_floor_and_alpha_hrp_underrun() -> None:
     assert any("12%" in reason for reason in check.failure_reasons)
     check = evaluate_ppo_discovery_promotion(
         metadata=_meta(),
-        evaluation=_eval(test_cagr=0.13, alpha_hrp_test_cagr=0.14),
+        evaluation=_eval(test_cagr=0.13),
         approved_by="razin",
         expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest=protocol_file_digest(),
+        incumbent_evaluation_dataset_hash="eval-a",
     )
-    assert any("below Alpha-HRP" in reason for reason in check.failure_reasons)
+    assert any("incumbent" in reason for reason in check.failure_reasons)
 
 
 def test_no_news_variant_cannot_promote() -> None:
@@ -131,3 +142,45 @@ def test_cagr_formula() -> None:
     assert weekly_net_cagr(weekly) == pytest.approx(
         float(__import__("numpy").expm1(0.52))
     )
+
+
+def test_promotion_rejects_non_finite_cagr_and_drawdown() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=float("inf")),
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert check.is_healthy is False
+    assert any("non-finite" in reason for reason in check.failure_reasons)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_max_drawdown=1.5),
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert check.is_healthy is False
+    assert any("drawdown" in reason for reason in check.failure_reasons)
+
+
+def test_unpaired_incumbent_requires_acknowledgement() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.13),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_evaluation_dataset_hash="eval-other",
+    )
+    assert check.is_healthy is False
+    assert any("unpaired" in reason for reason in check.failure_reasons)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.13),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_evaluation_dataset_hash="eval-other",
+        acknowledge_unpaired_evaluation=True,
+    )
+    assert check.is_healthy is True

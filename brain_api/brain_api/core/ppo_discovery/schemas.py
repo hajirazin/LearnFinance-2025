@@ -15,7 +15,9 @@ from brain_api.core.ppo_discovery.config import (
     AUDIT_NEWS_FIELDS,
     ENCODER_CHANNELS,
     ENCODER_SESSIONS,
+    EXPLICIT_ASSET_FEATURES,
     GLOBAL_FEATURE_NAMES,
+    GLOBAL_FEATURES,
     MAX_ASSETS,
 )
 
@@ -164,10 +166,33 @@ class CanonicalPPOState:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> CanonicalPPOState:
+        required = {
+            "symbols",
+            "asset_mask",
+            "price_history",
+            "asset_features",
+            "globals",
+            "current_weights",
+            "audit_news",
+            "exclusions",
+            "universe_snapshot",
+            "evidence_manifest",
+            "state_digest",
+            "as_of",
+            "held_symbols",
+            "news_by_symbol",
+        }
+        extra = set(payload) - required
+        missing = required - set(payload)
+        if extra or missing:
+            raise PPODiscoveryError(
+                f"CanonicalPPOState.from_dict strict keys extra={sorted(extra)} "
+                f"missing={sorted(missing)}"
+            )
         snapshot = payload["universe_snapshot"]
         news = {
             symbol: SymbolNewsFeatures(**row)
-            for symbol, row in payload.get("news_by_symbol", {}).items()
+            for symbol, row in payload["news_by_symbol"].items()
         }
         state = cls(
             symbols=tuple(payload["symbols"]),
@@ -177,8 +202,8 @@ class CanonicalPPOState:
             globals=np.asarray(payload["globals"], dtype=np.float64),
             current_weights=dict(payload["current_weights"]),
             news_by_symbol=news,
-            audit_news=payload.get("audit_news") or {},
-            exclusions=payload.get("exclusions") or {},
+            audit_news=payload["audit_news"] or {},
+            exclusions=payload["exclusions"] or {},
             universe_snapshot=UniverseSnapshot(
                 universe=snapshot["universe"],
                 retrieved_at=snapshot["retrieved_at"],
@@ -189,17 +214,86 @@ class CanonicalPPOState:
                 source_provenance=snapshot.get("source_provenance") or {},
                 snapshot_sha256=snapshot["snapshot_sha256"],
             ),
-            evidence_manifest=payload.get("evidence_manifest") or {},
+            evidence_manifest=payload["evidence_manifest"] or {},
             state_digest="",
             as_of=payload["as_of"],
-            held_symbols=tuple(payload.get("held_symbols") or ()),
+            held_symbols=tuple(payload["held_symbols"] or ()),
         )
+        _validate_canonical_state(state)
         recomputed = sha256_digest(state_to_digest_payload(state))
         state.state_digest = recomputed
-        claimed = payload.get("state_digest")
-        if claimed and claimed != recomputed:
+        claimed = payload["state_digest"]
+        if claimed != recomputed:
             raise PPODiscoveryError("state_digest does not match reconstructed tensors")
         return state
+
+
+def _finite_array(array: np.ndarray, name: str) -> None:
+    if not np.isfinite(array).all():
+        raise PPODiscoveryError(f"{name} contains non-finite values")
+
+
+def _validate_canonical_state(state: CanonicalPPOState) -> None:
+    """Reject reconstructed tensors that cannot be consumed by the policy."""
+    roster = state.universe_snapshot.sorted_symbols
+    symbol_count = state.universe_snapshot.symbol_count
+    if symbol_count != len(roster):
+        raise PPODiscoveryError("universe snapshot symbol_count does not match roster")
+    if len(state.symbols) != MAX_ASSETS:
+        raise PPODiscoveryError("symbols length must equal MAX_ASSETS")
+    if tuple(state.symbols[:symbol_count]) != tuple(roster):
+        raise PPODiscoveryError("packed symbols do not match the universe snapshot")
+    if any(state.symbols[symbol_count:]):
+        raise PPODiscoveryError("padded symbol slots must be empty")
+    if state.asset_mask.shape != (MAX_ASSETS,) or state.asset_mask.dtype != bool:
+        raise PPODiscoveryError("asset_mask must be a boolean vector of MAX_ASSETS")
+    if np.any(state.asset_mask[symbol_count:]):
+        raise PPODiscoveryError("padded assets must be masked off")
+    for index, symbol in enumerate(state.symbols):
+        if not symbol and bool(state.asset_mask[index]):
+            raise PPODiscoveryError("empty symbol slots must be masked off")
+    expected_history = (MAX_ASSETS, ENCODER_SESSIONS, ENCODER_CHANNELS)
+    if state.price_history.shape != expected_history:
+        raise PPODiscoveryError(
+            f"price_history shape {state.price_history.shape} != {expected_history}"
+        )
+    if state.asset_features.shape != (MAX_ASSETS, EXPLICIT_ASSET_FEATURES):
+        raise PPODiscoveryError("asset_features shape is invalid")
+    if state.globals.shape != (GLOBAL_FEATURES,):
+        raise PPODiscoveryError("globals shape is invalid")
+    _finite_array(state.price_history, "price_history")
+    _finite_array(state.asset_features, "asset_features")
+    _finite_array(state.globals, "globals")
+    p_calm = float(state.globals[0])
+    p_stress = float(state.globals[1])
+    cash_weight = float(state.globals[2])
+    if not 0.0 <= p_calm <= 1.0 or not 0.0 <= p_stress <= 1.0:
+        raise PPODiscoveryError("p_calm and p_stress must be in [0, 1]")
+    if not 0.0 <= cash_weight <= 1.0:
+        raise PPODiscoveryError("cash_weight must be in [0, 1]")
+    if "CASH" not in state.current_weights:
+        raise PPODiscoveryError("current_weights must include CASH")
+    weight_sum = 0.0
+    for _symbol, weight in state.current_weights.items():
+        try:
+            number = float(weight)
+        except (TypeError, ValueError) as exc:
+            raise PPODiscoveryError("current_weights must be finite") from exc
+        if number != number or abs(number) == float("inf") or number < 0.0:
+            raise PPODiscoveryError("current_weights must be finite and non-negative")
+        weight_sum += number
+    if abs(weight_sum - 1.0) > 1e-5:
+        raise PPODiscoveryError("current_weights must form a simplex")
+    roster_set = set(roster)
+    for symbol in state.held_symbols:
+        if symbol not in roster_set:
+            raise PPODiscoveryError(f"held symbol {symbol!r} is not in the snapshot")
+    for symbol in roster:
+        row = state.news_by_symbol.get(symbol)
+        if row is None:
+            raise PPODiscoveryError(f"missing news features for {symbol}")
+        if row.symbol != symbol:
+            raise PPODiscoveryError(f"news row symbol mismatch for {symbol}")
 
 
 @dataclass(frozen=True)

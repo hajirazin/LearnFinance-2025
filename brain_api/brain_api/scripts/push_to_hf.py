@@ -8,9 +8,6 @@ Usage:
     # Push model and make it current
     python -m brain_api.scripts.push_to_hf model --version v2025-12-30-96849e1ed625 --make-current
 
-    # Push news sentiment dataset
-    python -m brain_api.scripts.push_to_hf news-sentiment --parquet-path data/output/daily_sentiment.parquet
-
     # List available model versions locally
     python -m brain_api.scripts.push_to_hf list-models
 
@@ -23,13 +20,11 @@ Authentication:
 
 Environment Variables:
     HF_LSTM_MODEL_REPO: Target LSTM model repository (e.g., 'username/learnfinance-lstm')
-    HF_NEWS_SENTIMENT_REPO: Target news sentiment dataset repo (e.g., 'username/learnfinance-news-sentiment')
     HF_TOKEN: (Optional) HuggingFace API token - not needed if logged in via CLI
 """
 
 import argparse
 import sys
-from pathlib import Path
 
 
 def push_model(version: str, make_current: bool = False) -> int:
@@ -98,63 +93,6 @@ def push_model(version: str, make_current: bool = False) -> int:
 
         if make_current:
             print("  ✓ Set as current (main branch)")
-
-        return 0
-
-    except Exception as e:
-        print(f"Error uploading to HuggingFace: {e}")
-        return 1
-
-
-def push_news_sentiment(parquet_path: str) -> int:
-    """Push news sentiment parquet file to HuggingFace Datasets.
-
-    Args:
-        parquet_path: Path to the daily_sentiment.parquet file
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    import pandas as pd
-
-    from brain_api.core.config import get_hf_news_sentiment_repo
-    from brain_api.storage.huggingface import HuggingFaceDatasetStorage
-
-    # Check HF repo is configured
-    hf_repo = get_hf_news_sentiment_repo()
-    if not hf_repo:
-        print("Error: HF_NEWS_SENTIMENT_REPO environment variable not set")
-        return 1
-
-    # Check file exists
-    parquet_file = Path(parquet_path)
-    if not parquet_file.exists():
-        print(f"Error: Parquet file not found: {parquet_path}")
-        return 1
-
-    print(f"Loading sentiment data from: {parquet_path}")
-
-    try:
-        df = pd.read_parquet(parquet_path)
-        print(f"  Rows: {len(df):,}")
-        print(
-            f"  Symbols: {df['symbol'].nunique() if 'symbol' in df.columns else 'N/A'}"
-        )
-        if "date" in df.columns:
-            print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
-    except Exception as e:
-        print(f"Error reading parquet file: {e}")
-        return 1
-
-    # Initialize HF storage and upload
-    try:
-        hf_storage = HuggingFaceDatasetStorage(news_repo_id=hf_repo)
-        print(f"Uploading to HuggingFace: {hf_repo}")
-
-        url = hf_storage.push_news_sentiment(df)
-
-        print("✓ News sentiment uploaded successfully!")
-        print(f"  URL: {url}")
 
         return 0
 
@@ -239,17 +177,6 @@ def main() -> int:
         help="Also update main branch to this version",
     )
 
-    # News sentiment push command
-    news_parser = subparsers.add_parser(
-        "news-sentiment",
-        help="Push news sentiment dataset to HuggingFace",
-    )
-    news_parser.add_argument(
-        "--parquet-path",
-        default="data/output/daily_sentiment.parquet",
-        help="Path to daily_sentiment.parquet file",
-    )
-
     # List models command
     subparsers.add_parser("list-models", help="List available local model versions")
 
@@ -257,8 +184,6 @@ def main() -> int:
 
     if args.command == "model":
         return push_model(args.version, args.make_current)
-    elif args.command == "news-sentiment":
-        return push_news_sentiment(args.parquet_path)
     elif args.command == "list-models":
         return list_local_models()
     else:

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from brain_api.core.ppo_discovery.price_features import (
+    apply_encoder_channel_scaler,
     encoder_channels_from_ohlcv,
     explicit_price_signals,
     spy_return_20d,
@@ -68,3 +69,19 @@ def test_short_history_rejected() -> None:
 def test_spy_return_20d() -> None:
     closes = [float(i) for i in range(1, 30)]
     assert spy_return_20d(closes) == pytest.approx(closes[-1] / closes[-21] - 1.0)
+
+
+def test_encoder_channel_scaler_standardizes() -> None:
+    tensor = np.ones((250, 4), dtype=np.float64)
+    tensor[:, 1] = 3.0
+    scaled = apply_encoder_channel_scaler(
+        tensor,
+        {
+            "encoder_channels": {
+                "mean": [1.0, 3.0, 1.0, 1.0],
+                "scale": [2.0, 2.0, 2.0, 2.0],
+            }
+        },
+    )
+    np.testing.assert_allclose(scaled[:, 0], 0.0)
+    np.testing.assert_allclose(scaled[:, 1], 0.0)

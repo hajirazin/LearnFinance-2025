@@ -22,6 +22,7 @@ class RolloutStep:
     value: float
     log_p: float
     done: bool
+    realized_net_return: float = 0.0
 
 
 def compute_gae(

@@ -12,9 +12,9 @@ from temporalio.worker import Worker
 
 from activities import training as training_module
 from models import (
+    NewsBackfillResponse,
     SACReadinessIssue,
     SACTrainingReadiness,
-    SentimentGapFillResponse,
 )
 from tests._fake_client import FakeClient
 from workflows._sac_training_readiness import await_sac_training_readiness
@@ -43,22 +43,16 @@ def test_preflight_activity_forwards_universe_and_force():
     assert fake.calls[0]["json"] == {"universe": "halal", "force": True}
 
 
-def test_sentiment_gap_activity_polls_and_requires_published_result(monkeypatch):
+def test_news_backfill_activity_polls_until_complete(monkeypatch):
     fake = FakeClient(
         {
-            "/etl/sentiment-gaps": {"job_id": "gap-1", "status": "pending"},
-            "/etl/sentiment-gaps/gap-1": {
-                "job_id": "gap-1",
-                "status": "completed",
-                "result": {
-                    "hf_url": "https://huggingface.co/datasets/example/news",
-                    "duration_seconds": 12.5,
-                    "progress": {
-                        "rows_added": 4,
-                        "remaining_gaps": 2,
-                        "gaps_pre_api_date": 11,
-                    },
-                },
+            "/etl/news/backfill": {"job_id": "news-1", "status": "pending"},
+            "/etl/news/backfill/news-1": {
+                "job_id": "news-1",
+                "status": "complete",
+                "windows_done": 4,
+                "windows_total": 4,
+                "events_scored": 12,
             },
         }
     )
@@ -67,38 +61,25 @@ def test_sentiment_gap_activity_polls_and_requires_published_result(monkeypatch)
     monkeypatch.setattr(training_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
 
-    result = training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
+    result = training_module.run_news_backfill(
+        ["AAPL"],
+        "2020-10-05T09:00:00-04:00",
+        "2026-02-02T09:00:00-05:00",
+        poll_interval=60.0,
+    )
 
     assert fake.calls[0] == {
         "method": "POST",
-        "path": "/etl/sentiment-gaps",
-        "json": {"universe": "halal"},
+        "path": "/etl/news/backfill",
+        "json": {
+            "symbols": ["AAPL"],
+            "start": "2020-10-05T09:00:00-04:00",
+            "end": "2026-02-02T09:00:00-05:00",
+        },
     }
-    assert heartbeats == ["gap-1"]
-    assert result.rows_added == 4
-    assert result.gaps_pre_api_date == 11
-    assert result.published is True
-
-
-def test_sentiment_gap_activity_retries_completed_job_without_hf_url(monkeypatch):
-    fake = FakeClient(
-        {
-            "/etl/sentiment-gaps": {"job_id": "gap-2", "status": "pending"},
-            "/etl/sentiment-gaps/gap-2": {
-                "job_id": "gap-2",
-                "status": "completed",
-                "result": {"hf_url": None, "progress": {}},
-            },
-        }
-    )
-    monkeypatch.setattr(training_module.activity, "heartbeat", lambda _job_id: None)
-    monkeypatch.setattr(training_module.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
-
-    with pytest.raises(ApplicationError, match="without HF publication") as exc_info:
-        training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
-
-    assert exc_info.value.non_retryable is False
+    assert heartbeats == ["news-1"]
+    assert result.status == "complete"
+    assert result.events_scored == 12
 
 
 @pytest.mark.parametrize(
@@ -108,14 +89,14 @@ def test_sentiment_gap_activity_retries_completed_job_without_hf_url(monkeypatch
         (200, "failed", "failed: provider denied"),
     ],
 )
-def test_sentiment_gap_activity_surfaces_retryable_lost_or_failed_jobs(
+def test_news_backfill_activity_surfaces_retryable_lost_or_failed_jobs(
     monkeypatch, status_code, job_status, message
 ):
-    job_id = "gap-failed"
-    status_path = f"/etl/sentiment-gaps/{job_id}"
+    job_id = "news-failed"
+    status_path = f"/etl/news/backfill/{job_id}"
     fake = FakeClient(
         {
-            "/etl/sentiment-gaps": {"job_id": job_id, "status": "pending"},
+            "/etl/news/backfill": {"job_id": job_id, "status": "pending"},
             status_path: {
                 "job_id": job_id,
                 "status": job_status,
@@ -129,7 +110,12 @@ def test_sentiment_gap_activity_surfaces_retryable_lost_or_failed_jobs(
     monkeypatch.setattr(training_module, "get_training_client", lambda: fake)
 
     with pytest.raises(ApplicationError, match=message) as exc_info:
-        training_module.run_sentiment_gap_fill("halal", poll_interval=60.0)
+        training_module.run_news_backfill(
+            ["AAPL"],
+            "2020-10-05T09:00:00-04:00",
+            "2026-02-02T09:00:00-05:00",
+            poll_interval=60.0,
+        )
 
     assert exc_info.value.non_retryable is False
 
@@ -160,17 +146,19 @@ async def test_readiness_deadline_surfaces_exact_issues_after_seven_days():
                     retryable=True,
                 )
             ],
+            news_backfill_start="2020-10-05T09:00:00-04:00",
+            news_backfill_end="2026-02-02T09:00:00-05:00",
         )
 
-    @activity.defn(name="run_sentiment_gap_fill")
-    def mock_refresh(universe: str):
+    @activity.defn(name="run_news_backfill")
+    def mock_refresh(symbols, start, end):
         calls["refresh"] += 1
-        return SentimentGapFillResponse(
-            rows_added=0,
-            remaining_gaps=1,
-            gaps_pre_api_date=0,
-            duration_seconds=1.0,
-            hf_url="https://huggingface.co/datasets/example/news",
+        return NewsBackfillResponse(
+            job_id="news-1",
+            status="complete",
+            windows_done=1,
+            windows_total=1,
+            events_scored=0,
         )
 
     async with (
@@ -218,14 +206,14 @@ async def test_non_retryable_readiness_error_fails_without_refresh_or_sleep():
                 SACReadinessIssue(
                     source="news",
                     symbol="AAPL",
-                    detail="Malformed news parquet",
+                    detail="Malformed news coverage",
                     retryable=False,
                 )
             ],
         )
 
-    @activity.defn(name="run_sentiment_gap_fill")
-    def mock_refresh(universe: str):
+    @activity.defn(name="run_news_backfill")
+    def mock_refresh(symbols, start, end):
         calls["refresh"] += 1
         raise AssertionError("non-retryable readiness must not refresh")
 
@@ -249,4 +237,4 @@ async def test_non_retryable_readiness_error_fails_without_refresh_or_sleep():
             )
 
     assert calls == {"preflight": 1, "refresh": 0}
-    assert "Malformed news parquet" in str(exc_info.value.cause)
+    assert "Malformed news coverage" in str(exc_info.value.cause)

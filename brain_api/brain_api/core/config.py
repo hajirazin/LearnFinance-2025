@@ -25,7 +25,6 @@ ENV_HF_PATCHTST_NIFTY_SHARIAH_500_MODEL_REPO = (
 ENV_HF_SAC_HALAL_FILTERED_MODEL_REPO = "HF_SAC_HALAL_FILTERED_MODEL_REPO"
 ENV_HF_SAC_HALAL_MODEL_REPO = "HF_SAC_HALAL_MODEL_REPO"
 ENV_HF_PPO_DISCOVERY_HALAL_NEW_MODEL_REPO = "HF_PPO_DISCOVERY_HALAL_NEW_MODEL_REPO"
-ENV_HF_NEWS_SENTIMENT_REPO = "HF_NEWS_SENTIMENT_REPO"
 ENV_HF_TWITTER_SENTIMENT_REPO = "HF_TWITTER_SENTIMENT_REPO"
 # ``STORAGE_BACKEND`` lives in :mod:`brain_api.storage.policy`; the
 # env name and resolver are owned by that module so this file does
@@ -78,11 +77,6 @@ def get_hf_sac_halal_model_repo() -> str | None:
 def get_hf_ppo_discovery_halal_new_model_repo() -> str | None:
     """Get HF repo for the news-conditioned PPO discovery allocator."""
     return os.environ.get(ENV_HF_PPO_DISCOVERY_HALAL_NEW_MODEL_REPO)
-
-
-def get_hf_news_sentiment_repo() -> str | None:
-    """Get HuggingFace news sentiment dataset repository name."""
-    return os.environ.get(ENV_HF_NEWS_SENTIMENT_REPO)
 
 
 def get_hf_twitter_sentiment_repo() -> str | None:

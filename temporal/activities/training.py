@@ -12,8 +12,8 @@ from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
 from models import (
+    NewsBackfillResponse,
     SACTrainingReadiness,
-    SentimentGapFillResponse,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -40,16 +40,23 @@ def preflight_sac_training(universe: str, force: bool = False) -> SACTrainingRea
 
 
 @activity.defn
-def run_sentiment_gap_fill(
-    universe: str,
+def run_news_backfill(
+    symbols: list[str],
+    start: str,
+    end: str,
     poll_interval: float = 60.0,
-) -> SentimentGapFillResponse:
-    """Start, poll, and require publication of one sentiment-gap job."""
-    logger.info("Starting sentiment gap fill for universe=%s ...", universe)
+) -> NewsBackfillResponse:
+    """Start, poll, and require completion of one DuckDB news backfill job."""
+    logger.info(
+        "Starting news backfill for %s symbols start=%s end=%s",
+        len(symbols),
+        start,
+        end,
+    )
     with get_training_client() as client:
         response = client.post(
-            "/etl/sentiment-gaps",
-            json={"universe": universe},
+            "/etl/news/backfill",
+            json={"symbols": symbols, "start": start, "end": end},
         )
         response.raise_for_status()
         job_id = response.json()["job_id"]
@@ -57,11 +64,11 @@ def run_sentiment_gap_fill(
         while True:
             activity.heartbeat(job_id)
             time.sleep(poll_interval)
-            status_response = client.get(f"/etl/sentiment-gaps/{job_id}")
+            status_response = client.get(f"/etl/news/backfill/{job_id}")
             if status_response.status_code == 404:
                 raise ApplicationError(
-                    f"Sentiment gap job {job_id} was lost",
-                    type="SentimentGapJobLost",
+                    f"News backfill job {job_id} was lost",
+                    type="NewsBackfillJobLost",
                 )
             status_response.raise_for_status()
             job = status_response.json()
@@ -70,37 +77,28 @@ def run_sentiment_gap_fill(
                 continue
             if status == "failed":
                 raise ApplicationError(
-                    f"Sentiment gap job {job_id} failed: {job.get('error')}",
-                    type="SentimentGapJobFailed",
+                    f"News backfill job {job_id} failed: {job.get('error')}",
+                    type="NewsBackfillJobFailed",
                 )
-            if status != "completed" or not job.get("result"):
+            if status != "complete":
                 raise ApplicationError(
-                    f"Sentiment gap job {job_id} returned invalid status {status!r}",
-                    type="SentimentGapJobInvalid",
+                    f"News backfill job {job_id} returned invalid status {status!r}",
+                    type="NewsBackfillJobInvalid",
                 )
-
-            result = job["result"]
-            hf_url = result.get("hf_url")
-            if not hf_url:
-                raise ApplicationError(
-                    f"Sentiment gap job {job_id} completed without HF publication",
-                    type="SentimentGapPublicationMissing",
-                )
-            progress = result.get("progress") or {}
-            completed = SentimentGapFillResponse(
-                rows_added=progress.get("rows_added", 0),
-                remaining_gaps=progress.get("remaining_gaps", 0),
-                gaps_pre_api_date=progress.get("gaps_pre_api_date", 0),
-                duration_seconds=result.get("duration_seconds", 0.0),
-                hf_url=hf_url,
-                published=True,
+            completed = NewsBackfillResponse(
+                job_id=job_id,
+                status=status,
+                windows_done=int(job.get("windows_done") or 0),
+                windows_total=int(job.get("windows_total") or 0),
+                events_scored=int(job.get("events_scored") or 0),
+                error=job.get("error"),
             )
             logger.info(
-                "Sentiment gap fill complete in %.1fs: rows=%d remaining=%d hf=%s",
-                completed.duration_seconds,
-                completed.rows_added,
-                completed.remaining_gaps,
-                completed.hf_url,
+                "News backfill complete job_id=%s windows=%s/%s events=%s",
+                job_id,
+                completed.windows_done,
+                completed.windows_total,
+                completed.events_scored,
             )
             return completed
 

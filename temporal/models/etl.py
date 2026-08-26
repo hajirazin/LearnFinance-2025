@@ -1,14 +1,10 @@
-"""Temporal-facing result for the asynchronous sentiment-gap refresh."""
+"""Temporal-facing result for asynchronous news backfill.
 
-from pydantic import BaseModel
+The parse-only DTO lives in ``models.news`` so Temporal never
+aggregates news events. This module re-exports it for callers that
+historically imported the gap-fill response from ``models.etl``.
+"""
 
+from models.news import NewsBackfillResponse
 
-class SentimentGapFillResponse(BaseModel):
-    """Published result returned by ``run_sentiment_gap_fill``."""
-
-    rows_added: int
-    remaining_gaps: int
-    gaps_pre_api_date: int
-    duration_seconds: float
-    hf_url: str
-    published: bool = True
+__all__ = ["NewsBackfillResponse"]

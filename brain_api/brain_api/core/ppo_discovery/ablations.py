@@ -26,7 +26,7 @@ def _metrics(
         deterministic=True,
         **kwargs,
     )
-    payload = evaluate_policy_weeks([step.reward for step in steps])
+    payload = evaluate_policy_weeks([step.realized_net_return for step in steps])
     payload["status"] = "ok"
     return payload
 

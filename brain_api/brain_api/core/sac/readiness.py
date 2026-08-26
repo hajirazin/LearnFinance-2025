@@ -28,6 +28,8 @@ class SACTrainingReadiness:
     ready: bool
     missing: tuple[SACReadinessIssue, ...] = ()
     errors: tuple[SACReadinessIssue, ...] = ()
+    news_backfill_start: str | None = None
+    news_backfill_end: str | None = None
 
     @classmethod
     def from_issues(
@@ -37,6 +39,8 @@ class SACTrainingReadiness:
         symbols: list[str],
         missing: list[SACReadinessIssue],
         errors: list[SACReadinessIssue],
+        news_backfill_start: str | None = None,
+        news_backfill_end: str | None = None,
     ) -> SACTrainingReadiness:
         """Create readiness whose boolean is derived only from issue emptiness."""
         return cls(
@@ -45,4 +49,6 @@ class SACTrainingReadiness:
             ready=not missing and not errors,
             missing=tuple(missing),
             errors=tuple(errors),
+            news_backfill_start=news_backfill_start,
+            news_backfill_end=news_backfill_end,
         )

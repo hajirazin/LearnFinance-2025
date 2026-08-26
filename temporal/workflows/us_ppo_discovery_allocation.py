@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -16,6 +16,7 @@ from workflows._order_execution import (
 from workflows._run_identity import in_ist
 
 with workflow.unsafe.imports_passed_through():
+    from activities.inference import get_monday_decision_window
     from activities.portfolio import resolve_next_attempt
     from activities.ppo_discovery_execution import (
         generate_orders_ppo_discovery,
@@ -37,7 +38,15 @@ with workflow.unsafe.imports_passed_through():
     from models.ppo_discovery import PPOInferenceResponse
 
 ACTIVITY_TIMEOUT = timedelta(minutes=5)
+PPO_STATE_TIMEOUT = timedelta(hours=2)
+PPO_STATE_HEARTBEAT = timedelta(seconds=60)
 ACTIVITY_RETRY = 2
+
+
+def experience_week_bounds(as_of_date: str) -> tuple[str, str]:
+    """Monday decision date and the following Monday used for open-to-open labels."""
+    week_start = date.fromisoformat(as_of_date)
+    return as_of_date, (week_start + timedelta(days=7)).isoformat()
 
 
 def _activity_failure_reason(exc: BaseException) -> str:
@@ -63,7 +72,13 @@ class USPPODiscoveryAllocationWorkflow:
         now_ist = in_ist(workflow.now())
         as_of_date = now_ist.date().isoformat()
         run_id = f"paper:halal_new:{as_of_date}"
-        as_of = workflow.now().isoformat()
+        decision_window = await workflow.execute_activity(
+            get_monday_decision_window,
+            args=[as_of_date],
+            start_to_close_timeout=SHORT_TIMEOUT,
+            retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
+        )
+        as_of = decision_window.cutoff.isoformat()
 
         attempt = await workflow.execute_activity(
             resolve_next_attempt,
@@ -114,7 +129,8 @@ class USPPODiscoveryAllocationWorkflow:
             state = await workflow.execute_activity(
                 build_ppo_discovery_state,
                 args=[as_of, run_id, attempt, _portfolio_weights(portfolio)],
-                start_to_close_timeout=ACTIVITY_TIMEOUT,
+                start_to_close_timeout=PPO_STATE_TIMEOUT,
+                heartbeat_timeout=PPO_STATE_HEARTBEAT,
                 retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
             )
             allocation = await workflow.execute_activity(
@@ -143,12 +159,13 @@ class USPPODiscoveryAllocationWorkflow:
                 "email": {"is_success": email.is_success, "subject": email.subject},
             }
 
+        week_start, week_end = experience_week_bounds(as_of_date)
         await workflow.execute_activity(
             store_experience_ppo_discovery,
             args=[
                 run_id,
-                as_of_date,
-                as_of_date,
+                week_start,
+                week_end,
                 allocation,
                 state,
             ],

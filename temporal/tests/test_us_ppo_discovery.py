@@ -1,6 +1,7 @@
 """Temporal schedule and skip-path tests for ppo_discovery."""
 
-from __future__ import annotations
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from temporalio import activity
@@ -10,10 +11,31 @@ from models.forecast_email import (
     WeeklyReportEmailResponse,
     WeeklySummaryResponse,
 )
+from models.news import MondayDecisionWindowResponse
 from models.ppo_discovery import PPOInferenceResponse
 from schedules import SCHEDULES, _build_spec, second_sunday_of_month_at
 from tests.harness import worker_with_activities
-from workflows.us_ppo_discovery_allocation import USPPODiscoveryAllocationWorkflow
+from workflows.us_ppo_discovery_allocation import (
+    USPPODiscoveryAllocationWorkflow,
+    experience_week_bounds,
+)
+
+_NY = ZoneInfo("America/New_York")
+
+
+def _monday_window(run_date: str) -> MondayDecisionWindowResponse:
+    del run_date
+    cutoff = datetime(2026, 2, 2, 9, 0, tzinfo=_NY)
+    return MondayDecisionWindowResponse(
+        cutoff=cutoff,
+        start_exclusive=datetime(2026, 1, 26, 9, 0, tzinfo=_NY),
+        end_inclusive=cutoff,
+    )
+
+
+@activity.defn(name="get_monday_decision_window")
+def mock_get_monday_decision_window(run_date: str) -> MondayDecisionWindowResponse:
+    return _monday_window(run_date)
 
 
 def _schedule(schedule_id: str) -> dict:
@@ -34,7 +56,7 @@ def test_ppo_weekly_is_monday_9_et() -> None:
     calendar = spec.calendars[0]
     assert calendar.day_of_week[0].start == 1
     assert calendar.hour[0].start == 9
-    assert calendar.minute[0].start == 0
+    assert calendar.minute[0].start == 10
 
 
 def test_second_sunday_helper_is_days_8_to_14() -> None:
@@ -45,6 +67,39 @@ def test_second_sunday_helper_is_days_8_to_14() -> None:
     spec = _build_spec(_schedule("us-ppo-discovery-training"))
     assert spec.time_zone_name == "UTC"
     assert spec.calendars[0].day_of_month[0].start == 8
+
+
+def test_experience_week_end_is_the_following_monday() -> None:
+    start, end = experience_week_bounds("2026-08-24")
+    assert start == "2026-08-24"
+    assert end == "2026-08-31"
+
+
+def test_state_heartbeat_copies_activity_context() -> None:
+    import inspect
+
+    from activities.ppo_discovery_inference import build_ppo_discovery_state
+
+    source = inspect.getsource(build_ppo_discovery_state)
+    assert "copy_context" in source
+    assert "activity_context.run" in source
+
+
+def test_training_workflow_uses_preflight_snapshot_and_real_eval() -> None:
+    import inspect
+
+    from activities.ppo_discovery_training import _poll_ppo_training_job
+    from workflows.us_ppo_discovery_training import USPPODiscoveryTrainingWorkflow
+
+    source = inspect.getsource(USPPODiscoveryTrainingWorkflow.run)
+    assert "fetch_halal_new_universe" not in source
+    assert 'preflight["sorted_symbols"]' in source
+    assert 'train.get("evaluation")' in source
+    assert "NEWS_ARCHIVE_START_ISO" in source
+    assert 'preflight.get("ready")' in source
+    assert '"evaluation": {"candidate": True, "promoted": False}' not in source
+    poll = inspect.getsource(_poll_ppo_training_job)
+    assert "snapshot_sha256" in poll
 
 
 def test_first_sunday_schedules_untouched() -> None:
@@ -92,6 +147,7 @@ class TestUSPPODiscoverySkip:
             raise AssertionError("inference must not run on skip")
 
         activities = [
+            mock_get_monday_decision_window,
             resolve_next_attempt,
             get_ppo_discovery_portfolio,
             generate_ppo_discovery_summary,
@@ -151,6 +207,7 @@ class TestUSPPODiscoverySkip:
             )
 
         activities = [
+            mock_get_monday_decision_window,
             resolve_next_attempt,
             get_ppo_discovery_portfolio,
             build_ppo_discovery_state,
@@ -208,6 +265,7 @@ class TestUSPPODiscoverySkip:
             )
 
         activities = [
+            mock_get_monday_decision_window,
             resolve_next_attempt,
             get_ppo_discovery_portfolio,
             build_ppo_discovery_state,

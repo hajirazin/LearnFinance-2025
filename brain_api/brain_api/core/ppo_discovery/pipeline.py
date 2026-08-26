@@ -2,44 +2,68 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from brain_api.core.ppo_discovery.ablations import run_required_ablations
 from brain_api.core.ppo_discovery.artifacts import write_candidate_artifact
-from brain_api.core.ppo_discovery.config import HISTORY_BARS, PPODiscoveryConfig
+from brain_api.core.ppo_discovery.baselines import locked_random_test_metrics
+from brain_api.core.ppo_discovery.checkpoints import (
+    load_seed_checkpoint,
+    model_config_hash,
+    save_seed_checkpoint,
+    seed_checkpoint_dir,
+)
+from brain_api.core.ppo_discovery.config import (
+    ENCODER_CHANNELS,
+    HISTORY_BARS,
+    MIN_ELIGIBLE_ASSETS,
+    PPODiscoveryConfig,
+)
+from brain_api.core.ppo_discovery.dataset_identity import build_dataset_identity
 from brain_api.core.ppo_discovery.environment import (
     WeeklyTransition,
     collect_closed_loop_rollout,
 )
 from brain_api.core.ppo_discovery.evaluator import (
+    aggregate_seed_metrics,
     block_bootstrap_mean_ci,
     evaluate_policy_weeks,
     reject_current_patchtst_on_old_weeks,
     select_candidate_seed,
 )
-from brain_api.core.ppo_discovery.news_store import (
-    load_weekly_news_features,
-    weekly_news_path,
-)
+from brain_api.core.ppo_discovery.matched_k import matched_k_average_rank
+from brain_api.core.ppo_discovery.news_adapter import load_weekly_ppo_news_features
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.pretraining import (
     next_week_open_log_return,
     pretrain_temporal_encoder,
 )
-from brain_api.core.ppo_discovery.price_features import encoder_channels_from_ohlcv
+from brain_api.core.ppo_discovery.price_features import (
+    apply_encoder_channel_scaler,
+    encoder_channels_from_ohlcv,
+)
+from brain_api.core.ppo_discovery.promotion import protocol_file_digest
 from brain_api.core.ppo_discovery.regime import (
     fit_ppo_regime_hmm,
     weekly_regime_probabilities,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError, UniverseSnapshot
+from brain_api.core.ppo_discovery.splits import (
+    FULL_VARIANT,
+    is_locked_full_training,
+    split_walk_forward,
+)
 from brain_api.core.ppo_discovery.trainer import train_ppo_discovery
 from brain_api.core.ppo_discovery.weeks import (
     actor_cutoff_datetimes,
+    news_window_starts_at_or_after_archive,
     prices_as_of,
     weekly_trade_clock,
 )
@@ -60,30 +84,37 @@ def run_ppo_discovery_training(
     base_path: Path | str | None = None,
     skip_supervised_pretraining: bool = False,
     freeze_encoder: bool = False,
+    experiment_variant: str = FULL_VARIANT,
 ) -> dict[str, Any]:
     """Historical two-stage train. Never writes ``current``."""
     reject_current_patchtst_on_old_weeks(False)
+    if experiment_variant == FULL_VARIANT and not is_locked_full_training(
+        config,
+        skip_supervised_pretraining=skip_supervised_pretraining,
+        freeze_encoder=freeze_encoder,
+    ):
+        raise PPODiscoveryError(
+            "experiment_variant='full' requires locked default seeds and "
+            "10_000 timesteps with both training stages"
+        )
     report = progress or (lambda _payload: None)
     symbols = list(snapshot.sorted_symbols)
     price_start = start_date or date(end_date.year - 7, 1, 1)
     report({"stage": "prices"})
     prices = load_prices_yfinance([*symbols, "SPY", "^VIX"], price_start, end_date)
-    missing = [name for name in (*symbols, "SPY", "^VIX") if name not in prices]
-    if missing:
-        raise PPODiscoveryError(f"missing yfinance frames: {missing}")
+    ohlcv = _ohlcv_for_training(prices, symbols)
     spy = prices["SPY"]
     clock = weekly_trade_clock(price_start, end_date)
     cutoffs = actor_cutoff_datetimes(clock)
     regimes_by_date = {}
-    ohlcv = {symbol: prices[symbol] for symbol in symbols}
     transitions: list[WeeklyTransition] = []
     for index in range(len(clock.rebalance_sessions) - 1):
         cutoff = cutoffs[index]
-        if not _has_encoder_history(ohlcv, symbols, cutoff.date()):
+        if not news_window_starts_at_or_after_archive(cutoff):
             continue
-        news = load_weekly_news_features(
-            cutoff, symbols, base_path=base_path or storage.base_path
-        )
+        if _eligible_count(ohlcv, symbols, cutoff.date()) < MIN_ELIGIBLE_ASSETS:
+            continue
+        news = load_weekly_ppo_news_features(cutoff, symbols)
         transitions.append(
             WeeklyTransition(
                 cutoff=cutoff,
@@ -94,15 +125,13 @@ def run_ppo_discovery_training(
                 p_stress=0.0,
             )
         )
-    if len(transitions) < 2:
+    if len(transitions) < 5:
         raise PPODiscoveryError(
-            "need at least two weekly transitions after history warmup"
+            "need at least five weekly transitions after history warmup"
         )
-    test_n = max(1, len(transitions) // 5)
-    train_weeks = transitions[:-test_n]
-    test_weeks = transitions[-test_n:]
-    if not train_weeks:
-        raise PPODiscoveryError("empty train split")
+    train_weeks, val_weeks, test_weeks = split_walk_forward(
+        transitions, experiment_variant=experiment_variant
+    )
     hmm_cutoff = train_weeks[-1].cutoff.date()
     report({"stage": "hmm", "cutoff": hmm_cutoff.isoformat()})
     hmm = fit_ppo_regime_hmm(prices, start_date=price_start, cutoff=hmm_cutoff)
@@ -114,44 +143,92 @@ def run_ppo_discovery_training(
         weekly_cutoffs=[week.cutoff.date() for week in transitions],
     )
     train_weeks = [_with_regime(week, regimes_by_date) for week in train_weeks]
+    val_weeks = [_with_regime(week, regimes_by_date) for week in val_weeks]
     test_weeks = [_with_regime(week, regimes_by_date) for week in test_weeks]
-    scalers = _fit_count_scaler(train_weeks)
+    identity = build_dataset_identity(
+        train_weeks,
+        val_weeks,
+        test_weeks,
+        snapshot=snapshot,
+        ohlcv=ohlcv,
+        spy=spy,
+    )
+    scalers = _fit_feature_scalers(train_weeks, snapshot, ohlcv)
     policy = PPODiscoveryActorCritic(config)
     if not skip_supervised_pretraining:
         report({"stage": "pretrain"})
-        histories, targets = _pretrain_arrays(train_weeks, snapshot, ohlcv)
+        histories, targets = _pretrain_arrays(
+            train_weeks, snapshot, ohlcv, feature_scalers=scalers
+        )
         pretrain_temporal_encoder(
             policy, histories, targets, config=config, seed=config.seeds[0]
         )
+    pretrained_encoder_state = {
+        key: tensor.detach().cpu().clone()
+        for key, tensor in policy.temporal.state_dict().items()
+    }
     if freeze_encoder:
         from dataclasses import replace
 
         config = replace(config, freeze_encoder_updates=10**9)
+    if base_path is None:
+        from brain_api.storage.base import DEFAULT_DATA_PATH
+
+        checkpoint_root = Path(DEFAULT_DATA_PATH)
+    else:
+        checkpoint_root = Path(base_path)
+    ckpt_dir = seed_checkpoint_dir(
+        checkpoint_root,
+        experiment_id=experiment_id,
+        snapshot_hash=snapshot.snapshot_sha256,
+        config_hash=model_config_hash(config),
+    )
+    checkpoint_expected = {
+        "protocol_digest": protocol_file_digest(),
+        "training_dataset_hash": identity.training_dataset_hash,
+        "snapshot_sha256": snapshot.snapshot_sha256,
+        "model_config_hash": model_config_hash(config),
+    }
     seed_val: dict[int, float] = {}
     seed_sharpe: dict[int, float] = {}
     seed_policies: dict[int, PPODiscoveryActorCritic] = {}
     failed_seeds: list[int] = []
     last_error: Exception | None = None
-    val_weeks = train_weeks[-max(1, len(train_weeks) // 5) :]
     for seed in config.seeds:
         report({"stage": "ppo", "seed": seed})
         seed_policy = PPODiscoveryActorCritic(config)
         seed_policy.load_state_dict(policy.state_dict())
+        loaded = load_seed_checkpoint(
+            ckpt_dir, seed=int(seed), expected=checkpoint_expected
+        )
         try:
-            train_ppo_discovery(
-                seed_policy,
-                lambda current: collect_closed_loop_rollout(
-                    current,
-                    train_weeks,
-                    snapshot=snapshot,
-                    ohlcv_by_symbol=ohlcv,
-                    spy=spy,
-                    feature_scalers=scalers,
+            if loaded is not None:
+                seed_policy.load_state_dict(loaded["state_dict"])
+                report({"stage": "ppo_resume", "seed": seed})
+            else:
+                train_ppo_discovery(
+                    seed_policy,
+                    lambda current: collect_closed_loop_rollout(
+                        current,
+                        train_weeks,
+                        snapshot=snapshot,
+                        ohlcv_by_symbol=ohlcv,
+                        spy=spy,
+                        feature_scalers=scalers,
+                        config=config,
+                    ),
                     config=config,
-                ),
-                config=config,
-                seed=seed,
-            )
+                    seed=seed,
+                )
+                save_seed_checkpoint(
+                    ckpt_dir,
+                    seed=int(seed),
+                    policy=seed_policy,
+                    metadata={
+                        "experiment_id": experiment_id,
+                        **checkpoint_expected,
+                    },
+                )
             val_metrics = _eval_weeks(
                 seed_policy, val_weeks, snapshot, ohlcv, spy, scalers, config
             )
@@ -199,23 +276,65 @@ def run_ppo_discovery_training(
         config=config,
         pretrained=policy,
     )
+    report({"stage": "matched_k"})
+    matched_k = matched_k_average_rank(
+        chosen_policy,
+        test_weeks=test_weeks,
+        snapshot=snapshot,
+        ohlcv=ohlcv,
+        spy=spy,
+        scalers=scalers,
+        config=config,
+    )
+    random_baseline = locked_random_test_metrics(
+        test_weeks,
+        snapshot=snapshot,
+        ohlcv=ohlcv,
+        spy=spy,
+        scalers=scalers,
+        config=config,
+    )
+    seed_metrics = {
+        str(seed): {
+            "val_cagr": seed_val[seed],
+            "val_sharpe": seed_sharpe[seed],
+        }
+        for seed in seed_val
+    }
     evaluation = {
         "test_cagr": test_metrics["cagr"],
         "test_max_drawdown": test_metrics["max_drawdown"],
+        "test_weekly_net_log": test_logs,
         "alpha_hrp_test_cagr": alpha_cagr,
         "alpha_hrp_test_max_drawdown": alpha_dd,
         "paired_vs_alpha_hrp_point": paired,
         "ablations": ablations,
+        "matched_k": matched_k,
         "failed_seeds": failed_seeds,
         "candidate": True,
         "survivorship_bias": True,
         "selected_seed": chosen,
+        "seed_metrics": seed_metrics,
+        "seed_aggregates": {
+            "val_cagr": aggregate_seed_metrics(seed_val),
+            "val_sharpe": aggregate_seed_metrics(seed_sharpe),
+            "n_seeds": len(seed_val),
+        },
+        "locked_random_baseline": random_baseline,
+        "training_dataset_hash": identity.training_dataset_hash,
+        "validation_dataset_hash": identity.validation_dataset_hash,
+        "evaluation_dataset_hash": identity.evaluation_dataset_hash,
     }
     news_manifest = {
         "complete": True,
-        "parquet": str(weekly_news_path(base_path or storage.base_path)),
+        "store": "duckdb",
         "cutoffs": [week.cutoff.isoformat() for week in transitions],
+        "training_dataset_hash": identity.training_dataset_hash,
+        "validation_dataset_hash": identity.validation_dataset_hash,
+        "evaluation_dataset_hash": identity.evaluation_dataset_hash,
+        "weeks": identity.news_weeks,
     }
+    session_dates = ",".join(pd.Timestamp(ts).strftime("%Y-%m-%d") for ts in spy.index)
     price_manifest = {
         "complete": True,
         "source": "yfinance",
@@ -223,6 +342,13 @@ def run_ppo_discovery_training(
         "start": price_start.isoformat(),
         "end": end_date.isoformat(),
         "session_count": len(spy),
+        "session_dates_sha256": hashlib.sha256(
+            session_dates.encode("utf-8")
+        ).hexdigest(),
+        "symbol_session_hashes": identity.price_sessions,
+        "training_dataset_hash": identity.training_dataset_hash,
+        "validation_dataset_hash": identity.validation_dataset_hash,
+        "evaluation_dataset_hash": identity.evaluation_dataset_hash,
     }
     report({"stage": "write_candidate"})
     version = write_candidate_artifact(
@@ -236,7 +362,9 @@ def run_ppo_discovery_training(
         news_manifest=news_manifest,
         price_manifest=price_manifest,
         experiment_id=experiment_id,
+        experiment_variant=experiment_variant,
         end_date=end_date.isoformat(),
+        pretrained_encoder_state_dict=pretrained_encoder_state,
     )
     return {
         "version": version,
@@ -261,18 +389,29 @@ def _with_regime(week: WeeklyTransition, regimes: dict) -> WeeklyTransition:
     )
 
 
-def _has_encoder_history(ohlcv, symbols, cutoff: date) -> bool:
+def _ohlcv_for_training(
+    prices: dict[str, pd.DataFrame], symbols: Sequence[str]
+) -> dict[str, pd.DataFrame]:
+    """Require SPY and VIX; omit missing stock frames so they mask later."""
+    missing_index = [name for name in ("SPY", "^VIX") if name not in prices]
+    if missing_index:
+        raise PPODiscoveryError(f"missing yfinance frames: {missing_index}")
+    return {symbol: prices[symbol] for symbol in symbols if symbol in prices}
+
+
+def _eligible_count(ohlcv, symbols, cutoff: date) -> int:
+    count = 0
     for symbol in symbols:
         frame = ohlcv.get(symbol)
         if frame is None:
-            return False
+            continue
         try:
             sliced = prices_as_of(frame, cutoff)
         except PPODiscoveryError:
-            return False
-        if len(sliced) < HISTORY_BARS:
-            return False
-    return True
+            continue
+        if len(sliced) >= HISTORY_BARS:
+            count += 1
+    return count
 
 
 def _fit_count_scaler(weeks: Sequence[WeeklyTransition]) -> dict[str, dict[str, float]]:
@@ -291,7 +430,41 @@ def _fit_count_scaler(weeks: Sequence[WeeklyTransition]) -> dict[str, dict[str, 
     return {"log1p_article_count": {"mean": mean, "scale": scale}}
 
 
-def _pretrain_arrays(weeks, snapshot, ohlcv):
+def _fit_feature_scalers(
+    weeks: Sequence[WeeklyTransition], snapshot: UniverseSnapshot, ohlcv
+) -> dict[str, Any]:
+    """Fit news-count and per-channel encoder scalers on the train fold only."""
+    scalers: dict[str, Any] = dict(_fit_count_scaler(weeks))
+    channel_rows: list[np.ndarray] = []
+    for week in weeks:
+        cutoff = week.cutoff.date()
+        for symbol in snapshot.sorted_symbols:
+            frame = ohlcv.get(symbol)
+            if frame is None:
+                continue
+            try:
+                tensor = encoder_channels_from_ohlcv(prices_as_of(frame, cutoff))
+            except PPODiscoveryError:
+                continue
+            channel_rows.append(tensor.reshape(-1, ENCODER_CHANNELS))
+    if not channel_rows:
+        raise PPODiscoveryError(
+            "cannot fit encoder_channels scaler on an empty train fold"
+        )
+    stacked = np.concatenate(channel_rows, axis=0)
+    mean = stacked.mean(axis=0)
+    scale = stacked.std(axis=0, ddof=0)
+    scale = np.maximum(scale, 1e-12)
+    if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(scale)):
+        raise PPODiscoveryError("encoder_channels scaler is non-finite")
+    scalers["encoder_channels"] = {
+        "mean": mean.tolist(),
+        "scale": scale.tolist(),
+    }
+    return scalers
+
+
+def _pretrain_arrays(weeks, snapshot, ohlcv, feature_scalers=None):
     from brain_api.core.ppo_discovery.weeks import open_to_open_return
 
     histories = []
@@ -302,17 +475,29 @@ def _pretrain_arrays(weeks, snapshot, ohlcv):
         history_rows = []
         target_rows = []
         for symbol in symbols:
-            sliced = prices_as_of(ohlcv[symbol], cutoff)
-            history_rows.append(encoder_channels_from_ohlcv(sliced))
-            start_open, simple = open_to_open_return(
-                ohlcv[symbol],
-                week.rebalance_session,
-                week.next_rebalance_session,
-                symbol=symbol,
-            )
-            target_rows.append(
-                next_week_open_log_return(start_open, start_open * (1.0 + simple))
-            )
+            frame = ohlcv.get(symbol)
+            if frame is None:
+                continue
+            try:
+                sliced = prices_as_of(frame, cutoff)
+                history = apply_encoder_channel_scaler(
+                    encoder_channels_from_ohlcv(sliced), feature_scalers
+                )
+                start_open, simple = open_to_open_return(
+                    frame,
+                    week.rebalance_session,
+                    week.next_rebalance_session,
+                    symbol=symbol,
+                )
+                target = next_week_open_log_return(
+                    start_open, start_open * (1.0 + simple)
+                )
+            except PPODiscoveryError:
+                continue
+            history_rows.append(history)
+            target_rows.append(target)
+        if not history_rows:
+            continue
         histories.append(np.stack(history_rows, axis=0))
         targets.append(np.asarray(target_rows, dtype=np.float64))
     return histories, targets
@@ -329,7 +514,7 @@ def _week_logs(policy, weeks, snapshot, ohlcv, spy, scalers, config) -> list[flo
         config=config,
         deterministic=True,
     )
-    return [step.reward for step in steps]
+    return [step.realized_net_return for step in steps]
 
 
 def _eval_weeks(

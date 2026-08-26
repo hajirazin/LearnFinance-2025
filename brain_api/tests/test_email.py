@@ -515,6 +515,19 @@ def mock_weekly_report_email_request():
             "regime_posterior": [0.7, 0.2, 0.1],
             "sac_schema_version": 3,
             "architecture": "masked_attention",
+            "news_audit": {
+                "as_of": "2026-02-02T09:00:00-05:00",
+                "start_exclusive": "2026-01-26T09:00:00-05:00",
+                "end_inclusive": "2026-02-02T09:00:00-05:00",
+                "per_symbol": [
+                    {
+                        "symbol": "AAPL",
+                        "sentiment_score": 0.65,
+                        "article_count": 5,
+                        "coverage_status": "complete",
+                    },
+                ],
+            },
         },
         "patchtst": {
             "predictions": [

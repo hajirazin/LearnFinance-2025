@@ -10,7 +10,12 @@ from pydantic import BaseModel, Field
 
 from brain_api.core.ppo_discovery.config import UNIVERSE_NAME, PPODiscoveryConfig
 from brain_api.core.ppo_discovery.pipeline import run_ppo_discovery_training
-from brain_api.core.ppo_discovery.universe_snapshot import resolve_universe_snapshot
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
+from brain_api.core.ppo_discovery.splits import resolve_experiment_variant
+from brain_api.core.ppo_discovery.universe_snapshot import (
+    load_universe_snapshot,
+    resolve_universe_snapshot,
+)
 from brain_api.routes.training.job_registry import (
     complete_job,
     fail_job,
@@ -29,14 +34,21 @@ class PPOTrainRequest(BaseModel):
     end_date: str | None = None
     start_date: str | None = None
     experiment_id: str = "ppo-discovery-default"
+    snapshot_sha256: str | None = None
     total_timesteps: int | None = None
     seeds: list[int] | None = None
+
+
+def _load_training_snapshot(request: PPOTrainRequest):
+    if request.snapshot_sha256:
+        return load_universe_snapshot(request.snapshot_sha256)
+    return resolve_universe_snapshot(datetime.now(UTC), persist=True)
 
 
 def _run_training(job_id: str, request: PPOTrainRequest) -> None:
     try:
         update_progress(job_id, {"stage": "freeze_universe"})
-        snapshot = resolve_universe_snapshot(datetime.now(UTC), persist=True)
+        snapshot = _load_training_snapshot(request)
         config = PPODiscoveryConfig()
         if request.total_timesteps is not None:
             config.total_timesteps = request.total_timesteps
@@ -56,10 +68,13 @@ def _run_training(job_id: str, request: PPOTrainRequest) -> None:
             end_date=end,
             start_date=start,
             experiment_id=request.experiment_id,
+            experiment_variant=resolve_experiment_variant(config),
             progress=lambda payload: update_progress(job_id, payload),
             base_path=DEFAULT_DATA_PATH,
         )
         complete_job(job_id, result)
+    except PPODiscoveryError as exc:
+        fail_job(job_id, str(exc))
     except Exception as exc:
         fail_job(job_id, str(exc))
 

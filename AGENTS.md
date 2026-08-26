@@ -16,7 +16,7 @@ The goal is to learn which approaches work best, not to pick a single method upf
 ## Architecture boundaries
 
 - **Temporal** is the outer orchestrator (replaced Prefect):
-  - schedule trigger (Monday 6 PM IST for US inference, Monday 9 AM IST for India, and four monthly training slots on the first Sunday of the month staggered 6h apart starting 00:01 UTC -- see "Training schedule" below)
+  - schedule trigger (Monday 09:00 America/New_York for US SAC `halal_filtered`, 09:05 for SAC `halal`, 09:10 for PPO discovery; Monday 9 AM IST for India, and four monthly training slots on the first Sunday of the month staggered 6h apart starting 00:01 UTC -- see "Training schedule" below)
   - calling brain_api endpoints via HTTP activities
   - handling parallel task execution (asyncio.gather) and skip logic
   - durable sleep/wait for sell-wait-buy pattern (single workflow, no 3-flow hack)
@@ -133,8 +133,8 @@ temporal/                         # Temporal workflow orchestration
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /signals/news` | News sentiment (FinBERT, real-time) |
-| `POST /signals/news/historical` | News sentiment (historical) |
+| `POST /news/windows/materialize` | Fetch+score the exact Monday window into DuckDB |
+| `POST /news/windows/query` | Read-only query of that window (parse-only DTO) |
 | `POST /signals/prices` | Adjusted daily closes, current execution prices, and provenance for SAC v3 eligibility/features |
 | `POST /signals/market-history` | Gap-checked aligned SPY adjusted-close/VIX history after the active SAC artifact's HMM cutoff |
 | `POST /signals/ppo-discovery/state` | Canonical 9+7 ppo_discovery state (OHLCV + mandatory Alpaca/Benzinga news + HMM globals). Incomplete news is 422; verified zero-news is valid. |
@@ -189,9 +189,10 @@ temporal/                         # Temporal workflow orchestration
 | `GET /universe/halal_india` | Top 15 PatchTST-scored from Nifty 500 Shariah (NSE India) |
 | `GET /universe/nifty_shariah_500` | All ~210 Nifty 500 Shariah constituents (NSE India) |
 | `GET /models/active-symbols` | Active SAC symbols plus schema version and HMM training cutoff; `universe` query param is mandatory (`halal_filtered` or `halal`) |
-| `POST /etl/news-sentiment` | ETL pipeline for news sentiment (`universe` required in body) |
-| `POST /etl/sentiment-gaps` | Gap detection and backfill (`universe` required in body) |
-| `POST /etl/ppo-discovery/news-history` | PPO-only weekly news parquet from Alpaca/Benzinga (does not write `daily_sentiment.parquet`) |
+| `POST /etl/news/backfill` | DuckDB news backfill over canonical Monday windows |
+| `GET /etl/news/backfill/{job_id}` | News backfill job status |
+| `POST /etl/news/gaps` | Detect missing Monday windows and enqueue gap fill |
+| `GET /etl/news/gaps/{job_id}` | News gap-fill job status |
 | `GET /models/ppo-discovery/active` | Promoted ppo_discovery artifact identity; `universe=halal_new` is required |
 | `POST /experience/label/ppo-discovery` | Label ppo_discovery experience using the dedicated Alpaca account; records must set `universe="halal_new"` explicitly |
 | `POST /experience/store` | Store RL experience |
@@ -281,7 +282,7 @@ costs. Source of truth: `StateSchema` in
 | Momentum 1w rank (`P[t]/P[t-5]-1`) | adjusted closes |
 | Momentum 4w rank (`P[t]/P[t-20]-1`) | adjusted closes |
 | Momentum 12-1 rank (`P[t-21]/P[t-252]-1`) | adjusted closes |
-| News-sentiment rank | provider-checked `/signals/news` |
+| News-sentiment rank | DuckDB weekly adapter (Monday 09:00 NY window) |
 | Realized-volatility rank | 20 adjusted-close log returns, `ddof=1`, annualized `sqrt(252)` |
 | Current stock weight | portfolio state, unscaled |
 
@@ -297,7 +298,7 @@ observation without overlapping history.
 
 Live SPY/VIX evidence must cover the exact XNYS sessions after the artifact
 cutoff through the latest completed session before the scheduled decision date.
-The Monday 18:00 IST SAC decision is pre-open in New York, so the partial Monday
+The Monday 09:00 America/New_York SAC decision is pre-open in New York, so the partial Monday
 session is never requested, required, or used; the normal endpoint is the prior
 Friday. Empty evidence is valid only when no completed post-cutoff XNYS session
 is due.
@@ -507,8 +508,9 @@ The system must:
 | Monthly (first Sunday 12:01 UTC) | US SAC training on the legacy `halal` universe (parallel A/B sibling of `sac_halal_filtered`; 6 h gap from halal_filtered SAC) | Cron (Temporal, Mac training queue) |
 | Monthly (first Sunday 18:01 UTC) | Full PatchTST retrain (India) | Cron (Temporal, Mac training queue) |
 | Monthly (second Sunday 00:01 UTC) | US PPO discovery training on frozen `halal_new` (candidate only; no auto-promote). Uses `second_sunday_of_month_at`; do not change `first_sunday_of_month_at`. | Cron (Temporal, Mac training queue) |
-| Monday 09:00 America/New_York | US PPO discovery inference (`us-ppo-discovery-allocate`) | Cron (Temporal, Pi inference queue) |
-| Monday 6 PM IST | US inference only | Cron (Temporal, Pi inference queue) |
+| Monday 09:00 America/New_York | US SAC (`halal_filtered`) inference | Cron (Temporal, Pi inference queue) |
+| Monday 09:05 America/New_York | US SAC (`halal`) inference | Cron (Temporal, Pi inference queue) |
+| Monday 09:10 America/New_York | US PPO discovery inference (`us-ppo-discovery-allocate`) | Cron (Temporal, Pi inference queue) |
 
 Training cadence cannot be expressed via cron "first Sunday of month" (Vixie cron OR's day-of-month with day-of-week). Schedules use `ScheduleCalendarSpec(day_of_month=[1..7], day_of_week=[0], hour=H, minute=M)` instead; see `temporal/schedules.py::first_sunday_of_month_at`. PPO discovery training uses `second_sunday_of_month_at` (`day_of_month=[8..14]`). The first-Sunday training slots are staggered 6 h apart so the single Mac trainer runs them serially (enforced by `TEMPORAL_MAX_CONCURRENT_ACTIVITIES=1` on the training worker). To disable only PPO discovery, pause or delete `us-ppo-discovery-allocate` and `us-ppo-discovery-training` on the Temporal server; do not edit other `SCHEDULES` entries.
 
@@ -558,7 +560,7 @@ Key configuration:
 - **Parallel execution**: `asyncio.gather()` for concurrent activity execution within workflows
 - **Pydantic data converter**: `pydantic_data_converter` used for correct Pydantic v2 serialization
 - **Sell-wait-buy**: Single workflow with a market-aware durable polling loop. After submitting sells, the helper fetches the Alpaca market clock once (`GET /alpaca/clock`); if the market is closed it sleeps until exactly the advertised `next_open` (no lead-time fudge), then polls `check_order_statuses` every `POLL_INTERVAL = 1 min` until all sells reach a terminal status or the 48h `SELL_DEADLINE` is hit. Replaces the legacy flat 15-min poll cadence.
-- **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL activities inside training workflows (e.g. `run_sentiment_gap_fill`) automatically land on the training worker.
+- **Task queue routing** (role-based, not host-based): two queues -- `learnfinance-inference` for weekly allocation / HRP workflows, `learnfinance-training` for monthly training workflows. Each worker subscribes to exactly one queue via `TEMPORAL_TASK_QUEUE` env. Activities inherit the workflow's task queue by default, so ETL activities inside training workflows (e.g. `run_news_backfill`) automatically land on the training worker.
 - **Activity concurrency cap** (per worker): `TEMPORAL_MAX_CONCURRENT_ACTIVITIES` env (default `10`) drives BOTH `Worker(max_concurrent_activities=N)` and the `ThreadPoolExecutor(max_workers=N)`. The Mac training worker sets this to `1` so heavy training activities are serialized; Pi inference keeps the default `10` so fast allocation activities run in parallel.
 
 **Host topology** (current production deployment):

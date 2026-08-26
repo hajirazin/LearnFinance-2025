@@ -12,6 +12,7 @@ from brain_api.core.ppo_discovery.config import (
     UNIVERSE_NAME,
 )
 from brain_api.core.ppo_discovery.explanations import build_explanations
+from brain_api.core.ppo_discovery.news_adapter import news_adapter_revision
 from brain_api.core.ppo_discovery.policy import (
     PPODiscoveryActorCritic,
     validate_inference_weights,
@@ -23,6 +24,7 @@ from brain_api.core.ppo_discovery.schemas import (
     sha256_digest,
     state_to_digest_payload,
 )
+from brain_api.news.models import NEWS_SCHEMA_VERSION, NEWS_SENTIMENT_REVISION
 from brain_api.storage.policy import load_current_artifacts_for_bucket
 from brain_api.storage.ppo_discovery.local import PPODiscoveryArtifacts
 
@@ -46,6 +48,14 @@ def reject_schema_mismatch(metadata: dict[str, Any]) -> None:
     if metadata.get("experiment_variant") != "full":
         raise PPODiscoveryError(
             "only the full experiment variant may be used for inference"
+        )
+    if metadata.get("news_schema_version") != NEWS_SCHEMA_VERSION:
+        raise PPODiscoveryError("artifact news_schema_version does not match live news")
+    if metadata.get("finbert_revision") != NEWS_SENTIMENT_REVISION:
+        raise PPODiscoveryError("artifact FinBERT revision does not match the pin")
+    if metadata.get("news_adapter_revision") != news_adapter_revision():
+        raise PPODiscoveryError(
+            "artifact news adapter revision does not match live code"
         )
 
 
@@ -72,18 +82,16 @@ def run_ppo_discovery_inference(
         for symbol, flag in zip(state.symbols, state.asset_mask.tolist(), strict=True)
         if flag and symbol
     }
-    weights = validate_inference_weights(policy.infer_weights(state), eligible)
-    stocks = tuple(
-        sorted(symbol for symbol in weights if symbol != "CASH" and weights[symbol] > 0)
-    )
-    k = len(stocks)
+    weights, order = policy.infer_decision(state)
+    weights = validate_inference_weights(weights, eligible)
+    k = len(order)
     explanations = build_explanations(state, weights, artifacts.metadata)
     return PPOInferenceResult(
         model_type=MODEL_TYPE,
         model_version=artifacts.version,
         universe=UNIVERSE_NAME,
-        selected_symbols=stocks,
-        selection_order=stocks,
+        selected_symbols=order,
+        selection_order=order,
         k=k,
         percentage_weights=weights,
         state_digest=state.state_digest,

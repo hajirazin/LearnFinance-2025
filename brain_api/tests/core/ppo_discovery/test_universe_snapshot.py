@@ -11,6 +11,7 @@ from brain_api.core.ppo_discovery.config import MAX_ASSETS, UNIVERSE_NAME
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.universe_snapshot import (
     build_universe_snapshot,
+    load_universe_snapshot,
     persist_universe_snapshot,
     resolve_universe_snapshot,
     snapshot_hash_for_symbols,
@@ -30,6 +31,9 @@ def test_snapshot_sorts_and_hashes_deterministically(tmp_path: Path) -> None:
     path = persist_universe_snapshot(first, base_path=tmp_path)
     assert path.exists()
     persist_universe_snapshot(second, base_path=tmp_path)
+    loaded = load_universe_snapshot(first.snapshot_sha256, base_path=tmp_path)
+    assert loaded.sorted_symbols == first.sorted_symbols
+    assert loaded.snapshot_sha256 == first.snapshot_sha256
 
 
 def test_snapshot_rejects_duplicates_and_capacity() -> None:

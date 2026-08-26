@@ -17,6 +17,9 @@ from brain_api.core.ppo_discovery.config import (
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.distributions import (
+    count_and_selection_entropy as factored_count_and_selection_entropy,
+)
+from brain_api.core.ppo_discovery.distributions import (
     deterministic_weights,
     recompute_action_log_prob_tensors,
     sample_cash_and_weights,
@@ -209,8 +212,10 @@ class PPODiscoveryActorCritic(nn.Module):
         )
         return self.value_head(pooled).squeeze(-1)
 
-    def infer_weights(self, state: CanonicalPPOState) -> dict[str, float]:
-        """Deterministic inference action."""
+    def infer_decision(
+        self, state: CanonicalPPOState
+    ) -> tuple[dict[str, float], tuple[str, ...]]:
+        """Deterministic weights plus selection-logit order (symbol tie-break)."""
         self.eval()
         device = next(self.parameters()).device
         with torch.no_grad():
@@ -228,7 +233,7 @@ class PPODiscoveryActorCritic(nn.Module):
             masked_counts = count_logits[0].masked_fill(~valid, float("-inf"))
             k = int(torch.argmax(masked_counts).item())
             if k == 0:
-                return {"CASH": 1.0}
+                return {"CASH": 1.0}, ()
             valid_indices = [index for index, flag in enumerate(mask.tolist()) if flag]
             ranked = sorted(
                 valid_indices,
@@ -238,10 +243,11 @@ class PPODiscoveryActorCritic(nn.Module):
                 ),
             )
             selected = ranked[:k]
+            order = tuple(state.symbols[index] for index in selected)
             cash_raw, allocation_raw = self.cash_and_allocation_raw(
                 encoded[0], pooled[0], selected
             )
-            return deterministic_weights(
+            weights = deterministic_weights(
                 count_logits=count_logits[0],
                 selection_logits=selection_logits[0],
                 cash_raw=cash_raw,
@@ -250,6 +256,32 @@ class PPODiscoveryActorCritic(nn.Module):
                 symbols=state.symbols,
                 cash_floor=self.config.cash_floor,
             )
+            return weights, order
+
+    def infer_weights(self, state: CanonicalPPOState) -> dict[str, float]:
+        """Deterministic inference action."""
+        weights, _order = self.infer_decision(state)
+        return weights
+
+    def count_and_selection_entropy(
+        self, state: CanonicalPPOState, action: SampledAction
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        device = next(self.parameters()).device
+        history, features, globals_, mask = tensors_from_state(state, device)
+        encoded, pooled = self.encode(
+            history.unsqueeze(0),
+            features.unsqueeze(0),
+            globals_.unsqueeze(0),
+            mask.unsqueeze(0),
+        )
+        count_logits, selection_logits, _ = self.heads(encoded, pooled)
+        return factored_count_and_selection_entropy(
+            count_logits=count_logits[0],
+            selection_logits=selection_logits[0],
+            asset_mask=mask,
+            selection_indices=action.selection_indices,
+            k=action.k,
+        )
 
     def pretrain_forward(self, history: torch.Tensor) -> torch.Tensor:
         """Predict next-week open-to-open log return from the temporal encoder."""

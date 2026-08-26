@@ -62,3 +62,5 @@ class SACTrainingReadiness(BaseModel):
     ready: bool
     missing: list[SACReadinessIssue] = []
     errors: list[SACReadinessIssue] = []
+    news_backfill_start: str | None = None
+    news_backfill_end: str | None = None

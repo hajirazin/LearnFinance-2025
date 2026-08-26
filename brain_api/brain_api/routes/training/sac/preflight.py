@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from brain_api.core.config import resolve_training_window
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, UnknownBucketError, get_bucket
-from brain_api.core.news_sentiment import NewsObservationError
 from brain_api.core.portfolio_rl.data_loading import (
     align_signals_to_weekly,
-    load_historical_news_sentiment,
+    news_backfill_bounds,
+    require_weekly_news_coverage,
 )
 from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
@@ -21,6 +21,7 @@ from brain_api.core.sac.trade_clock import (
     build_sac_weekly_trade_clock,
     extract_session_open_prices,
 )
+from brain_api.news.errors import NewsCoverageMissing
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.policy import (
     StoragePolicyError,
@@ -28,7 +29,7 @@ from brain_api.storage.policy import (
     get_prior_metadata_for_bucket,
 )
 
-from ._shared import SACTrainRequest, sac_us_allowed_universes
+from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
 
 router = APIRouter()
 
@@ -50,6 +51,8 @@ class SACTrainingReadinessResponse(BaseModel):
     ready: bool
     missing: list[SACReadinessIssueResponse]
     errors: list[SACReadinessIssueResponse]
+    news_backfill_start: str | None = None
+    news_backfill_end: str | None = None
 
 
 def _required_snapshot_cutoffs(start_date: date, end_date: date) -> list[date]:
@@ -66,9 +69,7 @@ def assess_sac_training_readiness(
     symbols = bucket.symbols_resolver()
     if not force:
         prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
-        if prior_metadata is not None and set(prior_metadata.get("symbols", [])) == set(
-            symbols
-        ):
+        if sac_current_is_reusable(prior_metadata, symbols):
             return SACTrainingReadiness.from_issues(
                 universe=universe,
                 symbols=symbols,
@@ -122,18 +123,11 @@ def assess_sac_training_readiness(
                 )
                 price_ready = False
 
-        news = None
+        news_ok = False
         try:
-            news = load_historical_news_sentiment(
-                [symbol],
-                start_date=weekly_cutoffs[0].date() - timedelta(days=6),
-                end_date=weekly_cutoffs[-1].date(),
-            )
-        except FileNotFoundError as exc:
-            missing.append(
-                SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
-            )
-        except NewsObservationError as exc:
+            require_weekly_news_coverage([symbol], weekly_cutoffs)
+            news_ok = True
+        except NewsCoverageMissing as exc:
             missing.append(
                 SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
             )
@@ -142,15 +136,14 @@ def assess_sac_training_readiness(
                 SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
             )
 
-        if price_ready and news is not None:
+        if price_ready and news_ok:
             try:
                 align_signals_to_weekly(
                     {symbol: price_frame},
-                    news,
                     [symbol],
                     weekly_cutoffs=weekly_cutoffs,
                 )
-            except NewsObservationError as exc:
+            except NewsCoverageMissing as exc:
                 missing.append(
                     SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
                 )
@@ -183,11 +176,14 @@ def assess_sac_training_readiness(
                     )
                 )
 
+    backfill_start, backfill_end = news_backfill_bounds(weekly_cutoffs)
     return SACTrainingReadiness.from_issues(
         universe=universe,
         symbols=symbols,
         missing=missing,
         errors=errors,
+        news_backfill_start=backfill_start,
+        news_backfill_end=backfill_end,
     )
 
 
@@ -215,4 +211,6 @@ def preflight_sac_training(
         errors=[
             SACReadinessIssueResponse(**issue.to_dict()) for issue in readiness.errors
         ],
+        news_backfill_start=readiness.news_backfill_start,
+        news_backfill_end=readiness.news_backfill_end,
     )

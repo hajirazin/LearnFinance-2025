@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import numpy as np
 import pytest
 
 from brain_api.core.ppo_discovery.config import (
@@ -154,3 +155,35 @@ def test_permutation_of_input_list_does_not_change_lex_packing() -> None:
     snapshot = make_snapshot()
     state = build_ppo_discovery_state(_request(universe_snapshot=snapshot))
     assert tuple(s for s in state.symbols if s) == snapshot.sorted_symbols
+
+
+def test_encoder_scaler_is_applied_to_price_history() -> None:
+    snapshot = make_snapshot()
+    raw = build_ppo_discovery_state(_request(universe_snapshot=snapshot))
+    eligible = next(i for i, flag in enumerate(raw.asset_mask) if flag)
+    mean = [
+        float(raw.price_history[eligible, :, channel].mean()) for channel in range(4)
+    ]
+    scale = [1.0, 1.0, 1.0, 1.0]
+    scaled = build_ppo_discovery_state(
+        _request(
+            universe_snapshot=snapshot,
+            feature_scalers={"encoder_channels": {"mean": mean, "scale": scale}},
+        )
+    )
+    np.testing.assert_allclose(
+        scaled.price_history[eligible].mean(axis=0),
+        np.zeros(4),
+        atol=1e-9,
+    )
+
+
+def test_from_dict_rejects_invalid_globals_even_with_matching_digest() -> None:
+    from brain_api.core.ppo_discovery.schemas import CanonicalPPOState
+
+    state = build_ppo_discovery_state(_request())
+    payload = state.to_dict()
+    payload["globals"] = [0.5]
+    payload["state_digest"] = "intentionally-wrong"
+    with pytest.raises(PPODiscoveryError, match="globals shape"):
+        CanonicalPPOState.from_dict(payload)

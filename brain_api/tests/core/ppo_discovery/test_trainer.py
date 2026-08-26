@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
@@ -55,5 +56,86 @@ def test_tiny_synthetic_ppo_runs() -> None:
         assert parameter.requires_grad is False
 
 
-def test_rank_ic_perfect() -> None:
-    assert rank_ic(np.array([1.0, 2.0, 3.0]), np.array([10.0, 20.0, 30.0])) == 1.0
+def test_rank_ic_average_ties() -> None:
+    tied = rank_ic(np.array([1.0, 1.0, 2.0]), np.array([10.0, 10.0, 30.0]))
+    assert tied == pytest.approx(1.0)
+
+
+def test_rollout_length_chunks_ppo_updates(monkeypatch) -> None:
+    from brain_api.core.ppo_discovery import trainer as trainer_mod
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+
+    chunk_sizes: list[int] = []
+
+    def fake_update(policy, steps, optimizer, *, config, update_index, last_value=0.0):
+        del policy, optimizer, config, last_value
+        chunk_sizes.append(len(steps))
+        return {"ppo_loss": 0.0, "update_index": float(update_index)}
+
+    monkeypatch.setattr(trainer_mod, "ppo_update", fake_update)
+    state = build_ppo_discovery_state(_request())
+    config = PPODiscoveryConfig(
+        total_timesteps=8,
+        rollout_length=4,
+        minibatch_size=2,
+        ppo_epochs=1,
+        dropout=0.0,
+    )
+    policy = PPODiscoveryActorCritic(config)
+
+    def episode(current):
+        rewards = [0.01] * 8
+        dones = [False] * 7 + [True]
+        return collect_rollout(current, [state] * 8, rewards, dones, config=config)
+
+    metrics = trainer_mod.train_ppo_discovery(policy, episode, config=config, seed=0)
+    assert chunk_sizes == [4, 4]
+    assert metrics["timesteps"] == 8.0
+
+
+def test_entropy_coefs_are_applied_to_matching_heads() -> None:
+    import inspect
+
+    from brain_api.core.ppo_discovery.trainer import ppo_update
+
+    source = inspect.getsource(ppo_update)
+    assert "count_entropy_coef" in source
+    assert "selection_entropy_coef" in source
+    assert "count_entropy_coef + selection_entropy_coef" not in source
+    assert "n_entropy_draws" not in source
+
+
+def test_chunked_gae_bootstraps_next_state_value(monkeypatch) -> None:
+    from dataclasses import replace
+
+    from brain_api.core.ppo_discovery import trainer as trainer_mod
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+
+    last_values: list[float] = []
+
+    def fake_update(policy, steps, optimizer, *, config, update_index, last_value=0.0):
+        del policy, optimizer, config, steps
+        last_values.append(float(last_value))
+        return {"ppo_loss": 0.0, "update_index": float(update_index)}
+
+    monkeypatch.setattr(trainer_mod, "ppo_update", fake_update)
+    state = build_ppo_discovery_state(_request())
+    config = PPODiscoveryConfig(
+        total_timesteps=8,
+        rollout_length=4,
+        minibatch_size=2,
+        ppo_epochs=1,
+        dropout=0.0,
+    )
+    policy = PPODiscoveryActorCritic(config)
+
+    def episode(current):
+        rewards = [0.01] * 8
+        dones = [False] * 7 + [True]
+        steps = collect_rollout(current, [state] * 8, rewards, dones, config=config)
+        return [
+            replace(step, value=float(index + 1)) for index, step in enumerate(steps)
+        ]
+
+    trainer_mod.train_ppo_discovery(policy, episode, config=config, seed=0)
+    assert last_values == [5.0, 0.0]

@@ -140,6 +140,43 @@ class IBKRSingaporeCostConfig:
 
 
 @dataclass(frozen=True)
+class AlpacaUSCostConfig:
+    """Alpaca US equity pass-through fees for ppo_discovery train/eval.
+
+    Commission is zero. Sells still pay SEC Section 31 and FINRA TAF.
+    Clearing, CAT, IBKR's $0.35 order minimum, and exchange pass-through
+    on commission are not charged on the Alpaca retail schedule.
+
+    SAC keeps :class:`IBKRSingaporeCostConfig`. This sibling is only for
+    ppo_discovery, whose production account is Alpaca.
+    """
+
+    commission_per_share: float = 0.0
+    commission_min: float = 0.0
+    commission_max_pct: float = 0.01
+    clearing_per_share: float = 0.0
+    cat_per_share: float = 0.0
+    sec_fee_rate: float = 0.0000278
+    finra_taf_per_share: float = 0.000166
+    finra_taf_cap: float = 8.30
+    nyse_pass_through_rate: float = 0.0
+    finra_pass_through_rate: float = 0.0
+    nav_usd: float = 100_000.0
+
+    @classmethod
+    def default(cls) -> AlpacaUSCostConfig:
+        return cls()
+
+    def with_nav(self, nav_usd: float) -> AlpacaUSCostConfig:
+        if nav_usd <= 0:
+            raise ValueError(f"nav_usd must be > 0, got {nav_usd}")
+        return replace(self, nav_usd=nav_usd)
+
+
+BrokerCostRates = IBKRSingaporeCostConfig | AlpacaUSCostConfig
+
+
+@dataclass(frozen=True)
 class LegCost:
     """Itemised cost of a single per-symbol per-leg trade in USD.
 
@@ -240,7 +277,7 @@ def compute_ibkr_leg_cost(
     notional_usd: float,
     shares: float,
     side: Side,
-    cfg: IBKRSingaporeCostConfig,
+    cfg: BrokerCostRates,
 ) -> LegCost:
     """Compute IBKR-SG cost for a single per-symbol per-leg trade.
 
@@ -331,7 +368,7 @@ def compute_ibkr_rebalance_cost(
     current_weights: np.ndarray,
     target_weights: np.ndarray,
     prices: np.ndarray,
-    cfg: IBKRSingaporeCostConfig,
+    cfg: BrokerCostRates,
     *,
     weight_epsilon: float = 0.005,
 ) -> RebalanceCost:

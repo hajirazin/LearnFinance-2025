@@ -33,11 +33,11 @@ to serialise heavy GPU activities).
 |----------|----------|-------|-------------|
 | USDoubleHRP | Monday 07:00 America/New_York | inference | Two-stage HRP (halal_new → sticky top 15) + dhrp orders + email |
 | USAlphaHRP | Monday 07:30 America/New_York | inference | PatchTST alpha → rank-band sticky top 15 → HRP on the `hrp` Alpaca account + email |
-| USWeeklyAllocation | Monday 08:00 America/New_York | inference | `halal_filtered` SAC allocation + sell-wait-buy + email |
-| USSACHalalAllocation | Monday 08:30 America/New_York | inference | `halal` SAC allocation through the dedicated IBKR account + email |
+| USWeeklyAllocation | Monday 09:00 America/New_York | inference | `halal_filtered` SAC allocation + sell-wait-buy + email |
+| USSACHalalAllocation | Monday 09:05 America/New_York | inference | `halal` SAC allocation through the dedicated `sac_halal` Alpaca account + email |
 | IndiaWeeklyAllocation | Monday 09:00 Asia/Kolkata | inference | India Alpha-HRP (PatchTST screen → rank-band sticky → HRP) + email (paper-only, no broker) |
 | IndiaDoubleHRP | Monday 09:30 Asia/Kolkata | inference | Two-stage HRP (Nifty Shariah 500 → top 15) + email (paper-only, no broker) |
-| USPPODiscoveryAllocation | Monday 09:00 America/New_York | inference | News-conditioned PPO on frozen `halal_new` via the `ppo_discovery` Alpaca account + email. Incomplete news / missing `current` skip with zero orders. |
+| USPPODiscoveryAllocation | Monday 09:10 America/New_York | inference | News-conditioned PPO on frozen `halal_new` via the `ppo_discovery` Alpaca account + email. Incomplete news / missing `current` skip with zero orders. |
 | USForecastersTraining | First Sunday of month, 00:01 UTC | training | LSTM + PatchTST training (strictly serial) + email |
 | USSACTraining | First Sunday of month, 06:01 UTC | training | SAC training on `halal_filtered` bucket + email |
 | USSACHalalTraining | First Sunday of month, 12:01 UTC | training | SAC training on `halal` legacy yfinance bucket (parallel A/B sibling) + email |

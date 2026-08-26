@@ -1,4 +1,4 @@
-"""IBKR after-cost reward plus the existing HHI penalty for ppo_discovery."""
+"""Alpaca after-cost reward plus the existing HHI penalty for ppo_discovery."""
 
 from __future__ import annotations
 
@@ -8,10 +8,13 @@ from types import SimpleNamespace
 import numpy as np
 
 from brain_api.core.portfolio_rl.broker_costs import (
-    IBKRSingaporeCostConfig,
+    AlpacaUSCostConfig,
     compute_ibkr_rebalance_cost,
 )
-from brain_api.core.portfolio_rl.rewards import compute_net_log_reward
+from brain_api.core.portfolio_rl.rewards import (
+    RebalanceTransition,
+    compute_net_log_reward,
+)
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.sac.experience_accounting import build_rebalance_arrays
@@ -26,11 +29,13 @@ def ppo_discovery_reward(
     nav_usd: float,
     config: PPODiscoveryConfig,
     include_transaction_cost: bool = True,
-) -> tuple[float, float, float]:
-    """Return ``(reward, gross_return, cost_fraction)``.
+) -> tuple[float, float, float, float]:
+    """Return ``(reward, gross_return, cost_fraction, economic_net_log)``.
 
     Missing next-open prices for a traded name fail rather than last-price fill.
     ``n_stocks`` for HHI is the number of selected stocks ``K``, not 15.
+    Shaped ``reward`` is for GAE. ``economic_net_log`` is the unscaled
+    ``log(1 + gross - cost)`` used for CAGR, drawdown, and bootstrap.
     """
     stocks = [symbol for symbol in target_weights if symbol != "CASH"]
     for symbol in stocks:
@@ -45,7 +50,7 @@ def ppo_discovery_reward(
         if symbol == "CASH" or abs(float(weight)) <= 1e-12:
             continue
         gross += float(weight) * float(symbol_returns[symbol])
-    cost_config = IBKRSingaporeCostConfig.default().with_nav(nav_usd)
+    cost_config = AlpacaUSCostConfig.default().with_nav(nav_usd)
     symbol_order, prior, target, prices = build_rebalance_arrays(
         dict(prior_weights), dict(target_weights), dict(symbol_prices)
     )
@@ -72,7 +77,12 @@ def ppo_discovery_reward(
     reward = compute_net_log_reward(
         gross, cost_fraction, reward_cfg, target_weights=stock_plus_cash
     )
-    return float(reward), float(gross), cost_fraction
+    stock_returns = np.asarray(
+        [float(symbol_returns.get(symbol, 0.0)) for symbol in symbol_order],
+        dtype=np.float64,
+    )
+    economic = RebalanceTransition.calculate(target, stock_returns, cost_fraction)
+    return float(reward), float(gross), cost_fraction, float(economic.net_log_return)
 
 
 __all__ = ["ppo_discovery_reward"]

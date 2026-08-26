@@ -17,7 +17,6 @@ from .dependencies import (
     get_price_loader,
     get_sac_as_of_date,
     get_sac_storage,
-    get_sentiment_parquet_path,
     get_storage,
     get_week_boundary_computer,
 )
@@ -78,7 +77,6 @@ __all__ = [
     "get_price_loader",
     "get_sac_as_of_date",
     "get_sac_storage",
-    "get_sentiment_parquet_path",
     "get_storage",
     "get_week_boundary_computer",
     "router",

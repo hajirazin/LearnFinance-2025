@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ from brain_api.core.ppo_discovery.config import (
     MIN_ELIGIBLE_ASSETS,
 )
 from brain_api.core.ppo_discovery.price_features import (
+    apply_encoder_channel_scaler,
     encoder_channels_from_ohlcv,
     explicit_price_signals,
     rank_eligible,
@@ -52,7 +54,7 @@ class StateBuildRequest:
     p_calm: float
     p_stress: float
     spy_closes: Sequence[float]
-    feature_scalers: Mapping[str, Mapping[str, float]] | None = None
+    feature_scalers: Mapping[str, Any] | None = None
     tradable_symbols: frozenset[str] | None = None
 
 
@@ -95,7 +97,9 @@ def build_ppo_discovery_state(request: StateBuildRequest) -> CanonicalPPOState:
             if frame is None:
                 raise PPODiscoveryError(f"{symbol} missing OHLCV")
             validated = validate_ohlcv_frame(symbol, frame)
-            history = encoder_channels_from_ohlcv(validated)
+            history = apply_encoder_channel_scaler(
+                encoder_channels_from_ohlcv(validated), request.feature_scalers
+            )
             closes = validated["close"].to_numpy(dtype=np.float64)
             signals = explicit_price_signals(closes)
         except PPODiscoveryError as exc:

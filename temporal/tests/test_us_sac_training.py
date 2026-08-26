@@ -15,10 +15,10 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from models import (
+    NewsBackfillResponse,
     SACReadinessIssue,
     SACTrainingReadiness,
     SACTrainingWorkflowInput,
-    SentimentGapFillResponse,
     TrainingResponse,
     TrainingSummaryEmailResponse,
     TrainingSummaryResponse,
@@ -39,12 +39,12 @@ def mock_filtered():
 
 @pytest.fixture
 def mock_refresh():
-    return SentimentGapFillResponse(
-        rows_added=10,
-        remaining_gaps=0,
-        gaps_pre_api_date=3,
-        duration_seconds=5.5,
-        hf_url="https://huggingface.co/datasets/example/news",
+    return NewsBackfillResponse(
+        job_id="news-1",
+        status="complete",
+        windows_done=4,
+        windows_total=4,
+        events_scored=10,
     )
 
 
@@ -98,11 +98,9 @@ def _make_sac_activities(
         call_log.append("fetch_halal_filtered_universe")
         return filtered
 
-    @activity.defn(name="run_sentiment_gap_fill")
-    def mock_ref(universe: str):
-        call_log.append("run_sentiment_gap_fill")
-        # SAC workflow refreshes the same slate it trains on.
-        assert universe == "halal_filtered"
+    @activity.defn(name="run_news_backfill")
+    def mock_ref(symbols, start, end) -> NewsBackfillResponse:
+        call_log.append("run_news_backfill")
         return refresh
 
     @activity.defn(name="preflight_sac_training")
@@ -124,6 +122,8 @@ def _make_sac_activities(
                         retryable=True,
                     )
                 ],
+                news_backfill_start="2020-10-01T09:00:00-04:00",
+                news_backfill_end="2026-02-02T09:00:00-05:00",
             )
         return SACTrainingReadiness(
             universe=universe,
@@ -202,9 +202,9 @@ class TestUSSACTrainingWorkflow:
             assert result["filtered"]["selection_method"] == (
                 "patchtst_forecast_rank_band"
             )
-            assert result["refresh"]["rows_added"] == 10
-            assert result["refresh"]["gaps_pre_api_date"] == 3
-            assert result["refresh"]["published"] is True
+            assert result["refresh"]["job_id"] == "news-1"
+            assert result["refresh"]["status"] == "complete"
+            assert result["refresh"]["events_scored"] == 10
             assert result["sac"]["version"] == "v2026-03-01-sac001"
             assert result["sac"]["promoted"] is True
             assert result["sac"]["failure_reasons"] == []
@@ -221,7 +221,7 @@ class TestUSSACTrainingWorkflow:
             # filtered-fetch must precede refresh + SAC train.
             filt_idx = call_log.index("fetch_halal_filtered_universe")
             preflight_idx = call_log.index("preflight_sac_training")
-            ref_idx = call_log.index("run_sentiment_gap_fill")
+            ref_idx = call_log.index("run_news_backfill")
             sac_idx = call_log.index("train_sac")
             assert filt_idx < preflight_idx < ref_idx < sac_idx
 
