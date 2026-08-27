@@ -53,39 +53,42 @@ def run_backfill(
     done = 0
     events_scored = 0
     try:
-        for symbol in ordered_symbols:
-            for window in windows:
-                existing = store.get_coverage(symbol, window)
-                if existing is not None:
-                    done += 1
-                    job = mark_job(
-                        store,
-                        job,
-                        last_completed_symbol=symbol,
-                        last_completed_window_end=window.end_inclusive,
-                        windows_done=done,
-                    )
-                    continue
-                coverage, events = service.materialize([symbol], window)
-                done += 1
-                events_scored += len(events)
+        for window in windows:
+            pending = [
+                symbol
+                for symbol in ordered_symbols
+                if store.get_coverage(symbol, window) is None
+            ]
+            already = len(ordered_symbols) - len(pending)
+            if already:
+                done += already
                 job = mark_job(
                     store,
                     job,
-                    last_completed_symbol=symbol,
-                    last_completed_window_end=window.end_inclusive,
                     windows_done=done,
                     events_scored=events_scored,
                 )
-                logger.info(
-                    "news backfill symbol=%s window_end=%s status=%s events=%s done=%s/%s",
-                    symbol,
-                    window.end_inclusive.isoformat(),
-                    coverage[0].status if coverage else "unknown",
-                    len(events),
-                    done,
-                    windows_total,
-                )
+            if not pending:
+                continue
+            _coverage, events = service.materialize(pending, window)
+            done += len(pending)
+            events_scored += len(events)
+            job = mark_job(
+                store,
+                job,
+                last_completed_symbol=pending[-1],
+                last_completed_window_end=window.end_inclusive,
+                windows_done=done,
+                events_scored=events_scored,
+            )
+            logger.info(
+                "news backfill window_end=%s pending=%s events=%s done=%s/%s",
+                window.end_inclusive.isoformat(),
+                len(pending),
+                len(events),
+                done,
+                windows_total,
+            )
         mark_job(store, job, status="complete")
         logger.info(
             "news backfill end job_id=%s events_scored=%s", job.job_id, events_scored

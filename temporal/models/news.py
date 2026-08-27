@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 # Must match brain_api.news.models.NEWS_ARCHIVE_START_ISO.
-NEWS_ARCHIVE_START_ISO = "2020-10-05T09:00:00-04:00"
+NEWS_ARCHIVE_START_ISO = "2015-01-05T09:00:00-05:00"
 
 
 class NewsCoverageItem(BaseModel):

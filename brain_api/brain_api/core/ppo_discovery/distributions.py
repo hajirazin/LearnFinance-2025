@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 from torch.distributions import Beta, Categorical, Dirichlet
 
-from brain_api.core.ppo_discovery.config import CASH_FLOOR
+from brain_api.core.ppo_discovery.config import CASH_FLOOR, MAX_SELECTED
 from brain_api.core.ppo_discovery.schemas import ActionLogProb, SampledAction
 
 
@@ -293,14 +293,18 @@ def deterministic_weights(
     asset_mask: torch.Tensor,
     symbols: tuple[str, ...],
     cash_floor: float = CASH_FLOOR,
+    force_k: int | None = None,
 ) -> dict[str, float]:
-    """Inference action: argmax K, lex-stable top-K, Beta/Dirichlet means."""
+    """Inference action: argmax K (or forced K), lex-stable top-K, Beta/Dirichlet means."""
     n_eligible = int(asset_mask.sum().item())
-    masked_counts = masked_count_logits(
-        count_logits.unsqueeze(0),
-        torch.tensor([n_eligible], device=count_logits.device),
-    )[0]
-    k = int(torch.argmax(masked_counts).item())
+    if force_k is not None:
+        k = min(max(int(force_k), 0), n_eligible, MAX_SELECTED)
+    else:
+        masked_counts = masked_count_logits(
+            count_logits.unsqueeze(0),
+            torch.tensor([n_eligible], device=count_logits.device),
+        )[0]
+        k = int(torch.argmax(masked_counts).item())
     if k == 0:
         return {"CASH": 1.0}
     valid_indices = [index for index, flag in enumerate(asset_mask.tolist()) if flag]

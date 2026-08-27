@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from brain_api.core.ppo_discovery import promotion as promotion_mod
 from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
@@ -18,8 +21,10 @@ from brain_api.core.ppo_discovery.promotion import (
     evaluate_ppo_discovery_promotion,
     ppo_discovery_source_digest,
     protocol_file_digest,
+    result_hash,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
+from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
 
 
 def _meta(**overrides):
@@ -33,6 +38,7 @@ def _meta(**overrides):
         "code_revision": ppo_discovery_source_digest(),
         "evaluation_dataset_hash": "eval-a",
         "model_config_hash": "cfg-a",
+        "result_hash": result_hash(_eval()),
     }
     payload.update(overrides)
     return payload
@@ -52,6 +58,10 @@ def _eval(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def _meta_for(evaluation: dict, **overrides):
+    return _meta(result_hash=result_hash(evaluation), **overrides)
 
 
 def test_promotion_requires_approved_by_and_hash() -> None:
@@ -174,9 +184,10 @@ def test_unpaired_incumbent_requires_acknowledgement() -> None:
     )
     assert check.is_healthy is False
     assert any("unpaired" in reason for reason in check.failure_reasons)
+    evaluation = _eval(test_cagr=0.13)
     check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(test_cagr=0.13),
+        metadata=_meta_for(evaluation),
+        evaluation=evaluation,
         approved_by="razin",
         expected_config_hash="abc123",
         incumbent_cagr=0.14,
@@ -184,3 +195,184 @@ def test_unpaired_incumbent_requires_acknowledgement() -> None:
         acknowledge_unpaired_evaluation=True,
     )
     assert check.is_healthy is True
+
+
+def test_protocol_drift_requires_repair_override() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest="drifted",
+        incumbent_evaluation_dataset_hash="eval-a",
+    )
+    assert check.is_healthy is False
+    assert any("repair_override" in reason for reason in check.failure_reasons)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest="drifted",
+        incumbent_evaluation_dataset_hash="eval-a",
+        repair_override=True,
+    )
+    assert check.is_healthy is True
+
+
+def test_protocol_and_unpaired_eval_need_both_flags() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest="drifted",
+        incumbent_evaluation_dataset_hash="eval-other",
+        repair_override=True,
+    )
+    assert check.is_healthy is False
+    assert any("unpaired" in reason for reason in check.failure_reasons)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest="drifted",
+        incumbent_evaluation_dataset_hash="eval-other",
+        acknowledge_unpaired_evaluation=True,
+    )
+    assert check.is_healthy is False
+    assert any("repair_override" in reason for reason in check.failure_reasons)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(),
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest="drifted",
+        incumbent_evaluation_dataset_hash="eval-other",
+        acknowledge_unpaired_evaluation=True,
+        repair_override=True,
+    )
+    assert check.is_healthy is True
+
+
+def test_result_hash_mismatch_rejects_promotion() -> None:
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.21),
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert check.is_healthy is False
+    assert any("result_hash" in reason for reason in check.failure_reasons)
+
+
+def _storage_with_pointer(
+    tmp_path: Path, version: str | None
+) -> PPODiscoveryHalalNewModelStorage:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    storage._model_path.mkdir(parents=True, exist_ok=True)
+    if version is not None:
+        (storage._model_path / "current").write_text(version)
+    return storage
+
+
+def test_cas_empty_ledger_uses_current_pointer(tmp_path: Path, monkeypatch) -> None:
+    storage = _storage_with_pointer(tmp_path, "v1")
+    monkeypatch.setattr(
+        promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
+    )
+    monkeypatch.setattr(storage, "promote_version", lambda version: None)
+    promotion_mod._commit_promotion(
+        storage,
+        "v2",
+        approved_by="razin",
+        expected_current_version="v1",
+        config_changed=False,
+        unpaired_acknowledged=False,
+    )
+    conn = promotion_mod._ledger(storage)
+    row = conn.execute(
+        "SELECT status FROM promotions WHERE version = ?", ("v2",)
+    ).fetchone()
+    assert row[0] == "promoted"
+
+
+def test_cas_empty_expected_fails_when_pointer_is_set(
+    tmp_path: Path, monkeypatch
+) -> None:
+    storage = _storage_with_pointer(tmp_path, "v1")
+    monkeypatch.setattr(
+        promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
+    )
+    with pytest.raises(ValueError, match="current pointer"):
+        promotion_mod._commit_promotion(
+            storage,
+            "v2",
+            approved_by="razin",
+            expected_current_version="",
+            config_changed=False,
+            unpaired_acknowledged=False,
+        )
+
+
+def test_pending_for_self_with_pointer_on_candidate_is_idempotent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    storage = _storage_with_pointer(tmp_path, "v2")
+    conn = promotion_mod._ledger(storage)
+    conn.execute(
+        "INSERT INTO promotions(version, approved_by, expected_current_version, "
+        "promoted_at, status, config_changed, unpaired_acknowledged) "
+        "VALUES (?, ?, ?, ?, 'pending', 0, 0)",
+        ("v2", "razin", "v1", "2026-01-01T00:00:00+00:00"),
+    )
+    conn.commit()
+    conn.close()
+    promoted: list[str] = []
+    monkeypatch.setattr(
+        promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        storage, "promote_version", lambda version: promoted.append(version)
+    )
+    promotion_mod._commit_promotion(
+        storage,
+        "v2",
+        approved_by="razin",
+        expected_current_version="v1",
+        config_changed=False,
+        unpaired_acknowledged=False,
+    )
+    assert promoted == []
+    conn = promotion_mod._ledger(storage)
+    row = conn.execute(
+        "SELECT status FROM promotions WHERE version = ?", ("v2",)
+    ).fetchone()
+    assert row[0] == "promoted"
+
+
+def test_inaugural_promote_uses_empty_expected(tmp_path: Path, monkeypatch) -> None:
+    storage = _storage_with_pointer(tmp_path, None)
+    monkeypatch.setattr(
+        promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
+    )
+    monkeypatch.setattr(storage, "promote_version", lambda version: None)
+    promotion_mod._commit_promotion(
+        storage,
+        "v1",
+        approved_by="razin",
+        expected_current_version="",
+        config_changed=False,
+        unpaired_acknowledged=False,
+    )
+    conn = promotion_mod._ledger(storage)
+    row = conn.execute(
+        "SELECT status FROM promotions WHERE version = ?", ("v1",)
+    ).fetchone()
+    assert row[0] == "promoted"

@@ -11,7 +11,12 @@ import pandas as pd
 
 from brain_api.core.ppo_discovery.config import HISTORY_BARS
 from brain_api.core.ppo_discovery.environment import WeeklyTransition
-from brain_api.core.ppo_discovery.schemas import UniverseSnapshot, canonical_json_bytes
+from brain_api.core.ppo_discovery.price_features import validate_ohlcv_frame
+from brain_api.core.ppo_discovery.schemas import (
+    PPODiscoveryError,
+    UniverseSnapshot,
+    canonical_json_bytes,
+)
 from brain_api.core.ppo_discovery.weeks import open_to_open_return, prices_as_of
 
 
@@ -84,12 +89,16 @@ def _week_payload(
     spy: pd.DataFrame,
 ) -> dict[str, Any]:
     cutoff = week.cutoff.date()
+    eligible, exclusions = _week_eligibility(week, snapshot, ohlcv)
     return {
         "cutoff": week.cutoff.isoformat(),
         "rebalance_session": pd.Timestamp(week.rebalance_session).isoformat(),
         "next_rebalance_session": pd.Timestamp(week.next_rebalance_session).isoformat(),
         "p_calm": float(week.p_calm),
         "p_stress": float(week.p_stress),
+        "snapshot_sha256": snapshot.snapshot_sha256,
+        "eligible": eligible,
+        "exclusions": exclusions,
         "news": _news_week_payload(week, snapshot)["symbols"],
         "ohlcv": {
             symbol: _pit_ohlcv_hash(ohlcv.get(symbol), cutoff)
@@ -98,6 +107,28 @@ def _week_payload(
         "spy": _pit_ohlcv_hash(spy, cutoff),
         "next_open": _next_open_payload(week, snapshot, ohlcv),
     }
+
+
+def _week_eligibility(
+    week: WeeklyTransition,
+    snapshot: UniverseSnapshot,
+    ohlcv: Mapping[str, pd.DataFrame],
+) -> tuple[list[str], dict[str, str]]:
+    cutoff = week.cutoff.date()
+    eligible: list[str] = []
+    exclusions: dict[str, str] = {}
+    for symbol in snapshot.sorted_symbols:
+        frame = ohlcv.get(symbol)
+        if frame is None:
+            exclusions[symbol] = "missing OHLCV frame"
+            continue
+        try:
+            validate_ohlcv_frame(symbol, prices_as_of(frame, cutoff))
+        except PPODiscoveryError as exc:
+            exclusions[symbol] = str(exc)
+            continue
+        eligible.append(symbol)
+    return eligible, exclusions
 
 
 def _news_week_payload(

@@ -118,9 +118,12 @@ def collect_closed_loop_rollout(
             state.price_history[...] = 0.0
         prior = dict(weights)
         with torch.no_grad():
-            if deterministic or force_k is not None or equal_weight_selected:
+            if force_k is not None:
+                target_weights, _order = policy.infer_decision(state, force_k=force_k)
+                action = _action_from_weights(state, target_weights)
+            elif deterministic or equal_weight_selected:
                 target_weights = policy.infer_weights(state)
-                action = _action_from_weights(state, target_weights, force_k=force_k)
+                action = _action_from_weights(state, target_weights)
                 if equal_weight_selected:
                     action = _with_equal_stock_weights(action)
             else:
@@ -168,35 +171,13 @@ def collect_closed_loop_rollout(
 def _action_from_weights(
     state: CanonicalPPOState,
     weights: dict[str, float],
-    *,
-    force_k: int | None = None,
 ):
-    from brain_api.core.ppo_discovery.config import CASH_FLOOR
     from brain_api.core.ppo_discovery.schemas import SampledAction
 
     stocks = [
         symbol for symbol, weight in weights.items() if symbol != "CASH" and weight > 0
     ]
     stocks = sorted(stocks, key=lambda symbol: (-float(weights[symbol]), symbol))
-    if force_k is not None:
-        eligible = [
-            symbol
-            for symbol, flag in zip(
-                state.symbols, state.asset_mask.tolist(), strict=True
-            )
-            if flag and symbol
-        ]
-        stocks = sorted(
-            eligible,
-            key=lambda symbol: (-float(weights.get(symbol, 0.0)), symbol),
-        )[:force_k]
-        if stocks:
-            cash = max(float(weights.get("CASH", CASH_FLOOR)), CASH_FLOOR)
-            mass = (1.0 - cash) / len(stocks)
-            weights = dict.fromkeys(stocks, mass)
-            weights["CASH"] = cash
-        else:
-            weights = {"CASH": 1.0}
     selected = tuple(stocks)
     return SampledAction(
         k=len(selected),

@@ -61,3 +61,18 @@ def test_dataset_hash_changes_when_close_or_news_changes() -> None:
         spy=spy,
     )
     assert mutated_news.evaluation_dataset_hash != identity.evaluation_dataset_hash
+
+
+def test_dataset_hash_changes_when_symbol_becomes_ineligible() -> None:
+    snapshot = make_snapshot(n=10)
+    ohlcv, spy = _frames(snapshot)
+    week = _week(snapshot, ohlcv, spy, sentiment=0.1)
+    identity = build_dataset_identity(
+        [week], [week], [week], snapshot=snapshot, ohlcv=ohlcv, spy=spy
+    )
+    excluded = snapshot.sorted_symbols[0]
+    ohlcv[excluded] = pd.DataFrame()
+    mutated = build_dataset_identity(
+        [week], [week], [week], snapshot=snapshot, ohlcv=ohlcv, spy=spy
+    )
+    assert mutated.evaluation_dataset_hash != identity.evaluation_dataset_hash

@@ -45,6 +45,7 @@ def preflight_ppo_discovery(request: PPOPreflightRequest) -> dict:
         "experiment_id": request.experiment_id,
         "end_date": request.end_date or end.isoformat(),
         "issues": readiness["issues"],
+        "exclusions": readiness["exclusions"],
         "session_hashes": readiness["session_hashes"],
         "session_counts": readiness["session_counts"],
         "eligible_symbol_count": readiness["eligible_symbol_count"],

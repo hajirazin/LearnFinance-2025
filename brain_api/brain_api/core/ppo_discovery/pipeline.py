@@ -15,6 +15,7 @@ from brain_api.core.ppo_discovery.ablations import run_required_ablations
 from brain_api.core.ppo_discovery.artifacts import write_candidate_artifact
 from brain_api.core.ppo_discovery.baselines import locked_random_test_metrics
 from brain_api.core.ppo_discovery.checkpoints import (
+    hash_state_dict,
     load_seed_checkpoint,
     model_config_hash,
     save_seed_checkpoint,
@@ -49,7 +50,10 @@ from brain_api.core.ppo_discovery.price_features import (
     apply_encoder_channel_scaler,
     encoder_channels_from_ohlcv,
 )
-from brain_api.core.ppo_discovery.promotion import protocol_file_digest
+from brain_api.core.ppo_discovery.promotion import (
+    ppo_discovery_source_digest,
+    protocol_file_digest,
+)
 from brain_api.core.ppo_discovery.regime import (
     fit_ppo_regime_hmm,
     weekly_regime_probabilities,
@@ -188,6 +192,8 @@ def run_ppo_discovery_training(
         "training_dataset_hash": identity.training_dataset_hash,
         "snapshot_sha256": snapshot.snapshot_sha256,
         "model_config_hash": model_config_hash(config),
+        "code_revision": ppo_discovery_source_digest(),
+        "pretrained_encoder_sha256": hash_state_dict(pretrained_encoder_state),
     }
     seed_val: dict[int, float] = {}
     seed_sharpe: dict[int, float] = {}

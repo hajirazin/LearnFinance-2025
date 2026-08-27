@@ -54,16 +54,20 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
             "model_config_hash": model_config_hash(config),
+            "code_revision": "old-code",
+            "pretrained_encoder_sha256": "old-encoder",
         },
     )
     loaded = load_seed_checkpoint(
         directory,
         seed=42,
         expected={
-            "protocol_digest": "new",
+            "protocol_digest": "old",
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
             "model_config_hash": model_config_hash(config),
+            "code_revision": "new-code",
+            "pretrained_encoder_sha256": "old-encoder",
         },
     )
     assert loaded is None
@@ -75,6 +79,21 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
             "model_config_hash": model_config_hash(config),
+            "code_revision": "old-code",
+            "pretrained_encoder_sha256": "new-encoder",
+        },
+    )
+    assert loaded is None
+    loaded = load_seed_checkpoint(
+        directory,
+        seed=42,
+        expected={
+            "protocol_digest": "old",
+            "training_dataset_hash": "train-old",
+            "snapshot_sha256": "sha256:deadbeef",
+            "model_config_hash": model_config_hash(config),
+            "code_revision": "old-code",
+            "pretrained_encoder_sha256": "old-encoder",
         },
     )
     assert loaded is not None

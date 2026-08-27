@@ -21,6 +21,7 @@ class PPOPromoteRequest(BaseModel):
     approved_by: str = Field(min_length=1)
     expected_current_version: str
     acknowledge_unpaired_evaluation: bool = False
+    repair_override: bool = False
 
 
 class PPOReevaluateRequest(BaseModel):
@@ -38,6 +39,7 @@ def promote_ppo_discovery_endpoint(request: PPOPromoteRequest) -> dict:
             expected_config_hash=request.expected_config_hash,
             expected_current_version=request.expected_current_version,
             acknowledge_unpaired_evaluation=request.acknowledge_unpaired_evaluation,
+            repair_override=request.repair_override,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

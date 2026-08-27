@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +24,7 @@ from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.promotion import (
     evaluate_ppo_discovery_promotion,
     reevaluate_ppo_discovery,
+    result_hash,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.synthetic import make_synthetic_state
@@ -92,7 +94,13 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
             expected_config_hash=artifacts.metadata["config_hash"],
         )
         assert check.is_healthy is True
-        reevaluate_ppo_discovery(storage, version)
+        updated = reevaluate_ppo_discovery(storage, version)
+        reloaded = storage.load_artifacts(version)
+        evaluation_on_disk = json.loads(
+            (reloaded.artifact_dir / "evaluation.json").read_text()
+        )
+        assert reloaded.metadata["result_hash"] == result_hash(evaluation_on_disk)
+        assert reloaded.metadata["result_hash"] == updated["result_hash"]
         storage.load_artifacts(version)
         storage.promote_version(version)
         assert storage.read_current_version() == version
@@ -114,6 +122,62 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
         "4556d13015211d73dccd3fdd39d39232506f3e43"
     )
     assert artifacts.metadata["news_adapter_revision"]
+
+
+def test_tampered_evaluation_fails_promote_until_reevaluate(tmp_path: Path) -> None:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    evaluation = {
+        "test_cagr": 0.20,
+        "alpha_hrp_test_cagr": 0.15,
+        "test_max_drawdown": 0.10,
+        "alpha_hrp_test_max_drawdown": 0.12,
+        "paired_vs_alpha_hrp_point": 0.001,
+        "test_weekly_net_log": [0.01] * 52,
+        "ablations": {
+            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+        },
+        "failed_seeds": [],
+    }
+    version = write_candidate_artifact(
+        storage,
+        policy,
+        config=config,
+        evaluation=evaluation,
+        universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
+        experiment_id="ci",
+        end_date="2026-08-31",
+        regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+        news_manifest=_hashed_manifests()[0],
+        price_manifest=_hashed_manifests()[1],
+        pretrained_encoder_state_dict=policy.temporal.state_dict(),
+    )
+    artifacts = storage.load_artifacts(version)
+    evaluation_path = artifacts.artifact_dir / "evaluation.json"
+    tampered = json.loads(evaluation_path.read_text())
+    tampered["test_cagr"] = 0.99
+    evaluation_path.write_text(json.dumps(tampered, indent=2, sort_keys=True))
+    storage.write_checksums(version)
+    tampered_on_disk = json.loads(evaluation_path.read_text())
+    check = evaluate_ppo_discovery_promotion(
+        metadata=artifacts.metadata,
+        evaluation=tampered_on_disk,
+        approved_by="razin",
+        expected_config_hash=artifacts.metadata["config_hash"],
+    )
+    assert check.is_healthy is False
+    assert any("result_hash" in reason for reason in check.failure_reasons)
+    updated = reevaluate_ppo_discovery(storage, version)
+    reloaded = storage.load_artifacts(version)
+    assert reloaded.metadata["result_hash"] == result_hash(updated)
+    synced = evaluate_ppo_discovery_promotion(
+        metadata=reloaded.metadata,
+        evaluation=updated,
+        approved_by="razin",
+        expected_config_hash=reloaded.metadata["config_hash"],
+    )
+    assert synced.is_healthy is True
 
 
 def test_pretrained_encoder_file_is_stage_a_not_post_ppo(tmp_path: Path) -> None:

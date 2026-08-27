@@ -177,3 +177,80 @@ def test_naive_provider_timestamp_is_rejected() -> None:
     )
     with pytest.raises(NewsProviderError, match="timezone-naive"):
         provider.fetch_window("AAPL", window)
+
+
+def _inside_article(article_id: str, symbols: list[str] | None = None) -> dict:
+    payload = {
+        "id": article_id,
+        "headline": "A",
+        "summary": "",
+        "created_at": datetime(2026, 8, 18, 9, 0, tzinfo=NY).isoformat(),
+        "updated_at": datetime(2026, 8, 18, 9, 0, tzinfo=NY).isoformat(),
+        "source": "benzinga",
+    }
+    if symbols is not None:
+        payload["symbols"] = symbols
+    return payload
+
+
+def test_batch_last_page_full_does_not_prove_empties() -> None:
+    window = _window()
+    news = [_inside_article(str(i), symbols=["AAPL"]) for i in range(50)]
+    session = _FakeSession([(200, {"news": news})])
+    provider = AlpacaNewsProvider(
+        api_key="k", api_secret="s", session=session, rate_limit_delay=0
+    )
+    result = provider.fetch_window_batch(["AAPL", "MSFT"], window)
+    assert result.empties_are_proven is False
+    assert len(result.articles_by_symbol["AAPL"]) == 50
+    assert result.articles_by_symbol["MSFT"] == []
+    assert "AAPL,MSFT" in session.calls[0]["symbols"]
+
+
+def test_batch_last_page_short_proves_empties() -> None:
+    window = _window()
+    news = [_inside_article(str(i), symbols=["AAPL"]) for i in range(3)]
+    session = _FakeSession([(200, {"news": news})])
+    provider = AlpacaNewsProvider(
+        api_key="k", api_secret="s", session=session, rate_limit_delay=0
+    )
+    result = provider.fetch_window_batch(["AAPL", "MSFT"], window)
+    assert result.empties_are_proven is True
+    assert len(result.articles_by_symbol["AAPL"]) == 3
+    assert result.articles_by_symbol["MSFT"] == []
+
+
+def test_batch_fans_out_article_to_requested_symbols() -> None:
+    window = _window()
+    session = _FakeSession(
+        [(200, {"news": [_inside_article("shared", symbols=["AAPL", "MSFT"])]})]
+    )
+    provider = AlpacaNewsProvider(
+        api_key="k", api_secret="s", session=session, rate_limit_delay=0
+    )
+    result = provider.fetch_window_batch(["AAPL", "MSFT", "NVDA"], window)
+    assert [row.provider_article_id for row in result.articles_by_symbol["AAPL"]] == [
+        "shared"
+    ]
+    assert [row.provider_article_id for row in result.articles_by_symbol["MSFT"]] == [
+        "shared"
+    ]
+    assert result.articles_by_symbol["NVDA"] == []
+    assert result.empties_are_proven is True
+
+
+def test_batch_cap_does_not_raise_or_prove_empties(monkeypatch) -> None:
+    from brain_api.news import alpaca_provider as provider_mod
+
+    monkeypatch.setattr(provider_mod, "MAX_ARTICLES_PER_SYMBOL_WINDOW", 2)
+    window = _window()
+    news = [_inside_article(str(i), symbols=["AAPL"]) for i in range(3)]
+    session = _FakeSession([(200, {"news": news, "next_page_token": "more"})])
+    provider = AlpacaNewsProvider(
+        api_key="k", api_secret="s", session=session, rate_limit_delay=0
+    )
+    result = provider.fetch_window_batch(["AAPL", "MSFT"], window)
+    assert result.empties_are_proven is False
+    assert len(result.articles_by_symbol["AAPL"]) == 2
+    assert result.articles_by_symbol["MSFT"] == []
+    assert len(session.calls) == 1

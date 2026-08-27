@@ -17,6 +17,7 @@ from brain_api.core.ppo_discovery.config import (
     PROMOTION_CAGR_FLOOR,
     REQUIRED_ABLATIONS,
 )
+from brain_api.core.ppo_discovery.schemas import canonical_json_bytes
 from brain_api.core.training_health import ArtifactHealthCheck
 from brain_api.storage.ppo_discovery.huggingface import maybe_upload_ppo_discovery
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
@@ -55,13 +56,20 @@ def ppo_discovery_source_digest() -> str:
 
 
 def result_hash(evaluation: dict[str, Any]) -> str:
-    payload = {
-        "test_cagr": evaluation.get("test_cagr"),
-        "test_max_drawdown": evaluation.get("test_max_drawdown"),
-        "test_weekly_net_log": evaluation.get("test_weekly_net_log"),
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
+    payload = _without_result_hash(evaluation)
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+
+
+def _without_result_hash(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_result_hash(item)
+            for key, item in value.items()
+            if key != "result_hash"
+        }
+    if isinstance(value, list):
+        return [_without_result_hash(item) for item in value]
+    return value
 
 
 def _finite_number(value: Any) -> bool:
@@ -83,9 +91,9 @@ def evaluate_ppo_discovery_promotion(
     incumbent_evaluation_dataset_hash: str | None = None,
     incumbent_model_config_hash: str | None = None,
     acknowledge_unpaired_evaluation: bool = False,
+    repair_override: bool = False,
 ) -> ArtifactHealthCheck:
     """Hard gates from the research spec. Failures never write ``current``."""
-    _ = incumbent_protocol_digest, incumbent_model_config_hash
     reasons: list[str] = []
     if not approved_by or not str(approved_by).strip():
         reasons.append("approved_by is required")
@@ -108,6 +116,16 @@ def evaluate_ppo_discovery_promotion(
         reasons.append("evaluation_dataset_hash is required")
     if not metadata.get("model_config_hash"):
         reasons.append("model_config_hash is required")
+    try:
+        evaluation_digest = result_hash(evaluation)
+    except (TypeError, ValueError):
+        reasons.append("evaluation payload is not JSON-canonical")
+        evaluation_digest = None
+    if (
+        evaluation_digest is not None
+        and metadata.get("result_hash") != evaluation_digest
+    ):
+        reasons.append("metadata.result_hash does not match evaluation payload")
     cagr_raw = evaluation.get("test_cagr")
     if not _finite_number(cagr_raw):
         reasons.append("test CAGR is missing or non-finite")
@@ -125,6 +143,12 @@ def evaluate_ppo_discovery_promotion(
         and incumbent_evaluation_dataset_hash is not None
         and eval_hash == incumbent_evaluation_dataset_hash
     )
+    if (
+        incumbent_protocol_digest is not None
+        and incumbent_protocol_digest != metadata.get("protocol_digest")
+        and not repair_override
+    ):
+        reasons.append("incumbent protocol_digest differs; pass repair_override")
     if incumbent_cagr is not None and not paired:
         if not acknowledge_unpaired_evaluation:
             reasons.append(
@@ -133,6 +157,7 @@ def evaluate_ppo_discovery_promotion(
             )
     elif paired and _finite_number(cagr_raw) and cagr < float(incumbent_cagr):
         reasons.append("test CAGR is below the incumbent")
+    _ = incumbent_model_config_hash
     ablations = evaluation.get("ablations") or {}
     for name in REQUIRED_ABLATIONS:
         row = ablations.get(name)
@@ -169,6 +194,11 @@ def reevaluate_ppo_discovery(
     (artifacts.artifact_dir / "evaluation.json").write_text(
         json.dumps(evaluation, indent=2, sort_keys=True)
     )
+    metadata = dict(artifacts.metadata)
+    metadata["result_hash"] = evaluation["result_hash"]
+    (artifacts.artifact_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True)
+    )
     storage.write_checksums(version)
     return evaluation
 
@@ -181,6 +211,7 @@ def promote_ppo_discovery(
     expected_config_hash: str,
     expected_current_version: str,
     acknowledge_unpaired_evaluation: bool = False,
+    repair_override: bool = False,
 ) -> dict[str, Any]:
     """Promote a candidate only after the locked gates pass.
 
@@ -213,6 +244,7 @@ def promote_ppo_discovery(
         incumbent_evaluation_dataset_hash=incumbent_eval_hash,
         incumbent_model_config_hash=incumbent_model_hash,
         acknowledge_unpaired_evaluation=acknowledge_unpaired_evaluation,
+        repair_override=repair_override,
     )
     if not check.is_healthy:
         raise ValueError("; ".join(check.failure_reasons))
@@ -235,6 +267,7 @@ def promote_ppo_discovery(
         "failure_reasons": [],
         "config_changed": config_changed,
         "unpaired_acknowledged": acknowledge_unpaired_evaluation,
+        "repair_override": repair_override,
     }
 
 
@@ -260,26 +293,33 @@ def _commit_promotion(
     config_changed: bool,
     unpaired_acknowledged: bool,
 ) -> None:
+    pointer = storage.read_current_version() or ""
     conn = _ledger(storage)
     try:
         conn.execute("BEGIN IMMEDIATE")
         pending = conn.execute(
-            "SELECT version, status FROM promotions WHERE status = 'pending'"
+            "SELECT version FROM promotions WHERE status = 'pending'"
         ).fetchall()
-        if any(row[0] != version for row in pending):
-            other = next(row[0] for row in pending if row[0] != version)
-            conn.rollback()
-            raise ValueError(f"promotion pending for {other!r}; aborting {version!r}")
-        promoted_row = conn.execute(
-            "SELECT version FROM promotions WHERE status = 'promoted' "
-            "ORDER BY promoted_at DESC LIMIT 1"
-        ).fetchone()
-        ledger_current = promoted_row[0] if promoted_row else ""
-        if expected_current_version != ledger_current:
+        pending_versions = [row[0] for row in pending]
+        if version in pending_versions and pointer == version:
+            _mark_ledger_promoted(conn, version)
+            conn.commit()
+            return
+        others = [item for item in pending_versions if item != version]
+        if others:
+            other = others[0]
+            if pointer == other:
+                _mark_ledger_promoted(conn, other)
+            else:
+                conn.rollback()
+                raise ValueError(
+                    f"promotion pending for {other!r}; aborting {version!r}"
+                )
+        if expected_current_version != pointer:
             conn.rollback()
             raise ValueError(
                 f"expected_current_version {expected_current_version!r} does not "
-                f"match ledger {ledger_current!r}"
+                f"match current pointer {pointer!r}"
             )
         existing = conn.execute(
             "SELECT status FROM promotions WHERE version = ?", (version,)
@@ -312,17 +352,20 @@ def _commit_promotion(
     conn = _ledger(storage)
     try:
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute(
-            "UPDATE promotions SET status = 'promoted', promoted_at = ? "
-            "WHERE version = ?",
-            (datetime.now(UTC).isoformat(), version),
-        )
+        _mark_ledger_promoted(conn, version)
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     finally:
         conn.close()
+
+
+def _mark_ledger_promoted(conn: sqlite3.Connection, version: str) -> None:
+    conn.execute(
+        "UPDATE promotions SET status = 'promoted', promoted_at = ? WHERE version = ?",
+        (datetime.now(UTC).isoformat(), version),
+    )
 
 
 def _ledger(storage: PPODiscoveryHalalNewModelStorage) -> sqlite3.Connection:

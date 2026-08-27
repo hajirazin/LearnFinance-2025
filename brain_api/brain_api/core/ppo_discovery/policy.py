@@ -213,7 +213,7 @@ class PPODiscoveryActorCritic(nn.Module):
         return self.value_head(pooled).squeeze(-1)
 
     def infer_decision(
-        self, state: CanonicalPPOState
+        self, state: CanonicalPPOState, force_k: int | None = None
     ) -> tuple[dict[str, float], tuple[str, ...]]:
         """Deterministic weights plus selection-logit order (symbol tie-break)."""
         self.eval()
@@ -228,10 +228,13 @@ class PPODiscoveryActorCritic(nn.Module):
             )
             count_logits, selection_logits, _ = self.heads(encoded, pooled)
             n_eligible = int(mask.sum().item())
-            k_values = torch.arange(count_logits.size(-1), device=device)
-            valid = (k_values <= n_eligible) & (k_values <= MAX_SELECTED)
-            masked_counts = count_logits[0].masked_fill(~valid, float("-inf"))
-            k = int(torch.argmax(masked_counts).item())
+            if force_k is not None:
+                k = min(max(int(force_k), 0), n_eligible, MAX_SELECTED)
+            else:
+                k_values = torch.arange(count_logits.size(-1), device=device)
+                valid = (k_values <= n_eligible) & (k_values <= MAX_SELECTED)
+                masked_counts = count_logits[0].masked_fill(~valid, float("-inf"))
+                k = int(torch.argmax(masked_counts).item())
             if k == 0:
                 return {"CASH": 1.0}, ()
             valid_indices = [index for index, flag in enumerate(mask.tolist()) if flag]
@@ -255,12 +258,15 @@ class PPODiscoveryActorCritic(nn.Module):
                 asset_mask=mask,
                 symbols=state.symbols,
                 cash_floor=self.config.cash_floor,
+                force_k=force_k,
             )
             return weights, order
 
-    def infer_weights(self, state: CanonicalPPOState) -> dict[str, float]:
+    def infer_weights(
+        self, state: CanonicalPPOState, force_k: int | None = None
+    ) -> dict[str, float]:
         """Deterministic inference action."""
-        weights, _order = self.infer_decision(state)
+        weights, _order = self.infer_decision(state, force_k=force_k)
         return weights
 
     def count_and_selection_entropy(

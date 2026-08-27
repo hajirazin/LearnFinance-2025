@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,22 @@ from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 def model_config_hash(config: PPODiscoveryConfig) -> str:
     payload = json.dumps(config.to_dict(), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def hash_state_dict(state_dict: Mapping[str, Any]) -> str:
+    """Stable SHA-256 of a tensor state_dict (Stage-A encoder identity)."""
+    digest = hashlib.sha256()
+    for key in sorted(state_dict):
+        tensor = state_dict[key]
+        array = tensor.detach().cpu().contiguous().numpy()
+        digest.update(key.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(array.dtype).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(array.shape).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(array.tobytes())
+    return digest.hexdigest()
 
 
 def seed_checkpoint_dir(
@@ -124,6 +141,7 @@ def _sha256_file(path: Path) -> str:
 
 
 __all__ = [
+    "hash_state_dict",
     "load_seed_checkpoint",
     "model_config_hash",
     "save_seed_checkpoint",

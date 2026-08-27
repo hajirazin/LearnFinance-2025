@@ -31,6 +31,7 @@ def assess_price_readiness(
     if loaded is None:
         loaded = load_prices_yfinance([*symbols, *INDEX_SYMBOLS], price_start, end_date)
     issues: list[str] = []
+    exclusions: list[str] = []
     session_hashes: dict[str, str] = {}
     session_counts: dict[str, int] = {}
     for name in INDEX_SYMBOLS:
@@ -53,7 +54,7 @@ def assess_price_readiness(
             require_history=False,
         )
         if issue:
-            issues.append(issue)
+            exclusions.append(issue)
             continue
         if session_counts.get(symbol, 0) >= HISTORY_BARS:
             eligible += 1
@@ -65,6 +66,7 @@ def assess_price_readiness(
     return {
         "ready": not issues,
         "issues": issues,
+        "exclusions": exclusions,
         "session_hashes": session_hashes,
         "session_counts": session_counts,
         "eligible_symbol_count": eligible,

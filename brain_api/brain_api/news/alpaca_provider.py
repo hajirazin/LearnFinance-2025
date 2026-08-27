@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 import requests
@@ -23,8 +25,26 @@ from brain_api.news.models import (
 logger = logging.getLogger(__name__)
 
 ALPACA_NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
+ALPACA_NEWS_SYMBOL_BATCH_SIZE = 20
 PAGE_LIMIT = 50
 MAX_RETRIES = 3
+
+
+@dataclass(frozen=True)
+class WindowBatchFetch:
+    articles_by_symbol: dict[str, list[ProviderArticle]]
+    page_count: int
+    empties_are_proven: bool
+
+
+def _article_targets(item: dict, requested: set[str]) -> list[str]:
+    raw = item.get("symbols")
+    names: list[str] = []
+    if isinstance(raw, str):
+        names = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, list):
+        names = [str(part).strip() for part in raw if str(part).strip()]
+    return [name for name in names if name in requested]
 
 
 class AlpacaNewsProvider:
@@ -70,12 +90,12 @@ class AlpacaNewsProvider:
     def _get_page(
         self,
         *,
-        symbol: str,
+        symbols: str,
         window: NewsWindow,
         page_token: str | None,
     ) -> tuple[list[dict], str | None]:
         params: dict[str, object] = {
-            "symbols": symbol,
+            "symbols": symbols,
             "start": window.start_exclusive.isoformat(),
             "end": window.end_inclusive.isoformat(),
             "limit": PAGE_LIMIT,
@@ -99,8 +119,8 @@ class AlpacaNewsProvider:
                     raise NewsProviderError("Alpaca news request failed") from exc
                 backoff = 0.5 * (2**attempt)
                 logger.warning(
-                    "Alpaca request error symbol=%s attempt=%s backoff=%.2fs err=%s",
-                    symbol,
+                    "Alpaca request error symbols=%s attempt=%s backoff=%.2fs err=%s",
+                    symbols,
                     attempt + 1,
                     backoff,
                     exc,
@@ -115,9 +135,9 @@ class AlpacaNewsProvider:
                     raise last_error
                 backoff = 0.5 * (2**attempt)
                 logger.warning(
-                    "Alpaca HTTP %s symbol=%s attempt=%s backoff=%.2fs",
+                    "Alpaca HTTP %s symbols=%s attempt=%s backoff=%.2fs",
                     response.status_code,
-                    symbol,
+                    symbols,
                     attempt + 1,
                     backoff,
                 )
@@ -175,7 +195,7 @@ class AlpacaNewsProvider:
         page_count = 0
         while True:
             items, next_token = self._get_page(
-                symbol=symbol, window=window, page_token=page_token
+                symbols=symbol, window=window, page_token=page_token
             )
             page_count += 1
             is_last = not next_token
@@ -210,3 +230,76 @@ class AlpacaNewsProvider:
             seen_tokens.add(next_token)
             page_token = next_token
         return articles, page_count
+
+    def fetch_window_batch(
+        self, symbols: Sequence[str], window: NewsWindow
+    ) -> WindowBatchFetch:
+        requested = tuple(dict.fromkeys(symbols))
+        if not requested:
+            return WindowBatchFetch({}, 0, True)
+        requested_set = set(requested)
+        articles_by_symbol: dict[str, list[ProviderArticle]] = {
+            symbol: [] for symbol in requested
+        }
+        unique_ids: dict[str, set[str]] = {symbol: set() for symbol in requested}
+        page_token: str | None = None
+        seen_tokens: set[str] = set()
+        page_count = 0
+        last_page_len = 0
+        truncated = False
+        leftover_token: str | None = None
+        while True:
+            items, next_token = self._get_page(
+                symbols=",".join(requested), window=window, page_token=page_token
+            )
+            page_count += 1
+            last_page_len = len(items)
+            leftover_token = next_token
+            is_last = not next_token
+            if page_count == 1 or is_last or page_count % 10 == 0:
+                logger.info(
+                    "Alpaca batch page symbols=%s page=%s page_token_present=%s "
+                    "articles_on_page=%s",
+                    ",".join(requested),
+                    page_count,
+                    bool(next_token),
+                    len(items),
+                )
+            capped = False
+            for item in items:
+                if not isinstance(item, dict):
+                    raise NewsProviderError(
+                        "Alpaca news collection contained an unusable article"
+                    )
+                for target in _article_targets(item, requested_set):
+                    article = self._parse_article(item, target)
+                    if article.provider_article_id in unique_ids[target]:
+                        continue
+                    unique_ids[target].add(article.provider_article_id)
+                    if len(unique_ids[target]) > MAX_ARTICLES_PER_SYMBOL_WINDOW:
+                        unique_ids[target].remove(article.provider_article_id)
+                        capped = True
+                        continue
+                    if self._in_created_window(article.created_at, window):
+                        articles_by_symbol[target].append(article)
+            if capped:
+                truncated = True
+                break
+            if not next_token:
+                leftover_token = None
+                break
+            if next_token in seen_tokens:
+                raise RepeatedPageTokenError(
+                    f"repeated Alpaca page token for {','.join(requested)}: {next_token}"
+                )
+            seen_tokens.add(next_token)
+            page_token = next_token
+        last_page_short = last_page_len < PAGE_LIMIT
+        empties_are_proven = (
+            (not truncated) and leftover_token is None and last_page_short
+        )
+        return WindowBatchFetch(
+            articles_by_symbol=articles_by_symbol,
+            page_count=page_count,
+            empties_are_proven=empties_are_proven,
+        )

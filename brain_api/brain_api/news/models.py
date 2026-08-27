@@ -16,9 +16,9 @@ FINBERT_MAX_LENGTH = 512
 MAX_ARTICLES_PER_SYMBOL_WINDOW = 500
 MAX_ARTICLES_PER_REQUEST = 10_000
 CONFIDENCE_RECENCY_TAU_HOURS = 168.0
-# First Monday 09:00 NY window Alpaca/Benzinga can materialize. PPO training
-# must not request coverage before this instant.
-NEWS_ARCHIVE_START_ISO = "2020-10-05T09:00:00-04:00"
+# First Monday 09:00 America/New_York in 2015. PPO training must not request
+# coverage before this instant.
+NEWS_ARCHIVE_START_ISO = "2015-01-05T09:00:00-05:00"
 
 CoverageStatus = Literal["complete", "verified_empty"]
 JobStatus = Literal["pending", "running", "complete", "failed"]

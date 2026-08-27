@@ -29,14 +29,16 @@ def test_missing_stock_is_omitted_but_spy_and_vix_are_required() -> None:
 
 def test_cutoffs_before_news_archive_are_skipped() -> None:
     assert (
-        news_window_starts_at_or_after_archive(datetime(2020, 1, 3, 20, 0, tzinfo=UTC))
+        news_window_starts_at_or_after_archive(
+            datetime(2014, 12, 26, 20, 0, tzinfo=UTC)
+        )
         is False
     )
     assert (
-        news_window_starts_at_or_after_archive(datetime(2020, 10, 2, 20, 0, tzinfo=UTC))
+        news_window_starts_at_or_after_archive(datetime(2015, 1, 2, 20, 0, tzinfo=UTC))
         is False
     )
     assert (
-        news_window_starts_at_or_after_archive(datetime(2020, 10, 9, 20, 0, tzinfo=UTC))
+        news_window_starts_at_or_after_archive(datetime(2015, 1, 9, 20, 0, tzinfo=UTC))
         is True
     )

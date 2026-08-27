@@ -6,7 +6,11 @@ import logging
 import time
 from collections.abc import Sequence
 
-from brain_api.news.alpaca_provider import AlpacaNewsProvider
+from brain_api.news.alpaca_provider import (
+    ALPACA_NEWS_SYMBOL_BATCH_SIZE,
+    AlpacaNewsProvider,
+    WindowBatchFetch,
+)
 from brain_api.news.coalescing import COORDINATOR, _InFlight, materialization_key
 from brain_api.news.errors import (
     NewsCapExceeded,
@@ -123,69 +127,188 @@ class NewsService:
     ) -> None:
         total = len(symbols)
         unique_request_ids: set[str] = set()
-        for index, symbol in enumerate(symbols, start=1):
+        pending: list[str] = []
+        for symbol in symbols:
             if self.store.get_coverage(symbol, window) is not None:
                 if job is not None:
                     with job.lock:
                         job.done.add(symbol)
                 continue
-            symbol_started = time.perf_counter()
-            try:
-                articles, page_count = self.provider.fetch_window(symbol, window)
-            except Exception as exc:
-                logger.error(
-                    "news materialize failed symbol=%s window_end=%s err=%s",
+            pending.append(symbol)
+        batch_fetch = getattr(self.provider, "fetch_window_batch", None)
+        if callable(batch_fetch):
+            for offset in range(0, len(pending), ALPACA_NEWS_SYMBOL_BATCH_SIZE):
+                chunk = pending[offset : offset + ALPACA_NEWS_SYMBOL_BATCH_SIZE]
+                self._materialize_batch(
+                    batch_fetch,
+                    chunk,
+                    window,
+                    job,
+                    unique_request_ids,
+                    total=total,
+                    index_base=offset,
+                )
+            return
+        for index, symbol in enumerate(pending, start=1):
+            self._materialize_one(
+                symbol,
+                window,
+                job,
+                unique_request_ids,
+                index=index,
+                total=total,
+            )
+
+    def _materialize_batch(
+        self,
+        batch_fetch,
+        symbols: Sequence[str],
+        window: NewsWindow,
+        job: _InFlight | None,
+        unique_request_ids: set[str],
+        *,
+        total: int,
+        index_base: int,
+    ) -> None:
+        result: WindowBatchFetch = batch_fetch(symbols, window)
+        misses: list[str] = []
+        for offset, symbol in enumerate(symbols):
+            if self.store.get_coverage(symbol, window) is not None:
+                if job is not None:
+                    with job.lock:
+                        job.done.add(symbol)
+                continue
+            articles = result.articles_by_symbol.get(symbol, [])
+            if articles:
+                self._persist_fetched(
                     symbol,
-                    window.end_inclusive.isoformat(),
-                    exc,
+                    articles,
+                    result.page_count,
+                    window,
+                    job,
+                    unique_request_ids,
+                    index=index_base + offset + 1,
+                    total=total,
                 )
-                raise
-            unique_ids = {article.provider_article_id for article in articles}
-            if len(unique_ids) > MAX_ARTICLES_PER_SYMBOL_WINDOW:
-                raise NewsCapExceeded(
-                    f"{symbol} has {len(unique_ids)} unique articles in window "
-                    f"(cap {MAX_ARTICLES_PER_SYMBOL_WINDOW})"
+                continue
+            if result.empties_are_proven:
+                self._persist_fetched(
+                    symbol,
+                    [],
+                    result.page_count,
+                    window,
+                    job,
+                    unique_request_ids,
+                    index=index_base + offset + 1,
+                    total=total,
                 )
-            unique_request_ids.update(unique_ids)
-            if len(unique_request_ids) > MAX_ARTICLES_PER_REQUEST:
-                raise NewsCapExceeded(
-                    f"request has {len(unique_request_ids)} unique articles "
-                    f"(cap {MAX_ARTICLES_PER_REQUEST})"
-                )
-            usable, excluded = self._partition_revisions(articles, window)
-            events, cache_rows = self._score_articles(usable)
-            status = "verified_empty" if not events else "complete"
-            coverage = NewsCoverage(
-                provider=NEWS_PROVIDER,
-                symbol=symbol,
-                window_start_exclusive=window.start_exclusive,
-                window_end_inclusive=window.end_inclusive,
-                schema_version=NEWS_SCHEMA_VERSION,
-                sentiment_model=NEWS_SENTIMENT_MODEL,
-                sentiment_model_revision=NEWS_SENTIMENT_REVISION,
-                status=status,
-                page_count=page_count,
-                event_count=len(events),
-                future_revision_excluded_count=excluded,
-                fetched_at=utcnow(),
-                request_manifest_hash=request_manifest_hash([symbol], window),
+                continue
+            misses.append(symbol)
+        for offset, symbol in enumerate(misses):
+            self._materialize_one(
+                symbol,
+                window,
+                job,
+                unique_request_ids,
+                index=index_base + offset + 1,
+                total=total,
             )
-            self.store.commit_window(
-                events=events, coverage=coverage, cache_rows=cache_rows
-            )
+
+    def _materialize_one(
+        self,
+        symbol: str,
+        window: NewsWindow,
+        job: _InFlight | None,
+        unique_request_ids: set[str],
+        *,
+        index: int,
+        total: int,
+    ) -> None:
+        if self.store.get_coverage(symbol, window) is not None:
             if job is not None:
                 with job.lock:
                     job.done.add(symbol)
-            logger.info(
-                "news symbol=%s index=%s/%s pages=%s event_count=%s status=%s elapsed_ms=%.0f",
+            return
+        try:
+            articles, page_count = self.provider.fetch_window(symbol, window)
+        except Exception as exc:
+            logger.error(
+                "news materialize failed symbol=%s window_end=%s err=%s",
                 symbol,
-                index,
-                total,
-                page_count,
-                len(events),
-                status,
-                (time.perf_counter() - symbol_started) * 1000,
+                window.end_inclusive.isoformat(),
+                exc,
             )
+            raise
+        self._persist_fetched(
+            symbol,
+            articles,
+            page_count,
+            window,
+            job,
+            unique_request_ids,
+            index=index,
+            total=total,
+        )
+
+    def _persist_fetched(
+        self,
+        symbol: str,
+        articles: Sequence[ProviderArticle],
+        page_count: int,
+        window: NewsWindow,
+        job: _InFlight | None,
+        unique_request_ids: set[str],
+        *,
+        index: int,
+        total: int,
+    ) -> None:
+        symbol_started = time.perf_counter()
+        unique_ids = {article.provider_article_id for article in articles}
+        if len(unique_ids) > MAX_ARTICLES_PER_SYMBOL_WINDOW:
+            raise NewsCapExceeded(
+                f"{symbol} has {len(unique_ids)} unique articles in window "
+                f"(cap {MAX_ARTICLES_PER_SYMBOL_WINDOW})"
+            )
+        unique_request_ids.update(unique_ids)
+        if len(unique_request_ids) > MAX_ARTICLES_PER_REQUEST:
+            raise NewsCapExceeded(
+                f"request has {len(unique_request_ids)} unique articles "
+                f"(cap {MAX_ARTICLES_PER_REQUEST})"
+            )
+        usable, excluded = self._partition_revisions(articles, window)
+        events, cache_rows = self._score_articles(usable)
+        status = "verified_empty" if not events else "complete"
+        coverage = NewsCoverage(
+            provider=NEWS_PROVIDER,
+            symbol=symbol,
+            window_start_exclusive=window.start_exclusive,
+            window_end_inclusive=window.end_inclusive,
+            schema_version=NEWS_SCHEMA_VERSION,
+            sentiment_model=NEWS_SENTIMENT_MODEL,
+            sentiment_model_revision=NEWS_SENTIMENT_REVISION,
+            status=status,
+            page_count=page_count,
+            event_count=len(events),
+            future_revision_excluded_count=excluded,
+            fetched_at=utcnow(),
+            request_manifest_hash=request_manifest_hash([symbol], window),
+        )
+        self.store.commit_window(
+            events=events, coverage=coverage, cache_rows=cache_rows
+        )
+        if job is not None:
+            with job.lock:
+                job.done.add(symbol)
+        logger.info(
+            "news symbol=%s index=%s/%s pages=%s event_count=%s status=%s elapsed_ms=%.0f",
+            symbol,
+            index,
+            total,
+            page_count,
+            len(events),
+            status,
+            (time.perf_counter() - symbol_started) * 1000,
+        )
 
     @staticmethod
     def _partition_revisions(

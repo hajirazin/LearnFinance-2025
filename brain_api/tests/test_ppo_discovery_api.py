@@ -147,6 +147,35 @@ def test_promote_rejects_no_news_variant() -> None:
     assert "full" in response.json()["detail"].lower()
 
 
+def test_promote_accepts_repair_override() -> None:
+    with patch(
+        "brain_api.routes.training.ppo_discovery.promote.promote_ppo_discovery",
+        return_value={
+            "version": "v1",
+            "approved_by": "razin",
+            "promoted": True,
+            "failure_reasons": [],
+            "config_changed": False,
+            "unpaired_acknowledged": False,
+            "repair_override": True,
+        },
+    ) as promote:
+        response = client.post(
+            "/train/ppo-discovery/promote",
+            json={
+                "version": "v1",
+                "expected_config_hash": "abc",
+                "approved_by": "razin",
+                "expected_current_version": "",
+                "repair_override": True,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["repair_override"] is True
+    promote.assert_called_once()
+    assert promote.call_args.kwargs["repair_override"] is True
+
+
 def test_incomplete_news_state_is_422() -> None:
     from brain_api.news.errors import NewsCoverageMissing
 
@@ -200,6 +229,7 @@ def test_preflight_halal_new_ok(mock_ready, mock_snap) -> None:
     mock_ready.return_value = {
         "ready": True,
         "issues": [],
+        "exclusions": [],
         "session_hashes": {"AAPL": "a", "MSFT": "b"},
         "session_counts": {"AAPL": 300, "MSFT": 300},
         "eligible_symbol_count": 12,
@@ -213,6 +243,7 @@ def test_preflight_halal_new_ok(mock_ready, mock_snap) -> None:
     assert payload["ready"] is True
     assert payload["sorted_symbols"] == ["AAPL", "MSFT"]
     assert payload["snapshot_sha256"] == "sha256:abc"
+    assert payload["exclusions"] == []
     mock_ready.assert_called_once()
 
 
