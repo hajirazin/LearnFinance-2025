@@ -8,6 +8,7 @@ from brain_api.news.sentiment import (
     StrictFinBERTScorer,
     assemble_scored_text,
     normalize_scored_text,
+    try_assemble_scored_text,
 )
 
 
@@ -15,11 +16,20 @@ def test_normalize_and_assemble() -> None:
     assert normalize_scored_text("  <b>Hello</b>   world ") == "Hello world"
     text = assemble_scored_text("Apple beats", "Revenue up")
     assert text == "Apple beats Revenue up"
+    assert try_assemble_scored_text("Apple beats", "Revenue up") == text
 
 
 def test_empty_text_raises() -> None:
     with pytest.raises(SentimentScoringError, match="empty text"):
         assemble_scored_text("   ", "")
+
+
+def test_try_assemble_returns_none_for_empty_normalized_text() -> None:
+    assert try_assemble_scored_text("   ", "") is None
+    assert try_assemble_scored_text("", "") is None
+    assert try_assemble_scored_text("<p></p>", "") is None
+    assert try_assemble_scored_text("&nbsp;", "   ") is None
+    assert try_assemble_scored_text("Apple beats", "") == "Apple beats"
 
 
 def test_revision_constant() -> None:

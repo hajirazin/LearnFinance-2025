@@ -22,7 +22,13 @@ def _window() -> NewsWindow:
     )
 
 
-def _article(symbol: str, article_id: str = "1") -> ProviderArticle:
+def _article(
+    symbol: str,
+    article_id: str = "1",
+    *,
+    headline: str = "Hello",
+    summary: str = "World",
+) -> ProviderArticle:
     created = datetime(2026, 8, 18, 9, 0, tzinfo=NY)
     return ProviderArticle(
         provider_article_id=article_id,
@@ -30,15 +36,19 @@ def _article(symbol: str, article_id: str = "1") -> ProviderArticle:
         created_at=created,
         updated_at=created,
         source="benzinga",
-        headline="Hello",
-        summary="World",
+        headline=headline,
+        summary=summary,
     )
 
 
 class FakeScorer:
     batch_size = 32
 
+    def __init__(self) -> None:
+        self.texts_seen: list[str] = []
+
     def score_texts(self, texts: list[str]) -> list[ScoredSentiment]:
+        self.texts_seen.extend(texts)
         return [
             ScoredSentiment(
                 sentiment_score=0.2,
@@ -209,3 +219,70 @@ def test_provider_without_batch_still_materializes(tmp_path) -> None:
     coverage, events = service.materialize(["AAPL"], window)
     assert coverage[0].status == "complete"
     assert len(events) == 1
+
+
+def test_mixed_unscorable_article_is_skipped(tmp_path, caplog) -> None:
+    window = _window()
+    store = NewsStore(tmp_path)
+    scorer = FakeScorer()
+    provider = _BatchProvider(
+        WindowBatchFetch(
+            articles_by_symbol={
+                "AAPL": [
+                    _article("AAPL", "good"),
+                    _article("AAPL", "empty", headline="   ", summary=""),
+                ]
+            },
+            page_count=1,
+            empties_are_proven=True,
+        )
+    )
+    service = NewsService(store, provider=provider, scorer=scorer)
+    coverage, events = service.materialize(["AAPL"], window)
+    assert coverage[0].status == "complete"
+    assert [event.provider_article_id for event in events] == ["good"]
+    assert scorer.texts_seen == ["Hello World"]
+    assert "news skip unscorable article id=empty symbol=AAPL" in caplog.text
+
+
+def test_all_unscorable_articles_write_verified_empty(tmp_path, caplog) -> None:
+    window = _window()
+    store = NewsStore(tmp_path)
+    scorer = FakeScorer()
+    provider = _BatchProvider(
+        WindowBatchFetch(
+            articles_by_symbol={
+                "AAPL": [_article("AAPL", "blank", headline="", summary="")]
+            },
+            page_count=1,
+            empties_are_proven=True,
+        )
+    )
+    service = NewsService(store, provider=provider, scorer=scorer)
+    coverage, events = service.materialize(["AAPL"], window)
+    assert coverage[0].status == "verified_empty"
+    assert events == []
+    assert scorer.texts_seen == []
+    assert "news skip unscorable article id=blank symbol=AAPL" in caplog.text
+
+
+def test_html_only_headline_is_skipped(tmp_path) -> None:
+    window = _window()
+    store = NewsStore(tmp_path)
+    scorer = FakeScorer()
+    provider = _BatchProvider(
+        WindowBatchFetch(
+            articles_by_symbol={
+                "AAPL": [
+                    _article("AAPL", "tags", headline="<p></p>", summary="&nbsp;"),
+                ]
+            },
+            page_count=1,
+            empties_are_proven=True,
+        )
+    )
+    service = NewsService(store, provider=provider, scorer=scorer)
+    coverage, events = service.materialize(["AAPL"], window)
+    assert coverage[0].status == "verified_empty"
+    assert events == []
+    assert scorer.texts_seen == []

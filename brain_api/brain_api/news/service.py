@@ -36,8 +36,8 @@ from brain_api.news.models import (
 from brain_api.news.provider import NewsProvider
 from brain_api.news.sentiment import (
     StrictFinBERTScorer,
-    assemble_scored_text,
     scored_text_sha256,
+    try_assemble_scored_text,
 )
 from brain_api.news.store import NewsStore, utcnow
 
@@ -401,7 +401,14 @@ class NewsService:
         cache_rows: list[tuple] = []
         prepared: list[tuple[ProviderArticle, str, str]] = []
         for article in articles:
-            text = assemble_scored_text(article.headline, article.summary)
+            text = try_assemble_scored_text(article.headline, article.summary)
+            if text is None:
+                logger.warning(
+                    "news skip unscorable article id=%s symbol=%s",
+                    article.provider_article_id,
+                    article.symbol,
+                )
+                continue
             prepared.append((article, text, scored_text_sha256(text)))
         cached = self.store.cache_get_many(
             [digest for _article, _text, digest in prepared]

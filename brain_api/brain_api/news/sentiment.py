@@ -35,14 +35,21 @@ def normalize_scored_text(text: str) -> str:
     return _WS_RE.sub(" ", normalized).strip()
 
 
-def assemble_scored_text(headline: str, summary: str) -> str:
+def try_assemble_scored_text(headline: str, summary: str) -> str | None:
     head = normalize_scored_text(headline)
     summ = normalize_scored_text(summary)
     if not head and not summ:
-        raise SentimentScoringError("empty text after normalization")
+        return None
     if summ:
         return f"{head} {summ}".strip()
     return head
+
+
+def assemble_scored_text(headline: str, summary: str) -> str:
+    text = try_assemble_scored_text(headline, summary)
+    if text is None:
+        raise SentimentScoringError("empty text after normalization")
+    return text
 
 
 def scored_text_sha256(text: str) -> str:
