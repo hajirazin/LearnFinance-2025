@@ -9,7 +9,7 @@ from datetime import datetime
 from brain_api.core.weekly_decision import canonical_monday_windows_contained_in
 from brain_api.news.models import NewsWindow
 from brain_api.news.service import NewsService
-from brain_api.news.store import NewsStore
+from brain_api.news.store import NewsStore, coverage_key
 from brain_api.news_etl.jobs import get_or_create_job, job_windows_total, mark_job
 
 logger = logging.getLogger(__name__)
@@ -50,26 +50,37 @@ def run_backfill(
         len(windows),
     )
     job = mark_job(store, job, status="running", error=None)
-    done = 0
+    existing = store.coverage_keys(ordered_symbols)
+    pending_by_window: list[tuple[NewsWindow, list[str]]] = []
+    for window in windows:
+        pending = [
+            symbol
+            for symbol in ordered_symbols
+            if coverage_key(symbol, window.start_exclusive, window.end_inclusive)
+            not in existing
+        ]
+        if pending:
+            pending_by_window.append((window, pending))
+    done = windows_total - sum(len(pending) for _, pending in pending_by_window)
     events_scored = 0
     try:
-        for window in windows:
-            pending = [
-                symbol
-                for symbol in ordered_symbols
-                if store.get_coverage(symbol, window) is None
-            ]
-            already = len(ordered_symbols) - len(pending)
-            if already:
-                done += already
-                job = mark_job(
-                    store,
-                    job,
-                    windows_done=done,
-                    events_scored=events_scored,
-                )
-            if not pending:
-                continue
+        job = mark_job(store, job, windows_done=done, events_scored=events_scored)
+        logger.info(
+            "news backfill skip-summary pending_windows=%s skipped_cells=%s done=%s/%s",
+            len(pending_by_window),
+            done,
+            done,
+            windows_total,
+        )
+        if not pending_by_window:
+            mark_job(store, job, status="complete")
+            logger.info(
+                "news backfill end job_id=%s events_scored=%s",
+                job.job_id,
+                events_scored,
+            )
+            return job.job_id
+        for window, pending in pending_by_window:
             _coverage, events = service.materialize(pending, window)
             done += len(pending)
             events_scored += len(events)

@@ -25,7 +25,6 @@ from brain_api.news.models import (
 logger = logging.getLogger(__name__)
 
 ALPACA_NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
-ALPACA_NEWS_SYMBOL_BATCH_SIZE = 20
 PAGE_LIMIT = 50
 MAX_RETRIES = 3
 
@@ -255,16 +254,14 @@ class AlpacaNewsProvider:
             page_count += 1
             last_page_len = len(items)
             leftover_token = next_token
-            is_last = not next_token
-            if page_count == 1 or is_last or page_count % 10 == 0:
-                logger.info(
-                    "Alpaca batch page symbols=%s page=%s page_token_present=%s "
-                    "articles_on_page=%s",
-                    ",".join(requested),
-                    page_count,
-                    bool(next_token),
-                    len(items),
-                )
+            logger.info(
+                "Alpaca batch page symbol_count=%s page=%s page_token_present=%s "
+                "articles_on_page=%s",
+                len(requested),
+                page_count,
+                bool(next_token),
+                len(items),
+            )
             capped = False
             for item in items:
                 if not isinstance(item, dict):

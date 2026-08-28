@@ -7,7 +7,6 @@ import time
 from collections.abc import Sequence
 
 from brain_api.news.alpaca_provider import (
-    ALPACA_NEWS_SYMBOL_BATCH_SIZE,
     AlpacaNewsProvider,
     WindowBatchFetch,
 )
@@ -88,12 +87,8 @@ class NewsService:
             )
         unique_symbols = list(dict.fromkeys(symbols))
         key = materialization_key(window)
-        already = [
-            symbol
-            for symbol in unique_symbols
-            if self.store.get_coverage(symbol, window) is not None
-        ]
-        pending = [symbol for symbol in unique_symbols if symbol not in already]
+        covered = self.store.covered_symbols(unique_symbols, window)
+        pending = [symbol for symbol in unique_symbols if symbol not in covered]
         coalesce = "hit" if not pending else "miss"
         logger.info(
             "news materialize start key=%s symbol_count=%s pending=%s coalesce=%s start=%s end=%s",
@@ -127,9 +122,10 @@ class NewsService:
     ) -> None:
         total = len(symbols)
         unique_request_ids: set[str] = set()
+        covered = self.store.covered_symbols(symbols, window)
         pending: list[str] = []
         for symbol in symbols:
-            if self.store.get_coverage(symbol, window) is not None:
+            if symbol in covered:
                 if job is not None:
                     with job.lock:
                         job.done.add(symbol)
@@ -137,16 +133,15 @@ class NewsService:
             pending.append(symbol)
         batch_fetch = getattr(self.provider, "fetch_window_batch", None)
         if callable(batch_fetch):
-            for offset in range(0, len(pending), ALPACA_NEWS_SYMBOL_BATCH_SIZE):
-                chunk = pending[offset : offset + ALPACA_NEWS_SYMBOL_BATCH_SIZE]
+            if pending:
                 self._materialize_batch(
                     batch_fetch,
-                    chunk,
+                    pending,
                     window,
                     job,
                     unique_request_ids,
                     total=total,
-                    index_base=offset,
+                    index_base=0,
                 )
             return
         for index, symbol in enumerate(pending, start=1):

@@ -7,12 +7,28 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
-# Configure logging to show INFO level logs from our modules
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s %(name)s: %(message)s",
-)
 
+def _configure_app_logging() -> None:
+    """Make ``brain_api`` INFO visible under uvicorn.
+
+    Uvicorn's dictConfig runs before this module is imported and does not
+    set the root logger. ``basicConfig`` is then a no-op, so app INFO
+    records are dropped (root stays WARNING). Force root INFO and attach a
+    stderr handler when the root has none.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        root.addHandler(handler)
+
+
+_configure_app_logging()
 logger = logging.getLogger(__name__)
 
 # Load .env file before other imports that may read environment variables

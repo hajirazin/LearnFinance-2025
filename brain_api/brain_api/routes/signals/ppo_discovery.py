@@ -43,6 +43,10 @@ router = APIRouter()
 ENCODER_CALENDAR_LOOKBACK_DAYS = 450
 
 
+def get_news_service() -> NewsService:
+    return NewsService(NewsStore(DEFAULT_DATA_PATH))
+
+
 class PPOStateRequest(BaseModel):
     as_of: str
     run_id: str
@@ -68,7 +72,7 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
         window = NewsWindow(
             start_exclusive=start_exclusive, end_inclusive=end_inclusive
         )
-        _coverage, events = NewsService(NewsStore(DEFAULT_DATA_PATH)).materialize(
+        _coverage, events = get_news_service().materialize(
             list(snapshot.sorted_symbols), window
         )
         events_by_symbol: dict[str, list] = {

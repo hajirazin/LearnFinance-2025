@@ -314,6 +314,77 @@ class NewsStore:
             request_manifest_hash=row[12],
         )
 
+    def coverage_keys(
+        self,
+        symbols: Sequence[str],
+        *,
+        provider: str = NEWS_PROVIDER,
+        schema_version: int = NEWS_SCHEMA_VERSION,
+        sentiment_model: str = NEWS_SENTIMENT_MODEL,
+        sentiment_model_revision: str = NEWS_SENTIMENT_REVISION,
+    ) -> set[tuple[str, datetime, datetime]]:
+        """All coverage PK instants for these symbols under the current news identity."""
+        if not symbols:
+            return set()
+        placeholders = ", ".join("?" * len(symbols))
+        sql = f"""
+            SELECT symbol, window_start_exclusive, window_end_inclusive
+            FROM news_coverage
+            WHERE provider = ?
+              AND schema_version = ?
+              AND sentiment_model = ?
+              AND sentiment_model_revision = ?
+              AND symbol IN ({placeholders})
+        """
+        params: list[object] = [
+            provider,
+            schema_version,
+            sentiment_model,
+            sentiment_model_revision,
+            *symbols,
+        ]
+        with self._connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        return {coverage_key(row[0], row[1], row[2]) for row in rows}
+
+    def covered_symbols(
+        self,
+        symbols: Sequence[str],
+        window: NewsWindow,
+        *,
+        provider: str = NEWS_PROVIDER,
+        schema_version: int = NEWS_SCHEMA_VERSION,
+        sentiment_model: str = NEWS_SENTIMENT_MODEL,
+        sentiment_model_revision: str = NEWS_SENTIMENT_REVISION,
+    ) -> set[str]:
+        """Symbols in ``symbols`` that already have coverage for this exact window."""
+        if not symbols:
+            return set()
+        placeholders = ", ".join("?" * len(symbols))
+        sql = f"""
+            SELECT symbol
+            FROM news_coverage
+            WHERE provider = ?
+              AND symbol IN ({placeholders})
+              AND window_start_exclusive = ?
+              AND window_end_inclusive = ?
+              AND schema_version = ?
+              AND sentiment_model = ?
+              AND sentiment_model_revision = ?
+        """
+        params: list[object] = [
+            provider,
+            *symbols,
+            window.start_exclusive,
+            window.end_inclusive,
+            schema_version,
+            sentiment_model,
+            sentiment_model_revision,
+        ]
+        with self._connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        return {row[0] for row in rows}
+
     def query_events(
         self,
         symbols: Sequence[str],
@@ -445,6 +516,13 @@ class NewsStore:
             created_at=row[13],
             updated_at=row[14],
         )
+
+
+def coverage_key(
+    symbol: str, start: datetime, end: datetime
+) -> tuple[str, datetime, datetime]:
+    """UTC-normalized coverage membership key for one ``(symbol, window)``."""
+    return (symbol, start.astimezone(UTC), end.astimezone(UTC))
 
 
 def utcnow() -> datetime:

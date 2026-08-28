@@ -31,6 +31,7 @@ def get_news_store() -> NewsStore:
 
 
 def _run_backfill(symbols: list[str], start: datetime, end: datetime) -> None:
+    logger.info("news backfill worker start symbol_count=%s", len(symbols))
     try:
         run_backfill(symbols=symbols, start=start, end=end, store=get_news_store())
     except Exception:
@@ -60,6 +61,12 @@ def start_news_backfill(
     )
     background_tasks.add_task(
         _run_backfill, request.symbols, request.start, request.end
+    )
+    logger.info(
+        "news backfill queued job_id=%s status=%s symbol_count=%s",
+        job.job_id,
+        job.status,
+        len(request.symbols),
     )
     return {"job_id": job.job_id, "status": job.status}
 

@@ -179,6 +179,8 @@ def test_promote_accepts_repair_override() -> None:
 def test_incomplete_news_state_is_422() -> None:
     from brain_api.news.errors import NewsCoverageMissing
 
+    service = MagicMock()
+    service.materialize.side_effect = NewsCoverageMissing("news query incomplete")
     with (
         patch(
             "brain_api.routes.signals.ppo_discovery.resolve_universe_snapshot"
@@ -188,8 +190,8 @@ def test_incomplete_news_state_is_422() -> None:
             side_effect=lambda as_of: as_of,
         ),
         patch(
-            "brain_api.routes.signals.ppo_discovery.NewsService.materialize",
-            side_effect=NewsCoverageMissing("news query incomplete"),
+            "brain_api.routes.signals.ppo_discovery.get_news_service",
+            return_value=service,
         ),
     ):
         snap.return_value.sorted_symbols = ("AAPL", "MSFT")
@@ -205,6 +207,7 @@ def test_incomplete_news_state_is_422() -> None:
         )
     assert response.status_code == 422
     assert "incomplete" in response.json()["detail"].lower()
+    service.materialize.assert_called_once()
 
 
 def test_legacy_ppo_news_history_route_is_gone() -> None:

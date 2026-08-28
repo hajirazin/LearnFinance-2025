@@ -134,6 +134,27 @@ def isolate_universe_cache(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def block_live_news_duckdb(monkeypatch):
+    """Refuse the process-cwd ``data/news/news_v1.duckdb`` path in tests."""
+    from pathlib import Path
+
+    from brain_api.news.store import NewsStore, news_db_path
+
+    live = (Path.cwd() / "data" / "news" / "news_v1.duckdb").resolve()
+    original_init = NewsStore.__init__
+
+    def _init(self, base_path=None):
+        path = news_db_path(base_path).resolve()
+        if path == live:
+            raise RuntimeError(
+                f"tests must not open live news DuckDB {path}; pass tmp_path"
+            )
+        original_init(self, base_path)
+
+    monkeypatch.setattr(NewsStore, "__init__", _init)
+
+
 # Static halal_new universe used by the autouse network isolation
 # fixture below. Must contain enough symbols to satisfy the
 # ``min_history`` filter in ``halal_filtered`` plus the LSTM/PatchTST

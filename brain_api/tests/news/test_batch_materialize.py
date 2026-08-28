@@ -135,6 +135,27 @@ def test_unproven_miss_falls_back_to_single_ticker(tmp_path) -> None:
     assert {event.symbol for event in events} == {"AAPL", "MSFT"}
 
 
+def test_all_pending_symbols_go_in_one_batch_call(tmp_path) -> None:
+    window = _window()
+    store = NewsStore(tmp_path)
+    symbols = [f"S{i:03d}" for i in range(25)]
+    articles_by_symbol = {symbol: [] for symbol in symbols}
+    articles_by_symbol["S000"] = [_article("S000")]
+    provider = _BatchProvider(
+        WindowBatchFetch(
+            articles_by_symbol=articles_by_symbol,
+            page_count=1,
+            empties_are_proven=True,
+        )
+    )
+    service = NewsService(store, provider=provider, scorer=FakeScorer())
+    coverage, _events = service.materialize(symbols, window)
+    assert provider.batch_calls == [tuple(symbols)]
+    assert provider.window_calls == []
+    assert {row.symbol: row.status for row in coverage}["S000"] == "complete"
+    assert sum(1 for row in coverage if row.status == "verified_empty") == 24
+
+
 def test_provider_without_batch_still_materializes(tmp_path) -> None:
     window = _window()
     store = NewsStore(tmp_path)
