@@ -166,39 +166,22 @@ class NewsService:
         index_base: int,
     ) -> None:
         result: WindowBatchFetch = batch_fetch(symbols, window)
+        ready: list[tuple[str, Sequence[ProviderArticle]]] = []
         misses: list[str] = []
-        for offset, symbol in enumerate(symbols):
-            if self.store.get_coverage(symbol, window) is not None:
-                if job is not None:
-                    with job.lock:
-                        job.done.add(symbol)
-                continue
+        for symbol in symbols:
             articles = result.articles_by_symbol.get(symbol, [])
-            if articles:
-                self._persist_fetched(
-                    symbol,
-                    articles,
-                    result.page_count,
-                    window,
-                    job,
-                    unique_request_ids,
-                    index=index_base + offset + 1,
-                    total=total,
-                )
-                continue
-            if result.empties_are_proven:
-                self._persist_fetched(
-                    symbol,
-                    [],
-                    result.page_count,
-                    window,
-                    job,
-                    unique_request_ids,
-                    index=index_base + offset + 1,
-                    total=total,
-                )
-                continue
-            misses.append(symbol)
+            if articles or result.empties_are_proven:
+                ready.append((symbol, articles))
+            else:
+                misses.append(symbol)
+        self._persist_ready_batch(
+            ready,
+            result.page_count,
+            window,
+            job,
+            unique_request_ids,
+            empties_are_proven=result.empties_are_proven,
+        )
         for offset, symbol in enumerate(misses):
             self._materialize_one(
                 symbol,
@@ -208,6 +191,90 @@ class NewsService:
                 index=index_base + offset + 1,
                 total=total,
             )
+
+    def _persist_ready_batch(
+        self,
+        ready: Sequence[tuple[str, Sequence[ProviderArticle]]],
+        page_count: int,
+        window: NewsWindow,
+        job: _InFlight | None,
+        unique_request_ids: set[str],
+        *,
+        empties_are_proven: bool,
+    ) -> None:
+        if not ready:
+            return
+        started = time.perf_counter()
+        usable_by_symbol: dict[str, list[ProviderArticle]] = {}
+        excluded_by_symbol: dict[str, int] = {}
+        flat_usable: list[ProviderArticle] = []
+        for symbol, articles in ready:
+            unique_ids = {article.provider_article_id for article in articles}
+            if len(unique_ids) > MAX_ARTICLES_PER_SYMBOL_WINDOW:
+                raise NewsCapExceeded(
+                    f"{symbol} has {len(unique_ids)} unique articles in window "
+                    f"(cap {MAX_ARTICLES_PER_SYMBOL_WINDOW})"
+                )
+            unique_request_ids.update(unique_ids)
+            if len(unique_request_ids) > MAX_ARTICLES_PER_REQUEST:
+                raise NewsCapExceeded(
+                    f"request has {len(unique_request_ids)} unique articles "
+                    f"(cap {MAX_ARTICLES_PER_REQUEST})"
+                )
+            usable, excluded = self._partition_revisions(articles, window)
+            usable_by_symbol[symbol] = usable
+            excluded_by_symbol[symbol] = excluded
+            flat_usable.extend(usable)
+        all_events, cache_rows = self._score_articles(flat_usable)
+        events_by_symbol: dict[str, list[NewsEvent]] = {
+            symbol: [] for symbol, _ in ready
+        }
+        for event in all_events:
+            events_by_symbol[event.symbol].append(event)
+        fetched_at = utcnow()
+        items: list[tuple[list[NewsEvent], NewsCoverage, list[tuple]]] = []
+        complete = 0
+        for symbol, _articles in ready:
+            events = events_by_symbol[symbol]
+            status = "verified_empty" if not events else "complete"
+            if status == "complete":
+                complete += 1
+            items.append(
+                (
+                    events,
+                    NewsCoverage(
+                        provider=NEWS_PROVIDER,
+                        symbol=symbol,
+                        window_start_exclusive=window.start_exclusive,
+                        window_end_inclusive=window.end_inclusive,
+                        schema_version=NEWS_SCHEMA_VERSION,
+                        sentiment_model=NEWS_SENTIMENT_MODEL,
+                        sentiment_model_revision=NEWS_SENTIMENT_REVISION,
+                        status=status,
+                        page_count=page_count,
+                        event_count=len(events),
+                        future_revision_excluded_count=excluded_by_symbol[symbol],
+                        fetched_at=fetched_at,
+                        request_manifest_hash=request_manifest_hash([symbol], window),
+                    ),
+                    cache_rows if symbol == ready[0][0] else [],
+                )
+            )
+        self.store.commit_windows(items)
+        if job is not None:
+            with job.lock:
+                job.done.update(symbol for symbol, _articles in ready)
+        logger.info(
+            "news batch persist symbols=%s complete=%s verified_empty=%s "
+            "events=%s pages=%s empties_proven=%s elapsed_ms=%.0f",
+            len(ready),
+            complete,
+            len(ready) - complete,
+            len(all_events),
+            page_count,
+            empties_are_proven,
+            (time.perf_counter() - started) * 1000,
+        )
 
     def _materialize_one(
         self,
@@ -332,15 +399,20 @@ class NewsService:
             return [], []
         events: list[NewsEvent] = []
         cache_rows: list[tuple] = []
-        to_score: list[tuple[ProviderArticle, str, str]] = []
-        cache_hits = 0
+        prepared: list[tuple[ProviderArticle, str, str]] = []
         for article in articles:
             text = assemble_scored_text(article.headline, article.summary)
-            digest = scored_text_sha256(text)
-            cached = self.store.cache_get(digest)
-            if cached is not None:
+            prepared.append((article, text, scored_text_sha256(text)))
+        cached = self.store.cache_get_many(
+            [digest for _article, _text, digest in prepared]
+        )
+        to_score: list[tuple[ProviderArticle, str, str]] = []
+        cache_hits = 0
+        for article, text, digest in prepared:
+            hit = cached.get(digest)
+            if hit is not None:
                 cache_hits += 1
-                score, p_pos, p_neg, p_neu, conf = cached
+                score, p_pos, p_neg, p_neu, conf = hit
                 events.append(
                     self._event_from_score(
                         article, digest, score, p_pos, p_neg, p_neu, conf
@@ -348,8 +420,10 @@ class NewsService:
                 )
                 continue
             to_score.append((article, text, digest))
+        scored_started = time.perf_counter()
         if to_score:
             scored = self.scorer.score_texts([item[1] for item in to_score])
+            seen_digests: set[str] = set()
             for (article, _text, digest), item in zip(to_score, scored, strict=True):
                 events.append(
                     self._event_from_score(
@@ -362,6 +436,9 @@ class NewsService:
                         item.confidence,
                     )
                 )
+                if digest in seen_digests:
+                    continue
+                seen_digests.add(digest)
                 cache_rows.append(
                     (
                         digest,
@@ -375,8 +452,12 @@ class NewsService:
                         item.confidence,
                     )
                 )
-        if cache_hits:
-            logger.info("FinBERT scored=%s cache_hits=%s elapsed_ms=0", 0, cache_hits)
+        logger.info(
+            "FinBERT scored=%s cache_hits=%s elapsed_ms=%.0f",
+            len(to_score),
+            cache_hits,
+            (time.perf_counter() - scored_started) * 1000 if to_score else 0,
+        )
         return events, cache_rows
 
     @staticmethod

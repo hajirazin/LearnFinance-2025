@@ -73,6 +73,34 @@ def test_coverage_keys_ignores_other_sentiment_revision(tmp_path) -> None:
     assert store.covered_symbols(["AAPL"], window) == set()
 
 
+def test_cache_get_many_returns_committed_digests(tmp_path) -> None:
+    store = NewsStore(tmp_path)
+    window = _window()
+    digest = "a" * 64
+    store.commit_window(
+        events=[],
+        coverage=_coverage("AAPL", window),
+        cache_rows=[
+            (
+                digest,
+                NEWS_SENTIMENT_MODEL,
+                NEWS_SENTIMENT_REVISION,
+                1,
+                0.2,
+                0.6,
+                0.3,
+                0.1,
+                0.5,
+            )
+        ],
+    )
+    assert store.cache_get_many([]) == {}
+    hits = store.cache_get_many([digest, "b" * 64])
+    assert hits[digest] == (0.2, 0.6, 0.3, 0.1, 0.5)
+    assert "b" * 64 not in hits
+    assert store.cache_get(digest) == hits[digest]
+
+
 def test_covered_symbols_returns_only_this_window(tmp_path) -> None:
     store = NewsStore(tmp_path)
     window = _window()

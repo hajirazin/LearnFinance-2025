@@ -172,26 +172,53 @@ class NewsStore:
         sentiment_model_revision: str = NEWS_SENTIMENT_REVISION,
         scoring_schema_version: int = 1,
     ) -> tuple[float, float, float, float, float] | None:
+        hits = self.cache_get_many(
+            [scored_text_sha256],
+            sentiment_model=sentiment_model,
+            sentiment_model_revision=sentiment_model_revision,
+            scoring_schema_version=scoring_schema_version,
+        )
+        return hits.get(scored_text_sha256)
+
+    def cache_get_many(
+        self,
+        digests: Sequence[str],
+        *,
+        sentiment_model: str = NEWS_SENTIMENT_MODEL,
+        sentiment_model_revision: str = NEWS_SENTIMENT_REVISION,
+        scoring_schema_version: int = 1,
+    ) -> dict[str, tuple[float, float, float, float, float]]:
+        unique = list(dict.fromkeys(digests))
+        if not unique:
+            return {}
+        placeholders = ", ".join("?" * len(unique))
+        sql = f"""
+            SELECT scored_text_sha256, sentiment_score, p_positive, p_negative,
+                   p_neutral, confidence
+            FROM news_score_cache
+            WHERE sentiment_model = ?
+              AND sentiment_model_revision = ?
+              AND scoring_schema_version = ?
+              AND scored_text_sha256 IN ({placeholders})
+        """
+        params: list[object] = [
+            sentiment_model,
+            sentiment_model_revision,
+            scoring_schema_version,
+            *unique,
+        ]
         with self._connect() as con:
-            row = con.execute(
-                """
-                SELECT sentiment_score, p_positive, p_negative, p_neutral, confidence
-                FROM news_score_cache
-                WHERE scored_text_sha256 = ?
-                  AND sentiment_model = ?
-                  AND sentiment_model_revision = ?
-                  AND scoring_schema_version = ?
-                """,
-                [
-                    scored_text_sha256,
-                    sentiment_model,
-                    sentiment_model_revision,
-                    scoring_schema_version,
-                ],
-            ).fetchone()
-        if row is None:
-            return None
-        return tuple(float(value) for value in row)  # type: ignore[return-value]
+            rows = con.execute(sql, params).fetchall()
+        return {
+            row[0]: (
+                float(row[1]),
+                float(row[2]),
+                float(row[3]),
+                float(row[4]),
+                float(row[5]),
+            )
+            for row in rows
+        }
 
     def commit_window(
         self,
@@ -202,64 +229,81 @@ class NewsStore:
             tuple[str, str, str, int, float, float, float, float, float]
         ],
     ) -> None:
+        self.commit_windows(((events, coverage, cache_rows),))
+
+    def commit_windows(
+        self,
+        items: Sequence[
+            tuple[
+                Sequence[NewsEvent],
+                NewsCoverage,
+                Sequence[tuple[str, str, str, int, float, float, float, float, float]],
+            ]
+        ],
+    ) -> None:
+        """Write many coverage cells in one DuckDB transaction."""
+        if not items:
+            return
+
         def _write(con: duckdb.DuckDBPyConnection) -> None:
-            for event in events:
+            for events, coverage, cache_rows in items:
+                for event in events:
+                    con.execute(
+                        """
+                        INSERT OR REPLACE INTO news_events VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        )
+                        """,
+                        [
+                            event.provider,
+                            event.provider_article_id,
+                            event.symbol,
+                            event.created_at,
+                            event.updated_at,
+                            event.source,
+                            event.sentiment_score,
+                            event.p_positive,
+                            event.p_negative,
+                            event.p_neutral,
+                            event.confidence,
+                            event.scored_text_sha256,
+                            event.sentiment_model,
+                            event.sentiment_model_revision,
+                            event.schema_version,
+                            event.ingested_at,
+                        ],
+                    )
                 con.execute(
                     """
-                    INSERT OR REPLACE INTO news_events VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    INSERT OR REPLACE INTO news_coverage VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     """,
                     [
-                        event.provider,
-                        event.provider_article_id,
-                        event.symbol,
-                        event.created_at,
-                        event.updated_at,
-                        event.source,
-                        event.sentiment_score,
-                        event.p_positive,
-                        event.p_negative,
-                        event.p_neutral,
-                        event.confidence,
-                        event.scored_text_sha256,
-                        event.sentiment_model,
-                        event.sentiment_model_revision,
-                        event.schema_version,
-                        event.ingested_at,
+                        coverage.provider,
+                        coverage.symbol,
+                        coverage.window_start_exclusive,
+                        coverage.window_end_inclusive,
+                        coverage.schema_version,
+                        coverage.sentiment_model,
+                        coverage.sentiment_model_revision,
+                        coverage.status,
+                        coverage.page_count,
+                        coverage.event_count,
+                        coverage.future_revision_excluded_count,
+                        coverage.fetched_at,
+                        coverage.request_manifest_hash,
                     ],
                 )
-            con.execute(
-                """
-                INSERT OR REPLACE INTO news_coverage VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-                """,
-                [
-                    coverage.provider,
-                    coverage.symbol,
-                    coverage.window_start_exclusive,
-                    coverage.window_end_inclusive,
-                    coverage.schema_version,
-                    coverage.sentiment_model,
-                    coverage.sentiment_model_revision,
-                    coverage.status,
-                    coverage.page_count,
-                    coverage.event_count,
-                    coverage.future_revision_excluded_count,
-                    coverage.fetched_at,
-                    coverage.request_manifest_hash,
-                ],
-            )
-            for row in cache_rows:
-                con.execute(
-                    """
-                    INSERT OR REPLACE INTO news_score_cache VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?
+                for row in cache_rows:
+                    con.execute(
+                        """
+                        INSERT OR REPLACE INTO news_score_cache VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        )
+                        """,
+                        list(row),
                     )
-                    """,
-                    list(row),
-                )
 
         self._with_write_lock(_write)
 
