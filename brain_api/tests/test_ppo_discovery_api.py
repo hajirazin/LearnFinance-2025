@@ -12,6 +12,40 @@ from brain_api.main import app
 client = TestClient(app)
 
 
+def test_experience_label_uses_actual_nav_after_portfolio_drift() -> None:
+    from brain_api.routes.experience_ppo_discovery import (
+        PPOLabelRequest,
+        label_ppo_discovery_experience,
+    )
+
+    record = MagicMock()
+    record.run_id = "paper:halal_new:2026-01-05:ppo_discovery"
+    record.week_start = "2026-01-05"
+    record.week_end = "2026-01-12"
+    record.model_type = "ppo_discovery"
+    record.universe = "halal_new"
+    record.state = {"current_weights": {"CASH": 1.0}}
+    record.actual_weights = {"CASH": 1.0}
+    record.nav_usd = 9_500.0
+    storage = MagicMock()
+    storage.load.return_value = record
+
+    with patch(
+        "brain_api.routes.experience_ppo_discovery.ppo_discovery_reward",
+        return_value=(0.0, 0.0, 0.0, 0.0),
+    ) as reward:
+        result = label_ppo_discovery_experience(
+            PPOLabelRequest(run_id="paper:halal_new:2026-01-05"),
+            storage=storage,
+        )
+
+    assert result.records_labeled == 1
+    assert result.errors == []
+    assert reward.call_args.kwargs["nav_usd"] == 9_500.0
+    assert reward.call_args.kwargs["config"].training_nav_usd == 10_000.0
+    storage.update.assert_called_once_with(record)
+
+
 def test_unknown_universe_is_422() -> None:
     response = client.post(
         "/train/ppo-discovery/preflight",
@@ -289,6 +323,8 @@ def test_training_email_request_carries_evaluation() -> None:
     assert "0.21" in html
     assert "42" in html
     assert "full_ppo" in html
+    assert "IBKR Singapore Tiered costs at $10,000 training capital" in html
+    assert "execution remains Alpaca" in html
 
 
 def test_backfill_job_exists_immediately_after_202(monkeypatch) -> None:

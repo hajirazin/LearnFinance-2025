@@ -13,6 +13,8 @@ from brain_api.core.ppo_discovery.artifacts import write_candidate_artifact
 from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
+    PPO_DISCOVERY_BROKER_COST_MODEL,
+    PPO_DISCOVERY_TRAINING_NAV_USD,
     REQUIRED_ABLATIONS,
     PPODiscoveryConfig,
 )
@@ -122,6 +124,9 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
         "4556d13015211d73dccd3fdd39d39232506f3e43"
     )
     assert artifacts.metadata["news_adapter_revision"]
+    assert artifacts.metadata["broker_cost_model"] == (PPO_DISCOVERY_BROKER_COST_MODEL)
+    assert artifacts.metadata["training_nav_usd"] == (PPO_DISCOVERY_TRAINING_NAV_USD)
+    assert evaluation["broker_cost_config"] == config.to_dict()["broker_cost_config"]
 
 
 def test_tampered_evaluation_fails_promote_until_reevaluate(tmp_path: Path) -> None:

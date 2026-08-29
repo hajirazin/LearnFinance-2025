@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
+
 MAX_ASSETS = 512
 MIN_ELIGIBLE_ASSETS = 10
 MAX_SELECTED = 15
@@ -24,6 +26,8 @@ PROMOTION_CAGR_FLOOR = 0.12
 UNIVERSE_NAME = "halal_new"
 MODEL_TYPE = "ppo_discovery"
 ALGORITHM = "ppo_discovery"
+PPO_DISCOVERY_BROKER_COST_MODEL = "ibkr_sg_tiered"
+PPO_DISCOVERY_TRAINING_NAV_USD = 10_000.0
 DECISION_TIMEZONE = "America/New_York"
 DECISION_HOUR = 9
 NEWS_RECENCY_TAU_HOURS = 168.0
@@ -78,6 +82,15 @@ if len(GLOBAL_FEATURE_NAMES) != GLOBAL_FEATURES:
     raise RuntimeError("GLOBAL_FEATURE_NAMES length must match GLOBAL_FEATURES")
 
 
+def ppo_discovery_cost_contract() -> dict[str, Any]:
+    """Return the immutable broker-cost and capital contract for PPO."""
+    return {
+        "broker_cost_model": PPO_DISCOVERY_BROKER_COST_MODEL,
+        "training_nav_usd": PPO_DISCOVERY_TRAINING_NAV_USD,
+        "broker_cost_config": IBKRSingaporeCostConfig.default().to_dict(),
+    }
+
+
 @dataclass
 class PPODiscoveryConfig:
     """Versioned training and architecture hyperparameters."""
@@ -122,9 +135,13 @@ class PPODiscoveryConfig:
     pretrain_huber_beta: float = 0.01
     hhi_penalty_scale: float = 0.4
     reward_scale: float = 1.0
-    training_nav_usd: float = 100_000.0
     seeds: tuple[int, ...] = EXPERIMENT_SEEDS
     universe: str = UNIVERSE_NAME
+
+    @property
+    def training_nav_usd(self) -> float:
+        """Fixed capital base for every historical PPO rollout."""
+        return PPO_DISCOVERY_TRAINING_NAV_USD
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -168,7 +185,7 @@ class PPODiscoveryConfig:
             "pretrain_huber_beta": self.pretrain_huber_beta,
             "hhi_penalty_scale": self.hhi_penalty_scale,
             "reward_scale": self.reward_scale,
-            "training_nav_usd": self.training_nav_usd,
+            **ppo_discovery_cost_contract(),
             "seeds": list(self.seeds),
             "universe": self.universe,
             "asset_feature_names": list(ASSET_FEATURE_NAMES),
@@ -179,6 +196,27 @@ class PPODiscoveryConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PPODiscoveryConfig:
         payload = data.copy()
+        broker_cost_model = payload.pop("broker_cost_model", None)
+        if broker_cost_model != PPO_DISCOVERY_BROKER_COST_MODEL:
+            raise ValueError(
+                "ppo_discovery broker_cost_model must be "
+                f"{PPO_DISCOVERY_BROKER_COST_MODEL!r}, got {broker_cost_model!r}"
+            )
+        training_nav_usd = payload.pop("training_nav_usd", None)
+        if training_nav_usd is None or float(training_nav_usd) != (
+            PPO_DISCOVERY_TRAINING_NAV_USD
+        ):
+            raise ValueError(
+                "ppo_discovery training_nav_usd must be "
+                f"{PPO_DISCOVERY_TRAINING_NAV_USD}, got {training_nav_usd!r}"
+            )
+        broker_cost_config = payload.pop("broker_cost_config", None)
+        expected_cost_config = IBKRSingaporeCostConfig.default().to_dict()
+        if broker_cost_config != expected_cost_config:
+            raise ValueError(
+                "ppo_discovery broker_cost_config must match the locked "
+                "IBKR Singapore Tiered schedule"
+            )
         payload.pop("asset_feature_names", None)
         payload.pop("global_feature_names", None)
         if "seeds" in payload and isinstance(payload["seeds"], list):
@@ -223,6 +261,8 @@ __all__ = [
     "N_PATCHES",
     "PATCH_LENGTH",
     "PATCH_STRIDE",
+    "PPO_DISCOVERY_BROKER_COST_MODEL",
+    "PPO_DISCOVERY_TRAINING_NAV_USD",
     "PROMOTION_CAGR_FLOOR",
     "REQUIRED_ABLATIONS",
     "SET_D_MODEL",
@@ -231,4 +271,5 @@ __all__ = [
     "UNIVERSE_NAME",
     "PPODiscoveryConfig",
     "TrainingConfig",
+    "ppo_discovery_cost_contract",
 ]

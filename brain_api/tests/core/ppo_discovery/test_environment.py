@@ -5,9 +5,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import exchange_calendars as xcals
+import numpy as np
 import pandas as pd
+import pytest
 import torch
 
+from brain_api.core.portfolio_rl.broker_costs import (
+    IBKRSingaporeCostConfig,
+    compute_ibkr_rebalance_cost,
+)
 from brain_api.core.ppo_discovery.config import HISTORY_BARS, PPODiscoveryConfig
 from brain_api.core.ppo_discovery.environment import (
     WeeklyTransition,
@@ -49,7 +55,7 @@ def test_closed_loop_reward_matches_sampled_weights() -> None:
         p_calm=0.4,
         p_stress=0.2,
     )
-    config = PPODiscoveryConfig(dropout=0.0, training_nav_usd=100_000.0)
+    config = PPODiscoveryConfig(dropout=0.0)
     policy = PPODiscoveryActorCritic(config)
     torch.manual_seed(0)
     steps = collect_closed_loop_rollout(
@@ -103,7 +109,7 @@ def test_missing_unheld_price_frame_is_masked_not_aborted() -> None:
         p_calm=0.4,
         p_stress=0.2,
     )
-    config = PPODiscoveryConfig(dropout=0.0, training_nav_usd=100_000.0)
+    config = PPODiscoveryConfig(dropout=0.0)
     policy = PPODiscoveryActorCritic(config)
     torch.manual_seed(0)
     steps = collect_closed_loop_rollout(
@@ -118,6 +124,85 @@ def test_missing_unheld_price_frame_is_masked_not_aborted() -> None:
     assert len(steps) == 1
     dropped_index = list(steps[0].state.symbols).index(dropped)
     assert not bool(steps[0].state.asset_mask[dropped_index])
+
+
+def test_reward_uses_locked_ibkr_costs_at_ten_thousand_dollars() -> None:
+    config = PPODiscoveryConfig(hhi_penalty_scale=0.0)
+    prior = {"AAPL": 0.10, "MSFT": 0.10, "CASH": 0.80}
+    target = {"AAPL": 0.30, "MSFT": 0.30, "CASH": 0.40}
+    prices = {"AAPL": 200.0, "MSFT": 100.0}
+
+    reward, gross, cost_fraction, economic = ppo_discovery_reward(
+        prior_weights=prior,
+        target_weights=target,
+        symbol_returns={"AAPL": 0.0, "MSFT": 0.0},
+        symbol_prices=prices,
+        nav_usd=config.training_nav_usd,
+        config=config,
+    )
+    expected = compute_ibkr_rebalance_cost(
+        symbol_order=["AAPL", "MSFT"],
+        current_weights=np.array([0.10, 0.10, 0.80]),
+        target_weights=np.array([0.30, 0.30, 0.40]),
+        prices=np.array([200.0, 100.0]),
+        cfg=IBKRSingaporeCostConfig.default(),
+    )
+
+    assert config.training_nav_usd == 10_000.0
+    assert gross == 0.0
+    assert cost_fraction == pytest.approx(expected.total_fraction)
+    assert [leg.commission for leg in expected.legs] == pytest.approx([0.35, 0.35])
+    assert economic == pytest.approx(np.log1p(-expected.total_fraction))
+    assert reward == pytest.approx(economic)
+
+
+def test_no_transaction_cost_ablation_is_zero_cost() -> None:
+    _reward, _gross, cost_fraction, _economic = ppo_discovery_reward(
+        prior_weights={"CASH": 1.0},
+        target_weights={"AAPL": 0.98, "CASH": 0.02},
+        symbol_returns={"AAPL": 0.0},
+        symbol_prices={"AAPL": 100.0},
+        nav_usd=10_000.0,
+        config=PPODiscoveryConfig(),
+        include_transaction_cost=False,
+    )
+
+    assert cost_fraction == 0.0
+
+
+def test_reward_overlays_actual_nav_on_locked_ibkr_schedule() -> None:
+    prior = {"AAPL": 0.10, "CASH": 0.90}
+    target = {"AAPL": 0.30, "CASH": 0.70}
+    symbol_order = ["AAPL"]
+    current = np.array([0.10, 0.90])
+    desired = np.array([0.30, 0.70])
+    prices = np.array([200.0])
+
+    _reward, _gross, cost_fraction, _economic = ppo_discovery_reward(
+        prior_weights=prior,
+        target_weights=target,
+        symbol_returns={"AAPL": 0.0},
+        symbol_prices={"AAPL": 200.0},
+        nav_usd=1_000.0,
+        config=PPODiscoveryConfig(hhi_penalty_scale=0.0),
+    )
+    expected_at_actual_nav = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=current,
+        target_weights=desired,
+        prices=prices,
+        cfg=IBKRSingaporeCostConfig.default().with_nav(1_000.0),
+    )
+    wrong_at_training_nav = compute_ibkr_rebalance_cost(
+        symbol_order=symbol_order,
+        current_weights=current,
+        target_weights=desired,
+        prices=prices,
+        cfg=IBKRSingaporeCostConfig.default(),
+    )
+
+    assert cost_fraction == pytest.approx(expected_at_actual_nav.total_fraction)
+    assert cost_fraction != pytest.approx(wrong_at_training_nav.total_fraction)
 
 
 def _returns_for(prior, weights, ohlcv, week):

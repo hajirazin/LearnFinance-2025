@@ -1,12 +1,12 @@
-"""IBKR Singapore Tiered transaction-cost model for SAC.
+"""IBKR Singapore Tiered transaction-cost model for portfolio RL.
 
 This module replaces the legacy flat ``cost_bps`` * turnover formula
 in :mod:`brain_api.core.portfolio_rl.rewards` with a per-symbol,
 per-leg cost model calibrated to Interactive Brokers Singapore's
 **Tiered** pricing tier for US stocks (≤300k shares/month volume).
 
-The cost model is broker-specific by name on purpose: SAC trains under
-IBKR economics so that the policy learns to respect IBKR's per-order
+The cost model is broker-specific by name on purpose: SAC and PPO Discovery
+train under IBKR economics so the policies learn to respect IBKR's per-order
 minimum, sell-side regulatory schedule, and per-share clearing fees.
 The execution broker is intentionally independent of this hypothetical
 economics model. In particular, the ``halal_filtered`` paper workflow may
@@ -141,14 +141,15 @@ class IBKRSingaporeCostConfig:
 
 @dataclass(frozen=True)
 class AlpacaUSCostConfig:
-    """Alpaca US equity pass-through fees for ppo_discovery train/eval.
+    """Alpaca US equity pass-through fees retained for cost-engine tests.
 
     Commission is zero. Sells still pay SEC Section 31 and FINRA TAF.
     Clearing, CAT, IBKR's $0.35 order minimum, and exchange pass-through
     on commission are not charged on the Alpaca retail schedule.
 
-    SAC keeps :class:`IBKRSingaporeCostConfig`. This sibling is only for
-    ppo_discovery, whose production account is Alpaca.
+    Production portfolio-RL policies use :class:`IBKRSingaporeCostConfig`.
+    This sibling remains useful for explicit broker-cost calculations and
+    regression tests; PPO Discovery does not select between the schedules.
     """
 
     commission_per_share: float = 0.0

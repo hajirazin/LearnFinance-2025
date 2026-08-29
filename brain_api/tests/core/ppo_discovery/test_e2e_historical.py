@@ -105,7 +105,6 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
         pretrain_max_epochs=1,
         pretrain_patience=1,
         seeds=(42,),
-        training_nav_usd=100_000.0,
     )
 
     def _download(*_args, **_kwargs):

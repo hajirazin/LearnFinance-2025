@@ -441,6 +441,8 @@ Transaction cost `tc` is the per-symbol per-leg **IBKR Singapore Tiered** schedu
 
 Calibration anchor: USD 10,000 NAV (the cost is sized against this assumed portfolio value to make the per-order minimum bite realistically). At that scale a 30%-turnover rebalance comes out around **1.5-3 bps round-trip** -- the per-order minimum binds because typical legs are only a few shares of a $200 stock. Deliberately out of scope: FX (SGD↔USD), US dividend WHT, IBKR account fees.
 
+`ppo_discovery` uses this same IBKR Singapore Tiered schedule with a fixed USD 10,000 historical training/evaluation NAV. Its orders still execute through the dedicated Alpaca account, while experience labeling sizes costs from the actual recorded account NAV after portfolio drift.
+
 ### Limit orders + fractional sizing
 
 - Default order type: **limit orders**

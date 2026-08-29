@@ -36,7 +36,7 @@ def label_ppo_discovery_experience(
     request: PPOLabelRequest,
     storage: ExperienceStorage = Depends(get_experience_storage),
 ) -> LabelExperienceResponse:
-    """Label ppo_discovery records using the dedicated Alpaca account."""
+    """Label Alpaca-executed records using actual NAV and IBKR costs."""
     today = date.today()
     labeled = skipped = 0
     errors: list[str] = []

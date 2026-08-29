@@ -16,6 +16,7 @@ from brain_api.core.ppo_discovery.config import (
     GLOBAL_FEATURE_NAMES,
     PROMOTION_CAGR_FLOOR,
     REQUIRED_ABLATIONS,
+    ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.schemas import canonical_json_bytes
 from brain_api.core.training_health import ArtifactHealthCheck
@@ -31,6 +32,7 @@ _PROTOCOL_FILES = (
     _CORE_DIR / "portfolio_rl" / "rewards.py",
     _CORE_DIR / "portfolio_rl" / "broker_costs.py",
     _CORE_DIR / "weekly_decision.py",
+    _PPO_DIR / "config.py",
     _PPO_DIR / "evaluator.py",
     _PPO_DIR / "rewards.py",
     _PPO_DIR / "environment.py",
@@ -105,6 +107,11 @@ def evaluate_ppo_discovery_promotion(
         reasons.append("asset feature schema mismatch")
     if metadata.get("global_feature_names") != list(GLOBAL_FEATURE_NAMES):
         reasons.append("global feature schema mismatch")
+    for key, expected in ppo_discovery_cost_contract().items():
+        if metadata.get(key) != expected:
+            reasons.append(f"metadata.{key} does not match locked PPO cost contract")
+        if evaluation.get(key) != expected:
+            reasons.append(f"evaluation.{key} does not match locked PPO cost contract")
     if metadata.get("news_required") is not True:
         reasons.append("news_required must be true")
     expected_protocol = protocol_file_digest()

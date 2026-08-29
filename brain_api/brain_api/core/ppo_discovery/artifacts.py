@@ -12,6 +12,7 @@ from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
     PPODiscoveryConfig,
+    ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.news_adapter import news_adapter_revision
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
@@ -73,6 +74,8 @@ def write_candidate_artifact(
         if news_manifest[key] != price_manifest[key]:
             raise PPODiscoveryError(f"{key} mismatch between news and price manifests")
     end_date = end_date or datetime.now(UTC).date().isoformat()
+    cost_contract = ppo_discovery_cost_contract()
+    evaluation.update(cost_contract)
     code_revision = ppo_discovery_source_digest()
     digest = config_hash(
         config,
@@ -111,6 +114,7 @@ def write_candidate_artifact(
         "validation_dataset_hash": news_manifest["validation_dataset_hash"],
         "evaluation_dataset_hash": news_manifest["evaluation_dataset_hash"],
         "model_config_hash": model_config_hash(config),
+        **cost_contract,
     }
     storage.write_artifacts(
         version,

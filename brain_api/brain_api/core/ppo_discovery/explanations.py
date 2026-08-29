@@ -47,6 +47,9 @@ def build_explanations(
     }
     return {
         "model_version": metadata.get("version"),
+        "broker_cost_model": metadata.get("broker_cost_model"),
+        "training_nav_usd": metadata.get("training_nav_usd"),
+        "execution_broker": "alpaca",
         "k": len(selected),
         "cash_weight": float(weights.get("CASH", 0.0)),
         "globals": globals_,

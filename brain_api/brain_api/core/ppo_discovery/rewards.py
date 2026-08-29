@@ -1,4 +1,4 @@
-"""Alpaca after-cost reward plus the existing HHI penalty for ppo_discovery."""
+"""IBKR after-cost reward plus the existing HHI penalty for ppo_discovery."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from brain_api.core.portfolio_rl.broker_costs import (
-    AlpacaUSCostConfig,
+    IBKRSingaporeCostConfig,
     compute_ibkr_rebalance_cost,
 )
 from brain_api.core.portfolio_rl.rewards import (
@@ -50,7 +50,7 @@ def ppo_discovery_reward(
         if symbol == "CASH" or abs(float(weight)) <= 1e-12:
             continue
         gross += float(weight) * float(symbol_returns[symbol])
-    cost_config = AlpacaUSCostConfig.default().with_nav(nav_usd)
+    cost_config = IBKRSingaporeCostConfig.default().with_nav(nav_usd)
     symbol_order, prior, target, prices = build_rebalance_arrays(
         dict(prior_weights), dict(target_weights), dict(symbol_prices)
     )

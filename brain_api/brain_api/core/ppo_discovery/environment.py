@@ -1,4 +1,4 @@
-"""Closed-loop weekly environment: sample action, then Alpaca net reward."""
+"""Closed-loop weekly environment: sample action, then IBKR net reward."""
 
 from __future__ import annotations
 

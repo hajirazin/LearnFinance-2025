@@ -11,6 +11,7 @@ from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
     REQUIRED_ABLATIONS,
+    ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.evaluator import (
     mark_ablations,
@@ -39,6 +40,7 @@ def _meta(**overrides):
         "evaluation_dataset_hash": "eval-a",
         "model_config_hash": "cfg-a",
         "result_hash": result_hash(_eval()),
+        **ppo_discovery_cost_contract(),
     }
     payload.update(overrides)
     return payload
@@ -55,6 +57,7 @@ def _eval(**overrides):
             name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
         },
         "failed_seeds": [],
+        **ppo_discovery_cost_contract(),
     }
     payload.update(overrides)
     return payload
@@ -119,6 +122,36 @@ def test_healthy_full_variant_passes() -> None:
         expected_config_hash="abc123",
     )
     assert check.is_healthy is True
+
+
+@pytest.mark.parametrize(
+    ("location", "field", "value"),
+    [
+        ("metadata", "broker_cost_model", "alpaca_us"),
+        ("metadata", "training_nav_usd", 100_000.0),
+        ("evaluation", "broker_cost_config", {}),
+    ],
+)
+def test_promotion_rejects_cost_contract_mismatch(
+    location: str, field: str, value: object
+) -> None:
+    evaluation = _eval()
+    metadata = _meta_for(evaluation)
+    if location == "metadata":
+        metadata[field] = value
+    else:
+        evaluation[field] = value
+        metadata["result_hash"] = result_hash(evaluation)
+
+    check = evaluate_ppo_discovery_promotion(
+        metadata=metadata,
+        evaluation=evaluation,
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+
+    assert check.is_healthy is False
+    assert any(field in reason for reason in check.failure_reasons)
 
 
 def test_reject_current_patchtst_on_old_weeks() -> None:
