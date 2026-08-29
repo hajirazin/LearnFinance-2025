@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from brain_api.core.sac.market_sessions import (
+    align_to_xnys_sessions,
     require_exact_session_dates,
     xnys_session_dates,
 )
@@ -44,15 +45,13 @@ def extract_aligned_market_history(
 
     def _align_to_expected_sessions(symbol: str) -> pd.Series:
         series = _series(symbol)
-        actual_dates = [
-            value.date() for value in series.index if value in expected_index
-        ]
+        aligned, actual_dates = align_to_xnys_sessions(series, expected_dates)
         require_exact_session_dates(
             actual_dates,
             expected_dates,
             context=f"SAC v3 training {symbol} market history",
         )
-        return series.reindex(expected_index).astype(float)
+        return aligned.reindex(expected_index).astype(float)
 
     spy_values = _align_to_expected_sessions("SPY").to_numpy(dtype=float)
     vix_values = _align_to_expected_sessions("^VIX").to_numpy(dtype=float)

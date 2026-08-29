@@ -146,6 +146,49 @@ def load_weekly_ppo_news_features(
     }
 
 
+def load_historical_ppo_news_features(
+    cutoffs: Sequence[datetime],
+    symbols: Sequence[str],
+    *,
+    store: NewsStore | None = None,
+) -> dict[datetime, dict[str, SymbolNewsFeatures]]:
+    """Load all historical PPO news with two bulk DuckDB reads."""
+    news_store = store if store is not None else NewsStore()
+    cutoff_windows: dict[datetime, tuple[datetime, NewsWindow]] = {}
+    for cutoff in cutoffs:
+        decision_cutoff = monday_cutoff_for_actor_friday(cutoff.date())
+        start_exclusive, end_inclusive = monday_window_bounds(decision_cutoff.date())
+        cutoff_windows[cutoff] = (
+            decision_cutoff,
+            NewsWindow(
+                start_exclusive=start_exclusive,
+                end_inclusive=end_inclusive,
+            ),
+        )
+    windows = [window for _decision_cutoff, window in cutoff_windows.values()]
+    news_store.require_coverage_many(list(symbols), windows)
+    events_by_window = news_store.query_events_many(list(symbols), windows)
+    result: dict[datetime, dict[str, SymbolNewsFeatures]] = {}
+    for cutoff, (decision_cutoff, window) in cutoff_windows.items():
+        events_by_symbol: dict[str, list[NewsEvent]] = {
+            symbol: [] for symbol in symbols
+        }
+        for event in events_by_window[window]:
+            if event.symbol in events_by_symbol:
+                events_by_symbol[event.symbol].append(event)
+        packed = build_ppo_news_features(events_by_symbol, cutoff=decision_cutoff)
+        result[cutoff] = {
+            symbol: features_to_schema(
+                symbol,
+                packed[symbol],
+                events_by_symbol[symbol],
+                cutoff=decision_cutoff,
+            )
+            for symbol in symbols
+        }
+    return result
+
+
 def news_adapter_revision() -> str:
     """Sha256 of this adapter module. Pinned on ppo_discovery artifacts."""
     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()

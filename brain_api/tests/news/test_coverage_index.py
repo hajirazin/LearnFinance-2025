@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from brain_api.news.errors import NewsCoverageMissing
 from brain_api.news.models import (
     NEWS_PROVIDER,
     NEWS_SCHEMA_VERSION,
@@ -71,6 +72,29 @@ def test_coverage_keys_ignores_other_sentiment_revision(tmp_path) -> None:
     )
     assert store.coverage_keys(["AAPL"]) == set()
     assert store.covered_symbols(["AAPL"], window) == set()
+
+
+def test_require_coverage_many_validates_exact_grid_in_one_read(tmp_path) -> None:
+    store = NewsStore(tmp_path)
+    first = _window()
+    second = NewsWindow(
+        start_exclusive=first.end_inclusive,
+        end_inclusive=datetime(2026, 8, 31, 9, 0, tzinfo=NY),
+    )
+    for window in (first, second):
+        for symbol in ("AAPL", "MSFT"):
+            store.commit_window(
+                events=[], coverage=_coverage(symbol, window), cache_rows=[]
+            )
+
+    store.require_coverage_many(["AAPL", "MSFT"], [first, second])
+
+    missing = NewsWindow(
+        start_exclusive=second.end_inclusive,
+        end_inclusive=datetime(2026, 9, 7, 9, 0, tzinfo=NY),
+    )
+    with pytest.raises(NewsCoverageMissing, match="AAPL@"):
+        store.require_coverage_many(["AAPL", "MSFT"], [first, second, missing])
 
 
 def test_cache_get_many_returns_committed_digests(tmp_path) -> None:

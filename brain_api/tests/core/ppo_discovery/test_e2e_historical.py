@@ -110,7 +110,7 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
     def _download(*_args, **_kwargs):
         return yahoo
 
-    def _empty_news(cutoff, symbols, store=None):
+    def _empty_news(cutoffs, symbols, store=None):
         empty = PPOSymbolNewsFeatures(
             raw_sentiment=0.0,
             article_count=0,
@@ -119,14 +119,17 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
             sentiment_dispersion=0.0,
         )
         return {
-            symbol: features_to_schema(symbol, empty, [], cutoff=cutoff)
-            for symbol in symbols
+            cutoff: {
+                symbol: features_to_schema(symbol, empty, [], cutoff=cutoff)
+                for symbol in symbols
+            }
+            for cutoff in cutoffs
         }
 
     with (
         patch("brain_api.core.prices.yf.download", side_effect=_download),
         patch(
-            "brain_api.core.ppo_discovery.pipeline.load_weekly_ppo_news_features",
+            "brain_api.core.ppo_discovery.pipeline.load_historical_ppo_news_features",
             side_effect=_empty_news,
         ),
         patch("brain_api.core.prices.yf.Ticker") as ticker_cls,

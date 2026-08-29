@@ -66,6 +66,7 @@ def _load_prices_yfinance_unlocked(
 ) -> dict[str, pd.DataFrame]:
     prices: dict[str, pd.DataFrame] = {}
     failed_symbols: list[str] = []
+    yahoo_end_exclusive = end_date + timedelta(days=1)
 
     print(
         f"{log_prefix} Downloading prices for {len(symbols)} symbols from yfinance..."
@@ -78,7 +79,7 @@ def _load_prices_yfinance_unlocked(
         data = yf.download(
             tickers_str,
             start=start_date.isoformat(),
-            end=end_date.isoformat(),
+            end=yahoo_end_exclusive.isoformat(),
             progress=False,
             group_by="ticker",
             auto_adjust=True,
@@ -113,7 +114,7 @@ def _load_prices_yfinance_unlocked(
                 ticker = yf.Ticker(symbol)
                 df = ticker.history(
                     start=start_date.isoformat(),
-                    end=end_date.isoformat(),
+                    end=yahoo_end_exclusive.isoformat(),
                     auto_adjust=True,
                 )
                 if df is not None and not df.empty:

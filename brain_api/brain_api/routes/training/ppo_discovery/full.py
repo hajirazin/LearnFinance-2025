@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -27,6 +28,7 @@ from brain_api.storage.base import DEFAULT_DATA_PATH
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class PPOTrainRequest(BaseModel):
@@ -46,8 +48,18 @@ def _load_training_snapshot(request: PPOTrainRequest):
 
 
 def _run_training(job_id: str, request: PPOTrainRequest) -> None:
+    def _report(payload: dict) -> None:
+        update_progress(job_id, payload)
+        logger.info("PPO discovery training job=%s progress=%s", job_id, payload)
+
     try:
-        update_progress(job_id, {"stage": "freeze_universe"})
+        logger.info(
+            "PPO discovery training job=%s started experiment=%s end_date=%s",
+            job_id,
+            request.experiment_id,
+            request.end_date,
+        )
+        _report({"stage": "freeze_universe"})
         snapshot = _load_training_snapshot(request)
         config = PPODiscoveryConfig()
         if request.total_timesteps is not None:
@@ -69,14 +81,21 @@ def _run_training(job_id: str, request: PPOTrainRequest) -> None:
             start_date=start,
             experiment_id=request.experiment_id,
             experiment_variant=resolve_experiment_variant(config),
-            progress=lambda payload: update_progress(job_id, payload),
+            progress=_report,
             base_path=DEFAULT_DATA_PATH,
         )
         complete_job(job_id, result)
+        logger.info(
+            "PPO discovery training job=%s completed version=%s",
+            job_id,
+            result.get("version"),
+        )
     except PPODiscoveryError as exc:
         fail_job(job_id, str(exc))
+        logger.error("PPO discovery training job=%s failed: %s", job_id, exc)
     except Exception as exc:
         fail_job(job_id, str(exc))
+        logger.exception("PPO discovery training job=%s failed", job_id)
 
 
 @router.post("/ppo-discovery/full")

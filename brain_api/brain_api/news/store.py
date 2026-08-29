@@ -8,6 +8,7 @@ import threading
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 
 import duckdb
@@ -429,6 +430,63 @@ class NewsStore:
             rows = con.execute(sql, params).fetchall()
         return {row[0] for row in rows}
 
+    def require_coverage_many(
+        self, symbols: Sequence[str], windows: Sequence[NewsWindow]
+    ) -> None:
+        """Validate an exact symbol-by-window coverage grid in one query."""
+        unique_symbols = list(dict.fromkeys(symbols))
+        unique_windows = list(dict.fromkeys(windows))
+        if not unique_symbols or not unique_windows:
+            return
+        symbol_placeholders = ", ".join("?" * len(unique_symbols))
+        window_values = ", ".join("(?, ?)" for _ in unique_windows)
+        sql = f"""
+            WITH requested_windows(start_exclusive, end_inclusive) AS (
+                VALUES {window_values}
+            )
+            SELECT c.symbol, c.window_start_exclusive, c.window_end_inclusive
+            FROM news_coverage AS c
+            JOIN requested_windows AS w
+              ON c.window_start_exclusive = w.start_exclusive
+             AND c.window_end_inclusive = w.end_inclusive
+            WHERE c.provider = ?
+              AND c.symbol IN ({symbol_placeholders})
+              AND c.schema_version = ?
+              AND c.sentiment_model = ?
+              AND c.sentiment_model_revision = ?
+        """
+        params: list[object] = []
+        for window in unique_windows:
+            params.extend([window.start_exclusive, window.end_inclusive])
+        params.extend(
+            [
+                NEWS_PROVIDER,
+                *unique_symbols,
+                NEWS_SCHEMA_VERSION,
+                NEWS_SENTIMENT_MODEL,
+                NEWS_SENTIMENT_REVISION,
+            ]
+        )
+        with self._connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        present = {
+            coverage_key(symbol, start_exclusive, end_inclusive)
+            for symbol, start_exclusive, end_inclusive in rows
+        }
+        missing = [
+            coverage_key(symbol, window.start_exclusive, window.end_inclusive)
+            for window in unique_windows
+            for symbol in unique_symbols
+            if coverage_key(symbol, window.start_exclusive, window.end_inclusive)
+            not in present
+        ]
+        if missing:
+            preview = ", ".join(
+                f"{symbol}@{end.isoformat()}" for symbol, _start, end in missing[:20]
+            )
+            suffix = "" if len(missing) <= 20 else f" (+{len(missing) - 20} more)"
+            raise NewsCoverageMissing(f"missing news coverage cells: {preview}{suffix}")
+
     def query_events(
         self,
         symbols: Sequence[str],
@@ -488,6 +546,81 @@ class NewsStore:
                 )
             )
         return events
+
+    def query_events_many(
+        self,
+        symbols: Sequence[str],
+        windows: Sequence[NewsWindow],
+        *,
+        provider: str = NEWS_PROVIDER,
+    ) -> dict[NewsWindow, list[NewsEvent]]:
+        """Read point-in-time events for many non-overlapping windows at once."""
+        unique_symbols = list(dict.fromkeys(symbols))
+        unique_windows = list(dict.fromkeys(windows))
+        result = {window: [] for window in unique_windows}
+        if not unique_symbols or not unique_windows:
+            return result
+        ordered_windows = sorted(
+            unique_windows, key=lambda window: window.end_inclusive
+        )
+        for previous, current in pairwise(ordered_windows):
+            if current.start_exclusive < previous.end_inclusive:
+                raise ValueError("bulk news windows must not overlap")
+        symbol_placeholders = ", ".join("?" * len(unique_symbols))
+        window_values = ", ".join("(?, ?, ?)" for _ in ordered_windows)
+        sql = f"""
+            WITH requested_windows(window_index, start_exclusive, end_inclusive) AS (
+                VALUES {window_values}
+            ), ranked AS (
+                SELECT w.window_index, e.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY w.window_index, e.provider,
+                                     e.provider_article_id, e.symbol
+                        ORDER BY e.updated_at DESC
+                    ) AS rn
+                FROM requested_windows AS w
+                JOIN news_events AS e
+                  ON e.created_at > w.start_exclusive
+                 AND e.created_at <= w.end_inclusive
+                 AND e.updated_at <= w.end_inclusive
+                WHERE e.provider = ?
+                  AND e.symbol IN ({symbol_placeholders})
+            )
+            SELECT window_index, provider, provider_article_id, symbol, created_at,
+                   updated_at, source, sentiment_score, p_positive, p_negative,
+                   p_neutral, confidence, scored_text_sha256, sentiment_model,
+                   sentiment_model_revision, schema_version, ingested_at
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY window_index, symbol, created_at, provider_article_id
+        """
+        params: list[object] = []
+        for index, window in enumerate(ordered_windows):
+            params.extend([index, window.start_exclusive, window.end_inclusive])
+        params.extend([provider, *unique_symbols])
+        with self._connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        for row in rows:
+            event = NewsEvent(
+                provider=row[1],
+                provider_article_id=row[2],
+                symbol=row[3],
+                created_at=row[4],
+                updated_at=row[5],
+                source=row[6],
+                sentiment_score=float(row[7]),
+                p_positive=float(row[8]),
+                p_negative=float(row[9]),
+                p_neutral=float(row[10]),
+                confidence=float(row[11]),
+                scored_text_sha256=row[12],
+                sentiment_model=row[13],
+                sentiment_model_revision=row[14],
+                schema_version=int(row[15]),
+                ingested_at=row[16],
+            )
+            result[ordered_windows[int(row[0])]].append(event)
+        return result
 
     def require_coverage(
         self, symbols: Sequence[str], window: NewsWindow

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,9 @@ from brain_api.core.ppo_discovery.evaluator import (
     select_candidate_seed,
 )
 from brain_api.core.ppo_discovery.matched_k import matched_k_average_rank
-from brain_api.core.ppo_discovery.news_adapter import load_weekly_ppo_news_features
+from brain_api.core.ppo_discovery.news_adapter import (
+    load_historical_ppo_news_features,
+)
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.pretraining import (
     next_week_open_log_return,
@@ -111,24 +113,44 @@ def run_ppo_discovery_training(
     clock = weekly_trade_clock(price_start, end_date)
     cutoffs = actor_cutoff_datetimes(clock)
     regimes_by_date = {}
-    transitions: list[WeeklyTransition] = []
+    eligible_rows: list[tuple[int, datetime]] = []
     for index in range(len(clock.rebalance_sessions) - 1):
         cutoff = cutoffs[index]
         if not news_window_starts_at_or_after_archive(cutoff):
             continue
         if _eligible_count(ohlcv, symbols, cutoff.date()) < MIN_ELIGIBLE_ASSETS:
             continue
-        news = load_weekly_ppo_news_features(cutoff, symbols)
+        eligible_rows.append((index, cutoff))
+    report(
+        {
+            "stage": "news",
+            "weeks_total": len(eligible_rows),
+            "symbols_total": len(symbols),
+        }
+    )
+    historical_news = load_historical_ppo_news_features(
+        [cutoff for _index, cutoff in eligible_rows], symbols
+    )
+    transitions: list[WeeklyTransition] = []
+    for completed, (index, cutoff) in enumerate(eligible_rows, start=1):
         transitions.append(
             WeeklyTransition(
                 cutoff=cutoff,
                 rebalance_session=clock.rebalance_sessions[index],
                 next_rebalance_session=clock.rebalance_sessions[index + 1],
-                news_by_symbol=news,
+                news_by_symbol=historical_news[cutoff],
                 p_calm=0.0,
                 p_stress=0.0,
             )
         )
+        if completed % 25 == 0 or completed == len(eligible_rows):
+            report(
+                {
+                    "stage": "transitions",
+                    "weeks_completed": completed,
+                    "weeks_total": len(eligible_rows),
+                }
+            )
     if len(transitions) < 5:
         raise PPODiscoveryError(
             "need at least five weekly transitions after history warmup"

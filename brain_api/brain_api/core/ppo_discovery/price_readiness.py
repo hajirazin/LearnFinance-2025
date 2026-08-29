@@ -11,7 +11,10 @@ import pandas as pd
 from brain_api.core.ppo_discovery.config import HISTORY_BARS, MIN_ELIGIBLE_ASSETS
 from brain_api.core.ppo_discovery.dataset_identity import frame_session_hash
 from brain_api.core.prices import load_prices_yfinance
-from brain_api.core.sac.market_sessions import xnys_session_dates
+from brain_api.core.sac.market_sessions import (
+    align_to_xnys_sessions,
+    xnys_session_dates,
+)
 
 INDEX_SYMBOLS = ("SPY", "^VIX")
 
@@ -41,6 +44,9 @@ def assess_price_readiness(
             session_hashes,
             session_counts,
             require_history=True,
+            expected_start=price_start,
+            expected_end=end_date,
+            align_to_xnys=name == "^VIX",
         )
         if issue:
             issues.append(issue)
@@ -52,6 +58,8 @@ def assess_price_readiness(
             session_hashes,
             session_counts,
             require_history=False,
+            expected_start=None,
+            expected_end=end_date,
         )
         if issue:
             exclusions.append(issue)
@@ -82,6 +90,9 @@ def _inspect_frame(
     session_counts: dict[str, int],
     *,
     require_history: bool,
+    expected_start: date | None,
+    expected_end: date,
+    align_to_xnys: bool = False,
 ) -> str | None:
     if frame is None or frame.empty:
         return f"missing price frame for {symbol}"
@@ -89,13 +100,20 @@ def _inspect_frame(
         return f"{symbol} price frame must use a DatetimeIndex"
     index = frame.index.tz_localize(None) if frame.index.tz is not None else frame.index
     dates = [pd.Timestamp(ts).date() for ts in pd.DatetimeIndex(index).normalize()]
+    inspected_frame = frame
+    if align_to_xnys:
+        calendar_start = min(dates[0], expected_start or dates[0])
+        calendar_end = max(dates[-1], expected_end)
+        calendar_dates = xnys_session_dates(calendar_start, calendar_end)
+        inspected_frame, dates = align_to_xnys_sessions(frame, calendar_dates)
+    required_start = expected_start or dates[0]
+    expected = xnys_session_dates(required_start, expected_end)
     session_counts[symbol] = len(dates)
-    session_hashes[symbol] = frame_session_hash(frame)
+    session_hashes[symbol] = frame_session_hash(inspected_frame)
     if require_history and len(dates) < HISTORY_BARS:
         return f"{symbol} has {len(dates)} sessions; need {HISTORY_BARS}"
     if len(dates) < 2:
         return f"{symbol} has fewer than two sessions"
-    expected = xnys_session_dates(dates[0], dates[-1])
     if dates != expected:
         missing = [value.isoformat() for value in expected if value not in dates]
         extra = [value.isoformat() for value in dates if value not in expected]

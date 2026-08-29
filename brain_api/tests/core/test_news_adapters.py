@@ -8,6 +8,7 @@ import pytest
 
 from brain_api.core.ppo_discovery.news_adapter import (
     build_ppo_news_features,
+    load_historical_ppo_news_features,
     load_weekly_ppo_news_features,
 )
 from brain_api.core.sac.news_adapter import build_sac_news_features
@@ -88,3 +89,33 @@ def test_friday_actor_cutoff_uses_following_monday_window() -> None:
     assert window.start_exclusive == datetime(2026, 8, 17, 9, 0, tzinfo=NY)
     assert window.end_inclusive == datetime(2026, 8, 24, 9, 0, tzinfo=NY)
     assert rows["AAPL"].article_count == 0
+
+
+def test_historical_ppo_news_uses_two_bulk_store_reads() -> None:
+    fridays = [
+        datetime(2026, 8, 14, 20, 0, tzinfo=UTC),
+        datetime(2026, 8, 21, 20, 0, tzinfo=UTC),
+    ]
+    calls: list[str] = []
+
+    class _FakeStore:
+        def require_coverage_many(self, symbols, windows):
+            calls.append("coverage")
+            assert symbols == ["AAPL", "MSFT"]
+            assert len(windows) == 2
+
+        def query_events_many(self, symbols, windows):
+            calls.append("events")
+            return {window: [] for window in windows}
+
+    rows = load_historical_ppo_news_features(
+        fridays, ["AAPL", "MSFT"], store=_FakeStore()
+    )
+
+    assert calls == ["coverage", "events"]
+    assert list(rows) == fridays
+    assert all(
+        features[symbol].article_count == 0
+        for features in rows.values()
+        for symbol in ("AAPL", "MSFT")
+    )

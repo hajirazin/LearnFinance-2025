@@ -44,7 +44,21 @@ def test_load_prices_yfinance_passes_threads_false() -> None:
         result = load_prices_yfinance(["AAPL"], date(2026, 4, 1), date(2026, 4, 25))
 
     assert captured["threads"] is False
+    assert captured["end"] == "2026-04-26"
     assert "AAPL" in result
+
+
+def test_load_prices_yfinance_fallback_uses_inclusive_public_end_date() -> None:
+    ticker = MagicMock()
+    ticker.history.return_value = _ohlcv_frame()
+    with (
+        patch("brain_api.core.prices.yf.download", return_value=pd.DataFrame()),
+        patch("brain_api.core.prices.yf.Ticker", return_value=ticker),
+    ):
+        result = load_prices_yfinance(["AAPL"], date(2026, 4, 1), date(2026, 4, 25))
+
+    assert "AAPL" in result
+    assert ticker.history.call_args.kwargs["end"] == "2026-04-26"
 
 
 def test_concurrent_load_prices_never_overlap_yf_download() -> None:
