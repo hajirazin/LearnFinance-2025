@@ -83,3 +83,28 @@ def test_seeded_init_then_pretrain_is_independent_of_leftover_rng() -> None:
             getattr(first, name).weight.detach(),
             getattr(leftover, name).weight.detach(),
         )
+
+
+def test_early_stop_log_is_distinct_from_periodic_epoch_log(capsys) -> None:
+    config = PPODiscoveryConfig(
+        dropout=0.0,
+        pretrain_lr=0.0,
+        pretrain_max_epochs=5,
+        pretrain_patience=1,
+        pretrain_batch_size=4,
+    )
+    policy = PPODiscoveryActorCritic(config)
+    histories = [np.zeros((2, 250, 4), dtype=np.float64) for _ in range(4)]
+    targets = [np.array([0.01, 0.02], dtype=np.float64) for _ in range(4)]
+    pretrain_temporal_encoder(policy, histories, targets, config=config, seed=0)
+    out = capsys.readouterr().out
+    epoch_lines = [line for line in out.splitlines() if "pretrain epoch=" in line]
+    epoch_numbers = [
+        line.split("pretrain epoch=", 1)[1].split("/", 1)[0] for line in epoch_lines
+    ]
+    assert len(epoch_numbers) == len(set(epoch_numbers))
+    early_stop = [line for line in out.splitlines() if "pretrain early_stop" in line]
+    assert len(early_stop) == 1
+    assert "patience=" in early_stop[0]
+    assert "best_val_ic=" in early_stop[0]
+    assert "device=" in early_stop[0]

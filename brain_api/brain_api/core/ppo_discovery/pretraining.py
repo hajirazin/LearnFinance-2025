@@ -167,8 +167,9 @@ def pretrain_temporal_encoder(
             patience += 1
             if patience >= config.pretrain_patience:
                 line = (
-                    f"[PPO] pretrain epoch={epoch_i + 1}/{config.pretrain_max_epochs} "
-                    f"val_loss={val_loss:.6f} val_ic={val_ic:.4f} device={device.type}"
+                    f"[PPO] pretrain early_stop epoch={epoch_i + 1}/"
+                    f"{config.pretrain_max_epochs} patience={patience} "
+                    f"best_val_ic={best_ic:.4f} device={device.type}"
                 )
                 print(line, flush=True)
                 logger.info(line)

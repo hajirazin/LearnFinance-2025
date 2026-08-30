@@ -37,7 +37,11 @@ class PPODiscoverySetEncoder(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        self.encoder = nn.TransformerEncoder(
+            layer,
+            num_layers=n_layers,
+            enable_nested_tensor=False,
+        )
         self.n_globals = n_globals
 
     def forward(

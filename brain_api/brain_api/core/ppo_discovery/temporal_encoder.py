@@ -53,7 +53,11 @@ class PPODiscoveryTemporalEncoder(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        self.encoder = nn.TransformerEncoder(
+            layer,
+            num_layers=n_layers,
+            enable_nested_tensor=False,
+        )
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, history: torch.Tensor) -> torch.Tensor:

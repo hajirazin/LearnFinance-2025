@@ -20,6 +20,29 @@ def clamp_concentration(raw: torch.Tensor) -> torch.Tensor:
     return torch.clamp(torch.nn.functional.softplus(raw) + 1.0, max=50.0)
 
 
+def _dirichlet_log_prob(
+    concentrations: torch.Tensor,
+    value: torch.Tensor,
+) -> torch.Tensor:
+    """Differentiable Dirichlet log density using device-native primitives."""
+    return (
+        torch.xlogy(concentrations - 1.0, value).sum(dim=-1)
+        + torch.lgamma(concentrations.sum(dim=-1))
+        - torch.lgamma(concentrations).sum(dim=-1)
+    )
+
+
+def _beta_log_prob(
+    alpha: torch.Tensor,
+    beta: torch.Tensor,
+    value: torch.Tensor,
+) -> torch.Tensor:
+    """Differentiable Beta log density as a two-part Dirichlet."""
+    concentrations = torch.stack((alpha, beta), dim=-1)
+    parts = torch.stack((value, 1.0 - value), dim=-1)
+    return _dirichlet_log_prob(concentrations, parts)
+
+
 def cash_from_z(z_cash: torch.Tensor, cash_floor: float = CASH_FLOOR) -> torch.Tensor:
     return cash_floor + (1.0 - cash_floor) * z_cash
 
@@ -103,7 +126,7 @@ def sample_cash_and_weights(
     z_cash = _sample_cpu_if_mps(cash_dist).to(
         device=alpha_cash.device, dtype=alpha_cash.dtype
     )
-    log_p_cash = float(cash_dist.log_prob(z_cash).item())
+    log_p_cash = float(_beta_log_prob(alpha_cash, beta_cash, z_cash).item())
     cash_weight = float(cash_from_z(z_cash, cash_floor).item())
     selected_raw = allocation_raw[
         torch.tensor(selected_idx, device=allocation_raw.device)
@@ -113,7 +136,7 @@ def sample_cash_and_weights(
     simplex = _sample_cpu_if_mps(dirichlet).to(
         device=concentrations.device, dtype=concentrations.dtype
     )
-    log_p_dir = float(dirichlet.log_prob(simplex).item())
+    log_p_dir = float(_dirichlet_log_prob(concentrations, simplex).item())
     stock_mass = 1.0 - cash_weight
     weights = {
         symbol: float(stock_mass * simplex[i].item()) for i, symbol in enumerate(order)
@@ -197,7 +220,7 @@ def recompute_action_log_prob_tensors(
 
     alpha_cash, beta_cash = clamp_concentration(cash_raw)
     z = torch.tensor(action.z_cash, device=cash_raw.device, dtype=cash_raw.dtype)
-    log_p_cash = Beta(alpha_cash, beta_cash).log_prob(z)
+    log_p_cash = _beta_log_prob(alpha_cash, beta_cash, z)
     concentrations = clamp_concentration(
         allocation_raw[
             torch.tensor(action.selection_indices, device=allocation_raw.device)
@@ -208,7 +231,7 @@ def recompute_action_log_prob_tensors(
         device=allocation_raw.device,
         dtype=allocation_raw.dtype,
     )
-    log_p_dir = Dirichlet(concentrations).log_prob(simplex)
+    log_p_dir = _dirichlet_log_prob(concentrations, simplex)
     return log_p_k + log_p_sel + log_p_cash + log_p_dir
 
 
@@ -245,7 +268,7 @@ def recompute_action_log_prob(
 
     alpha_cash, beta_cash = clamp_concentration(cash_raw)
     z = torch.tensor(action.z_cash, device=cash_raw.device, dtype=cash_raw.dtype)
-    log_p_cash = Beta(alpha_cash, beta_cash).log_prob(z)
+    log_p_cash = _beta_log_prob(alpha_cash, beta_cash, z)
     concentrations = clamp_concentration(
         allocation_raw[
             torch.tensor(action.selection_indices, device=allocation_raw.device)
@@ -256,7 +279,7 @@ def recompute_action_log_prob(
         device=allocation_raw.device,
         dtype=allocation_raw.dtype,
     )
-    log_p_dir = Dirichlet(concentrations).log_prob(simplex)
+    log_p_dir = _dirichlet_log_prob(concentrations, simplex)
     total = log_p_k + log_p_sel + log_p_cash + log_p_dir
     return ActionLogProb(
         float(log_p_k.item()),

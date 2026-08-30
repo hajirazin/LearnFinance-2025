@@ -19,8 +19,10 @@ from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.seed_ledger import (
+    empty_seeds_ledger,
     failed_seed_ids,
     load_seeds_ledger,
+    upsert_seed_row,
     write_seeds_ledger,
 )
 from brain_api.core.ppo_discovery.seed_training import train_ppo_discovery_seeds
@@ -380,3 +382,53 @@ def test_undeclared_validation_failed_seed_is_ignored(
     )
     assert 7 not in result.failed_seeds
     assert result.ledger["seeds"]["7"]["status"] == "validation_failed"
+
+
+def test_retry_progress_does_not_report_current_seed_as_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = PPODiscoveryConfig(
+        dropout=0.0,
+        total_timesteps=4,
+        ppo_epochs=1,
+        minibatch_size=8,
+        ppo_microbatch_size=8,
+        seeds=(42, 123, 2026),
+    )
+    policy = PPODiscoveryActorCritic(config)
+    ledger = empty_seeds_ledger()
+    for seed in (42, 123, 2026):
+        ledger = upsert_seed_row(ledger, seed, status="failed")
+    write_seeds_ledger(tmp_path, ledger)
+    captured: list[dict] = []
+
+    def fake_train(policy, episode_fn, *, config, seed, **kwargs):
+        del policy, episode_fn, seed, kwargs
+        return {"ppo_loss": 0.0, "timesteps": float(config.total_timesteps)}
+
+    _stub_seed_loop(
+        monkeypatch, fake_train, lambda *a, **k: {"cagr": 0.2, "sharpe": 0.1}
+    )
+    train_ppo_discovery_seeds(
+        pretrained_state=policy.state_dict(),
+        train_weeks=[],
+        val_weeks=[],
+        snapshot=make_snapshot(4),
+        ohlcv={},
+        spy=MagicMock(),
+        scalers={},
+        config=config,
+        ckpt_dir=tmp_path,
+        checkpoint_expected={},
+        experiment_id="exp",
+        device=torch.device("cpu"),
+        progress=captured.append,
+    )
+    first = next(
+        payload
+        for payload in captured
+        if payload.get("seed_status") == "in_progress" and payload.get("seed") == 42
+    )
+    assert 42 not in first["failed_seeds"]
+    assert 123 in first["failed_seeds"]
+    assert 2026 in first["failed_seeds"]

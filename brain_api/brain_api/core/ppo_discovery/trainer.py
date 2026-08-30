@@ -32,6 +32,22 @@ def _assert_finite(tensor: torch.Tensor, name: str) -> None:
         raise PPODiscoveryError(f"non-finite {name} during PPO update")
 
 
+def _assert_gradient_devices(
+    policy: PPODiscoveryActorCritic,
+    device: torch.device,
+) -> None:
+    """Require every populated gradient to match its parameter and train device."""
+    for name, parameter in policy.named_parameters():
+        if parameter.grad is None:
+            continue
+        if parameter.device != device or parameter.grad.device != parameter.device:
+            raise PPODiscoveryError(
+                "gradient device mismatch for "
+                f"{name}: param={parameter.device} grad={parameter.grad.device} "
+                f"train={device}"
+            )
+
+
 def _device_of(policy: PPODiscoveryActorCritic) -> torch.device:
     return next(policy.parameters()).device
 
@@ -129,6 +145,7 @@ def ppo_update(
                 _assert_finite(loss, "ppo_loss")
                 loss.backward()
                 last_loss = float(loss.detach().item())
+            _assert_gradient_devices(policy, device)
             nn.utils.clip_grad_norm_(policy.parameters(), config.max_grad_norm)
             optimizer.step()
     return {"ppo_loss": last_loss, "update_index": float(update_index)}

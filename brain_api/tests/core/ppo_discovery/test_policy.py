@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+import warnings
 
 import numpy as np
 import pytest
 import torch
+from torch.distributions import Beta, Dirichlet
 
 from brain_api.core.ppo_discovery.config import (
     CASH_FLOOR,
@@ -14,6 +16,8 @@ from brain_api.core.ppo_discovery.config import (
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.distributions import (
+    _beta_log_prob,
+    _dirichlet_log_prob,
     clamp_concentration,
     recompute_action_log_prob_tensors,
     sample_cash_and_weights,
@@ -279,13 +283,35 @@ def test_cpu_cash_dirichlet_sample_is_seed_stable() -> None:
     assert first.dirichlet_weights == pytest.approx(second.dirichlet_weights, abs=1e-6)
 
 
+def test_dirichlet_and_beta_log_prob_match_torch_distributions() -> None:
+    concentrations = torch.tensor([1.5, 2.0, 3.0])
+    value = torch.tensor([0.2, 0.3, 0.5])
+    assert _dirichlet_log_prob(concentrations, value).item() == pytest.approx(
+        Dirichlet(concentrations).log_prob(value).item(), rel=1e-5, abs=1e-6
+    )
+    near_zero = torch.tensor([1e-8, 1e-8, 1.0 - 2e-8])
+    assert _dirichlet_log_prob(concentrations, near_zero).item() == pytest.approx(
+        Dirichlet(concentrations).log_prob(near_zero).item(), rel=1e-5, abs=1e-6
+    )
+    alpha = torch.tensor(1.5)
+    beta = torch.tensor(2.5)
+    z_cash = torch.tensor(0.4)
+    assert _beta_log_prob(alpha, beta, z_cash).item() == pytest.approx(
+        Beta(alpha, beta).log_prob(z_cash).item(), rel=1e-5, abs=1e-6
+    )
+
+
 @pytest.mark.skipif(
     not torch.backends.mps.is_available(), reason="MPS is not available"
 )
 def test_mps_k_positive_sample_and_log_prob_replay() -> None:
     assert "PYTORCH_ENABLE_MPS_FALLBACK" not in os.environ
-    cash_raw = torch.tensor([1.0, 1.5], device="mps")
-    allocation_raw = torch.ones(4, device="mps")
+    cash_raw = torch.tensor(
+        [1.0, 1.5], device="mps", dtype=torch.float32, requires_grad=True
+    )
+    allocation_raw = torch.ones(
+        4, device="mps", dtype=torch.float32, requires_grad=True
+    )
     action = sample_cash_and_weights(
         k=2,
         selected_idx=(0, 1),
@@ -307,6 +333,21 @@ def test_mps_k_positive_sample_and_log_prob_replay() -> None:
     )
     assert replayed.device.type == "mps"
     assert torch.isfinite(replayed)
+    (-replayed).backward()
+    assert cash_raw.grad is not None
+    assert allocation_raw.grad is not None
+    assert torch.isfinite(cash_raw.grad).all()
+    assert torch.isfinite(allocation_raw.grad).all()
+    assert cash_raw.grad.device.type == "mps"
+    assert allocation_raw.grad.device.type == "mps"
+    torch.optim.AdamW([cash_raw, allocation_raw], lr=1e-4).step()
+
+
+def test_ppo_transformers_disable_inapplicable_nested_tensor() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        PPODiscoveryActorCritic(PPODiscoveryConfig(dropout=0.0))
+    assert not any("enable_nested_tensor" in str(item.message) for item in caught)
 
 
 def test_infer_decision_value_is_one_encode_and_matches_value() -> None:

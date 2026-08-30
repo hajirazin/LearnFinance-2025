@@ -117,6 +117,10 @@ def train_ppo_discovery_seeds(
 
     for seed in config.seeds:
         seed_i = int(seed)
+        ledger = upsert_seed_row(
+            ledger, seed_i, status="in_progress", device=device.type
+        )
+        write_seeds_ledger(ckpt_dir, ledger)
         report(
             {
                 "stage": "ppo",
@@ -127,10 +131,6 @@ def train_ppo_discovery_seeds(
                 "failed_seeds": failed_seed_ids(ledger),
             }
         )
-        ledger = upsert_seed_row(
-            ledger, seed_i, status="in_progress", device=device.type
-        )
-        write_seeds_ledger(ckpt_dir, ledger)
         seed_policy = PPODiscoveryActorCritic(config).to(device)
         seed_policy.load_state_dict(pretrained_state)
         seed_policy.to(device)
