@@ -187,12 +187,66 @@ def test_promotion_rejects_unavailable_ablations() -> None:
         evaluation=_eval(ablations=mark_ablations({})),
         approved_by="razin",
         expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest=protocol_file_digest(),
+        incumbent_evaluation_dataset_hash="eval-a",
     )
     assert check.is_healthy is False
     assert any(
         "unavailable" in reason or "ablation" in reason
         for reason in check.failure_reasons
     )
+
+
+def test_inaugural_promotion_allows_failed_seeds_and_ablations() -> None:
+    ablations = {name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS}
+    ablations["frozen_pretrained_encoder"] = {
+        "status": "failed",
+        "error": "held asset HUBB lacks a finite positive execution price",
+    }
+    ablations["no_supervised_pretraining"] = {
+        "status": "failed",
+        "error": "held asset HUBB lacks a finite positive execution price",
+    }
+    evaluation = _eval(failed_seeds=[123, 2026], ablations=ablations, test_cagr=0.36)
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta_for(evaluation),
+        evaluation=evaluation,
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert check.is_healthy is True
+    below_floor = _eval(failed_seeds=[123], ablations=ablations, test_cagr=0.05)
+    floor_check = evaluate_ppo_discovery_promotion(
+        metadata=_meta_for(below_floor),
+        evaluation=below_floor,
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert floor_check.is_healthy is False
+    assert any("12%" in reason for reason in floor_check.failure_reasons)
+    drifted = evaluate_ppo_discovery_promotion(
+        metadata=_meta_for(evaluation, code_revision="deadbeefdead"),
+        evaluation=evaluation,
+        approved_by="razin",
+        expected_config_hash="abc123",
+    )
+    assert drifted.is_healthy is True
+
+
+def test_incumbent_promotion_rejects_failed_seeds_and_ablations() -> None:
+    evaluation = _eval(failed_seeds=[123])
+    check = evaluate_ppo_discovery_promotion(
+        metadata=_meta_for(evaluation),
+        evaluation=evaluation,
+        approved_by="razin",
+        expected_config_hash="abc123",
+        incumbent_cagr=0.14,
+        incumbent_protocol_digest=protocol_file_digest(),
+        incumbent_evaluation_dataset_hash="eval-a",
+    )
+    assert check.is_healthy is False
+    assert any("seeds failed" in reason for reason in check.failure_reasons)
 
 
 def test_cagr_formula() -> None:
@@ -433,6 +487,44 @@ def test_pending_for_self_with_pointer_on_candidate_is_idempotent(
     assert rewritten["promoted"] is True
     assert rewritten["approved_by"] == "razin"
     assert rewritten["failure_reasons"] == []
+
+
+def test_promote_resumes_pending_without_rechecking_gates(
+    tmp_path: Path, monkeypatch
+) -> None:
+    storage = _storage_with_pointer(tmp_path, "v2")
+    _write_stub_version(storage, "v2")
+    conn = promotion_mod._ledger(storage)
+    conn.execute(
+        "INSERT INTO promotions(version, approved_by, expected_current_version, "
+        "promoted_at, status, config_changed, unpaired_acknowledged) "
+        "VALUES (?, ?, ?, ?, 'pending', 0, 0)",
+        ("v2", "razin", "", "2026-01-01T00:00:00+00:00"),
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(promotion_mod, "_smoke_load_candidate", lambda artifacts: None)
+    monkeypatch.setattr(
+        promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
+    )
+
+    def _fail_health(*_args, **_kwargs):
+        raise AssertionError("pending resume must not re-run promotion gates")
+
+    monkeypatch.setattr(promotion_mod, "evaluate_ppo_discovery_promotion", _fail_health)
+    result = promotion_mod.promote_ppo_discovery(
+        storage,
+        "v2",
+        approved_by="razin",
+        expected_config_hash="ignored",
+        expected_current_version="",
+    )
+    assert result["promoted"] is True
+    conn = promotion_mod._ledger(storage)
+    row = conn.execute(
+        "SELECT status FROM promotions WHERE version = ?", ("v2",)
+    ).fetchone()
+    assert row[0] == "promoted"
 
 
 def test_inaugural_promote_uses_empty_expected(tmp_path: Path, monkeypatch) -> None:

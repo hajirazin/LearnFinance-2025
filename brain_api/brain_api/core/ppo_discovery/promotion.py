@@ -84,6 +84,19 @@ def _finite_number(value: Any) -> bool:
     return number == number and abs(number) != float("inf")
 
 
+def _is_inaugural_skippable_reason(reason: str) -> bool:
+    """Holes that block replacing current, not writing the first pointer.
+
+    ``code_revision`` is skippable on inaugural so gate-only edits (this
+    module) after a candidate is written do not trap the first promote.
+    """
+    return (
+        reason == "one or more seeds failed"
+        or reason.startswith("required ablation ")
+        or reason == "code_revision does not match current ppo_discovery sources"
+    )
+
+
 def evaluate_ppo_discovery_candidate(
     metadata: dict[str, Any],
     evaluation: dict[str, Any],
@@ -169,7 +182,15 @@ def evaluate_ppo_discovery_promotion(
     acknowledge_unpaired_evaluation: bool = False,
     repair_override: bool = False,
 ) -> ArtifactHealthCheck:
-    """Hard gates from the research spec. Failures never write ``current``."""
+    """Hard gates from the research spec. Failures never write ``current``.
+
+    With no incumbent, failed seeds, failed required ablations, and a
+    ``code_revision`` mismatch do not block the first ``current`` pointer.
+    The 12% test CAGR floor, ``full`` variant, schema, protocol digest,
+    and cost contract still apply. Replacing an incumbent still requires
+    a complete seed set, every required ablation, and a matching
+    ``code_revision``.
+    """
     candidate = evaluate_ppo_discovery_candidate(metadata, evaluation)
     reasons = list(candidate.failure_reasons)
     if not approved_by or not str(approved_by).strip():
@@ -199,6 +220,10 @@ def evaluate_ppo_discovery_promotion(
     elif paired and _finite_number(cagr_raw) and cagr < float(incumbent_cagr):
         reasons.append("test CAGR is below the incumbent")
     _ = incumbent_model_config_hash
+    if incumbent_cagr is None:
+        reasons = [
+            reason for reason in reasons if not _is_inaugural_skippable_reason(reason)
+        ]
     if reasons:
         return ArtifactHealthCheck(is_healthy=False, failure_reasons=reasons)
     return ArtifactHealthCheck(is_healthy=True, failure_reasons=[])
@@ -247,6 +272,24 @@ def promote_ppo_discovery(
     """
     artifacts = storage.load_artifacts(version)
     _smoke_load_candidate(artifacts)
+    if _pending_promotion_version(storage) == version:
+        _commit_promotion(
+            storage,
+            version,
+            approved_by=approved_by,
+            expected_current_version=expected_current_version,
+            config_changed=False,
+            unpaired_acknowledged=acknowledge_unpaired_evaluation,
+        )
+        return {
+            "version": version,
+            "approved_by": approved_by,
+            "promoted": True,
+            "failure_reasons": [],
+            "config_changed": False,
+            "unpaired_acknowledged": acknowledge_unpaired_evaluation,
+            "repair_override": repair_override,
+        }
     evaluation = _load_json(artifacts.artifact_dir / "evaluation.json")
     incumbent = storage.read_current_version()
     incumbent_cagr = None
@@ -310,6 +353,19 @@ def _smoke_load_candidate(artifacts: Any) -> None:
     for name, parameter in policy.named_parameters():
         if not torch.isfinite(parameter).all():
             raise ValueError(f"non-finite parameter {name} in candidate artifact")
+
+
+def _pending_promotion_version(
+    storage: PPODiscoveryHalalNewModelStorage,
+) -> str | None:
+    conn = _ledger(storage)
+    try:
+        row = conn.execute(
+            "SELECT version FROM promotions WHERE status = 'pending'"
+        ).fetchone()
+        return None if row is None else str(row[0])
+    finally:
+        conn.close()
 
 
 def _commit_promotion(
