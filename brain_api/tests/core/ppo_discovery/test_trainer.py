@@ -260,6 +260,53 @@ def test_tiny_synthetic_ppo_update_runs_on_mps() -> None:
             assert parameter.grad.device.type == "mps"
 
 
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(), reason="MPS is not available"
+)
+def test_production_shaped_first_ppo_update_runs_on_mps() -> None:
+    """Live first-update batching on MPS with K>0 cash/Dirichlet terms.
+
+    Uses production ``rollout_length`` / ``minibatch_size`` /
+    ``ppo_microbatch_size``. This is not a reconstruction of the
+    WatchFiles-interrupted job; a control run with ``Beta.log_prob`` /
+    ``Dirichlet.log_prob`` also completed this update on PyTorch 2.9.1 MPS.
+    """
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+
+    assert "PYTORCH_ENABLE_MPS_FALLBACK" not in os.environ
+    state = build_ppo_discovery_state(_request())
+    config = PPODiscoveryConfig(
+        total_timesteps=52,
+        rollout_length=52,
+        minibatch_size=32,
+        ppo_microbatch_size=8,
+        ppo_epochs=1,
+        freeze_encoder_updates=20,
+        dropout=0.0,
+    )
+    policy = PPODiscoveryActorCritic(config).to("mps")
+
+    def episode(current, cache=None):
+        horizon = config.rollout_length
+        return collect_rollout(
+            current,
+            [state] * horizon,
+            [0.01] * horizon,
+            [False] * (horizon - 1) + [True],
+            config=config,
+        )
+
+    metrics = train_ppo_discovery(
+        policy, episode, config=config, seed=42, device=torch.device("mps")
+    )
+    assert metrics["timesteps"] >= 52
+    assert metrics["mean_k"] > 0
+    for parameter in policy.parameters():
+        assert parameter.device.type == "mps"
+        if parameter.grad is not None:
+            assert parameter.grad.device.type == "mps"
+
+
 def test_assert_gradient_devices_passes_when_aligned() -> None:
     policy = PPODiscoveryActorCritic(PPODiscoveryConfig(dropout=0.0))
     loss = policy.value_head.weight.sum()

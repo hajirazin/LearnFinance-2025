@@ -24,7 +24,12 @@ def _dirichlet_log_prob(
     concentrations: torch.Tensor,
     value: torch.Tensor,
 ) -> torch.Tensor:
-    """Differentiable Dirichlet log density using device-native primitives."""
+    """Dirichlet log density: same ``xlogy`` + ``lgamma`` as PyTorch 2.9.
+
+    This is not a different backward from ``Dirichlet.log_prob``. ``xlogy``
+    is required so ``0 * log(0)`` is 0 rather than NaN. Sampling still uses
+    ``Beta`` / ``Dirichlet`` objects; only density evaluation is inlined.
+    """
     return (
         torch.xlogy(concentrations - 1.0, value).sum(dim=-1)
         + torch.lgamma(concentrations.sum(dim=-1))
