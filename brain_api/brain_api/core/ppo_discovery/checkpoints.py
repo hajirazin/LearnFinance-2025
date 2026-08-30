@@ -8,6 +8,7 @@ import os
 import random
 import tempfile
 from collections.abc import Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -235,12 +236,20 @@ def _cpu_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _cpu_optimizer_state(optimizer: torch.optim.Optimizer) -> dict[str, Any]:
-    payload = optimizer.state_dict()
-    for state in payload.get("state", {}).values():
-        for key, value in list(state.items()):
-            if torch.is_tensor(value):
-                state[key] = value.detach().cpu().clone()
-    return payload
+    return _cpu_checkpoint_copy(optimizer.state_dict())
+
+
+def _cpu_checkpoint_copy(value: Any) -> Any:
+    """Copy checkpoint data without mutating live optimizer state containers."""
+    if torch.is_tensor(value):
+        return value.detach().cpu().clone()
+    if isinstance(value, dict):
+        return {key: _cpu_checkpoint_copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_cpu_checkpoint_copy(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_cpu_checkpoint_copy(item) for item in value)
+    return deepcopy(value)
 
 
 def move_optimizer_state_to_device(

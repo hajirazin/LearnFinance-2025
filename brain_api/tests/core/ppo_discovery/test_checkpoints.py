@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+import torch
+
 from brain_api.core.ppo_discovery.checkpoints import (
     load_seed_checkpoint,
     save_seed_checkpoint,
+    save_seed_partial_checkpoint,
     seed_checkpoint_dir,
     train_recipe_hash,
 )
@@ -97,3 +101,73 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
         },
     )
     assert loaded is not None
+
+
+def _take_optimizer_step(
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, device: torch.device
+) -> None:
+    optimizer.zero_grad()
+    inputs = torch.ones(2, 4, device=device)
+    model(inputs).sum().backward()
+    optimizer.step()
+
+
+def test_partial_checkpoint_does_not_mutate_live_optimizer_state(
+    tmp_path: Path,
+) -> None:
+    device = torch.device("cpu")
+    model = torch.nn.Linear(4, 2).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    _take_optimizer_step(model, optimizer, device)
+    live_tensors = {
+        (id(parameter), key): value
+        for parameter, state in optimizer.state.items()
+        for key, value in state.items()
+        if torch.is_tensor(value)
+    }
+
+    save_seed_partial_checkpoint(
+        tmp_path,
+        seed=42,
+        policy=model,  # type: ignore[arg-type]
+        optimizer=optimizer,
+        device=device,
+        steps_done=1,
+        episode_index=1,
+        update_index=1,
+    )
+
+    for parameter, state in optimizer.state.items():
+        for key, value in state.items():
+            if torch.is_tensor(value):
+                assert value is live_tensors[(id(parameter), key)]
+    _take_optimizer_step(model, optimizer, device)
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(), reason="MPS is not available"
+)
+def test_mps_adam_survives_partial_checkpoint_save(tmp_path: Path) -> None:
+    device = torch.device("mps")
+    model = torch.nn.Linear(4, 2).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    _take_optimizer_step(model, optimizer, device)
+
+    save_seed_partial_checkpoint(
+        tmp_path,
+        seed=42,
+        policy=model,  # type: ignore[arg-type]
+        optimizer=optimizer,
+        device=device,
+        steps_done=1,
+        episode_index=1,
+        update_index=1,
+    )
+
+    assert {
+        value.device.type
+        for state in optimizer.state.values()
+        for value in state.values()
+        if torch.is_tensor(value) and value.ndim > 0
+    } == {"mps"}
+    _take_optimizer_step(model, optimizer, device)
