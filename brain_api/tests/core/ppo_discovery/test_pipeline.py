@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
 
-from brain_api.core.ppo_discovery.pipeline import _ohlcv_for_training
+from brain_api.core.ppo_discovery.pipeline import (
+    _ohlcv_for_training,
+    run_ppo_discovery_training,
+)
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.weeks import news_window_starts_at_or_after_archive
 
@@ -41,4 +45,22 @@ def test_cutoffs_before_news_archive_are_skipped() -> None:
     assert (
         news_window_starts_at_or_after_archive(datetime(2015, 1, 9, 20, 0, tzinfo=UTC))
         is True
+    )
+
+
+def test_pipeline_delegates_seed_training_with_device_and_recipe_hash() -> None:
+    source = inspect.getsource(run_ppo_discovery_training)
+    assert "train_ppo_discovery_seeds" in source
+    assert "device=device" in source
+    assert "train_recipe_hash(config)" in source
+    assert "progress=report" in source
+    assert "get_device()" in source
+    assert "torch.manual_seed(config.seeds[0])" in source
+    assert "np.random.seed(config.seeds[0])" in source
+    assert 'load_artifacts(version).metadata["failure_reasons"]' in source
+    assert '"test_sharpe"' in source
+    assert "[PPO] hmm start" in source
+    assert "[PPO] hmm complete" in source
+    assert source.index("freeze_encoder_updates=10**9") < source.index(
+        "train_recipe_hash(config)"
     )

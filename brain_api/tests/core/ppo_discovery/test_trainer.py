@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+import torch
 
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
@@ -39,13 +40,14 @@ def test_tiny_synthetic_ppo_runs() -> None:
         total_timesteps=8,
         rollout_length=4,
         minibatch_size=2,
+        ppo_microbatch_size=2,
         ppo_epochs=1,
         freeze_encoder_updates=20,
         dropout=0.0,
     )
     policy = PPODiscoveryActorCritic(config)
 
-    def episode(current):
+    def episode(current, cache=None):
         return collect_rollout(
             current, [state, state], [0.01, 0.0], [False, True], config=config
         )
@@ -67,8 +69,10 @@ def test_rollout_length_chunks_ppo_updates(monkeypatch) -> None:
 
     chunk_sizes: list[int] = []
 
-    def fake_update(policy, steps, optimizer, *, config, update_index, last_value=0.0):
-        del policy, optimizer, config, last_value
+    def fake_update(
+        policy, steps, optimizer, *, config, update_index, last_value=0.0, **kwargs
+    ):
+        del policy, optimizer, config, last_value, kwargs
         chunk_sizes.append(len(steps))
         return {"ppo_loss": 0.0, "update_index": float(update_index)}
 
@@ -78,12 +82,13 @@ def test_rollout_length_chunks_ppo_updates(monkeypatch) -> None:
         total_timesteps=8,
         rollout_length=4,
         minibatch_size=2,
+        ppo_microbatch_size=2,
         ppo_epochs=1,
         dropout=0.0,
     )
     policy = PPODiscoveryActorCritic(config)
 
-    def episode(current):
+    def episode(current, cache=None):
         rewards = [0.01] * 8
         dones = [False] * 7 + [True]
         return collect_rollout(current, [state] * 8, rewards, dones, config=config)
@@ -113,8 +118,10 @@ def test_chunked_gae_bootstraps_next_state_value(monkeypatch) -> None:
 
     last_values: list[float] = []
 
-    def fake_update(policy, steps, optimizer, *, config, update_index, last_value=0.0):
-        del policy, optimizer, config, steps
+    def fake_update(
+        policy, steps, optimizer, *, config, update_index, last_value=0.0, **kwargs
+    ):
+        del policy, optimizer, config, steps, kwargs
         last_values.append(float(last_value))
         return {"ppo_loss": 0.0, "update_index": float(update_index)}
 
@@ -124,12 +131,13 @@ def test_chunked_gae_bootstraps_next_state_value(monkeypatch) -> None:
         total_timesteps=8,
         rollout_length=4,
         minibatch_size=2,
+        ppo_microbatch_size=2,
         ppo_epochs=1,
         dropout=0.0,
     )
     policy = PPODiscoveryActorCritic(config)
 
-    def episode(current):
+    def episode(current, cache=None):
         rewards = [0.01] * 8
         dones = [False] * 7 + [True]
         steps = collect_rollout(current, [state] * 8, rewards, dones, config=config)
@@ -139,3 +147,74 @@ def test_chunked_gae_bootstraps_next_state_value(monkeypatch) -> None:
 
     trainer_mod.train_ppo_discovery(policy, episode, config=config, seed=0)
     assert last_values == [5.0, 0.0]
+
+
+def test_four_microbatches_take_one_optimizer_step() -> None:
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+    from brain_api.core.ppo_discovery.trainer import ppo_update
+    from tests.core.ppo_discovery.test_state_builder import _request
+
+    state = build_ppo_discovery_state(_request())
+    config = PPODiscoveryConfig(
+        total_timesteps=32,
+        rollout_length=32,
+        minibatch_size=32,
+        ppo_microbatch_size=8,
+        ppo_epochs=1,
+        dropout=0.0,
+        freeze_encoder_updates=20,
+    )
+    policy = PPODiscoveryActorCritic(config)
+    policy.eval()
+    steps = collect_rollout(
+        policy,
+        [state] * 32,
+        [0.01] * 32,
+        [False] * 31 + [True],
+        config=config,
+    )
+    encodes = {"n": 0}
+    original_encode = policy.encode
+
+    def wrapped(*args, **kwargs):
+        encodes["n"] += 1
+        return original_encode(*args, **kwargs)
+
+    policy.encode = wrapped  # type: ignore[method-assign]
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=1e-4)
+    ppo_update(
+        policy,
+        steps,
+        optimizer,
+        config=config,
+        update_index=0,
+    )
+    assert encodes["n"] == 4
+
+
+def test_frozen_train_episode_receives_temporal_cache() -> None:
+    from brain_api.core.ppo_discovery.rollout import collect_rollout
+    from brain_api.core.ppo_discovery.temporal_cache import FrozenTemporalEmbeddingCache
+
+    state = build_ppo_discovery_state(_request())
+    config = PPODiscoveryConfig(
+        total_timesteps=8,
+        rollout_length=4,
+        minibatch_size=2,
+        ppo_microbatch_size=2,
+        ppo_epochs=1,
+        freeze_encoder_updates=20,
+        dropout=0.0,
+    )
+    policy = PPODiscoveryActorCritic(config)
+    seen: list[object] = []
+
+    def episode(current, cache):
+        seen.append(cache)
+        return collect_rollout(
+            current, [state, state], [0.01, 0.0], [False, True], config=config
+        )
+
+    train_ppo_discovery(policy, episode, config=config, seed=0)
+    assert seen
+    assert all(isinstance(cache, FrozenTemporalEmbeddingCache) for cache in seen)

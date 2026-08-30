@@ -78,6 +78,7 @@ class USPPODiscoveryTrainingWorkflow:
             "promoted": False,
             "snapshot_sha256": snapshot_sha256,
             "evaluation": train.get("evaluation") or {},
+            "failure_reasons": list(train.get("failure_reasons") or []),
         }
         summary = await workflow.execute_activity(
             generate_ppo_discovery_training_summary,
@@ -89,6 +90,7 @@ class USPPODiscoveryTrainingWorkflow:
             "promoted": False,
             "snapshot_sha256": summary_payload["snapshot_sha256"],
             "evaluation": summary_payload["evaluation"],
+            "failure_reasons": list(summary_payload.get("failure_reasons") or []),
             "para_1_overall": summary.summary.get("para_1_overall", ""),
             "para_2_metrics": summary.summary.get("para_2_metrics", ""),
             "para_3_recommendations": summary.summary.get("para_3_recommendations", ""),

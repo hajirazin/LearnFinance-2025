@@ -41,6 +41,37 @@ def tensors_from_state(
     return history, features, globals_, mask
 
 
+def tensors_from_states(
+    states: list[CanonicalPPOState], device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Stack packed states into a microbatch on ``device``."""
+    histories = torch.stack(
+        [
+            torch.as_tensor(state.price_history, dtype=torch.float32, device=device)
+            for state in states
+        ]
+    )
+    features = torch.stack(
+        [
+            torch.as_tensor(state.asset_features, dtype=torch.float32, device=device)
+            for state in states
+        ]
+    )
+    globals_ = torch.stack(
+        [
+            torch.as_tensor(state.globals, dtype=torch.float32, device=device)
+            for state in states
+        ]
+    )
+    masks = torch.stack(
+        [
+            torch.as_tensor(state.asset_mask, dtype=torch.bool, device=device)
+            for state in states
+        ]
+    )
+    return histories, features, globals_, masks
+
+
 class PPODiscoveryActorCritic(nn.Module):
     """Count, Plackett-Luce selection, Beta cash, Dirichlet weights, value."""
 
@@ -86,6 +117,7 @@ class PPODiscoveryActorCritic(nn.Module):
         asset_features: torch.Tensor,
         globals_: torch.Tensor,
         asset_mask: torch.Tensor,
+        temporal_embeddings: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return per-asset encodings and pooled state.
 
@@ -96,7 +128,11 @@ class PPODiscoveryActorCritic(nn.Module):
             raise ValueError("asset feature width must be 9")
         if globals_.size(-1) != GLOBAL_FEATURES:
             raise ValueError("global feature width must be 7")
-        embeddings = self.temporal(history)
+        embeddings = (
+            temporal_embeddings
+            if temporal_embeddings is not None
+            else self.temporal(history)
+        )
         tokens = torch.cat([embeddings, asset_features], dim=-1)
         encoded, pooled, _ = self.set_encoder(tokens, asset_mask, globals_)
         return encoded, pooled
@@ -171,6 +207,121 @@ class PPODiscoveryActorCritic(nn.Module):
             cash_floor=self.config.cash_floor,
         )
 
+    def sample_action_value_log_prob(
+        self,
+        state: CanonicalPPOState,
+        *,
+        temporal_embeddings: torch.Tensor | None = None,
+    ) -> tuple[SampledAction, float, float]:
+        """One encoder pass: action, value, log_p_total."""
+        device = next(self.parameters()).device
+        history, features, globals_, mask = tensors_from_state(state, device)
+        if temporal_embeddings is not None and temporal_embeddings.ndim == 2:
+            temporal_embeddings = temporal_embeddings.unsqueeze(0)
+        encoded, pooled = self.encode(
+            history.unsqueeze(0),
+            features.unsqueeze(0),
+            globals_.unsqueeze(0),
+            mask.unsqueeze(0),
+            temporal_embeddings=temporal_embeddings,
+        )
+        count_logits, selection_logits, value = self.heads(encoded, pooled)
+        encoded_u = encoded[0]
+        pooled_u = pooled[0]
+        k, selected_idx, order, log_p_k, log_p_sel = sample_count_and_selection(
+            count_logits=count_logits[0],
+            selection_logits=selection_logits[0],
+            asset_mask=mask,
+            symbols=state.symbols,
+        )
+        if k == 0:
+            action = sample_cash_and_weights(
+                k=0,
+                selected_idx=(),
+                order=(),
+                log_p_k=log_p_k,
+                log_p_sel=0.0,
+                cash_raw=pooled_u.new_zeros(2),
+                allocation_raw=encoded_u.new_zeros(encoded_u.size(0)),
+                cash_floor=self.config.cash_floor,
+            )
+        else:
+            cash_raw, allocation_raw = self.cash_and_allocation_raw(
+                encoded_u, pooled_u, list(selected_idx)
+            )
+            action = sample_cash_and_weights(
+                k=k,
+                selected_idx=selected_idx,
+                order=order,
+                log_p_k=log_p_k,
+                log_p_sel=log_p_sel,
+                cash_raw=cash_raw,
+                allocation_raw=allocation_raw,
+                cash_floor=self.config.cash_floor,
+            )
+        return action, float(value[0].item()), float(action.log_p_total)
+
+    def evaluate_actions(
+        self,
+        states: list[CanonicalPPOState],
+        actions: list[SampledAction],
+        *,
+        temporal_embeddings: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """One encode per microbatch; loop only over factored action metadata."""
+        if len(states) != len(actions):
+            raise ValueError("evaluate_actions requires aligned states and actions")
+        device = next(self.parameters()).device
+        history, features, globals_, mask = tensors_from_states(states, device)
+        encoded, pooled = self.encode(
+            history,
+            features,
+            globals_,
+            mask,
+            temporal_embeddings=temporal_embeddings,
+        )
+        count_logits, selection_logits, values = self.heads(encoded, pooled)
+        log_probs: list[torch.Tensor] = []
+        count_entropies: list[torch.Tensor] = []
+        selection_entropies: list[torch.Tensor] = []
+        for index, action in enumerate(actions):
+            encoded_u = encoded[index]
+            pooled_u = pooled[index]
+            mask_u = mask[index]
+            if action.k == 0:
+                cash_raw = pooled_u.new_zeros(2)
+                allocation_raw = encoded_u.new_zeros(encoded_u.size(0))
+            else:
+                cash_raw, allocation_raw = self.cash_and_allocation_raw(
+                    encoded_u, pooled_u, list(action.selection_indices)
+                )
+            log_probs.append(
+                recompute_action_log_prob_tensors(
+                    action,
+                    count_logits=count_logits[index],
+                    selection_logits=selection_logits[index],
+                    cash_raw=cash_raw,
+                    allocation_raw=allocation_raw,
+                    asset_mask=mask_u,
+                    cash_floor=self.config.cash_floor,
+                )
+            )
+            h_count, h_selection = factored_count_and_selection_entropy(
+                count_logits=count_logits[index],
+                selection_logits=selection_logits[index],
+                asset_mask=mask_u,
+                selection_indices=action.selection_indices,
+                k=action.k,
+            )
+            count_entropies.append(h_count)
+            selection_entropies.append(h_selection)
+        return (
+            torch.stack(log_probs),
+            values,
+            torch.stack(count_entropies),
+            torch.stack(selection_entropies),
+        )
+
     def log_prob(self, state: CanonicalPPOState, action: SampledAction) -> torch.Tensor:
         """Recompute the stored action's log probability under current params."""
         device = next(self.parameters()).device
@@ -212,10 +363,10 @@ class PPODiscoveryActorCritic(nn.Module):
         )
         return self.value_head(pooled).squeeze(-1)
 
-    def infer_decision(
+    def infer_decision_value(
         self, state: CanonicalPPOState, force_k: int | None = None
-    ) -> tuple[dict[str, float], tuple[str, ...]]:
-        """Deterministic weights plus selection-logit order (symbol tie-break)."""
+    ) -> tuple[dict[str, float], tuple[str, ...], float]:
+        """One encode: deterministic weights, selection order, and value."""
         self.eval()
         device = next(self.parameters()).device
         with torch.no_grad():
@@ -226,7 +377,8 @@ class PPODiscoveryActorCritic(nn.Module):
                 globals_.unsqueeze(0),
                 mask.unsqueeze(0),
             )
-            count_logits, selection_logits, _ = self.heads(encoded, pooled)
+            count_logits, selection_logits, value = self.heads(encoded, pooled)
+            value_f = float(value[0].item())
             n_eligible = int(mask.sum().item())
             if force_k is not None:
                 k = min(max(int(force_k), 0), n_eligible, MAX_SELECTED)
@@ -236,7 +388,7 @@ class PPODiscoveryActorCritic(nn.Module):
                 masked_counts = count_logits[0].masked_fill(~valid, float("-inf"))
                 k = int(torch.argmax(masked_counts).item())
             if k == 0:
-                return {"CASH": 1.0}, ()
+                return {"CASH": 1.0}, (), value_f
             valid_indices = [index for index, flag in enumerate(mask.tolist()) if flag]
             ranked = sorted(
                 valid_indices,
@@ -260,7 +412,14 @@ class PPODiscoveryActorCritic(nn.Module):
                 cash_floor=self.config.cash_floor,
                 force_k=force_k,
             )
-            return weights, order
+            return weights, order, value_f
+
+    def infer_decision(
+        self, state: CanonicalPPOState, force_k: int | None = None
+    ) -> tuple[dict[str, float], tuple[str, ...]]:
+        """Deterministic weights plus selection-logit order (symbol tie-break)."""
+        weights, order, _value = self.infer_decision_value(state, force_k=force_k)
+        return weights, order
 
     def infer_weights(
         self, state: CanonicalPPOState, force_k: int | None = None
@@ -331,5 +490,6 @@ def validate_inference_weights(
 __all__ = [
     "PPODiscoveryActorCritic",
     "tensors_from_state",
+    "tensors_from_states",
     "validate_inference_weights",
 ]

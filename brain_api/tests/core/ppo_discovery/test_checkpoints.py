@@ -6,9 +6,9 @@ from pathlib import Path
 
 from brain_api.core.ppo_discovery.checkpoints import (
     load_seed_checkpoint,
-    model_config_hash,
     save_seed_checkpoint,
     seed_checkpoint_dir,
+    train_recipe_hash,
 )
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
@@ -21,7 +21,7 @@ def test_seed_checkpoint_round_trip_and_resume_path(tmp_path: Path) -> None:
         tmp_path,
         experiment_id="e2e",
         snapshot_hash="sha256:deadbeef",
-        config_hash=model_config_hash(config),
+        recipe_hash=train_recipe_hash(config),
     )
     save_seed_checkpoint(directory, seed=42, policy=policy, metadata={"val_cagr": 0.1})
     loaded = load_seed_checkpoint(directory, seed=42)
@@ -43,7 +43,7 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
         tmp_path,
         experiment_id="e2e",
         snapshot_hash="sha256:deadbeef",
-        config_hash=model_config_hash(config),
+        recipe_hash=train_recipe_hash(config),
     )
     save_seed_checkpoint(
         directory,
@@ -53,7 +53,7 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "protocol_digest": "old",
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
-            "model_config_hash": model_config_hash(config),
+            "train_recipe_hash": train_recipe_hash(config),
             "code_revision": "old-code",
             "pretrained_encoder_sha256": "old-encoder",
         },
@@ -65,7 +65,7 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "protocol_digest": "old",
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
-            "model_config_hash": model_config_hash(config),
+            "train_recipe_hash": train_recipe_hash(config),
             "code_revision": "new-code",
             "pretrained_encoder_sha256": "old-encoder",
         },
@@ -78,7 +78,7 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "protocol_digest": "old",
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
-            "model_config_hash": model_config_hash(config),
+            "train_recipe_hash": train_recipe_hash(config),
             "code_revision": "old-code",
             "pretrained_encoder_sha256": "new-encoder",
         },
@@ -91,7 +91,7 @@ def test_stale_checkpoint_hashes_are_ignored(tmp_path: Path) -> None:
             "protocol_digest": "old",
             "training_dataset_hash": "train-old",
             "snapshot_sha256": "sha256:deadbeef",
-            "model_config_hash": model_config_hash(config),
+            "train_recipe_hash": train_recipe_hash(config),
             "code_revision": "old-code",
             "pretrained_encoder_sha256": "old-encoder",
         },

@@ -68,9 +68,7 @@ def collect_rollout(
     policy.eval()
     for state, reward, done in zip(states, rewards, dones, strict=True):
         with torch.no_grad():
-            action = policy.sample_action(state)
-            value = float(policy.value(state).item())
-            log_p = float(policy.log_prob(state, action).item())
+            action, value, log_p = policy.sample_action_value_log_prob(state)
         if not np.isfinite(log_p) or not np.isfinite(value):
             raise ValueError("non-finite value or log-probability during rollout")
         steps.append(

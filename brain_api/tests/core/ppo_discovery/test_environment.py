@@ -126,6 +126,52 @@ def test_missing_unheld_price_frame_is_masked_not_aborted() -> None:
     assert not bool(steps[0].state.asset_mask[dropped_index])
 
 
+def test_deterministic_rollout_encodes_once_per_week() -> None:
+    index = _xnys_index(HISTORY_BARS + 10)
+    snapshot = make_snapshot(11)
+    ohlcv = {}
+    for i, symbol in enumerate(snapshot.sorted_symbols):
+        frame = make_ohlcv(n=len(index), seed=i + 1)
+        frame.index = index
+        ohlcv[symbol] = frame
+    spy = make_ohlcv(n=len(index), seed=99)
+    spy.index = index
+    cutoff = datetime.combine(index[-6].date(), datetime.min.time(), tzinfo=UTC)
+    news = {
+        symbol: make_news(symbol, count=0, raw=0.0)
+        for symbol in snapshot.sorted_symbols
+    }
+    week = WeeklyTransition(
+        cutoff=cutoff.replace(hour=20),
+        rebalance_session=index[-5],
+        next_rebalance_session=index[-1],
+        news_by_symbol=news,
+        p_calm=0.4,
+        p_stress=0.2,
+    )
+    config = PPODiscoveryConfig(dropout=0.0)
+    policy = PPODiscoveryActorCritic(config)
+    encodes = {"n": 0}
+    original = policy.encode
+
+    def wrapped(*args, **kwargs):
+        encodes["n"] += 1
+        return original(*args, **kwargs)
+
+    policy.encode = wrapped  # type: ignore[method-assign]
+    collect_closed_loop_rollout(
+        policy,
+        [week],
+        snapshot=snapshot,
+        ohlcv_by_symbol=ohlcv,
+        spy=spy,
+        feature_scalers={"log1p_article_count": {"mean": 0.0, "scale": 1.0}},
+        config=config,
+        deterministic=True,
+    )
+    assert encodes["n"] == 1
+
+
 def test_reward_uses_locked_ibkr_costs_at_ten_thousand_dollars() -> None:
     config = PPODiscoveryConfig(hhi_penalty_scale=0.0)
     prior = {"AAPL": 0.10, "MSFT": 0.10, "CASH": 0.80}

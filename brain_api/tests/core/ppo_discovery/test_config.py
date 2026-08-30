@@ -6,6 +6,7 @@ import pytest
 
 from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
 from brain_api.core.ppo_discovery.config import (
+    EXPERIMENT_SEEDS,
     PPO_DISCOVERY_BROKER_COST_MODEL,
     PPO_DISCOVERY_TRAINING_NAV_USD,
     PPODiscoveryConfig,
@@ -60,3 +61,31 @@ def test_deserialization_rejects_missing_cost_contract() -> None:
 
     with pytest.raises(ValueError, match="broker_cost_model"):
         PPODiscoveryConfig.from_dict(payload)
+
+
+def test_default_experiment_seeds_are_the_full_protocol() -> None:
+    assert EXPERIMENT_SEEDS == (42, 123, 2026)
+    assert PPODiscoveryConfig().seeds == (42, 123, 2026)
+    assert PPODiscoveryConfig().ppo_microbatch_size == 8
+    assert PPODiscoveryConfig().minibatch_size == 32
+
+
+def test_recipe_hash_ignores_only_seeds() -> None:
+    from brain_api.core.ppo_discovery.checkpoints import (
+        model_config_hash,
+        train_recipe_hash,
+    )
+
+    base = PPODiscoveryConfig()
+    other_seeds = PPODiscoveryConfig(seeds=(42,))
+    other_dropout = PPODiscoveryConfig(dropout=0.0)
+    assert train_recipe_hash(base) == train_recipe_hash(other_seeds)
+    assert train_recipe_hash(base) != train_recipe_hash(other_dropout)
+    assert model_config_hash(base) != model_config_hash(other_seeds)
+
+
+def test_microbatch_must_divide_minibatch() -> None:
+    with pytest.raises(ValueError, match="divisible"):
+        PPODiscoveryConfig(minibatch_size=32, ppo_microbatch_size=3)
+    with pytest.raises(ValueError, match="ppo_microbatch_size"):
+        PPODiscoveryConfig(minibatch_size=8, ppo_microbatch_size=16)

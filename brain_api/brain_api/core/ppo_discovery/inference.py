@@ -9,6 +9,8 @@ from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
     MODEL_TYPE,
+    PPO_DISCOVERY_ARCHITECTURE,
+    PPO_DISCOVERY_SCHEMA_VERSION,
     UNIVERSE_NAME,
 )
 from brain_api.core.ppo_discovery.explanations import build_explanations
@@ -39,6 +41,10 @@ def load_policy_from_artifacts(
 
 
 def reject_schema_mismatch(metadata: dict[str, Any]) -> None:
+    if metadata.get("ppo_discovery_schema_version") != PPO_DISCOVERY_SCHEMA_VERSION:
+        raise PPODiscoveryError("artifact ppo_discovery_schema_version mismatch")
+    if metadata.get("architecture") != PPO_DISCOVERY_ARCHITECTURE:
+        raise PPODiscoveryError("artifact architecture mismatch")
     if metadata.get("asset_feature_names") != list(ASSET_FEATURE_NAMES):
         raise PPODiscoveryError("artifact asset feature schema mismatch")
     if metadata.get("global_feature_names") != list(GLOBAL_FEATURE_NAMES):

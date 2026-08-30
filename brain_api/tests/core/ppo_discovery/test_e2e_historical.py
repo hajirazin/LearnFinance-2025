@@ -14,6 +14,7 @@ import exchange_calendars as xcals
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from brain_api.core.ppo_discovery.config import (
     HISTORY_BARS,
@@ -101,6 +102,7 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
         total_timesteps=4,
         ppo_epochs=1,
         minibatch_size=2,
+        ppo_microbatch_size=2,
         freeze_encoder_updates=20,
         pretrain_max_epochs=1,
         pretrain_patience=1,
@@ -132,6 +134,10 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
             "brain_api.core.ppo_discovery.pipeline.load_historical_ppo_news_features",
             side_effect=_empty_news,
         ),
+        patch(
+            "brain_api.core.ppo_discovery.pipeline.get_device",
+            return_value=torch.device("cpu"),
+        ),
         patch("brain_api.core.prices.yf.Ticker") as ticker_cls,
     ):
         ticker_cls.return_value.history.side_effect = AssertionError(
@@ -157,6 +163,11 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
     assert "terminal_posterior" in artifacts.regime_hmm
     evaluation = result["evaluation"]
     assert np.isfinite(evaluation["test_cagr"])
+    assert np.isfinite(evaluation["test_sharpe"])
+    assert result["failure_reasons"] == artifacts.metadata["failure_reasons"]
+    assert isinstance(artifacts.metadata["data_window"]["start"], str)
+    assert artifacts.metadata["trained_at"] == artifacts.metadata["training_timestamp"]
+    assert artifacts.metadata["metrics"]["test_sharpe"] == evaluation["test_sharpe"]
     for name in REQUIRED_ABLATIONS:
         assert evaluation["ablations"][name]["status"] in {"ok", "failed"}
         assert evaluation["ablations"][name]["status"] != "unavailable"

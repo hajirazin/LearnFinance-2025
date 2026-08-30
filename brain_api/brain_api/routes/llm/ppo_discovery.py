@@ -35,6 +35,7 @@ class PPOTrainingSummaryRequest(BaseModel):
     promoted: bool = False
     snapshot_sha256: str
     evaluation: dict[str, Any]
+    failure_reasons: list[str] = []
 
 
 def _jinja() -> Environment:

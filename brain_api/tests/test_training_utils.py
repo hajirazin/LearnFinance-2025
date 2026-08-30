@@ -197,3 +197,19 @@ def test_combined_failures_accumulate(tmp_path: Path):
     assert any("val_loss must be > 0" in r for r in reasons)
     assert "feature_scaler.pkl missing or zero bytes" in reasons
     assert "metadata.json missing or zero bytes" in reasons
+
+
+def test_is_accelerator_out_of_memory_detects_python_cuda_and_mps() -> None:
+    import torch
+
+    from brain_api.core.training_utils import is_accelerator_out_of_memory
+
+    cpu = torch.device("cpu")
+    mps = torch.device("mps")
+    assert is_accelerator_out_of_memory(MemoryError("oom"), cpu)
+    assert is_accelerator_out_of_memory(RuntimeError("MPS backend out of memory"), mps)
+    assert not is_accelerator_out_of_memory(RuntimeError("out of memory"), cpu)
+    assert not is_accelerator_out_of_memory(RuntimeError("shape mismatch"), mps)
+    cuda_oom = getattr(torch.cuda, "OutOfMemoryError", None)
+    if cuda_oom is not None:
+        assert is_accelerator_out_of_memory(cuda_oom("cuda oom"), torch.device("cuda"))

@@ -11,6 +11,7 @@ from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
     REQUIRED_ABLATIONS,
+    PPODiscoveryConfig,
     ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.evaluator import (
@@ -32,6 +33,8 @@ def _meta(**overrides):
     payload = {
         "config_hash": "abc123",
         "experiment_variant": "full",
+        "ppo_discovery_schema_version": 1,
+        "architecture": "temporal_set_factored",
         "asset_feature_names": list(ASSET_FEATURE_NAMES),
         "global_feature_names": list(GLOBAL_FEATURE_NAMES),
         "news_required": True,
@@ -122,6 +125,18 @@ def test_healthy_full_variant_passes() -> None:
         expected_config_hash="abc123",
     )
     assert check.is_healthy is True
+
+
+def test_candidate_health_does_not_require_approved_by() -> None:
+    from brain_api.core.ppo_discovery.promotion import (
+        evaluate_ppo_discovery_candidate,
+    )
+
+    check = evaluate_ppo_discovery_candidate(_meta(), _eval())
+    assert check.is_healthy is True
+    failed = evaluate_ppo_discovery_candidate(_meta(), _eval(failed_seeds=[42]))
+    assert failed.is_healthy is False
+    assert any("seeds failed" in reason for reason in failed.failure_reasons)
 
 
 @pytest.mark.parametrize(
@@ -315,8 +330,33 @@ def _storage_with_pointer(
     return storage
 
 
+def _write_stub_version(
+    storage: PPODiscoveryHalalNewModelStorage, version: str
+) -> None:
+    from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
+
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    storage.write_artifacts(
+        version,
+        policy_state_dict=policy.state_dict(),
+        pretrained_encoder_state_dict=policy.temporal.state_dict(),
+        config=config,
+        feature_scalers={},
+        regime_hmm={"schema_version": 3},
+        metadata={"config_hash": "stub", "promoted": False},
+        universe_manifest={},
+        news_manifest={},
+        price_manifest={},
+        experiment_lock={},
+        evaluation={},
+        seeds_ledger={"schema_version": 1, "seeds": {}},
+    )
+
+
 def test_cas_empty_ledger_uses_current_pointer(tmp_path: Path, monkeypatch) -> None:
     storage = _storage_with_pointer(tmp_path, "v1")
+    _write_stub_version(storage, "v2")
     monkeypatch.setattr(
         promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
     )
@@ -358,6 +398,7 @@ def test_pending_for_self_with_pointer_on_candidate_is_idempotent(
     tmp_path: Path, monkeypatch
 ) -> None:
     storage = _storage_with_pointer(tmp_path, "v2")
+    _write_stub_version(storage, "v2")
     conn = promotion_mod._ledger(storage)
     conn.execute(
         "INSERT INTO promotions(version, approved_by, expected_current_version, "
@@ -388,10 +429,15 @@ def test_pending_for_self_with_pointer_on_candidate_is_idempotent(
         "SELECT status FROM promotions WHERE version = ?", ("v2",)
     ).fetchone()
     assert row[0] == "promoted"
+    rewritten = storage.load_artifacts("v2").metadata
+    assert rewritten["promoted"] is True
+    assert rewritten["approved_by"] == "razin"
+    assert rewritten["failure_reasons"] == []
 
 
 def test_inaugural_promote_uses_empty_expected(tmp_path: Path, monkeypatch) -> None:
     storage = _storage_with_pointer(tmp_path, None)
+    _write_stub_version(storage, "v1")
     monkeypatch.setattr(
         promotion_mod, "maybe_upload_ppo_discovery", lambda *a, **k: None
     )

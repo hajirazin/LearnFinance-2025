@@ -24,6 +24,20 @@ def cash_from_z(z_cash: torch.Tensor, cash_floor: float = CASH_FLOOR) -> torch.T
     return cash_floor + (1.0 - cash_floor) * z_cash
 
 
+def _sample_cpu_if_mps(dist: Beta | Dirichlet) -> torch.Tensor:
+    """Sample Beta/Dirichlet on CPU when params live on MPS (PyTorch 2.9)."""
+    if isinstance(dist, Beta):
+        if dist.concentration1.device.type != "mps":
+            return dist.sample()
+        return Beta(
+            dist.concentration1.detach().cpu(),
+            dist.concentration0.detach().cpu(),
+        ).sample()
+    if dist.concentration.device.type != "mps":
+        return dist.sample()
+    return Dirichlet(dist.concentration.detach().cpu()).sample()
+
+
 def sample_count_and_selection(
     *,
     count_logits: torch.Tensor,
@@ -86,7 +100,9 @@ def sample_cash_and_weights(
         )
     alpha_cash, beta_cash = clamp_concentration(cash_raw)
     cash_dist = Beta(alpha_cash, beta_cash)
-    z_cash = cash_dist.sample()
+    z_cash = _sample_cpu_if_mps(cash_dist).to(
+        device=alpha_cash.device, dtype=alpha_cash.dtype
+    )
     log_p_cash = float(cash_dist.log_prob(z_cash).item())
     cash_weight = float(cash_from_z(z_cash, cash_floor).item())
     selected_raw = allocation_raw[
@@ -94,7 +110,9 @@ def sample_cash_and_weights(
     ]
     concentrations = clamp_concentration(selected_raw)
     dirichlet = Dirichlet(concentrations)
-    simplex = dirichlet.sample()
+    simplex = _sample_cpu_if_mps(dirichlet).to(
+        device=concentrations.device, dtype=concentrations.dtype
+    )
     log_p_dir = float(dirichlet.log_prob(simplex).item())
     stock_mass = 1.0 - cash_weight
     weights = {

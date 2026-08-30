@@ -50,6 +50,14 @@ class LockedRandomAllocator:
         weight = stock_mass / k
         return {**dict.fromkeys(chosen, weight), "CASH": CASH_FLOOR}
 
+    def infer_decision_value(
+        self, state: CanonicalPPOState, force_k: int | None = None
+    ) -> tuple[dict[str, float], tuple[str, ...], float]:
+        del force_k
+        weights = self.infer_weights(state)
+        order = tuple(symbol for symbol in weights if symbol != "CASH")
+        return weights, order, 0.0
+
     def value(self, state: CanonicalPPOState) -> torch.Tensor:
         del state
         return torch.zeros((), dtype=torch.float32)

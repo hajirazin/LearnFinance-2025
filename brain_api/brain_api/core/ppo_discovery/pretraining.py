@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import numpy as np
@@ -12,6 +13,8 @@ from torch.optim import AdamW
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
+
+logger = logging.getLogger(__name__)
 
 
 def next_week_open_log_return(open_t: float, open_next: float) -> float:
@@ -132,7 +135,7 @@ def pretrain_temporal_encoder(
         mean_ic = float(np.mean(week_ics)) if week_ics else 0.0
         return mean_loss, mean_ic
 
-    for _epoch_i in range(config.pretrain_max_epochs):
+    for epoch_i in range(config.pretrain_max_epochs):
         train_idx = list(range(val_start or n_weeks))
         val_idx = list(range(val_start, n_weeks)) if val_start else train_idx
         policy.train()
@@ -140,6 +143,15 @@ def pretrain_temporal_encoder(
         policy.eval()
         with torch.no_grad():
             val_loss, val_ic = _epoch(val_idx, train=False)
+        log_interval = max(1, int(config.pretrain_max_epochs) // 10)
+        is_last = epoch_i + 1 == config.pretrain_max_epochs
+        if (epoch_i + 1) % log_interval == 0 or is_last:
+            line = (
+                f"[PPO] pretrain epoch={epoch_i + 1}/{config.pretrain_max_epochs} "
+                f"val_loss={val_loss:.6f} val_ic={val_ic:.4f} device={device.type}"
+            )
+            print(line, flush=True)
+            logger.info(line)
         improved = val_ic > best_ic + 1e-8 or (
             abs(val_ic - best_ic) <= 1e-8 and val_loss < best_loss
         )
@@ -154,6 +166,12 @@ def pretrain_temporal_encoder(
         else:
             patience += 1
             if patience >= config.pretrain_patience:
+                line = (
+                    f"[PPO] pretrain epoch={epoch_i + 1}/{config.pretrain_max_epochs} "
+                    f"val_loss={val_loss:.6f} val_ic={val_ic:.4f} device={device.type}"
+                )
+                print(line, flush=True)
+                logger.info(line)
                 break
     policy.temporal.load_state_dict(best_state)
     return {"best_val_rank_ic": float(best_ic), "best_val_smooth_l1": float(best_loss)}

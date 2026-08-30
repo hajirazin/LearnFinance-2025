@@ -28,6 +28,7 @@ REQUIRED_FILES: tuple[str, ...] = (
     "price_manifest.json",
     "experiment_lock.json",
     "evaluation.json",
+    "seeds_ledger.json",
     "checksums.sha256",
 )
 
@@ -86,6 +87,7 @@ class PPODiscoveryHalalNewModelStorage:
         experiment_lock: dict[str, Any],
         evaluation: dict[str, Any],
         promote: bool = False,
+        seeds_ledger: dict[str, Any] | None = None,
     ) -> Path:
         """Persist a candidate version. Never overwrites differing bytes."""
         version_path = self._version_path(version)
@@ -117,6 +119,7 @@ class PPODiscoveryHalalNewModelStorage:
                 price_manifest=price_manifest,
                 experiment_lock=experiment_lock,
                 evaluation=evaluation,
+                seeds_ledger=seeds_ledger or {"schema_version": 1, "seeds": {}},
             )
             self._write_checksums_at(tmp_path)
             os.replace(tmp_path, version_path)
@@ -143,6 +146,7 @@ class PPODiscoveryHalalNewModelStorage:
         price_manifest: dict[str, Any],
         experiment_lock: dict[str, Any],
         evaluation: dict[str, Any],
+        seeds_ledger: dict[str, Any] | None = None,
     ) -> None:
         torch.save(policy_state_dict, version_path / "policy.pt")
         torch.save(
@@ -170,6 +174,9 @@ class PPODiscoveryHalalNewModelStorage:
             json.dumps(experiment_lock, indent=2)
         )
         (version_path / "evaluation.json").write_text(json.dumps(evaluation, indent=2))
+        (version_path / "seeds_ledger.json").write_text(
+            json.dumps(seeds_ledger or {"schema_version": 1, "seeds": {}}, indent=2)
+        )
 
     def promote_version(self, version: str) -> None:
         if not self.version_exists(version):

@@ -6,8 +6,16 @@
   <p>Universe snapshot: {{ snapshot_sha256 }}</p>
   <p>Cost contract: IBKR Singapore Tiered costs at $10,000 training capital; execution remains Alpaca.</p>
   <p>Survivorship bias: today's roster was applied historically. News is mandatory.</p>
+  {% if failure_reasons %}
+  <p>Failure reasons:</p>
+  <ul>
+    {% for reason in failure_reasons %}
+    <li>{{ reason }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   {% if evaluation %}
-  <p>Selected seed: {{ evaluation.get('selected_seed') }}</p>
+    <p>Selected seed: {{ evaluation.get('selected_seed') }} | Device: {{ evaluation.get('device') }}</p>
   <p>Test CAGR: {{ evaluation.get('test_cagr') }} | Max drawdown: {{ evaluation.get('test_max_drawdown') }}</p>
   <p>Failed seeds: {{ evaluation.get('failed_seeds') }}</p>
   <p>Ablations: {{ evaluation.get('ablations') }}</p>

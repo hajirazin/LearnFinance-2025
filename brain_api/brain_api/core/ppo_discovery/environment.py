@@ -64,6 +64,7 @@ def collect_closed_loop_rollout(
     zero_history: bool = False,
     equal_weight_selected: bool = False,
     force_k: int | None = None,
+    temporal_cache=None,
 ) -> list[RolloutStep]:
     """Sample (or infer) an action, then reward it from next-open returns."""
     if not transitions:
@@ -119,20 +120,25 @@ def collect_closed_loop_rollout(
         prior = dict(weights)
         with torch.no_grad():
             if force_k is not None:
-                target_weights, _order = policy.infer_decision(state, force_k=force_k)
+                target_weights, _order, value = policy.infer_decision_value(
+                    state, force_k=force_k
+                )
                 action = _action_from_weights(state, target_weights)
+                log_p = 0.0
             elif deterministic or equal_weight_selected:
-                target_weights = policy.infer_weights(state)
+                target_weights, _order, value = policy.infer_decision_value(state)
                 action = _action_from_weights(state, target_weights)
                 if equal_weight_selected:
                     action = _with_equal_stock_weights(action)
-            else:
-                action = policy.sample_action(state)
-            value = float(policy.value(state).item())
-            if deterministic or force_k is not None or equal_weight_selected:
                 log_p = 0.0
             else:
-                log_p = float(policy.log_prob(state, action).item())
+                embeddings = None
+                if temporal_cache is not None:
+                    variant = "zero_history" if zero_history else "normal"
+                    embeddings = temporal_cache.get(state, variant)
+                action, value, log_p = policy.sample_action_value_log_prob(
+                    state, temporal_embeddings=embeddings
+                )
         target = dict(action.percentage_weights)
         symbol_returns, symbol_prices = _next_open_market(
             prior,

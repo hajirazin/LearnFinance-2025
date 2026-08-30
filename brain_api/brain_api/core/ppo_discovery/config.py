@@ -62,7 +62,9 @@ AUDIT_NEWS_FIELDS: tuple[str, ...] = (
     "fraction_positive_news",
     "news_sentiment_dispersion",
 )
-EXPERIMENT_SEEDS: tuple[int, ...] = (42, 123, 2026, 7, 19, 31, 73, 101, 211, 509)
+EXPERIMENT_SEEDS: tuple[int, ...] = (42, 123, 2026)
+PPO_DISCOVERY_SCHEMA_VERSION = 1
+PPO_DISCOVERY_ARCHITECTURE = "temporal_set_factored"
 REQUIRED_ABLATIONS: tuple[str, ...] = (
     "full_ppo",
     "no_news_features",
@@ -125,6 +127,7 @@ class PPODiscoveryConfig:
     max_grad_norm: float = 1.0
     rollout_length: int = 52
     minibatch_size: int = 32
+    ppo_microbatch_size: int = 8
     ppo_epochs: int = 5
     freeze_encoder_updates: int = 20
     total_timesteps: int = 10_000
@@ -137,6 +140,19 @@ class PPODiscoveryConfig:
     reward_scale: float = 1.0
     seeds: tuple[int, ...] = EXPERIMENT_SEEDS
     universe: str = UNIVERSE_NAME
+
+    def __post_init__(self) -> None:
+        if not (1 <= int(self.ppo_microbatch_size) <= int(self.minibatch_size)):
+            raise ValueError(
+                "ppo_microbatch_size must be in "
+                f"[1, minibatch_size={self.minibatch_size}], "
+                f"got {self.ppo_microbatch_size}"
+            )
+        if int(self.minibatch_size) % int(self.ppo_microbatch_size) != 0:
+            raise ValueError(
+                "minibatch_size must be divisible by ppo_microbatch_size, "
+                f"got {self.minibatch_size} % {self.ppo_microbatch_size}"
+            )
 
     @property
     def training_nav_usd(self) -> float:
@@ -175,6 +191,7 @@ class PPODiscoveryConfig:
             "max_grad_norm": self.max_grad_norm,
             "rollout_length": self.rollout_length,
             "minibatch_size": self.minibatch_size,
+            "ppo_microbatch_size": self.ppo_microbatch_size,
             "ppo_epochs": self.ppo_epochs,
             "freeze_encoder_updates": self.freeze_encoder_updates,
             "total_timesteps": self.total_timesteps,
@@ -261,7 +278,9 @@ __all__ = [
     "N_PATCHES",
     "PATCH_LENGTH",
     "PATCH_STRIDE",
+    "PPO_DISCOVERY_ARCHITECTURE",
     "PPO_DISCOVERY_BROKER_COST_MODEL",
+    "PPO_DISCOVERY_SCHEMA_VERSION",
     "PPO_DISCOVERY_TRAINING_NAV_USD",
     "PROMOTION_CAGR_FLOOR",
     "REQUIRED_ABLATIONS",

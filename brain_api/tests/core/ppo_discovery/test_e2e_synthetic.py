@@ -240,6 +240,12 @@ def test_reject_schema_mismatch_requires_news_pins() -> None:
         "news_required": True,
         "experiment_variant": "full",
     }
+    with pytest.raises(PPODiscoveryError, match="ppo_discovery_schema_version"):
+        reject_schema_mismatch(metadata)
+    metadata["ppo_discovery_schema_version"] = 1
+    with pytest.raises(PPODiscoveryError, match="architecture"):
+        reject_schema_mismatch(metadata)
+    metadata["architecture"] = "temporal_set_factored"
     with pytest.raises(PPODiscoveryError, match="news_schema_version"):
         reject_schema_mismatch(metadata)
     metadata["news_schema_version"] = 1
@@ -291,3 +297,80 @@ def test_incomplete_version_directory_is_rebuilt(tmp_path: Path) -> None:
     rebuilt = _write()
     assert rebuilt == version
     assert storage.version_exists(version)
+
+
+def test_candidate_metadata_window_timestamp_and_sharpe(tmp_path: Path) -> None:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    news, price = _hashed_manifests()
+    news["weeks"] = [{"cutoff": "2020-06-01T20:00:00+00:00", "symbols": {}}]
+    price["start"] = "2019-01-01"
+    version = write_candidate_artifact(
+        storage,
+        policy,
+        config=config,
+        evaluation={
+            "test_cagr": 0.05,
+            "test_sharpe": 1.25,
+            "alpha_hrp_test_cagr": 0.15,
+            "test_max_drawdown": 0.10,
+            "alpha_hrp_test_max_drawdown": 0.12,
+            "paired_vs_alpha_hrp_point": 0.001,
+            "test_weekly_net_log": [0.01] * 52,
+            "ablations": {
+                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+            },
+            "failed_seeds": [],
+        },
+        universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
+        experiment_id="ci",
+        end_date="2026-08-31",
+        regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+        news_manifest=news,
+        price_manifest=price,
+        pretrained_encoder_state_dict=policy.temporal.state_dict(),
+    )
+    metadata = storage.load_artifacts(version).metadata
+    assert metadata["data_window"]["start"] == "2019-01-01"
+    assert isinstance(metadata["data_window"]["start"], str)
+    assert metadata["trained_at"] == metadata["training_timestamp"]
+    assert metadata["metrics"]["test_sharpe"] == 1.25
+    assert metadata["prior_version"] is None
+    assert any("12%" in reason for reason in metadata["failure_reasons"])
+
+
+def test_data_window_start_falls_back_to_first_week_cutoff(tmp_path: Path) -> None:
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    news, price = _hashed_manifests()
+    news["weeks"] = [{"cutoff": "2020-06-01T20:00:00+00:00", "symbols": {}}]
+    version = write_candidate_artifact(
+        storage,
+        policy,
+        config=config,
+        evaluation={
+            "test_cagr": 0.20,
+            "test_sharpe": 0.5,
+            "alpha_hrp_test_cagr": 0.15,
+            "test_max_drawdown": 0.10,
+            "alpha_hrp_test_max_drawdown": 0.12,
+            "paired_vs_alpha_hrp_point": 0.001,
+            "test_weekly_net_log": [0.01] * 52,
+            "ablations": {
+                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+            },
+            "failed_seeds": [],
+        },
+        universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
+        experiment_id="ci",
+        end_date="2026-08-31",
+        regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+        news_manifest=news,
+        price_manifest=price,
+        pretrained_encoder_state_dict=policy.temporal.state_dict(),
+    )
+    start = storage.load_artifacts(version).metadata["data_window"]["start"]
+    assert start == "2020-06-01T20:00:00+00:00"
+    assert not isinstance(start, dict)

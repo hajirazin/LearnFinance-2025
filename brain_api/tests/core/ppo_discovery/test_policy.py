@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
+import pytest
 import torch
 
 from brain_api.core.ppo_discovery.config import (
@@ -12,6 +15,8 @@ from brain_api.core.ppo_discovery.config import (
 )
 from brain_api.core.ppo_discovery.distributions import (
     clamp_concentration,
+    recompute_action_log_prob_tensors,
+    sample_cash_and_weights,
     sample_factored_action,
 )
 from brain_api.core.ppo_discovery.policy import (
@@ -199,3 +204,126 @@ def test_selection_entropy_sums_all_plackett_luce_draws() -> None:
     )
     assert float(all_draws) > float(first_only)
     assert float(zero) == 0.0
+
+
+def test_fused_sample_is_one_encode_and_matches_heads() -> None:
+    state = build_ppo_discovery_state(_request())
+    policy = _tiny_policy()
+    torch.manual_seed(4)
+    encodes = {"n": 0}
+    original = policy.encode
+
+    def wrapped(*args, **kwargs):
+        encodes["n"] += 1
+        return original(*args, **kwargs)
+
+    policy.encode = wrapped  # type: ignore[method-assign]
+    action, value, log_p = policy.sample_action_value_log_prob(state)
+    assert encodes["n"] == 1
+    assert log_p == pytest.approx(action.log_p_total)
+    policy.encode = original  # type: ignore[method-assign]
+    torch.manual_seed(4)
+    action2 = policy.sample_action(state)
+    assert action.k == action2.k
+    assert abs(value - float(policy.value(state).item())) < 1e-5
+
+
+def test_evaluate_actions_eight_state_microbatch_matches_scalar() -> None:
+    state = build_ppo_discovery_state(_request())
+    policy = _tiny_policy()
+    torch.manual_seed(5)
+    actions = [policy.sample_action(state) for _ in range(8)]
+    states = [state] * 8
+    encodes = {"n": 0}
+    original = policy.encode
+
+    def wrapped(*args, **kwargs):
+        encodes["n"] += 1
+        return original(*args, **kwargs)
+
+    policy.encode = wrapped  # type: ignore[method-assign]
+    batched_logp, batched_value, _, _ = policy.evaluate_actions(states, actions)
+    assert encodes["n"] == 1
+    policy.encode = original  # type: ignore[method-assign]
+    for index, action in enumerate(actions):
+        assert batched_logp[index].item() == pytest.approx(
+            float(policy.log_prob(state, action).item()), abs=1e-5
+        )
+        assert batched_value[index].item() == pytest.approx(
+            float(policy.value(state).item()), abs=1e-5
+        )
+
+
+def test_cpu_cash_dirichlet_sample_is_seed_stable() -> None:
+    torch.manual_seed(11)
+    first = sample_cash_and_weights(
+        k=2,
+        selected_idx=(0, 1),
+        order=("A", "B"),
+        log_p_k=0.0,
+        log_p_sel=0.0,
+        cash_raw=torch.tensor([1.0, 1.5]),
+        allocation_raw=torch.ones(4),
+    )
+    torch.manual_seed(11)
+    second = sample_cash_and_weights(
+        k=2,
+        selected_idx=(0, 1),
+        order=("A", "B"),
+        log_p_k=0.0,
+        log_p_sel=0.0,
+        cash_raw=torch.tensor([1.0, 1.5]),
+        allocation_raw=torch.ones(4),
+    )
+    assert first.z_cash == pytest.approx(second.z_cash, abs=1e-6)
+    assert first.dirichlet_weights == pytest.approx(second.dirichlet_weights, abs=1e-6)
+
+
+@pytest.mark.skipif(
+    not torch.backends.mps.is_available(), reason="MPS is not available"
+)
+def test_mps_k_positive_sample_and_log_prob_replay() -> None:
+    assert "PYTORCH_ENABLE_MPS_FALLBACK" not in os.environ
+    cash_raw = torch.tensor([1.0, 1.5], device="mps")
+    allocation_raw = torch.ones(4, device="mps")
+    action = sample_cash_and_weights(
+        k=2,
+        selected_idx=(0, 1),
+        order=("A", "B"),
+        log_p_k=0.0,
+        log_p_sel=0.0,
+        cash_raw=cash_raw,
+        allocation_raw=allocation_raw,
+    )
+    assert action.k == 2
+    mask = torch.tensor([True, True, False, False], device="mps")
+    replayed = recompute_action_log_prob_tensors(
+        action,
+        count_logits=torch.zeros(16, device="mps"),
+        selection_logits=torch.zeros(4, device="mps"),
+        cash_raw=cash_raw,
+        allocation_raw=allocation_raw,
+        asset_mask=mask,
+    )
+    assert replayed.device.type == "mps"
+    assert torch.isfinite(replayed)
+
+
+def test_infer_decision_value_is_one_encode_and_matches_value() -> None:
+    state = build_ppo_discovery_state(_request())
+    policy = _tiny_policy()
+    encodes = {"n": 0}
+    original = policy.encode
+
+    def wrapped(*args, **kwargs):
+        encodes["n"] += 1
+        return original(*args, **kwargs)
+
+    policy.encode = wrapped  # type: ignore[method-assign]
+    weights, order, fused_value = policy.infer_decision_value(state)
+    assert encodes["n"] == 1
+    policy.encode = original  # type: ignore[method-assign]
+    assert fused_value == pytest.approx(float(policy.value(state).item()), abs=1e-5)
+    weights2, order2 = policy.infer_decision(state)
+    assert weights == weights2
+    assert order == order2

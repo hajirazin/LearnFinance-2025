@@ -14,6 +14,8 @@ import torch
 from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
+    PPO_DISCOVERY_ARCHITECTURE,
+    PPO_DISCOVERY_SCHEMA_VERSION,
     PROMOTION_CAGR_FLOOR,
     REQUIRED_ABLATIONS,
     ppo_discovery_cost_contract,
@@ -82,25 +84,16 @@ def _finite_number(value: Any) -> bool:
     return number == number and abs(number) != float("inf")
 
 
-def evaluate_ppo_discovery_promotion(
-    *,
+def evaluate_ppo_discovery_candidate(
     metadata: dict[str, Any],
     evaluation: dict[str, Any],
-    approved_by: str,
-    expected_config_hash: str,
-    incumbent_cagr: float | None = None,
-    incumbent_protocol_digest: str | None = None,
-    incumbent_evaluation_dataset_hash: str | None = None,
-    incumbent_model_config_hash: str | None = None,
-    acknowledge_unpaired_evaluation: bool = False,
-    repair_override: bool = False,
 ) -> ArtifactHealthCheck:
-    """Hard gates from the research spec. Failures never write ``current``."""
+    """Intrinsic candidate checks. Missing approved_by is not a failure."""
     reasons: list[str] = []
-    if not approved_by or not str(approved_by).strip():
-        reasons.append("approved_by is required")
-    if metadata.get("config_hash") != expected_config_hash:
-        reasons.append("expected_config_hash does not match artifact config_hash")
+    if metadata.get("ppo_discovery_schema_version") != PPO_DISCOVERY_SCHEMA_VERSION:
+        reasons.append("ppo_discovery_schema_version mismatch")
+    if metadata.get("architecture") != PPO_DISCOVERY_ARCHITECTURE:
+        reasons.append("architecture mismatch")
     if metadata.get("experiment_variant") != FULL_VARIANT:
         reasons.append("only experiment_variant='full' may be promoted")
     if metadata.get("asset_feature_names") != list(ASSET_FEATURE_NAMES):
@@ -144,6 +137,47 @@ def evaluate_ppo_discovery_promotion(
     drawdown = evaluation.get("test_max_drawdown")
     if not _finite_number(drawdown) or not (0.0 <= float(drawdown) <= 1.0):
         reasons.append("test_max_drawdown must be finite in [0, 1]")
+    ablations = evaluation.get("ablations") or {}
+    for name in REQUIRED_ABLATIONS:
+        row = ablations.get(name)
+        if not isinstance(row, dict) or row.get("status") != "ok":
+            reasons.append(
+                f"required ablation {name!r} is missing, failed, or unavailable"
+            )
+            continue
+        ablation_cagr = row.get("cagr")
+        if ablation_cagr is None or not _finite_number(ablation_cagr):
+            reasons.append(f"required ablation {name!r} has a non-finite CAGR")
+    if evaluation.get("failed_seeds"):
+        reasons.append("one or more seeds failed")
+    del cagr
+    if reasons:
+        return ArtifactHealthCheck(is_healthy=False, failure_reasons=reasons)
+    return ArtifactHealthCheck(is_healthy=True, failure_reasons=[])
+
+
+def evaluate_ppo_discovery_promotion(
+    *,
+    metadata: dict[str, Any],
+    evaluation: dict[str, Any],
+    approved_by: str,
+    expected_config_hash: str,
+    incumbent_cagr: float | None = None,
+    incumbent_protocol_digest: str | None = None,
+    incumbent_evaluation_dataset_hash: str | None = None,
+    incumbent_model_config_hash: str | None = None,
+    acknowledge_unpaired_evaluation: bool = False,
+    repair_override: bool = False,
+) -> ArtifactHealthCheck:
+    """Hard gates from the research spec. Failures never write ``current``."""
+    candidate = evaluate_ppo_discovery_candidate(metadata, evaluation)
+    reasons = list(candidate.failure_reasons)
+    if not approved_by or not str(approved_by).strip():
+        reasons.append("approved_by is required")
+    if metadata.get("config_hash") != expected_config_hash:
+        reasons.append("expected_config_hash does not match artifact config_hash")
+    cagr_raw = evaluation.get("test_cagr")
+    cagr = float(cagr_raw) if _finite_number(cagr_raw) else float("nan")
     eval_hash = metadata.get("evaluation_dataset_hash")
     paired = (
         incumbent_cagr is not None
@@ -165,19 +199,6 @@ def evaluate_ppo_discovery_promotion(
     elif paired and _finite_number(cagr_raw) and cagr < float(incumbent_cagr):
         reasons.append("test CAGR is below the incumbent")
     _ = incumbent_model_config_hash
-    ablations = evaluation.get("ablations") or {}
-    for name in REQUIRED_ABLATIONS:
-        row = ablations.get(name)
-        if not isinstance(row, dict) or row.get("status") != "ok":
-            reasons.append(
-                f"required ablation {name!r} is missing, failed, or unavailable"
-            )
-            continue
-        ablation_cagr = row.get("cagr")
-        if ablation_cagr is None or not _finite_number(ablation_cagr):
-            reasons.append(f"required ablation {name!r} has a non-finite CAGR")
-    if evaluation.get("failed_seeds"):
-        reasons.append("one or more seeds failed")
     if reasons:
         return ArtifactHealthCheck(is_healthy=False, failure_reasons=reasons)
     return ArtifactHealthCheck(is_healthy=True, failure_reasons=[])
@@ -309,6 +330,8 @@ def _commit_promotion(
         ).fetchall()
         pending_versions = [row[0] for row in pending]
         if version in pending_versions and pointer == version:
+            _rewrite_promoted_metadata(storage, version, approved_by=approved_by)
+            maybe_upload_ppo_discovery(storage, version, make_current=True)
             _mark_ledger_promoted(conn, version)
             conn.commit()
             return
@@ -354,6 +377,7 @@ def _commit_promotion(
         raise
     finally:
         conn.close()
+    _rewrite_promoted_metadata(storage, version, approved_by=approved_by)
     maybe_upload_ppo_discovery(storage, version, make_current=True)
     storage.promote_version(version)
     conn = _ledger(storage)
@@ -366,6 +390,24 @@ def _commit_promotion(
         raise
     finally:
         conn.close()
+
+
+def _rewrite_promoted_metadata(
+    storage: PPODiscoveryHalalNewModelStorage,
+    version: str,
+    *,
+    approved_by: str,
+) -> None:
+    artifacts = storage.load_artifacts(version)
+    metadata = dict(artifacts.metadata)
+    metadata["promoted"] = True
+    metadata["failure_reasons"] = []
+    metadata["approved_by"] = approved_by
+    metadata["promoted_at"] = datetime.now(UTC).isoformat()
+    (artifacts.artifact_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True)
+    )
+    storage.write_checksums(version)
 
 
 def _mark_ledger_promoted(conn: sqlite3.Connection, version: str) -> None:
@@ -412,6 +454,7 @@ def _load_json(path):
 
 __all__ = [
     "FULL_VARIANT",
+    "evaluate_ppo_discovery_candidate",
     "evaluate_ppo_discovery_promotion",
     "ppo_discovery_source_digest",
     "promote_ppo_discovery",

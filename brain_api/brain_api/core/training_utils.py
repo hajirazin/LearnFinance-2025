@@ -33,6 +33,22 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
+def is_accelerator_out_of_memory(
+    exc: BaseException,
+    device: torch.device,
+) -> bool:
+    """Return true for Python, CUDA, or MPS out-of-memory failures."""
+    if isinstance(exc, MemoryError):
+        return True
+    cuda_oom = getattr(torch.cuda, "OutOfMemoryError", None)
+    if cuda_oom is not None and isinstance(exc, cuda_oom):
+        return True
+    if device.type == "mps" and isinstance(exc, RuntimeError):
+        message = " ".join(str(exc).lower().split())
+        return "out of memory" in message
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Forecaster artifact health check (always-promote-with-guardrails policy)
 # ---------------------------------------------------------------------------
