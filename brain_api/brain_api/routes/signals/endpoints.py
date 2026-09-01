@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.sac.market_sessions import completed_xnys_session_dates
+from brain_api.core.vix_fallback import VixFallbackError, apply_cboe_vix_fallback
 from brain_api.routes.signals.models import (
     ClosesRequest,
     ClosesResponse,
@@ -92,6 +93,12 @@ def get_market_history(request: MarketHistoryRequest) -> MarketHistoryResponse:
         )
 
     prices = load_prices_yfinance(["SPY", "^VIX"], start, as_of)
+    try:
+        vix_result = apply_cboe_vix_fallback(prices, required_dates=expected_dates)
+    except VixFallbackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    prices = vix_result.prices
+    provenance["vix_fallback"] = vix_result.audit.to_dict()
     if set(prices) != {"SPY", "^VIX"}:
         raise HTTPException(
             status_code=503,

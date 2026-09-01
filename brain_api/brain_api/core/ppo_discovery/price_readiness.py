@@ -15,6 +15,11 @@ from brain_api.core.sac.market_sessions import (
     align_to_xnys_sessions,
     xnys_session_dates,
 )
+from brain_api.core.vix_fallback import (
+    VixFallbackAudit,
+    VixFallbackError,
+    apply_cboe_vix_fallback,
+)
 
 INDEX_SYMBOLS = ("SPY", "^VIX")
 
@@ -24,16 +29,28 @@ def assess_price_readiness(
     *,
     end_date: date,
     start_date: date | None = None,
+    index_end_date: date | None = None,
     prices: dict[str, pd.DataFrame] | None = None,
+    cboe_history: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
-    """Return ``ready`` plus per-symbol hashes/counts. Never hits the network
-    when ``prices`` is injected (tests). Production callers omit ``prices``.
-    """
+    """Return readiness plus exact-session hashes, counts, and VIX provenance."""
     price_start = start_date or date(end_date.year - 7, 1, 1)
     loaded = prices
     if loaded is None:
         loaded = load_prices_yfinance([*symbols, *INDEX_SYMBOLS], price_start, end_date)
     issues: list[str] = []
+    index_end = index_end_date or end_date
+    vix_audit = VixFallbackAudit()
+    try:
+        vix_result = apply_cboe_vix_fallback(
+            loaded,
+            required_dates=xnys_session_dates(price_start, index_end),
+            cboe_history=cboe_history,
+        )
+        loaded = vix_result.prices
+        vix_audit = vix_result.audit
+    except VixFallbackError as exc:
+        issues.append(str(exc))
     exclusions: list[str] = []
     session_hashes: dict[str, str] = {}
     session_counts: dict[str, int] = {}
@@ -45,8 +62,8 @@ def assess_price_readiness(
             session_counts,
             require_history=True,
             expected_start=price_start,
-            expected_end=end_date,
-            align_to_xnys=name == "^VIX",
+            expected_end=index_end,
+            align_to_xnys=True,
         )
         if issue:
             issues.append(issue)
@@ -80,6 +97,8 @@ def assess_price_readiness(
         "eligible_symbol_count": eligible,
         "price_start": price_start.isoformat(),
         "end_date": end_date.isoformat(),
+        "index_end_date": index_end.isoformat(),
+        "vix_provenance": vix_audit.to_dict(),
     }
 
 
@@ -102,9 +121,8 @@ def _inspect_frame(
     dates = [pd.Timestamp(ts).date() for ts in pd.DatetimeIndex(index).normalize()]
     inspected_frame = frame
     if align_to_xnys:
-        calendar_start = min(dates[0], expected_start or dates[0])
-        calendar_end = max(dates[-1], expected_end)
-        calendar_dates = xnys_session_dates(calendar_start, calendar_end)
+        calendar_start = expected_start or dates[0]
+        calendar_dates = xnys_session_dates(calendar_start, expected_end)
         inspected_frame, dates = align_to_xnys_sessions(frame, calendar_dates)
     required_start = expected_start or dates[0]
     expected = xnys_session_dates(required_start, expected_end)

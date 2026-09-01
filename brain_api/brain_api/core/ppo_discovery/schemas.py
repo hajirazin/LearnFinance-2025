@@ -357,6 +357,10 @@ def state_to_digest_payload(state: CanonicalPPOState) -> dict[str, Any]:
     """JSON-ready payload whose hash is the canonical state digest."""
     manifest = dict(state.evidence_manifest)
     manifest.pop("state_digest", None)
+    # Retrieval provenance is audit evidence, not model state. In particular,
+    # its wall-clock ``retrieved_at`` must not make an otherwise identical
+    # decision hash differently on retry.
+    manifest.pop("market_history_provenance", None)
     return {
         "as_of": state.as_of,
         "symbols": list(state.symbols),

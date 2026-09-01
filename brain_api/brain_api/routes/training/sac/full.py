@@ -59,7 +59,10 @@ from ..job_registry import (
     update_progress,
 )
 from ..models import SACTrainResponse, TrainingJobResponse
-from ._market_history import extract_aligned_market_history
+from ._market_history import (
+    record_sac_vix_audit,
+    repair_and_extract_sac_market_history,
+)
 from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
 from .preflight import assess_sac_training_readiness
 
@@ -269,13 +272,21 @@ def _run_sac_full_training(
                 "SAC training requires returns for the exact halal slate; "
                 f"missing price histories: {missing_price_symbols}"
             )
-        market_dates, spy_adjusted_closes, vix_closes = extract_aligned_market_history(
-            prices_dict,
-            start_date=price_start_date,
-            completed_through=end_date,
-        )
 
         trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
+        market_history_end = trade_clock.transition_actor_cutoffs[-1].date()
+        (
+            prices_dict,
+            market_dates,
+            spy_adjusted_closes,
+            vix_closes,
+            vix_audit,
+        ) = repair_and_extract_sac_market_history(
+            prices_dict,
+            start_date=price_start_date,
+            completed_through=market_history_end,
+        )
+
         weekly_prices = {}
         for symbol in available_symbols:
             df = prices_dict[symbol]
@@ -355,6 +366,7 @@ def _run_sac_full_training(
             ),
             cagr_of=lambda candidate_result: candidate_result.eval_cagr,
         )
+        record_sac_vix_audit(experiment, vix_audit)
         selected_candidate = experiment.selected
         result = selected_candidate.result
         selected_config = replace(config, seed=selected_candidate.seed)

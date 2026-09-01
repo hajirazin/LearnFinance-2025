@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field
 from brain_api.core.ppo_discovery.config import UNIVERSE_NAME
 from brain_api.core.ppo_discovery.price_readiness import assess_price_readiness
 from brain_api.core.ppo_discovery.universe_snapshot import resolve_universe_snapshot
+from brain_api.core.ppo_discovery.weeks import (
+    actor_cutoff_datetimes,
+    weekly_trade_clock,
+)
 
 router = APIRouter()
 
@@ -32,7 +36,22 @@ def preflight_ppo_discovery(request: PPOPreflightRequest) -> dict:
         end = date.fromisoformat(request.end_date)
     else:
         end = datetime.now(UTC).date()
-    readiness = assess_price_readiness(snapshot.sorted_symbols, end_date=end)
+    try:
+        price_start = date(end.year - 7, 1, 1)
+        clock = weekly_trade_clock(price_start, end)
+        transition_cutoffs = actor_cutoff_datetimes(clock)[:-1]
+        index_end = transition_cutoffs[-1].date()
+    except (IndexError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"PPO preflight needs at least two weekly rebalance sessions: {exc}",
+        ) from exc
+    readiness = assess_price_readiness(
+        snapshot.sorted_symbols,
+        start_date=price_start,
+        end_date=end,
+        index_end_date=index_end,
+    )
     return {
         "ready": readiness["ready"],
         "universe": snapshot.universe,
@@ -49,4 +68,6 @@ def preflight_ppo_discovery(request: PPOPreflightRequest) -> dict:
         "session_hashes": readiness["session_hashes"],
         "session_counts": readiness["session_counts"],
         "eligible_symbol_count": readiness["eligible_symbol_count"],
+        "vix_provenance": readiness["vix_provenance"],
+        "market_history_end_date": readiness["index_end_date"],
     }

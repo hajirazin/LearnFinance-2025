@@ -56,6 +56,7 @@ class StateBuildRequest:
     spy_closes: Sequence[float]
     feature_scalers: Mapping[str, Any] | None = None
     tradable_symbols: frozenset[str] | None = None
+    market_history_provenance: Mapping[str, Any] | None = None
 
 
 def _cash_weight(weights: Mapping[str, float]) -> float:
@@ -239,6 +240,7 @@ def build_ppo_discovery_state(request: StateBuildRequest) -> CanonicalPPOState:
         "news_complete": True,
         "asset_feature_names": list(ASSET_FEATURE_NAMES),
         "global_feature_names": list(GLOBAL_FEATURE_NAMES),
+        "market_history_provenance": dict(request.market_history_provenance or {}),
     }
     state = CanonicalPPOState(
         symbols=tuple(padded_symbols),

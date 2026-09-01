@@ -270,6 +270,14 @@ def test_preflight_halal_new_ok(mock_ready, mock_snap) -> None:
         "session_hashes": {"AAPL": "a", "MSFT": "b"},
         "session_counts": {"AAPL": 300, "MSFT": 300},
         "eligible_symbol_count": 12,
+        "vix_provenance": {
+            "primary_provider": "yfinance",
+            "fallback_provider": None,
+            "fallback_dates": [],
+            "source_url": None,
+            "retrieved_at": None,
+        },
+        "index_end_date": "2026-08-14",
     }
     response = client.post(
         "/train/ppo-discovery/preflight",

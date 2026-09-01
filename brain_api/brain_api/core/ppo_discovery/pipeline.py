@@ -73,8 +73,34 @@ from brain_api.core.ppo_discovery.weeks import (
     weekly_trade_clock,
 )
 from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.sac.market_sessions import xnys_session_dates
 from brain_api.core.training_utils import get_device, is_accelerator_out_of_memory
+from brain_api.core.vix_fallback import (
+    VixFallbackAudit,
+    VixFallbackResult,
+    apply_cboe_vix_fallback,
+)
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
+
+
+def repair_ppo_training_vix(
+    prices: dict[str, pd.DataFrame],
+    *,
+    price_start: date,
+    hmm_weeks: Sequence[date],
+) -> VixFallbackResult:
+    """Repair only index sessions consumed by PPO's weekly HMM states."""
+    return apply_cboe_vix_fallback(
+        prices,
+        required_dates=xnys_session_dates(price_start, max(hmm_weeks)),
+    )
+
+
+def price_manifest_with_vix_audit(
+    manifest: dict[str, Any], audit: VixFallbackAudit
+) -> dict[str, Any]:
+    """Add fallback provenance without changing the primary source contract."""
+    return {**manifest, "vix_provenance": audit.to_dict()}
 
 
 def run_ppo_discovery_training(
@@ -117,10 +143,9 @@ def run_ppo_discovery_training(
     price_start = start_date or date(end_date.year - 7, 1, 1)
     report({"stage": "prices"})
     prices = load_prices_yfinance([*symbols, "SPY", "^VIX"], price_start, end_date)
-    ohlcv = ohlcv_for_training(prices, symbols)
-    spy = prices["SPY"]
     clock = weekly_trade_clock(price_start, end_date)
     cutoffs = actor_cutoff_datetimes(clock)
+    ohlcv = ohlcv_for_training(prices, symbols)
     regimes_by_date = {}
     eligible_rows: list[tuple[int, datetime]] = []
     for index in range(len(clock.rebalance_sessions) - 1):
@@ -169,6 +194,15 @@ def run_ppo_discovery_training(
     )
     hmm_cutoff = train_weeks[-1].cutoff.date()
     hmm_weeks = [week.cutoff.date() for week in transitions]
+    # Training consumes index evidence only through its final usable actor
+    # cutoff. Trailing provider rows after this date cannot block training.
+    vix_result = repair_ppo_training_vix(
+        prices,
+        price_start=price_start,
+        hmm_weeks=hmm_weeks,
+    )
+    prices = vix_result.prices
+    spy = prices["SPY"]
     n_obs = max(0, len(spy) - 20)
     report({"stage": "hmm", "cutoff": hmm_cutoff.isoformat()})
     print(
@@ -181,7 +215,7 @@ def run_ppo_discovery_training(
         hmm,
         prices,
         start_date=price_start,
-        completed_through=end_date,
+        completed_through=max(hmm_weeks),
         weekly_cutoffs=hmm_weeks,
     )
     print(
@@ -389,21 +423,24 @@ def run_ppo_discovery_training(
         "weeks": identity.news_weeks,
     }
     session_dates = ",".join(pd.Timestamp(ts).strftime("%Y-%m-%d") for ts in spy.index)
-    price_manifest = {
-        "complete": True,
-        "source": "yfinance",
-        "symbols": symbols,
-        "start": price_start.isoformat(),
-        "end": end_date.isoformat(),
-        "session_count": len(spy),
-        "session_dates_sha256": hashlib.sha256(
-            session_dates.encode("utf-8")
-        ).hexdigest(),
-        "symbol_session_hashes": identity.price_sessions,
-        "training_dataset_hash": identity.training_dataset_hash,
-        "validation_dataset_hash": identity.validation_dataset_hash,
-        "evaluation_dataset_hash": identity.evaluation_dataset_hash,
-    }
+    price_manifest = price_manifest_with_vix_audit(
+        {
+            "complete": True,
+            "source": "yfinance",
+            "symbols": symbols,
+            "start": price_start.isoformat(),
+            "end": end_date.isoformat(),
+            "session_count": len(spy),
+            "session_dates_sha256": hashlib.sha256(
+                session_dates.encode("utf-8")
+            ).hexdigest(),
+            "symbol_session_hashes": identity.price_sessions,
+            "training_dataset_hash": identity.training_dataset_hash,
+            "validation_dataset_hash": identity.validation_dataset_hash,
+            "evaluation_dataset_hash": identity.evaluation_dataset_hash,
+        },
+        vix_result.audit,
+    )
     report({"stage": "write_candidate", "device": device.type})
     print("[PPO] writing candidate artifact", flush=True)
     version = write_candidate_artifact(

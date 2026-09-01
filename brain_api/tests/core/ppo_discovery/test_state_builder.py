@@ -14,6 +14,7 @@ from brain_api.core.ppo_discovery.config import (
     MAX_ASSETS,
 )
 from brain_api.core.ppo_discovery.schemas import (
+    CanonicalPPOState,
     PPODiscoveryError,
     sha256_digest,
     state_to_digest_payload,
@@ -151,6 +152,32 @@ def test_digest_is_byte_stable() -> None:
     assert first.state_digest == sha256_digest(state_to_digest_payload(first))
 
 
+def test_market_retrieval_time_is_audited_but_not_hashed() -> None:
+    first = build_ppo_discovery_state(
+        _request(
+            market_history_provenance={
+                "vix_fallback": {"retrieved_at": "2026-08-31T13:00:00+00:00"}
+            }
+        )
+    )
+    second = build_ppo_discovery_state(
+        _request(
+            market_history_provenance={
+                "vix_fallback": {"retrieved_at": "2026-08-31T13:01:00+00:00"}
+            }
+        )
+    )
+
+    assert first.state_digest == second.state_digest
+    assert (
+        first.evidence_manifest["market_history_provenance"]
+        != second.evidence_manifest["market_history_provenance"]
+    )
+    restored = CanonicalPPOState.from_dict(first.to_dict())
+    assert restored.state_digest == first.state_digest
+    assert restored.evidence_manifest == first.evidence_manifest
+
+
 def test_permutation_of_input_list_does_not_change_lex_packing() -> None:
     snapshot = make_snapshot()
     state = build_ppo_discovery_state(_request(universe_snapshot=snapshot))
@@ -179,8 +206,6 @@ def test_encoder_scaler_is_applied_to_price_history() -> None:
 
 
 def test_from_dict_rejects_invalid_globals_even_with_matching_digest() -> None:
-    from brain_api.core.ppo_discovery.schemas import CanonicalPPOState
-
     state = build_ppo_discovery_state(_request())
     payload = state.to_dict()
     payload["globals"] = [0.5]

@@ -175,7 +175,7 @@ def test_price_readiness_ignores_vix_non_xnys_provider_row() -> None:
     assert result["session_hashes"]["^VIX"] == frame_session_hash(expected_frame)
 
 
-def test_price_readiness_still_rejects_missing_vix_xnys_session() -> None:
+def test_price_readiness_repairs_missing_vix_xnys_session() -> None:
     expected_dates = readiness_mod.xnys_session_dates(
         date(2025, 5, 1), date(2026, 6, 2)
     )[-(HISTORY_BARS + 1) :]
@@ -199,14 +199,12 @@ def test_price_readiness_still_rejects_missing_vix_xnys_session() -> None:
         start_date=expected_dates[0],
         end_date=expected_dates[-1],
         prices=prices,
+        cboe_history=expected_frame,
     )
 
-    assert result["ready"] is False
-    assert any(
-        "^VIX is discontinuous versus XNYS" in issue
-        and missing_date.isoformat() in issue
-        for issue in result["issues"]
-    )
+    assert result["ready"] is True
+    assert result["issues"] == []
+    assert result["vix_provenance"]["fallback_dates"] == [missing_date.isoformat()]
 
 
 def test_price_readiness_ignores_vix_non_xnys_row_before_first_session() -> None:
@@ -238,10 +236,7 @@ def test_price_readiness_ignores_vix_non_xnys_row_before_first_session() -> None
     assert result["session_hashes"]["^VIX"] == frame_session_hash(expected_frame)
 
 
-@pytest.mark.parametrize("missing_symbol", ["SPY", "^VIX"])
-def test_price_readiness_rejects_trailing_missing_index_session(
-    missing_symbol: str,
-) -> None:
+def test_price_readiness_rejects_trailing_missing_spy_session() -> None:
     expected_dates = readiness_mod.xnys_session_dates(
         date(2025, 5, 1), date(2026, 6, 2)
     )[-(HISTORY_BARS + 1) :]
@@ -251,7 +246,7 @@ def test_price_readiness_rejects_trailing_missing_index_session(
     prices = {symbol: expected_frame.copy() for symbol in symbols}
     prices["SPY"] = expected_frame.copy()
     prices["^VIX"] = expected_frame.copy()
-    prices[missing_symbol] = _frame_for_dates(expected_dates[:-1])
+    prices["SPY"] = _frame_for_dates(expected_dates[:-1])
 
     result = assess_price_readiness(
         symbols,
@@ -262,7 +257,56 @@ def test_price_readiness_rejects_trailing_missing_index_session(
 
     assert result["ready"] is False
     assert any(
-        f"{missing_symbol} is discontinuous versus XNYS" in issue
+        "SPY is discontinuous versus XNYS" in issue
         and missing_date.isoformat() in issue
         for issue in result["issues"]
     )
+
+
+def test_price_readiness_reports_unresolved_cboe_gap() -> None:
+    expected_dates = readiness_mod.xnys_session_dates(
+        date(2025, 5, 1), date(2026, 6, 2)
+    )[-(HISTORY_BARS + 1) :]
+    missing_date = expected_dates[-1]
+    symbols = [f"S{i:02d}" for i in range(MIN_ELIGIBLE_ASSETS)]
+    expected_frame = _frame_for_dates(expected_dates)
+    prices = {symbol: expected_frame.copy() for symbol in symbols}
+    prices["SPY"] = expected_frame.copy()
+    prices["^VIX"] = _frame_for_dates(expected_dates[:-1])
+
+    result = assess_price_readiness(
+        symbols,
+        start_date=expected_dates[0],
+        end_date=expected_dates[-1],
+        prices=prices,
+        cboe_history=_frame_for_dates(expected_dates[:-1]),
+    )
+
+    assert result["ready"] is False
+    assert any(missing_date.isoformat() in issue for issue in result["issues"])
+
+
+def test_price_readiness_ignores_unused_terminal_vix_gap(monkeypatch) -> None:
+    expected_dates = readiness_mod.xnys_session_dates(
+        date(2025, 5, 1), date(2026, 6, 2)
+    )[-(HISTORY_BARS + 1) :]
+    symbols = [f"S{i:02d}" for i in range(MIN_ELIGIBLE_ASSETS)]
+    expected_frame = _frame_for_dates(expected_dates)
+    prices = {symbol: expected_frame.copy() for symbol in symbols}
+    prices["SPY"] = expected_frame.copy()
+    prices["^VIX"] = _frame_for_dates(expected_dates[:-1])
+    monkeypatch.setattr(
+        "brain_api.core.vix_fallback.load_cboe_vix_history",
+        lambda: pytest.fail("unused terminal VIX date must not call Cboe"),
+    )
+
+    result = assess_price_readiness(
+        symbols,
+        start_date=expected_dates[0],
+        end_date=expected_dates[-1],
+        index_end_date=expected_dates[-2],
+        prices=prices,
+    )
+
+    assert result["ready"] is True
+    assert result["vix_provenance"]["fallback_dates"] == []

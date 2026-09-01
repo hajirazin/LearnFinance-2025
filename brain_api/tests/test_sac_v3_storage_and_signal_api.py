@@ -388,7 +388,7 @@ def test_sac_api_rejects_nonpositive_market_evidence_at_boundary():
     assert response.status_code == 422
 
 
-def test_market_history_api_returns_aligned_rows_and_rejects_gaps():
+def test_market_history_api_returns_aligned_rows_and_repairs_vix_gaps():
     dates = pd.bdate_range("2026-08-03", "2026-08-05")
     complete = {
         "SPY": _price_frame([630.0, 631.0, 632.0], dates),
@@ -411,11 +411,67 @@ def test_market_history_api_returns_aligned_rows_and_rejects_gaps():
     }
 
     incomplete = {**complete, "^VIX": complete["^VIX"].drop(dates[1])}
-    with patch(
-        "brain_api.routes.signals.endpoints.load_prices_yfinance",
-        return_value=incomplete,
+    with (
+        patch(
+            "brain_api.routes.signals.endpoints.load_prices_yfinance",
+            return_value=incomplete,
+        ),
+        patch(
+            "brain_api.core.vix_fallback.load_cboe_vix_history",
+            return_value=complete["^VIX"],
+        ),
     ):
         response = client.post(
+            "/signals/market-history",
+            json={"start_date": "2026-08-03", "as_of_date": "2026-08-05"},
+        )
+    assert response.status_code == 200
+    assert response.json()["rows"][-1]["vix_close"] == 18.0
+    assert response.json()["provenance"]["vix_fallback"]["fallback_dates"] == [
+        "2026-08-04"
+    ]
+
+
+def test_market_history_api_returns_503_when_cboe_cannot_repair_vix_gap():
+    dates = pd.bdate_range("2026-08-03", "2026-08-05")
+    incomplete = {
+        "SPY": _price_frame([630.0, 631.0, 632.0], dates),
+        "^VIX": _price_frame([17.0, 16.0], dates.delete(1)),
+    }
+    with (
+        patch(
+            "brain_api.routes.signals.endpoints.load_prices_yfinance",
+            return_value=incomplete,
+        ),
+        patch(
+            "brain_api.core.vix_fallback.load_cboe_vix_history",
+            return_value=incomplete["^VIX"],
+        ),
+    ):
+        response = TestClient(app).post(
+            "/signals/market-history",
+            json={"start_date": "2026-08-03", "as_of_date": "2026-08-05"},
+        )
+    assert response.status_code == 503
+
+
+def test_market_history_api_keeps_spy_session_gap_as_422():
+    dates = pd.bdate_range("2026-08-03", "2026-08-05")
+    incomplete = {
+        "SPY": _price_frame([630.0, 632.0], dates.delete(1)),
+        "^VIX": _price_frame([17.0, 16.5, 16.0], dates),
+    }
+    with (
+        patch(
+            "brain_api.routes.signals.endpoints.load_prices_yfinance",
+            return_value=incomplete,
+        ),
+        patch(
+            "brain_api.core.vix_fallback.load_cboe_vix_history",
+            side_effect=AssertionError("complete VIX must not call Cboe"),
+        ),
+    ):
+        response = TestClient(app).post(
             "/signals/market-history",
             json={"start_date": "2026-08-03", "as_of_date": "2026-08-05"},
         )

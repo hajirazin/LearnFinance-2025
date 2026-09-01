@@ -25,7 +25,9 @@ from brain_api.core.ppo_discovery.state_builder import (
 )
 from brain_api.core.ppo_discovery.universe_snapshot import resolve_universe_snapshot
 from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.sac.market_sessions import completed_xnys_session_dates
 from brain_api.core.sac.regime_hmm import RegimeHMMArtifact
+from brain_api.core.vix_fallback import VixFallbackError, apply_cboe_vix_fallback
 from brain_api.core.weekly_decision import (
     MondayCutoffError,
     monday_window_bounds,
@@ -112,6 +114,11 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
             hmm_artifact.training_cutoff_date,
             decision_date,
         )
+        required_vix_dates = completed_xnys_session_dates(
+            hmm_artifact.training_cutoff_date + timedelta(days=1), decision_date
+        )
+        vix_result = apply_cboe_vix_fallback(spy_vix, required_dates=required_vix_dates)
+        spy_vix = vix_result.prices
         spy = spy_vix.get("SPY")
         if spy is None or spy.empty:
             raise PPODiscoveryError("SPY history missing")
@@ -136,6 +143,7 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
                 p_stress=p_stress,
                 spy_closes=spy["close"].to_numpy(),
                 feature_scalers=scalers,
+                market_history_provenance={"vix_fallback": vix_result.audit.to_dict()},
             )
         )
     except MondayCutoffError as exc:
@@ -146,4 +154,6 @@ def build_state(request: PPOStateRequest) -> dict[str, Any]:
         ) from exc
     except PPODiscoveryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except VixFallbackError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return state.to_dict()
