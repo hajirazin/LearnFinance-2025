@@ -130,6 +130,28 @@ def test_held_asset_missing_price_aborts() -> None:
         )
 
 
+def test_held_asset_with_inverted_yahoo_ohlc_remains_eligible() -> None:
+    snapshot = make_snapshot()
+    held = snapshot.sorted_symbols[0]
+    ohlcv = {symbol: make_ohlcv() for symbol in snapshot.sorted_symbols}
+    row = ohlcv[held].index[-1]
+    ohlcv[held].loc[row, "low"] = (
+        min(ohlcv[held].loc[row, "open"], ohlcv[held].loc[row, "close"]) + 1.0
+    )
+
+    state = build_ppo_discovery_state(
+        _request(
+            universe_snapshot=snapshot,
+            ohlcv_by_symbol=ohlcv,
+            current_weights={held: 0.5, "CASH": 0.5},
+        )
+    )
+
+    index = list(state.symbols).index(held)
+    assert bool(state.asset_mask[index])
+    assert held not in state.exclusions
+
+
 def test_unheld_incomplete_history_is_masked() -> None:
     snapshot = make_snapshot(n=11)
     ohlcv = {

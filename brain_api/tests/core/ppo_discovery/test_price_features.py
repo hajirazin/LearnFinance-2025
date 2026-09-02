@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from brain_api.core.ppo_discovery.price_features import (
@@ -64,6 +65,46 @@ def test_momentum_helpers_match_sac() -> None:
 def test_short_history_rejected() -> None:
     with pytest.raises(PPODiscoveryError, match="sessions"):
         validate_ohlcv_frame("AAPL", make_ohlcv(n=10))
+
+
+def test_inverted_yahoo_ohlc_is_enveloped_without_mutating_source() -> None:
+    frame = make_ohlcv()
+    row = frame.index[-1]
+    frame.loc[row, "low"] = min(frame.loc[row, "open"], frame.loc[row, "close"]) + 1.0
+    frame.loc[row, "high"] = max(frame.loc[row, "open"], frame.loc[row, "close"]) - 0.5
+    source = frame.copy(deep=True)
+
+    validated = validate_ohlcv_frame("HUBB", frame)
+
+    assert validated.loc[row, "low"] == min(
+        source.loc[row, "low"], source.loc[row, "open"], source.loc[row, "close"]
+    )
+    assert validated.loc[row, "high"] == max(
+        source.loc[row, "high"], source.loc[row, "open"], source.loc[row, "close"]
+    )
+    pd.testing.assert_frame_equal(validated.iloc[:-1], source.iloc[:-1])
+    pd.testing.assert_frame_equal(frame, source)
+    assert np.isfinite(encoder_channels_from_ohlcv(validated)).all()
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("open", np.nan, "open"),
+        ("high", 0.0, "high"),
+        ("low", -1.0, "low"),
+        ("close", np.inf, "close"),
+        ("volume", -1.0, "volume"),
+        ("volume", np.nan, "volume"),
+    ],
+)
+def test_invalid_numeric_ohlcv_is_not_repaired(
+    column: str, value: float, message: str
+) -> None:
+    frame = make_ohlcv()
+    frame.loc[frame.index[-1], column] = value
+    with pytest.raises(PPODiscoveryError, match=message):
+        validate_ohlcv_frame("HUBB", frame)
 
 
 def test_spy_return_20d() -> None:

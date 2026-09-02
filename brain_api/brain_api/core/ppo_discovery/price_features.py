@@ -26,7 +26,7 @@ REQUIRED_COLUMNS = ("open", "high", "low", "close", "volume")
 
 
 def validate_ohlcv_frame(symbol: str, frame: pd.DataFrame) -> pd.DataFrame:
-    """Require finite OHLC geometry and nonnegative volume; no fill."""
+    """Validate numeric OHLCV and envelope provider high/low around open/close."""
     if frame is None or frame.empty:
         raise PPODiscoveryError(f"{symbol} has no OHLCV evidence")
     missing = [name for name in REQUIRED_COLUMNS if name not in frame.columns]
@@ -49,10 +49,8 @@ def validate_ohlcv_frame(symbol: str, frame: pd.DataFrame) -> pd.DataFrame:
     low = tail["low"].to_numpy()
     open_ = tail["open"].to_numpy()
     close = tail["close"].to_numpy()
-    if np.any(high + 1e-12 < np.maximum(open_, close)):
-        raise PPODiscoveryError(f"{symbol} high is below open/close")
-    if np.any(low - 1e-12 > np.minimum(open_, close)):
-        raise PPODiscoveryError(f"{symbol} low is above open/close")
+    tail["low"] = np.minimum(low, np.minimum(open_, close))
+    tail["high"] = np.maximum(high, np.maximum(open_, close))
     return tail
 
 
