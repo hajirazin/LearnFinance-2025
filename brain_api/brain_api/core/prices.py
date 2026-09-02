@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -19,12 +20,49 @@ _YFINANCE_IO_LOCK = threading.Lock()
 _OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
 
+def repair_ohlc_envelope(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy whose high/low enclose each finite OHLC candle body.
+
+    Invalid values are deliberately not imputed: NumPy propagates NaN and
+    callers retain their existing reject/drop semantics for non-finite or
+    non-positive evidence.
+    """
+    required = ("open", "high", "low", "close")
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        raise ValueError(f"OHLC frame missing columns {missing}")
+    repaired = frame.copy()
+    open_ = repaired["open"].to_numpy(dtype=np.float64)
+    high = repaired["high"].to_numpy(dtype=np.float64)
+    low = repaired["low"].to_numpy(dtype=np.float64)
+    close = repaired["close"].to_numpy(dtype=np.float64)
+    valid = (
+        np.isfinite(open_)
+        & np.isfinite(high)
+        & np.isfinite(low)
+        & np.isfinite(close)
+        & (open_ > 0)
+        & (high > 0)
+        & (low > 0)
+        & (close > 0)
+    )
+    repaired_low = low.copy()
+    repaired_high = high.copy()
+    repaired_low[valid] = np.minimum(low[valid], np.minimum(open_[valid], close[valid]))
+    repaired_high[valid] = np.maximum(
+        high[valid], np.maximum(open_[valid], close[valid])
+    )
+    repaired["low"] = repaired_low
+    repaired["high"] = repaired_high
+    return repaired
+
+
 def _symbol_ohlcv_from_yahoo_download(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
     """Return one symbol's lowercase OHLCV from a yfinance download DataFrame."""
     frame = data[symbol] if isinstance(data.columns, pd.MultiIndex) else data
     ohlcv = frame.loc[:, _OHLCV_COLUMNS].copy()
     ohlcv.columns = ["open", "high", "low", "close", "volume"]
-    return ohlcv.dropna()
+    return repair_ohlc_envelope(ohlcv).dropna()
 
 
 @contextmanager
@@ -120,7 +158,7 @@ def _load_prices_yfinance_unlocked(
                 if df is not None and not df.empty:
                     df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
                     df.columns = ["open", "high", "low", "close", "volume"]
-                    df = df.dropna()
+                    df = repair_ohlc_envelope(df).dropna()
                     if len(df) > 0:
                         prices[symbol] = df
                         print(f"{log_prefix} ✓ {symbol}: {len(df)} days")

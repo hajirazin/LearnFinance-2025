@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 
-from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.prices import load_prices_yfinance, repair_ohlc_envelope
 
 _OHLCV_VALUES = {
     "Open": [10.0, 11.0],
@@ -92,3 +93,40 @@ def test_load_prices_still_parses_flat_single_ticker_columns() -> None:
     assert "AAPL" in result
     assert list(result["AAPL"].columns) == ["open", "high", "low", "close", "volume"]
     assert len(result["AAPL"]) == 2
+
+
+def test_load_prices_repairs_yahoo_ohlc_envelope_without_mutating_download() -> None:
+    downloaded = _flat_ohlcv_frame()
+    downloaded.loc[downloaded.index[1], "Low"] = 11.25
+    downloaded.loc[downloaded.index[1], "High"] = 11.25
+    original = downloaded.copy(deep=True)
+
+    with (
+        patch("brain_api.core.prices.yf.download", return_value=downloaded),
+        patch("brain_api.core.prices.yf.Ticker") as ticker_cls,
+    ):
+        _assert_history_must_not_run(ticker_cls)
+        result = load_prices_yfinance(["AAPL"], date(2026, 4, 1), date(2026, 4, 25))
+
+    repaired = result["AAPL"].iloc[1]
+    assert repaired["low"] == 11.0
+    assert repaired["high"] == 11.5
+    pd.testing.assert_frame_equal(downloaded, original)
+
+
+def test_repair_ohlc_envelope_does_not_impute_nonfinite_or_nonpositive_rows() -> None:
+    frame = pd.DataFrame(
+        {
+            "open": [10.0, 0.0],
+            "high": [np.nan, -1.0],
+            "low": [11.0, 10.0],
+            "close": [12.0, 10.0],
+        }
+    )
+
+    repaired = repair_ohlc_envelope(frame)
+
+    assert np.isnan(repaired.loc[0, "high"])
+    assert repaired.loc[0, "low"] == 11.0
+    assert repaired.loc[1, "high"] == -1.0
+    assert repaired.loc[1, "low"] == 10.0

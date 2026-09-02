@@ -229,3 +229,4 @@ scripts/output
 
 docs/
 tmp/
+node_modules

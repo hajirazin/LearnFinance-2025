@@ -15,6 +15,7 @@ from brain_api.core.ppo_discovery.config import (
     HISTORY_BARS,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
+from brain_api.core.prices import repair_ohlc_envelope
 from brain_api.core.sac.momentum_signals import (
     compute_momentum_1w,
     compute_momentum_4w,
@@ -45,13 +46,7 @@ def validate_ohlcv_frame(symbol: str, frame: pd.DataFrame) -> pd.DataFrame:
     volume = tail["volume"].to_numpy()
     if not np.all(np.isfinite(volume)) or np.any(volume < 0):
         raise PPODiscoveryError(f"{symbol} volume must be finite and nonnegative")
-    high = tail["high"].to_numpy()
-    low = tail["low"].to_numpy()
-    open_ = tail["open"].to_numpy()
-    close = tail["close"].to_numpy()
-    tail["low"] = np.minimum(low, np.minimum(open_, close))
-    tail["high"] = np.maximum(high, np.maximum(open_, close))
-    return tail
+    return repair_ohlc_envelope(tail)
 
 
 def encoder_channels_from_ohlcv(frame: pd.DataFrame) -> np.ndarray:

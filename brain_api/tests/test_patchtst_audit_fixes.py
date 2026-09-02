@@ -112,6 +112,27 @@ def test_compute_ohlcv_log_returns_nonpositive_ohlc_is_nan():
     assert np.isfinite(out["volume_ret"].to_numpy()).all()
 
 
+def test_compute_ohlcv_log_returns_repairs_finite_ohlc_envelope() -> None:
+    idx = pd.date_range("2024-01-02", periods=3, freq="B")
+    df = pd.DataFrame(
+        {
+            "open": [10.0, 11.0, 12.0],
+            "high": [10.5, 11.25, 12.5],
+            "low": [9.5, 11.25, 11.5],
+            "close": [10.0, 11.5, 12.0],
+            "volume": [100.0, 110.0, 120.0],
+        },
+        index=idx,
+    )
+    original = df.copy(deep=True)
+
+    out = compute_ohlcv_log_returns(df, use_returns=True)
+
+    assert out.loc[idx[1], "low_ret"] == np.log(11.0 / 9.5)
+    assert out.loc[idx[1], "high_ret"] == np.log(11.5 / 10.5)
+    pd.testing.assert_frame_equal(df, original)
+
+
 def _synthetic_ohlcv(n: int, idx: pd.DatetimeIndex, volume: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(
         {

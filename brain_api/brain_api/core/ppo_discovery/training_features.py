@@ -15,6 +15,7 @@ from brain_api.core.ppo_discovery.pretraining import next_week_open_log_return
 from brain_api.core.ppo_discovery.price_features import (
     apply_encoder_channel_scaler,
     encoder_channels_from_ohlcv,
+    validate_ohlcv_frame,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError, UniverseSnapshot
 from brain_api.core.ppo_discovery.weeks import open_to_open_return, prices_as_of
@@ -86,7 +87,8 @@ def fit_feature_scalers(
             if frame is None:
                 continue
             try:
-                tensor = encoder_channels_from_ohlcv(prices_as_of(frame, cutoff))
+                inspected = validate_ohlcv_frame(symbol, prices_as_of(frame, cutoff))
+                tensor = encoder_channels_from_ohlcv(inspected)
             except PPODiscoveryError:
                 continue
             channel_rows.append(tensor.reshape(-1, ENCODER_CHANNELS))
@@ -120,7 +122,7 @@ def pretrain_arrays(weeks, snapshot, ohlcv, feature_scalers=None):
             if frame is None:
                 continue
             try:
-                sliced = prices_as_of(frame, cutoff)
+                sliced = validate_ohlcv_frame(symbol, prices_as_of(frame, cutoff))
                 history = apply_encoder_channel_scaler(
                     encoder_channels_from_ohlcv(sliced), feature_scalers
                 )

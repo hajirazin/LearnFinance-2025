@@ -3,6 +3,8 @@
 import numpy as np
 import pandas as pd
 
+from brain_api.core.prices import repair_ohlc_envelope
+
 
 def _log_return_positive(series: pd.Series) -> pd.Series:
     """Log return where both current and previous values are strictly positive.
@@ -41,21 +43,22 @@ def compute_ohlcv_log_returns(
         never Inf and never a silent zero-fill (AGENTS.md: no silent fallbacks).
         Downstream dataset builders skip NaN/Inf samples.
     """
+    repaired = repair_ohlc_envelope(df)
     if use_returns:
         features_df = pd.DataFrame(
             {
-                "open_ret": _log_return_positive(df["open"]),
-                "high_ret": _log_return_positive(df["high"]),
-                "low_ret": _log_return_positive(df["low"]),
-                "close_ret": _log_return_positive(df["close"]),
-                "volume_ret": _log_return_positive(df["volume"]),
+                "open_ret": _log_return_positive(repaired["open"]),
+                "high_ret": _log_return_positive(repaired["high"]),
+                "low_ret": _log_return_positive(repaired["low"]),
+                "close_ret": _log_return_positive(repaired["close"]),
+                "volume_ret": _log_return_positive(repaired["volume"]),
             },
-            index=df.index,
+            index=repaired.index,
         )
         # Drop first row (NaN from shift)
         features_df = features_df.iloc[1:]
     else:
-        features_df = df[["open", "high", "low", "close", "volume"]].copy()
+        features_df = repaired[["open", "high", "low", "close", "volume"]].copy()
         features_df.columns = [
             "open_ret",
             "high_ret",

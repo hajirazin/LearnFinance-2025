@@ -318,3 +318,24 @@ class TestFetchOhlcWindowNaNAlignment:
             (104.0, 100.0, 103.0),
             (105.0, 101.0, 104.0),
         ]
+
+
+def test_fetch_ohlc_window_repairs_yahoo_envelope_before_atr() -> None:
+    index = pd.to_datetime(["2026-04-23", "2026-04-24"])
+    downloaded = pd.DataFrame(
+        {
+            "Open": [100.0, 101.0],
+            "High": [102.0, 101.5],
+            "Low": [98.0, 101.5],
+            "Close": [100.0, 103.0],
+            "Volume": [1.0, 1.0],
+        },
+        index=index,
+    )
+    with (
+        patch("brain_api.core.prices.yf.download", return_value=downloaded),
+        patch("brain_api.core.prices.yf.Ticker"),
+    ):
+        bars = fetch_ohlc_window(["AAPL"])
+
+    assert bars["AAPL"] == [(102.0, 98.0, 100.0), (103.0, 101.0, 103.0)]
