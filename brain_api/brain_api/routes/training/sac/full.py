@@ -262,6 +262,12 @@ def _run_sac_full_training(
             [*symbols, "SPY", "^VIX"], price_start_date, end_date + timedelta(days=1)
         )
 
+        logger.info(
+            "[SAC] Price download complete: %s/%s symbols (including SPY/VIX)",
+            len(prices_dict),
+            len(symbols) + 2,
+        )
+
         if len(prices_dict) == 0:
             raise ValueError("No price data available for training")
 
@@ -273,6 +279,7 @@ def _run_sac_full_training(
                 f"missing price histories: {missing_price_symbols}"
             )
 
+        logger.info("[SAC] Building trade clock and market history")
         trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
         market_history_end = trade_clock.transition_actor_cutoffs[-1].date()
         (
@@ -306,6 +313,7 @@ def _run_sac_full_training(
         min_weeks = len(trade_clock.rebalance_sessions)
         weekly_dates = trade_clock.transition_actor_cutoffs
 
+        logger.info("[SAC] Loading training signals")
         update_progress(job_id, {"phase": "loading_signals"})
         signals = build_rl_training_signals(
             prices_dict,
@@ -326,6 +334,7 @@ def _run_sac_full_training(
                     )
                 signals[symbol][signal_name] = signal_arr[-(min_weeks - 1) :]
 
+        logger.info("[SAC] Generating PatchTST walk-forward forecasts")
         update_progress(job_id, {"phase": "walk_forward_forecasts"})
         patchtst_predictions = build_patchtst_forecast_features(
             weekly_prices=weekly_prices,
@@ -346,6 +355,7 @@ def _run_sac_full_training(
                 )
             patchtst_predictions[symbol] = pred_arr[-(min_weeks - 1) :]
 
+        logger.info("[SAC] Training SAC")
         update_progress(job_id, {"phase": "training"})
         training_data = sac_build_training_data(
             weekly_prices,

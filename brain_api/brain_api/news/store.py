@@ -430,14 +430,14 @@ class NewsStore:
             rows = con.execute(sql, params).fetchall()
         return {row[0] for row in rows}
 
-    def require_coverage_many(
+    def missing_coverage(
         self, symbols: Sequence[str], windows: Sequence[NewsWindow]
-    ) -> None:
-        """Validate an exact symbol-by-window coverage grid in one query."""
+    ) -> list[tuple[str, datetime, datetime]]:
+        """Return every missing ``(symbol, window)`` cell from one grid query."""
         unique_symbols = list(dict.fromkeys(symbols))
         unique_windows = list(dict.fromkeys(windows))
         if not unique_symbols or not unique_windows:
-            return
+            return []
         symbol_placeholders = ", ".join("?" * len(unique_symbols))
         window_values = ", ".join("(?, ?)" for _ in unique_windows)
         sql = f"""
@@ -473,13 +473,19 @@ class NewsStore:
             coverage_key(symbol, start_exclusive, end_inclusive)
             for symbol, start_exclusive, end_inclusive in rows
         }
-        missing = [
+        return [
             coverage_key(symbol, window.start_exclusive, window.end_inclusive)
             for window in unique_windows
             for symbol in unique_symbols
             if coverage_key(symbol, window.start_exclusive, window.end_inclusive)
             not in present
         ]
+
+    def require_coverage_many(
+        self, symbols: Sequence[str], windows: Sequence[NewsWindow]
+    ) -> None:
+        """Validate an exact symbol-by-window coverage grid in one query."""
+        missing = self.missing_coverage(symbols, windows)
         if missing:
             preview = ", ".join(
                 f"{symbol}@{end.isoformat()}" for symbol, _start, end in missing[:20]

@@ -24,6 +24,7 @@ with workflow.unsafe.imports_passed_through():
 
 ACTIVITY_TIMEOUT = timedelta(minutes=30)
 TRAIN_TIMEOUT = timedelta(hours=24)
+HEARTBEAT_TIMEOUT = timedelta(minutes=10)
 ACTIVITY_RETRY = 2
 
 
@@ -63,14 +64,14 @@ class USPPODiscoveryTrainingWorkflow:
                 symbols,
             ],
             start_to_close_timeout=TRAIN_TIMEOUT,
-            heartbeat_timeout=timedelta(minutes=5),
+            heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=ACTIVITY_RETRY),
         )
         train = await workflow.execute_activity(
             train_ppo_discovery,
             args=[as_of, experiment_id, snapshot_sha256],
             start_to_close_timeout=TRAIN_TIMEOUT,
-            heartbeat_timeout=timedelta(minutes=5),
+            heartbeat_timeout=HEARTBEAT_TIMEOUT,
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
         summary_payload = {

@@ -74,6 +74,58 @@ def test_coverage_keys_ignores_other_sentiment_revision(tmp_path) -> None:
     assert store.covered_symbols(["AAPL"], window) == set()
 
 
+def test_missing_coverage_empty_symbols_or_windows(tmp_path) -> None:
+    store = NewsStore(tmp_path)
+    window = _window()
+    assert store.missing_coverage([], [window]) == []
+    assert store.missing_coverage(["AAPL"], []) == []
+
+
+def test_missing_coverage_returns_empty_when_grid_is_complete(tmp_path) -> None:
+    store = NewsStore(tmp_path)
+    first = _window()
+    second = NewsWindow(
+        start_exclusive=first.end_inclusive,
+        end_inclusive=datetime(2026, 8, 31, 9, 0, tzinfo=NY),
+    )
+    for window in (first, second):
+        for symbol in ("AAPL", "MSFT"):
+            store.commit_window(
+                events=[], coverage=_coverage(symbol, window), cache_rows=[]
+            )
+
+    assert store.missing_coverage(["AAPL", "MSFT"], [first, second]) == []
+    store.require_coverage_many(["AAPL", "MSFT"], [first, second])
+
+
+def test_missing_coverage_returns_every_missing_cell(tmp_path) -> None:
+    store = NewsStore(tmp_path)
+    first = _window()
+    second = NewsWindow(
+        start_exclusive=first.end_inclusive,
+        end_inclusive=datetime(2026, 8, 31, 9, 0, tzinfo=NY),
+    )
+    third = NewsWindow(
+        start_exclusive=second.end_inclusive,
+        end_inclusive=datetime(2026, 9, 7, 9, 0, tzinfo=NY),
+    )
+    symbols = [f"S{i:02d}" for i in range(15)]
+    for symbol in symbols:
+        store.commit_window(events=[], coverage=_coverage(symbol, first), cache_rows=[])
+
+    missing = store.missing_coverage(symbols, [first, second, third])
+    expected = [
+        coverage_key(symbol, window.start_exclusive, window.end_inclusive)
+        for window in (second, third)
+        for symbol in symbols
+    ]
+    assert missing == expected
+    assert len(missing) == 30
+
+    with pytest.raises(NewsCoverageMissing, match=r"S00@.*\(\+\d+ more\)"):
+        store.require_coverage_many(symbols, [first, second, third])
+
+
 def test_require_coverage_many_validates_exact_grid_in_one_read(tmp_path) -> None:
     store = NewsStore(tmp_path)
     first = _window()

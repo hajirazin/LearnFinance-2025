@@ -11,6 +11,7 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
+from activities.heartbeat import heartbeat_until_done
 from models import (
     NewsBackfillResponse,
     SACTrainingReadiness,
@@ -30,7 +31,7 @@ def preflight_sac_training(universe: str, force: bool = False) -> SACTrainingRea
         universe,
         force,
     )
-    with get_training_client() as client:
+    with get_training_client() as client, heartbeat_until_done(universe):
         response = client.post(
             "/train/sac/preflight",
             json={"universe": universe, "force": force},
@@ -61,46 +62,47 @@ def run_news_backfill(
         response.raise_for_status()
         job_id = response.json()["job_id"]
 
-        while True:
-            activity.heartbeat(job_id)
-            time.sleep(poll_interval)
-            status_response = client.get(f"/etl/news/backfill/{job_id}")
-            if status_response.status_code == 404:
-                raise ApplicationError(
-                    f"News backfill job {job_id} was lost",
-                    type="NewsBackfillJobLost",
+        with heartbeat_until_done(job_id):
+            while True:
+                time.sleep(poll_interval)
+                status_response = client.get(f"/etl/news/backfill/{job_id}")
+                if status_response.status_code == 404:
+                    raise ApplicationError(
+                        f"News backfill job {job_id} was lost",
+                        type="NewsBackfillJobLost",
+                    )
+                status_response.raise_for_status()
+                job = status_response.json()
+                status = job["status"]
+                if status in {"pending", "running"}:
+                    continue
+                if status == "failed":
+                    raise ApplicationError(
+                        f"News backfill job {job_id} failed: {job.get('error')}",
+                        type="NewsBackfillJobFailed",
+                    )
+                if status != "complete":
+                    raise ApplicationError(
+                        f"News backfill job {job_id} returned invalid "
+                        f"status {status!r}",
+                        type="NewsBackfillJobInvalid",
+                    )
+                completed = NewsBackfillResponse(
+                    job_id=job_id,
+                    status=status,
+                    windows_done=int(job.get("windows_done") or 0),
+                    windows_total=int(job.get("windows_total") or 0),
+                    events_scored=int(job.get("events_scored") or 0),
+                    error=job.get("error"),
                 )
-            status_response.raise_for_status()
-            job = status_response.json()
-            status = job["status"]
-            if status in {"pending", "running"}:
-                continue
-            if status == "failed":
-                raise ApplicationError(
-                    f"News backfill job {job_id} failed: {job.get('error')}",
-                    type="NewsBackfillJobFailed",
+                logger.info(
+                    "News backfill complete job_id=%s windows=%s/%s events=%s",
+                    job_id,
+                    completed.windows_done,
+                    completed.windows_total,
+                    completed.events_scored,
                 )
-            if status != "complete":
-                raise ApplicationError(
-                    f"News backfill job {job_id} returned invalid status {status!r}",
-                    type="NewsBackfillJobInvalid",
-                )
-            completed = NewsBackfillResponse(
-                job_id=job_id,
-                status=status,
-                windows_done=int(job.get("windows_done") or 0),
-                windows_total=int(job.get("windows_total") or 0),
-                events_scored=int(job.get("events_scored") or 0),
-                error=job.get("error"),
-            )
-            logger.info(
-                "News backfill complete job_id=%s windows=%s/%s events=%s",
-                job_id,
-                completed.windows_done,
-                completed.windows_total,
-                completed.events_scored,
-            )
-            return completed
+                return completed
 
 
 @activity.defn
@@ -196,7 +198,8 @@ def _poll_training_job(
        selector for universe-keyed buckets): if 200, return result
        (idempotent cache hit)
     2. If 202, extract job_id and poll GET /train/status/{job_id}
-    3. Heartbeat on each poll cycle to keep Temporal informed
+    3. Sidecar-heartbeat during poll sleep/GET so Temporal does not
+       fire heartbeat_timeout while the HTTP read is blocked
     4. Return TrainingResponse on completion, raise on failure/cancel
 
     ``params`` are forwarded as query parameters on the initial POST
@@ -213,25 +216,25 @@ def _poll_training_job(
         job_id = job_data["job_id"]
         logger.info(f"Training job started: {job_id}")
 
-        while True:
-            activity.heartbeat(job_id)
-            time.sleep(poll_interval)
+        with heartbeat_until_done(job_id):
+            while True:
+                time.sleep(poll_interval)
 
-            status_resp = client.get(f"/train/status/{job_id}")
-            status_resp.raise_for_status()
-            status = status_resp.json()
+                status_resp = client.get(f"/train/status/{job_id}")
+                status_resp.raise_for_status()
+                status = status_resp.json()
 
-            logger.info(
-                f"Job {job_id}: status={status['status']}, "
-                f"progress={status.get('progress', {})}"
-            )
-
-            if status["status"] == "completed":
-                return TrainingResponse(**status["result"])
-            elif status["status"] in ("failed", "cancelled"):
-                raise ApplicationError(
-                    f"Training {status['status']}: {status.get('error', 'unknown')}"
+                logger.info(
+                    f"Job {job_id}: status={status['status']}, "
+                    f"progress={status.get('progress', {})}"
                 )
+
+                if status["status"] == "completed":
+                    return TrainingResponse(**status["result"])
+                elif status["status"] in ("failed", "cancelled"):
+                    raise ApplicationError(
+                        f"Training {status['status']}: {status.get('error', 'unknown')}"
+                    )
 
 
 @activity.defn

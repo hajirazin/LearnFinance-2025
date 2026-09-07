@@ -41,6 +41,7 @@
       "temporal:run:us-forecasters-training": ["cd temporal && temporal workflow start --type USForecastersTrainingWorkflow --task-queue learnfinance-training --workflow-id us-forecasters-training-manual"],
       "temporal:run:us-sac-training": ["cd temporal && temporal workflow start --type USSACTrainingWorkflow --task-queue learnfinance-training --workflow-id us-sac-training-manual"],
       "temporal:run:us-sac-halal-training": ["cd temporal && temporal workflow start --type USSACHalalTrainingWorkflow --task-queue learnfinance-training --workflow-id us-sac-halal-training-manual"],
+      "temporal:run:us-ppo-discovery-training": ["cd temporal && temporal workflow start --type USPPODiscoveryTrainingWorkflow --task-queue learnfinance-training --workflow-id us-ppo-discovery-training-manual"],
       "temporal:run:india-alpha-hrp": ["cd temporal && temporal workflow start --type IndiaWeeklyAllocationWorkflow --task-queue learnfinance-inference --workflow-id india-alpha-hrp-manual"],
       "temporal:run:india-double-hrp": ["cd temporal && temporal workflow start --type IndiaDoubleHRPWorkflow --task-queue learnfinance-inference --workflow-id india-double-hrp-manual"],
       "temporal:run:us-double-hrp": ["cd temporal && temporal workflow start --type USDoubleHRPWorkflow --task-queue learnfinance-inference --workflow-id us-double-hrp-manual"],

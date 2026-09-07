@@ -10,7 +10,8 @@ with workflow.unsafe.imports_passed_through():
     from activities.training import preflight_sac_training, run_news_backfill
     from models import NewsBackfillResponse, SACTrainingReadiness
 
-PREFLIGHT_TIMEOUT = timedelta(minutes=5)
+PREFLIGHT_TIMEOUT = timedelta(minutes=30)
+PREFLIGHT_HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 REFRESH_TIMEOUT = timedelta(hours=10)
 REFRESH_HEARTBEAT_TIMEOUT = timedelta(minutes=5)
 READINESS_RETRY_DAYS = 7
@@ -29,6 +30,7 @@ async def await_sac_training_readiness(
             preflight_sac_training,
             args=[universe, force],
             start_to_close_timeout=PREFLIGHT_TIMEOUT,
+            heartbeat_timeout=PREFLIGHT_HEARTBEAT_TIMEOUT,
             retry_policy=retry_policy,
         )
         if readiness.ready:

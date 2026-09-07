@@ -9,6 +9,7 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from activities.client import get_training_client
+from activities.heartbeat import heartbeat_until_done
 from activities.training import run_news_backfill
 
 logger = logging.getLogger(__name__)
@@ -58,24 +59,24 @@ def _poll_ppo_training_job(
             return payload
         job_id = payload["job_id"]
         logger.info("ppo_discovery training job started: %s", job_id)
-        while True:
-            activity.heartbeat(job_id)
-            time.sleep(poll_interval)
-            status_resp = client.get(f"/train/status/{job_id}")
-            status_resp.raise_for_status()
-            status = status_resp.json()
-            if status["status"] == "completed":
-                result = status.get("result") or {}
-                if not result.get("version"):
+        with heartbeat_until_done(job_id):
+            while True:
+                time.sleep(poll_interval)
+                status_resp = client.get(f"/train/status/{job_id}")
+                status_resp.raise_for_status()
+                status = status_resp.json()
+                if status["status"] == "completed":
+                    result = status.get("result") or {}
+                    if not result.get("version"):
+                        raise ApplicationError(
+                            "ppo_discovery job completed without a version"
+                        )
+                    return result
+                if status["status"] in ("failed", "cancelled"):
                     raise ApplicationError(
-                        "ppo_discovery job completed without a version"
+                        f"ppo_discovery training {status['status']}: "
+                        f"{status.get('error', 'unknown')}"
                     )
-                return result
-            if status["status"] in ("failed", "cancelled"):
-                raise ApplicationError(
-                    f"ppo_discovery training {status['status']}: "
-                    f"{status.get('error', 'unknown')}"
-                )
 
 
 @activity.defn

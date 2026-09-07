@@ -6,7 +6,7 @@ price-momentum features for SAC training.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
@@ -23,12 +23,9 @@ from brain_api.core.weekly_decision import (
     monday_cutoff_for_actor_friday,
     monday_window_bounds,
 )
-from brain_api.news.errors import NewsCoverageMissing
 from brain_api.news.models import NewsWindow
 from brain_api.news.store import NewsStore
 from brain_api.storage.base import DEFAULT_DATA_PATH
-
-NewsObservationError = NewsCoverageMissing
 
 
 def _store(store: NewsStore | None) -> NewsStore:
@@ -46,21 +43,28 @@ def news_backfill_bounds(
     return start_exclusive.isoformat(), end_inclusive.isoformat()
 
 
-def require_weekly_news_coverage(
+def _news_windows_for_cutoffs(weekly_cutoffs: pd.DatetimeIndex) -> list[NewsWindow]:
+    """Monday 09:00 NY windows aligned 1:1 with SAC Friday actor cutoffs."""
+    windows: list[NewsWindow] = []
+    for timestamp in weekly_cutoffs:
+        cutoff = monday_cutoff_for_actor_friday(timestamp.date())
+        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
+        windows.append(
+            NewsWindow(start_exclusive=start_exclusive, end_inclusive=end_inclusive)
+        )
+    return windows
+
+
+def missing_weekly_news_coverage(
     symbols: list[str],
     weekly_cutoffs: pd.DatetimeIndex,
     *,
     store: NewsStore | None = None,
-) -> None:
-    """Raise if any (symbol, Monday window) lacks exact coverage."""
-    news_store = _store(store)
-    for timestamp in weekly_cutoffs:
-        cutoff = monday_cutoff_for_actor_friday(timestamp.date())
-        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
-        window = NewsWindow(
-            start_exclusive=start_exclusive, end_inclusive=end_inclusive
-        )
-        news_store.require_coverage(symbols, window)
+) -> list[tuple[str, datetime, datetime]]:
+    """Every missing ``(symbol, Monday window)`` cell from one grid query."""
+    return _store(store).missing_coverage(
+        symbols, _news_windows_for_cutoffs(weekly_cutoffs)
+    )
 
 
 def load_weekly_news_scores(
@@ -71,23 +75,17 @@ def load_weekly_news_scores(
 ) -> dict[str, np.ndarray]:
     """One adapter scalar per symbol per SAC Friday cutoff (Monday 09:00 window)."""
     news_store = _store(store)
+    windows = _news_windows_for_cutoffs(weekly_cutoffs)
+    news_store.require_coverage_many(symbols, windows)
+    events_by_window = news_store.query_events_many(symbols, windows)
     scores: dict[str, list[float]] = {symbol: [] for symbol in symbols}
-    for timestamp in weekly_cutoffs:
+    for timestamp, window in zip(weekly_cutoffs, windows, strict=True):
         cutoff = monday_cutoff_for_actor_friday(timestamp.date())
-        start_exclusive, end_inclusive = monday_window_bounds(cutoff.date())
-        window = NewsWindow(
-            start_exclusive=start_exclusive, end_inclusive=end_inclusive
-        )
-        coverage = news_store.require_coverage(symbols, window)
-        events = news_store.query_events(symbols, window)
         events_by_symbol: dict[str, list] = {symbol: [] for symbol in symbols}
-        for event in events:
+        for event in events_by_window[window]:
             if event.symbol in events_by_symbol:
                 events_by_symbol[event.symbol].append(event)
-        status = {row.symbol: row.status for row in coverage}
-        week_scores = build_sac_news_features(
-            events_by_symbol, cutoff=cutoff, coverage_status=status
-        )
+        week_scores = build_sac_news_features(events_by_symbol, cutoff=cutoff)
         for symbol in symbols:
             scores[symbol].append(week_scores[symbol])
     return {

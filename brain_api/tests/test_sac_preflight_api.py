@@ -58,8 +58,13 @@ def strict_preflight_dependencies(monkeypatch):
 
     monkeypatch.setattr(
         preflight_module,
-        "require_weekly_news_coverage",
-        lambda requested_symbols, weekly_cutoffs: None,
+        "missing_weekly_news_coverage",
+        lambda requested_symbols, weekly_cutoffs: [],
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "align_signals_to_weekly",
+        lambda *args, **kwargs: {},
     )
 
     return prices
@@ -178,6 +183,59 @@ def test_sac_preflight_old_news_schema_does_not_skip_readiness(
     assert response.status_code == 200
     assert response.json()["ready"] is False
     assert response.json()["missing"]
+
+
+def test_sac_preflight_reports_news_missing_per_symbol(
+    monkeypatch,
+    strict_preflight_dependencies,
+):
+    from datetime import UTC, datetime
+
+    symbols = ["AAA", "BBB"]
+    monkeypatch.setattr(
+        preflight_module,
+        "get_bucket",
+        lambda model_type, universe: SimpleNamespace(
+            symbols_resolver=lambda: symbols,
+        ),
+    )
+    price_index = pd.date_range("2023-12-20", "2024-02-01", freq="D")
+    prices = {
+        symbol: pd.DataFrame({"open": 100.0, "close": 100.0}, index=price_index)
+        for symbol in symbols
+    }
+    monkeypatch.setattr(
+        preflight_module,
+        "load_prices_yfinance",
+        lambda requested_symbols, start_date, end_date: prices,
+    )
+    aaa_end = datetime(2024, 1, 8, 9, 0, tzinfo=UTC)
+    bbb_end = datetime(2024, 1, 15, 9, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        preflight_module,
+        "missing_weekly_news_coverage",
+        lambda requested_symbols, weekly_cutoffs: [
+            ("AAA", datetime(2024, 1, 1, 9, 0, tzinfo=UTC), aaa_end),
+            ("BBB", datetime(2024, 1, 8, 9, 0, tzinfo=UTC), bbb_end),
+        ],
+    )
+
+    response = client.post(
+        "/train/sac/preflight",
+        json={"universe": "halal_filtered", "force": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ready"] is False
+    news_issues = [issue for issue in payload["missing"] if issue["source"] == "news"]
+    assert {issue["symbol"] for issue in news_issues} == {"AAA", "BBB"}
+    assert all(issue["retryable"] is True for issue in news_issues)
+    by_symbol = {issue["symbol"]: issue["detail"] for issue in news_issues}
+    assert "1 week(s)" in by_symbol["AAA"]
+    assert aaa_end.isoformat() in by_symbol["AAA"]
+    assert "1 week(s)" in by_symbol["BBB"]
+    assert bbb_end.isoformat() in by_symbol["BBB"]
 
 
 @pytest.mark.parametrize(

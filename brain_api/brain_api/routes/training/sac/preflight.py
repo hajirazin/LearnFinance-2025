@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+import logging
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -12,8 +14,8 @@ from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, UnknownBucketError, get_bucket
 from brain_api.core.portfolio_rl.data_loading import (
     align_signals_to_weekly,
+    missing_weekly_news_coverage,
     news_backfill_bounds,
-    require_weekly_news_coverage,
 )
 from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
@@ -32,6 +34,7 @@ from brain_api.storage.policy import (
 from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SACReadinessIssueResponse(BaseModel):
@@ -59,6 +62,27 @@ def _required_snapshot_cutoffs(start_date: date, end_date: date) -> list[date]:
     return [
         date(year - 1, 12, 31) for year in range(start_date.year, end_date.year + 1)
     ]
+
+
+def _news_issues_from_missing_cells(
+    missing_cells: list[tuple[str, datetime, datetime]],
+) -> list[SACReadinessIssue]:
+    ends_by_symbol: dict[str, list] = defaultdict(list)
+    for symbol, _start, end in missing_cells:
+        ends_by_symbol[symbol].append(end)
+    issues: list[SACReadinessIssue] = []
+    for symbol, ends in ends_by_symbol.items():
+        latest = max(ends)
+        issues.append(
+            SACReadinessIssue(
+                "news",
+                f"missing news coverage for {len(ends)} week(s); "
+                f"latest {latest.isoformat()}",
+                symbol=symbol,
+                retryable=True,
+            )
+        )
+    return issues
 
 
 def assess_sac_training_readiness(
@@ -93,6 +117,13 @@ def assess_sac_training_readiness(
         prices = {}
         errors.append(SACReadinessIssue("prices", str(exc), retryable=True))
 
+    logger.info(
+        "[SAC preflight] prices loaded %s/%s",
+        sum(1 for symbol in symbols if prices.get(symbol) is not None),
+        len(symbols),
+    )
+
+    price_ready_symbols: list[str] = []
     for symbol in symbols:
         price_frame = prices.get(symbol)
         price_ready = price_frame is not None and not price_frame.empty
@@ -105,56 +136,68 @@ def assess_sac_training_readiness(
                     retryable=True,
                 )
             )
-        else:
-            try:
-                extract_session_open_prices(
-                    price_frame,
-                    trade_clock.rebalance_sessions,
-                    symbol=symbol,
-                )
-            except ValueError as exc:
-                missing.append(
-                    SACReadinessIssue(
-                        "prices",
-                        str(exc),
-                        symbol=symbol,
-                        retryable=True,
-                    )
-                )
-                price_ready = False
-
-        news_ok = False
+            continue
         try:
-            require_weekly_news_coverage([symbol], weekly_cutoffs)
-            news_ok = True
-        except NewsCoverageMissing as exc:
+            extract_session_open_prices(
+                price_frame,
+                trade_clock.rebalance_sessions,
+                symbol=symbol,
+            )
+        except ValueError as exc:
             missing.append(
-                SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
+                SACReadinessIssue(
+                    "prices",
+                    str(exc),
+                    symbol=symbol,
+                    retryable=True,
+                )
             )
-        except Exception as exc:
-            errors.append(
-                SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
-            )
+            continue
+        price_ready_symbols.append(symbol)
 
-        if price_ready and news_ok:
-            try:
-                align_signals_to_weekly(
-                    {symbol: price_frame},
-                    [symbol],
-                    weekly_cutoffs=weekly_cutoffs,
-                )
-            except NewsCoverageMissing as exc:
-                missing.append(
-                    SACReadinessIssue("news", str(exc), symbol=symbol, retryable=True)
-                )
-            except ValueError as exc:
-                missing.append(
-                    SACReadinessIssue("prices", str(exc), symbol=symbol, retryable=True)
-                )
+    news_complete = False
+    logger.info(
+        "[SAC preflight] news coverage grid %s symbols x %s weeks",
+        len(symbols),
+        len(weekly_cutoffs),
+    )
+    try:
+        missing_cells = missing_weekly_news_coverage(symbols, weekly_cutoffs)
+    except Exception as exc:
+        errors.append(SACReadinessIssue("news", str(exc), retryable=True))
+    else:
+        logger.info(
+            "[SAC preflight] news coverage missing %s cells", len(missing_cells)
+        )
+        if missing_cells:
+            missing.extend(_news_issues_from_missing_cells(missing_cells))
+        else:
+            news_complete = True
+
+    if news_complete and price_ready_symbols:
+        logger.info(
+            "[SAC preflight] aligning signals for %s symbols",
+            len(price_ready_symbols),
+        )
+        try:
+            align_signals_to_weekly(
+                {symbol: prices[symbol] for symbol in price_ready_symbols},
+                price_ready_symbols,
+                weekly_cutoffs=weekly_cutoffs,
+            )
+        except NewsCoverageMissing as exc:
+            missing.append(SACReadinessIssue("news", str(exc), retryable=True))
+        except ValueError as exc:
+            missing.append(SACReadinessIssue("prices", str(exc), retryable=True))
 
     for forecaster_type in ("patchtst",):
         storage = SnapshotLocalStorage(forecaster_type)
         for cutoff in _required_snapshot_cutoffs(start_date, end_date):
+            logger.info(
+                "[SAC preflight] ensuring %s snapshot for %s",
+                forecaster_type,
+                cutoff.isoformat(),
+            )
             try:
                 available = ensure_snapshot_for_bucket(
                     snapshot_storage=storage, cutoff_date=cutoff

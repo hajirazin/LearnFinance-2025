@@ -84,6 +84,12 @@ def generate_walkforward_forecasts(
         if year not in year_groups:
             continue
         cutoff_date = date(year - 1, 12, 31)
+        logger.info(
+            "[WalkForward] ensuring %s snapshot for year %s (cutoff %s)",
+            forecaster_type,
+            year,
+            cutoff_date,
+        )
         from brain_api.storage.policy import (
             StoragePolicyError,
             ensure_snapshot_for_bucket,

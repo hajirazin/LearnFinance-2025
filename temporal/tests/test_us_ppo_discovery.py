@@ -78,11 +78,14 @@ def test_experience_week_end_is_the_following_monday() -> None:
 def test_state_heartbeat_copies_activity_context() -> None:
     import inspect
 
+    from activities.heartbeat import heartbeat_until_done
     from activities.ppo_discovery_inference import build_ppo_discovery_state
 
     source = inspect.getsource(build_ppo_discovery_state)
-    assert "copy_context" in source
-    assert "activity_context.run" in source
+    assert "heartbeat_until_done" in source
+    helper = inspect.getsource(heartbeat_until_done)
+    assert "copy_context" in helper
+    assert "ctx.run" in helper
 
 
 def test_training_workflow_uses_preflight_snapshot_and_real_eval() -> None:
@@ -100,6 +103,8 @@ def test_training_workflow_uses_preflight_snapshot_and_real_eval() -> None:
     assert '"evaluation": {"candidate": True, "promoted": False}' not in source
     poll = inspect.getsource(_poll_ppo_training_job)
     assert "snapshot_sha256" in poll
+    assert "heartbeat_until_done" in poll
+    assert "activity.heartbeat" not in poll
 
 
 def test_first_sunday_schedules_untouched() -> None:

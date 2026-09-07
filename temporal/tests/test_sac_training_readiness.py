@@ -20,7 +20,7 @@ from tests._fake_client import FakeClient
 from workflows._sac_training_readiness import await_sac_training_readiness
 
 
-def test_preflight_activity_forwards_universe_and_force():
+def test_preflight_activity_forwards_universe_and_force(monkeypatch):
     fake = FakeClient(
         {
             "/train/sac/preflight": {
@@ -32,6 +32,7 @@ def test_preflight_activity_forwards_universe_and_force():
             }
         }
     )
+    monkeypatch.setattr(training_module.activity, "heartbeat", lambda *_details: None)
     original = training_module.get_training_client
     training_module.get_training_client = lambda: fake
     try:
