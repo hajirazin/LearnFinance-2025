@@ -1,10 +1,8 @@
-"""Stable snapshot-hash inputs for SAC US walk-forward and forecaster trains.
+"""Stable snapshot identity for SAC walk-forward and forecaster training.
 
-Monthly forecaster snapshots for year-end cutoffs use the extended backfill
-price window start (matching ``_backfill_lstm_snapshots`` /
-``_backfill_patchtst_snapshots``). SAC forecast generation consumes the
-PatchTST Dec-31 checkpoints from the ``patchtst_halal_new`` bucket via
-:func:`~brain_api.storage.policy.ensure_snapshot_for_bucket`.
+Snapshot folder and branch identity depends only on the canonical forecaster
+bucket, cutoff, and config. The training symbol slate and price-loading window
+remain training inputs, but they do not affect snapshot lookup identity.
 
 This module is also the read-side mirror of the snapshot backfill loops:
 :func:`count_missing_snapshots` answers "which snapshots would the backfill
@@ -17,16 +15,13 @@ the boolean accepted by
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from brain_api.core.config import resolve_training_window
 from brain_api.core.lstm.config import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
-from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst.config import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
-from brain_api.core.version import compute_model_hash
+from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.storage.policy import (
     StoragePolicy,
     StoragePolicyError,
@@ -36,68 +31,25 @@ from brain_api.storage.policy import (
 if TYPE_CHECKING:
     from brain_api.storage.forecaster_snapshots.local import SnapshotLocalStorage
 
-# Must stay aligned with ``bootstrap_years`` in the LSTM/PatchTST backfill loops.
-_SNAPSHOT_BACKFILL_BOOTSTRAP_YEARS = 4
-
-
-def extended_backfill_window_start_date() -> date:
-    """First calendar day loaded for RL snapshot backfill (extended window).
-
-    Mirrors ``routes/training/lstm.py::_backfill_lstm_snapshots`` and
-    ``routes/training/patchtst.py::_backfill_patchtst_snapshots``.
-    """
-    start_date, _ = resolve_training_window()
-    start_year = start_date.year
-    first_snapshot_year = start_year - 1
-    return date(
-        first_snapshot_year - _SNAPSHOT_BACKFILL_BOOTSTRAP_YEARS,
-        1,
-        1,
-    )
-
-
-def halal_new_lstm_resolver_symbols() -> list[str]:
-    return list(get_bucket(ModelType.LSTM, "halal_new").symbols_resolver())
-
-
-def halal_new_patchtst_resolver_symbols() -> list[str]:
-    return list(get_bucket(ModelType.PATCHTST, "halal_new").symbols_resolver())
-
 
 def expected_dec31_walkforward_snapshot_hash(
     *,
     forecaster_bucket: str,
     cutoff_date: date,
-    resolver_symbols: list[str],
-    config_dict: dict,
+    config_dict: dict[str, Any],
 ) -> str:
     """12-char digest for ``snapshot-{cutoff}-{digest}/`` (Dec-31 backfill rows)."""
-    window_start = extended_backfill_window_start_date()
-    return compute_model_hash(
-        forecaster_bucket,
-        window_start,
-        cutoff_date,
-        resolver_symbols,
-        config_dict,
-    )
+    return compute_snapshot_identity_hash(forecaster_bucket, cutoff_date, config_dict)
 
 
-def lstm_walkforward_expectation_bundle() -> tuple[str, list[str], dict]:
+def lstm_walkforward_expectation_bundle() -> tuple[str, dict[str, Any]]:
     """Return the identity inputs for standalone LSTM walk-forward snapshots."""
-    return (
-        "lstm_halal_new",
-        halal_new_lstm_resolver_symbols(),
-        LSTM_DEFAULT_CONFIG.to_dict(),
-    )
+    return "lstm_halal_new", LSTM_DEFAULT_CONFIG.to_dict()
 
 
-def patchtst_walkforward_expectation_bundle() -> tuple[str, list[str], dict]:
-    """(bucket_name, resolver_symbols, default_patchtst_config_dict)."""
-    return (
-        "patchtst_halal_new",
-        halal_new_patchtst_resolver_symbols(),
-        PATCHTST_DEFAULT_CONFIG.to_dict(),
-    )
+def patchtst_walkforward_expectation_bundle() -> tuple[str, dict[str, Any]]:
+    """Return the identity inputs for PatchTST walk-forward snapshots."""
+    return "patchtst_halal_new", PATCHTST_DEFAULT_CONFIG.to_dict()
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +118,7 @@ def count_missing_snapshots(
     *,
     forecaster_type: str,
     train_window: tuple[date, date],
-    symbols: Sequence[str],
-    config_dict: dict,
+    config_dict: dict[str, Any],
     snapshot_storage: SnapshotLocalStorage,
     policy: StoragePolicy | None = None,
 ) -> MissingSnapshotInventory:
@@ -179,31 +130,15 @@ def count_missing_snapshots(
     scan that decides between returning a 200 cached response and
     enqueuing a snapshots-only background job.
 
-    Math correctness invariant (AGENTS.md rule #2): the digest formulas
-    here MUST stay bit-identical to the ones in the backfill loops.
-    Two formulas are used because the existing main-training pipeline
-    already uses two:
-
-    * End-of-window snapshot uses ``compute_model_hash(forecaster_type,
-      start_date, end_date, symbols, config_dict)`` -- the resolved
-      training window from :func:`resolve_training_window`.
-    * Historical backfill snapshots (Dec-31 of each ``year`` in
-      ``range(start_year - 1, end_year)``) use
-      ``compute_model_hash(forecaster_type, snapshot_data_start,
-      cutoff_date, symbols, config_dict)`` where ``snapshot_data_start
-      = date(start_year - 1 - bootstrap_years, 1, 1)``.
-
-    If the backfill loops ever change a digest input, this function
-    must change in lockstep.
+    Math correctness invariant: every cutoff uses
+    :func:`compute_snapshot_identity_hash`, bit-identical to the writer.
+    The training window determines which cutoffs to inventory, but its start
+    and the training symbols are not snapshot identity inputs.
 
     Args:
-        forecaster_type: Snapshot bucket name (e.g. ``"lstm_halal_new"``);
-            also used as the ``forecaster_type`` argument to
-            ``compute_model_hash``.
+        forecaster_type: Canonical snapshot bucket name.
         train_window: ``(start_date, end_date)`` from
             :func:`brain_api.core.config.resolve_training_window`.
-        symbols: Stock symbols passed to the trainer (in the order
-            ``compute_model_hash`` will see them).
         config_dict: Forecaster config as a plain dict.
         snapshot_storage: Bucket storage instance used to probe local
             and (per policy) HF presence.
@@ -224,16 +159,9 @@ def count_missing_snapshots(
     check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
 
     start_date, end_date = train_window
-    symbols_list = list(symbols)
 
-    # End-of-window snapshot (digest matches the existing main-training
-    # pipeline's end-window write block, NOT the backfill formula).
-    end_window_digest = compute_model_hash(
-        forecaster_type,
-        start_date,
-        end_date,
-        symbols_list,
-        config_dict,
+    end_window_digest = compute_snapshot_identity_hash(
+        forecaster_type, end_date, config_dict
     )
     end_window_present = snapshot_storage.snapshot_exists_anywhere(
         end_date,
@@ -242,25 +170,14 @@ def count_missing_snapshots(
     )
     end_window_cutoff: date | None = None if end_window_present else end_date
 
-    # Historical Dec-31 backfill snapshots (digest matches the existing
-    # backfill loops' formula, with the extended window start).
     start_year = start_date.year
     end_year = end_date.year
     first_snapshot_year = start_year - 1
-    snapshot_data_start = date(
-        first_snapshot_year - _SNAPSHOT_BACKFILL_BOOTSTRAP_YEARS,
-        1,
-        1,
-    )
     historical: list[date] = []
     for year in range(first_snapshot_year, end_year):
         cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_model_hash(
-            forecaster_type,
-            snapshot_data_start,
-            cutoff_date,
-            symbols_list,
-            config_dict,
+        backfill_digest = compute_snapshot_identity_hash(
+            forecaster_type, cutoff_date, config_dict
         )
         if not snapshot_storage.snapshot_exists_anywhere(
             cutoff_date,

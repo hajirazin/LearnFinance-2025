@@ -118,34 +118,27 @@ class TestCountMissingSnapshots:
     def _expected_digests(
         forecaster_type: str,
         train_window: tuple[date, date],
-        symbols: list[str],
         config_dict: dict,
     ) -> tuple[str, list[tuple[date, str]]]:
         """Return ``(end_window_digest, [(historical_cutoff, digest), ...])``.
 
-        Mirrors ``count_missing_snapshots`` and the legacy backfill
-        loops bit-for-bit. Any drift here means the helper has
-        diverged from the trainer code.
+        Mirrors ``count_missing_snapshots`` and the backfill loops
+        bit-for-bit. Any drift here means the helper has diverged from
+        the trainer code.
         """
-        from brain_api.core.version import compute_model_hash
+        from brain_api.core.version import compute_snapshot_identity_hash
 
         start_date, end_date = train_window
-        end_window = compute_model_hash(
-            forecaster_type, start_date, end_date, symbols, config_dict
+        end_window = compute_snapshot_identity_hash(
+            forecaster_type, end_date, config_dict
         )
 
-        bootstrap_years = 4
         first_snapshot_year = start_date.year - 1
-        snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
         historical = []
         for year in range(first_snapshot_year, end_date.year):
             cutoff = date(year, 12, 31)
-            digest = compute_model_hash(
-                forecaster_type,
-                snapshot_data_start,
-                cutoff,
-                symbols,
-                config_dict,
+            digest = compute_snapshot_identity_hash(
+                forecaster_type, cutoff, config_dict
             )
             historical.append((cutoff, digest))
         return end_window, historical
@@ -169,10 +162,9 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         end_window, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         exists_map = {(train_window[1], end_window): True}
         for cutoff, digest in historical:
@@ -182,7 +174,6 @@ class TestCountMissingSnapshots:
         inventory = count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -199,10 +190,9 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         _end_window, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         exists_map = dict.fromkeys(historical, True)
         storage = self._build_storage(hf_repo=None, exists_map=exists_map)
@@ -210,7 +200,6 @@ class TestCountMissingSnapshots:
         inventory = count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -227,10 +216,9 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         end_window, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         exists_map = {(train_window[1], end_window): True}
         # Mark all but the first historical as present
@@ -241,7 +229,6 @@ class TestCountMissingSnapshots:
         inventory = count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -257,10 +244,9 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         _end_window, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         # End-window missing, plus the first 2 historical missing
         exists_map = dict.fromkeys(historical[2:], True)
@@ -269,7 +255,6 @@ class TestCountMissingSnapshots:
         inventory = count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -288,17 +273,15 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         _end_window, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         storage = self._build_storage(hf_repo=None, exists_map={})
 
         inventory = count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -314,14 +297,12 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         storage = self._build_storage(hf_repo="user/repo", exists_map={})
 
         count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.HF_FIRST,
@@ -338,14 +319,12 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         storage = self._build_storage(hf_repo=None, exists_map={})
 
         count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
@@ -361,7 +340,6 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy, StoragePolicyError
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         storage = self._build_storage(hf_repo=None, exists_map={})
 
@@ -369,7 +347,6 @@ class TestCountMissingSnapshots:
             count_missing_snapshots(
                 forecaster_type="lstm_halal_new",
                 train_window=train_window,
-                symbols=symbols,
                 config_dict=config_dict,
                 snapshot_storage=storage,
                 policy=StoragePolicy.HF_FIRST,
@@ -384,14 +361,12 @@ class TestCountMissingSnapshots:
         monkeypatch.setenv("STORAGE_BACKEND", "local_first")
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL"]
         config_dict = {"k": "v"}
         storage = self._build_storage(hf_repo=None, exists_map={})
 
         count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
         )
@@ -399,9 +374,9 @@ class TestCountMissingSnapshots:
         for call in storage.snapshot_exists_anywhere.call_args_list:
             assert call.kwargs["check_hf"] is False
 
-    def test_digest_inputs_match_backfill_formula(self):
+    def test_digest_inputs_match_snapshot_identity_formula(self):
         """Math-correctness regression: the helper MUST call
-        ``compute_model_hash`` with the exact same inputs as the
+        ``compute_snapshot_identity_hash`` with the exact same inputs as the
         backfill loops. If this drifts, every downstream snapshot
         decision silently breaks (AGENTS.md rule #2)."""
         from brain_api.core.forecaster_snapshot_identity import (
@@ -410,21 +385,19 @@ class TestCountMissingSnapshots:
         from brain_api.storage.policy import StoragePolicy
 
         train_window = (date(2016, 1, 1), date(2025, 12, 26))
-        symbols = ["AAPL", "MSFT"]
         config_dict = {"hidden": 16}
         storage = self._build_storage(hf_repo=None, exists_map={})
 
         count_missing_snapshots(
             forecaster_type="lstm_halal_new",
             train_window=train_window,
-            symbols=symbols,
             config_dict=config_dict,
             snapshot_storage=storage,
             policy=StoragePolicy.LOCAL_FIRST,
         )
 
         end_window_digest, historical = self._expected_digests(
-            "lstm_halal_new", train_window, symbols, config_dict
+            "lstm_halal_new", train_window, config_dict
         )
         observed = [
             (call.args[0], call.args[1])
@@ -432,3 +405,50 @@ class TestCountMissingSnapshots:
         ]
         assert observed[0] == (train_window[1], end_window_digest)
         assert observed[1:] == [(c, d) for c, d in historical]
+
+
+def test_walkforward_expectation_bundles_do_not_resolve_symbols(monkeypatch):
+    from brain_api.core import forecaster_snapshot_identity as identity
+    from brain_api.core.lstm.config import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
+    from brain_api.core.patchtst.config import (
+        DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG,
+    )
+    from brain_api.universe import halal_new
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("snapshot identity must not resolve a universe")
+
+    # Trap both historical lookup routes: bucket resolution and a direct/lazy
+    # import of the underlying universe resolver. The identity module no longer
+    # exposes either name, so the compatibility traps also catch a regression
+    # that reintroduces an imported alias.
+    monkeypatch.setattr(identity, "get_bucket", fail_if_called, raising=False)
+    monkeypatch.setattr(
+        identity, "get_halal_new_symbols", fail_if_called, raising=False
+    )
+    monkeypatch.setattr(halal_new, "get_halal_new_symbols", fail_if_called)
+
+    assert identity.lstm_walkforward_expectation_bundle() == (
+        "lstm_halal_new",
+        LSTM_DEFAULT_CONFIG.to_dict(),
+    )
+    assert identity.patchtst_walkforward_expectation_bundle() == (
+        "patchtst_halal_new",
+        PATCHTST_DEFAULT_CONFIG.to_dict(),
+    )
+
+
+def test_expected_dec31_hash_uses_bucket_cutoff_and_config() -> None:
+    from brain_api.core.forecaster_snapshot_identity import (
+        expected_dec31_walkforward_snapshot_hash,
+    )
+    from brain_api.core.version import compute_snapshot_identity_hash
+
+    cutoff = date(2020, 12, 31)
+    config = {"hidden": 16}
+
+    assert expected_dec31_walkforward_snapshot_hash(
+        forecaster_bucket="lstm_halal_new",
+        cutoff_date=cutoff,
+        config_dict=config,
+    ) == compute_snapshot_identity_hash("lstm_halal_new", cutoff, config)

@@ -6,7 +6,7 @@ forecast generation during RL training.
 Also supports HuggingFace Hub upload/download using the same repo
 as the main model but with branch naming convention:
 - Main model: v2025-01-05-abc123
-- Snapshots (hashed folder + branch): snapshot-2024-12-31-{12-hex-config-symbols-hash}
+- Snapshots (hashed folder + branch): snapshot-2024-12-31-{12-hex-identity-hash}
 """
 
 import json
@@ -51,7 +51,8 @@ class SnapshotLocalStorage(SnapshotHFMixin):
     Layout: ``{base_path}/models/{forecaster_type}/snapshot-{cutoff}-{digest}/``
     with ``weights.pt``, ``feature_scaler.pkl``, ``config.json``, ``metadata.json``.
 
-    The digest is twelve hex characters from :func:`~brain_api.core.version.compute_model_hash`.
+    The digest is twelve hex characters from
+    :func:`~brain_api.core.version.compute_snapshot_identity_hash`.
     Legacy ``snapshot-{date}/`` dirs (no digest) are ignored.
 
     HuggingFace branches reuse the same basename as the local folder.

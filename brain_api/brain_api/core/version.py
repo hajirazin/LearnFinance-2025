@@ -15,8 +15,7 @@ def compute_model_hash(
 ) -> str:
     """Deterministic 12-char digest of ``(model_type, window, symbols, config)``.
 
-    Used inside :func:`compute_model_version` and for forecaster snapshot
-    folder/branch naming (``snapshot-{cutoff}-{hash}/``).
+    Used inside :func:`compute_model_version` for main training versions.
 
     Args:
         model_type: Model / bucket discriminator (``"lstm"``, ``"patchtst"``,
@@ -34,6 +33,30 @@ def compute_model_hash(
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "symbols": sorted(symbols),
+        "config": config_dict,
+    }
+    canonical_json = json.dumps(canonical, sort_keys=True)
+    return hashlib.sha256(canonical_json.encode()).hexdigest()[:12]
+
+
+def compute_snapshot_identity_hash(
+    model_type: str,
+    cutoff_date: date,
+    config_dict: dict[str, Any],
+) -> str:
+    """Return the deterministic snapshot identity for bucket, cutoff, and config.
+
+    Args:
+        model_type: Canonical snapshot bucket name.
+        cutoff_date: Point-in-time snapshot cutoff.
+        config_dict: Forecaster configuration dictionary.
+
+    Returns:
+        Twelve lowercase hexadecimal characters from a truncated SHA-256 digest.
+    """
+    canonical = {
+        "model": model_type,
+        "cutoff_date": cutoff_date.isoformat(),
         "config": config_dict,
     }
     canonical_json = json.dumps(canonical, sort_keys=True)

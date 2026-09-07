@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-import pandas as pd
 import torch
 
 from brain_api.core.forecaster_snapshot_identity import _resolve_check_hf
@@ -54,8 +53,14 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
-from brain_api.core.version import compute_model_hash
+from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.routes.training.snapshot_persist import persist_forecaster_snapshot
+from brain_api.routes.training.snapshot_phase_filters import (
+    _filter_prices_by_cutoff as _filter_prices_by_cutoff,
+)
+from brain_api.routes.training.snapshot_phase_filters import (
+    _filter_signals_by_cutoff as _filter_signals_by_cutoff,
+)
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
@@ -66,88 +71,6 @@ from brain_api.storage.policy import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Shared utilities
-# ---------------------------------------------------------------------------
-
-
-def _filter_prices_by_cutoff(
-    prices: dict[str, pd.DataFrame],
-    cutoff_date: date,
-) -> dict[str, pd.DataFrame]:
-    """Filter price DataFrames to include only data up to ``cutoff_date``.
-
-    Used by both LSTM and PatchTST backfill loops -- the math is
-    identical for both (filter by the DatetimeIndex), so keeping one
-    copy is safe per AGENTS.md rule #2 (provably-identical filter).
-
-    yfinance returns a tz-aware DatetimeIndex (``America/New_York``)
-    while the backfill cutoff is a naive ``date``. Comparing them
-    directly raises pandas' ``Invalid comparison between
-    dtype=datetime64[ns, America/New_York] and Timestamp``. Localize
-    the cutoff to each symbol's index tz before comparing -- mirrors
-    the canonical pattern at
-    :mod:`brain_api.core.lstm.inference` lines 89-91.
-
-    Symbols that have no rows after filtering are dropped.
-    """
-    cutoff_ts = pd.Timestamp(cutoff_date)
-    out: dict[str, pd.DataFrame] = {}
-    for symbol, df in prices.items():
-        symbol_cutoff = cutoff_ts
-        if df.index.tz is not None and symbol_cutoff.tz is None:
-            symbol_cutoff = symbol_cutoff.tz_localize(df.index.tz)
-        filtered = df[df.index <= symbol_cutoff]
-        if len(filtered) > 0:
-            out[symbol] = filtered.copy()
-    return out
-
-
-def _filter_signals_by_cutoff(
-    signals: dict[str, pd.DataFrame],
-    cutoff_date: date,
-) -> dict[str, pd.DataFrame]:
-    """Filter signal DataFrames to include only data up to ``cutoff_date``.
-
-    PatchTST-only helper. Works with both ``DatetimeIndex`` and regular
-    indexes (will try to convert).
-
-    Symbols with no rows after filtering are dropped. Symbols whose
-    index cannot be parsed fall back to the raw DataFrame.
-    """
-    cutoff_ts = pd.Timestamp(cutoff_date)
-    result = {}
-
-    for symbol, df in signals.items():
-        if df.empty:
-            continue
-
-        if isinstance(df.index, pd.DatetimeIndex):
-            symbol_cutoff = cutoff_ts
-            if df.index.tz is not None and symbol_cutoff.tz is None:
-                symbol_cutoff = symbol_cutoff.tz_localize(df.index.tz)
-            filtered = df[df.index <= symbol_cutoff]
-        else:
-            try:
-                idx = pd.to_datetime(df.index)
-                symbol_cutoff = cutoff_ts
-                if (
-                    isinstance(idx, pd.DatetimeIndex)
-                    and idx.tz is not None
-                    and symbol_cutoff.tz is None
-                ):
-                    symbol_cutoff = symbol_cutoff.tz_localize(idx.tz)
-                mask = idx <= symbol_cutoff
-                filtered = df[mask]
-            except (ValueError, TypeError):
-                filtered = df
-
-        if len(filtered) > 0:
-            result[symbol] = filtered.copy()
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +125,9 @@ def _run_lstm_snapshot_phase(
     snapshot_hf_repo = snapshot_storage._get_hf_repo()
     check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
 
-    end_snap_digest = compute_model_hash(
+    end_snap_digest = compute_snapshot_identity_hash(
         snapshot_storage.forecaster_type,
-        start_date,
         end_date,
-        symbols,
         config.to_dict(),
     )
 
@@ -301,11 +222,9 @@ def _backfill_lstm_snapshots(
     snapshots_needed = []
     for year in range(first_snapshot_year, end_year):
         cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_model_hash(
+        backfill_digest = compute_snapshot_identity_hash(
             snapshot_storage.forecaster_type,
-            snapshot_data_start,
             cutoff_date,
-            symbols,
             config.to_dict(),
         )
         if not snapshot_storage.snapshot_exists_anywhere(
@@ -364,11 +283,9 @@ def _backfill_lstm_snapshots(
             dataset.X, dataset.y, dataset.feature_scaler, config
         )
 
-        backfill_digest = compute_model_hash(
+        backfill_digest = compute_snapshot_identity_hash(
             snapshot_storage.forecaster_type,
-            snapshot_data_start,
             cutoff_date,
-            symbols,
             config.to_dict(),
         )
 
@@ -453,11 +370,9 @@ def _run_patchtst_snapshot_phase(
     snapshot_hf_repo = snapshot_storage._get_hf_repo()
     check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
 
-    end_snap_digest = compute_model_hash(
+    end_snap_digest = compute_snapshot_identity_hash(
         snapshot_forecaster_type,
-        start_date,
         end_date,
-        symbols,
         config.to_dict(),
     )
 
@@ -549,11 +464,9 @@ def _backfill_patchtst_snapshots(
     snapshots_needed = []
     for year in range(first_snapshot_year, end_year):
         cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_model_hash(
+        backfill_digest = compute_snapshot_identity_hash(
             snapshot_storage.forecaster_type,
-            snapshot_data_start,
             cutoff_date,
-            symbols,
             config.to_dict(),
         )
         if not snapshot_storage.snapshot_exists_anywhere(
@@ -627,11 +540,9 @@ def _backfill_patchtst_snapshots(
             sample_symbols=dataset.symbols,
         )
 
-        backfill_digest = compute_model_hash(
+        backfill_digest = compute_snapshot_identity_hash(
             snapshot_forecaster_type,
-            snapshot_data_start,
             cutoff_date,
-            symbols,
             config.to_dict(),
         )
 

@@ -158,9 +158,8 @@ def block_live_news_duckdb(monkeypatch):
 # Static halal_new universe used by the autouse network isolation
 # fixture below. Must contain enough symbols to satisfy the
 # ``min_history`` filter in ``halal_filtered`` plus the LSTM/PatchTST
-# default ``n_stocks=15`` slate. Symbols are intentionally short so
-# ``compute_model_hash`` digests in the snapshot inventory unit tests
-# stay readable.
+# default ``n_stocks=15`` slate. Symbols are intentionally short to keep
+# universe fixtures readable.
 _FAKE_HALAL_NEW_UNIVERSE: dict = {
     "stocks": [
         {"symbol": f"S{i:02d}", "name": f"Test Stock {i}", "max_weight": 0.05}
@@ -176,13 +175,9 @@ _FAKE_HALAL_NEW_UNIVERSE: dict = {
 def isolate_external_universe_calls(monkeypatch):
     """Block real network access for every universe builder.
 
-    Three pre-existing tests (``test_storage_policy.py::TestEnsureSnapshotForBucketContract::*``
-    and ``test_forecaster_snapshots_walkforward.py::TestWalkForwardForecasts::test_build_forecast_features_raises_on_missing_snapshots``)
-    transitively invoke ``ensure_snapshot_for_bucket`` ->
-    ``lstm_walkforward_expectation_bundle`` ->
-    ``halal_new_lstm_resolver_symbols`` ->
-    ``get_halal_new_universe`` -> ``fetch_alpaca_tradable_symbols``,
-    which hits the real Alpaca API and the SP-Funds / Wahed scrapers.
+    Universe-building tests can otherwise reach ``get_halal_new_universe`` ->
+    ``fetch_alpaca_tradable_symbols``, which hits the real Alpaca API and the
+    SP-Funds / Wahed scrapers.
     Without this fixture each costs ~8 s of real network and silently
     consumes Alpaca quota whenever ``ALPACA_API_KEY`` leaks from
     ``.env`` (the host's ``isolate_from_env`` only clears HF vars).

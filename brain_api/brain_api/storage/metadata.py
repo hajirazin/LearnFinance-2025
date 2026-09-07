@@ -55,9 +55,10 @@ def create_training_metadata(
             migrated to the always-promote-with-guardrails policy
             still work.
         config_symbols_hash: Twelve-char digest of
-            ``(model_type_bucket, window, symbols, config)`` for audit;
-            mirrors forecaster snapshot folder suffixes. When omitted,
-            computed automatically from the other fields.
+            ``(model_type_bucket, window, symbols, config)`` for main-model
+            audit. When omitted, computed automatically from the other fields.
+            Snapshot metadata retains this legacy key name but stores the
+            separate bucket/cutoff/config snapshot identity hash.
         val_rank_ic: PatchTST validation weekly rank IC of the restored
             checkpoint. Omitted from metrics when None so LSTM hashes and
             callers stay unchanged.

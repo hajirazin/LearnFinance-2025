@@ -13,10 +13,6 @@ from pydantic import BaseModel, Field
 from brain_api.core.config import (
     resolve_training_window,
 )
-from brain_api.core.forecaster_snapshot_identity import (
-    MissingSnapshotInventory,
-    count_missing_snapshots,
-)
 from brain_api.core.model_buckets import (
     BucketConfig,
     ModelType,
@@ -27,10 +23,7 @@ from brain_api.core.patchtst import PatchTSTConfig, align_multivariate_data
 from brain_api.core.patchtst import (
     compute_version as patchtst_compute_version,
 )
-from brain_api.core.training_utils import (
-    TrainingCancelledError,
-    evaluate_forecaster_artifact_health,
-)
+from brain_api.core.training_utils import evaluate_forecaster_artifact_health
 from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
 )
@@ -53,13 +46,16 @@ from .dependencies import (
     get_patchtst_trainer,
 )
 from .job_registry import (
-    cancel_job,
     complete_job,
     fail_job,
     get_or_create_job,
     update_progress,
 )
 from .models import PatchTSTTrainResponse, TrainingJobResponse
+from .patchtst_jobs import (
+    _run_patchtst_training,
+    handle_patchtst_existing_metadata,
+)
 from .snapshot_phase import (
     _PatchTSTMainTrainingArtifacts,
     _run_patchtst_snapshot_phase,
@@ -485,163 +481,6 @@ def train_patchtst(
             message=f"PatchTST training started for {version}",
         ).model_dump(),
     )
-
-
-def handle_patchtst_existing_metadata(
-    *,
-    background_tasks: BackgroundTasks,
-    bucket: BucketConfig,
-    symbols: list[str],
-    config: PatchTSTConfig,
-    train_window: tuple[date, date],
-    version: str,
-    existing_metadata: dict,
-    skip_snapshot: bool,
-    log_prefix: str,
-) -> PatchTSTTrainResponse | JSONResponse:
-    """Branch the cached-main response on the snapshot inventory.
-
-    Shared by US (``/train/patchtst``) and India (``/train/patchtst/india``)
-    routes. India imports this directly so the bucket-aware path lives
-    in one place.
-
-    Three outcomes:
-
-    * ``inventory.is_empty`` (or ``skip_snapshot=True``): return 200
-      cached. Backwards-compatible fast path.
-    * Some snapshots missing: schedule snapshots-only background runner
-      under a dedicated ``{bucket}_snapshots`` key. Return 202.
-    * ``StoragePolicyError`` from ``count_missing_snapshots`` (i.e.
-      ``hf_first`` + the snapshot bucket has no HF repo configured):
-      surface as 503.
-    """
-    cached_response_kwargs = build_common_train_response_kwargs(
-        version, existing_metadata
-    )
-
-    if skip_snapshot:
-        logger.info(
-            f"{log_prefix} Version {version} already exists (idempotent, "
-            f"skip_snapshot=true)"
-        )
-        return PatchTSTTrainResponse(
-            **cached_response_kwargs,
-            num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
-        )
-
-    snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
-    try:
-        inventory: MissingSnapshotInventory = count_missing_snapshots(
-            forecaster_type=bucket.bucket_name,
-            train_window=train_window,
-            symbols=symbols,
-            config_dict=config.to_dict(),
-            snapshot_storage=snapshot_storage,
-        )
-    except StoragePolicyError as exc:
-        logger.error(
-            f"{log_prefix} Snapshot inventory scan failed for {version}: {exc}"
-        )
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    if inventory.is_empty:
-        logger.info(
-            f"{log_prefix} Version {version} already exists and all "
-            f"snapshots present (idempotent)"
-        )
-        return PatchTSTTrainResponse(
-            **cached_response_kwargs,
-            num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
-        )
-
-    snapshots_job_key = f"{bucket.bucket_name}_snapshots"
-    job, is_new = get_or_create_job(snapshots_job_key, version)
-    if not is_new:
-        logger.info(
-            f"{log_prefix} Snapshots-only job {job.job_id} already in "
-            f"progress for {version}"
-        )
-        return JSONResponse(
-            status_code=202,
-            content=TrainingJobResponse(
-                job_id=job.job_id,
-                status=job.status,
-                message=(
-                    f"PatchTST snapshots-only backfill already in progress "
-                    f"for {version}"
-                ),
-            ).model_dump(),
-        )
-
-    background_tasks.add_task(
-        _run_patchtst_snapshots_only,
-        job_id=job.job_id,
-        symbols=symbols,
-        config=config,
-        bucket=bucket,
-        train_window=train_window,
-        version=version,
-        existing_metadata=existing_metadata,
-        log_prefix=f"{log_prefix} Snapshots-only",
-    )
-    logger.info(
-        f"{log_prefix} Snapshots-only backfill started: {job.job_id} "
-        f"({inventory.total_missing} cutoff(s) missing)"
-    )
-
-    return JSONResponse(
-        status_code=202,
-        content=TrainingJobResponse(
-            job_id=job.job_id,
-            status="pending",
-            message=(
-                f"PatchTST snapshots-only backfill started for {version} "
-                f"({inventory.total_missing} cutoff(s) missing)"
-            ),
-        ).model_dump(),
-    )
-
-
-def _run_patchtst_training(
-    *,
-    job_id: str,
-    symbols: list[str],
-    storage: PatchTSTHalalNewModelStorage,
-    bucket: BucketConfig,
-    skip_snapshot: bool,
-    config: PatchTSTConfig,
-    price_loader: PatchTSTPriceLoader,
-    dataset_builder: PatchTSTDatasetBuilder,
-    trainer: PatchTSTTrainer,
-    log_prefix: str = "[PatchTST]",
-) -> None:
-    """Background task that runs the full PatchTST training pipeline."""
-    from brain_api.main import shutdown_event
-
-    try:
-        response = _train_patchtst_core(
-            symbols=symbols,
-            storage=storage,
-            bucket=bucket,
-            skip_snapshot=skip_snapshot,
-            config=config,
-            price_loader=price_loader,
-            dataset_builder=dataset_builder,
-            trainer=trainer,
-            log_prefix=log_prefix,
-            shutdown_event=shutdown_event,
-            job_id=job_id,
-        )
-        complete_job(job_id, response.model_dump())
-        logger.info(f"{log_prefix} Job {job_id} completed successfully")
-    except TrainingCancelledError:
-        cancel_job(job_id)
-        logger.info(f"{log_prefix} Job {job_id} cancelled by shutdown")
-    except Exception as e:
-        fail_job(job_id, str(e))
-        logger.error(f"{log_prefix} Job {job_id} failed: {e}")
 
 
 def _run_patchtst_snapshots_only(

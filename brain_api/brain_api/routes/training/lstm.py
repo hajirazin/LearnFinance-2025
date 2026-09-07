@@ -249,7 +249,6 @@ def _handle_lstm_existing_metadata(
         inventory: MissingSnapshotInventory = count_missing_snapshots(
             forecaster_type=bucket.bucket_name,
             train_window=train_window,
-            symbols=symbols,
             config_dict=config.to_dict(),
             snapshot_storage=snapshot_storage,
         )

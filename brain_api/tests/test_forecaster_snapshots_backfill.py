@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 
 
@@ -51,6 +52,8 @@ class TestBackfillSnapshotRange:
         mock_result.val_loss = 0.02
         mock_result.best_epoch = 1
         mock_result.stopped_epoch = 1
+        config = MagicMock()
+        config.to_dict.return_value = {"hidden": 16}
 
         with (
             patch(
@@ -74,7 +77,7 @@ class TestBackfillSnapshotRange:
         ):
             _backfill_lstm_snapshots(
                 symbols=["AAPL", "MSFT"],
-                config=MagicMock(to_dict=dict),
+                config=config,
                 start_date=date(2016, 1, 1),
                 end_date=date(2025, 12, 26),
                 snapshot_storage=mock_storage,
@@ -89,6 +92,19 @@ class TestBackfillSnapshotRange:
         written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
         expected = [date(y, 12, 31) for y in range(2015, 2025)]
         assert written_cutoffs == expected
+        observed_identities = [
+            (call.args[0], call.args[1])
+            for call in mock_storage.snapshot_exists_anywhere.call_args_list
+        ]
+        assert observed_identities == [
+            (
+                cutoff,
+                compute_snapshot_identity_hash(
+                    "lstm_halal_new", cutoff, config.to_dict()
+                ),
+            )
+            for cutoff in expected
+        ]
 
     def test_patchtst_backfill_creates_snapshots_for_full_rl_range(self):
         """Verify _backfill_patchtst_snapshots covers start_year-1 .. end_year-1."""
@@ -108,6 +124,8 @@ class TestBackfillSnapshotRange:
         mock_result.val_loss = 0.02
         mock_result.best_epoch = 1
         mock_result.stopped_epoch = 1
+        config = MagicMock()
+        config.to_dict.return_value = {"d_model": 32}
 
         with (
             patch(
@@ -133,7 +151,7 @@ class TestBackfillSnapshotRange:
         ):
             _backfill_patchtst_snapshots(
                 symbols=["AAPL", "MSFT"],
-                config=MagicMock(to_dict=dict),
+                config=config,
                 start_date=date(2016, 1, 1),
                 end_date=date(2025, 12, 26),
                 snapshot_storage=mock_storage,
@@ -148,6 +166,19 @@ class TestBackfillSnapshotRange:
         written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
         expected = [date(y, 12, 31) for y in range(2015, 2025)]
         assert written_cutoffs == expected
+        observed_identities = [
+            (call.args[0], call.args[1])
+            for call in mock_storage.snapshot_exists_anywhere.call_args_list
+        ]
+        assert observed_identities == [
+            (
+                cutoff,
+                compute_snapshot_identity_hash(
+                    "patchtst_halal_new", cutoff, config.to_dict()
+                ),
+            )
+            for cutoff in expected
+        ]
 
     def test_lstm_backfill_skips_existing_snapshots(self):
         """Verify backfill skips snapshots that already exist."""
@@ -496,3 +527,71 @@ class TestBackfillLoopsRespectPolicy:
                 snapshot_storage=mock_storage,
                 policy=StoragePolicy.HF_FIRST,
             )
+
+
+class TestSnapshotEndWindowIdentity:
+    def test_lstm_end_window_uses_snapshot_identity_hash(self):
+        from brain_api.routes.training.snapshot_phase import (
+            _run_lstm_snapshot_phase,
+        )
+        from brain_api.storage.policy import StoragePolicy
+
+        storage = MagicMock(spec=SnapshotLocalStorage)
+        storage.forecaster_type = "lstm_halal_new"
+        storage._get_hf_repo.return_value = None
+        storage.snapshot_exists_anywhere.return_value = True
+        config = MagicMock()
+        config.to_dict.return_value = {"hidden": 16}
+        end_date = date(2025, 12, 26)
+
+        with patch("brain_api.routes.training.snapshot_phase._backfill_lstm_snapshots"):
+            _run_lstm_snapshot_phase(
+                train_window=(date(2016, 1, 1), end_date),
+                symbols=["AAPL"],
+                config=config,
+                snapshot_storage=storage,
+                main_artifacts=None,
+                policy=StoragePolicy.LOCAL_FIRST,
+            )
+
+        storage.snapshot_exists_anywhere.assert_called_once_with(
+            end_date,
+            compute_snapshot_identity_hash(
+                "lstm_halal_new", end_date, config.to_dict()
+            ),
+            check_hf=False,
+        )
+
+    def test_patchtst_end_window_uses_snapshot_identity_hash(self):
+        from brain_api.routes.training.snapshot_phase import (
+            _run_patchtst_snapshot_phase,
+        )
+        from brain_api.storage.policy import StoragePolicy
+
+        storage = MagicMock(spec=SnapshotLocalStorage)
+        storage.forecaster_type = "patchtst_halal_new"
+        storage._get_hf_repo.return_value = None
+        storage.snapshot_exists_anywhere.return_value = True
+        config = MagicMock()
+        config.to_dict.return_value = {"d_model": 32}
+        end_date = date(2025, 12, 26)
+
+        with patch(
+            "brain_api.routes.training.snapshot_phase._backfill_patchtst_snapshots"
+        ):
+            _run_patchtst_snapshot_phase(
+                train_window=(date(2016, 1, 1), end_date),
+                symbols=["AAPL"],
+                config=config,
+                snapshot_storage=storage,
+                main_artifacts=None,
+                policy=StoragePolicy.LOCAL_FIRST,
+            )
+
+        storage.snapshot_exists_anywhere.assert_called_once_with(
+            end_date,
+            compute_snapshot_identity_hash(
+                "patchtst_halal_new", end_date, config.to_dict()
+            ),
+            check_hf=False,
+        )

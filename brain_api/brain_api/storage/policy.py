@@ -33,7 +33,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -45,9 +44,10 @@ from huggingface_hub.utils import (
     RevisionNotFoundError,
 )
 
+from brain_api.storage.forecaster_snapshot_policy import ensure_snapshot_for_bucket
+
 if TYPE_CHECKING:
     from brain_api.core.model_buckets import BucketConfig
-    from brain_api.storage.forecaster_snapshots.local import SnapshotLocalStorage
 
 logger = logging.getLogger(__name__)
 
@@ -566,54 +566,6 @@ def build_common_train_response_kwargs(
         # old artifacts continue to deserialize.
         "failure_reasons": metadata.get("failure_reasons", []),
     }
-
-
-# ---------------------------------------------------------------------------
-# Snapshots: ensure-available helper for generic forecaster walk-forward loading
-# ---------------------------------------------------------------------------
-
-
-def ensure_snapshot_for_bucket(
-    *,
-    snapshot_storage: SnapshotLocalStorage,
-    cutoff_date: date,
-    policy: StoragePolicy | None = None,
-) -> bool:
-    """Ensure the expected hashed forecaster snapshot is available locally.
-
-    Dec-31 walk-forward snapshots use resolver symbols + default forecast
-    config and the extended backfill window start (see
-    :mod:`brain_api.core.forecaster_snapshot_identity`). Folder / HF branch names
-    are ``snapshot-{{cutoff}}-{{digest}}``.
-    """
-
-    from brain_api.core.forecaster_snapshot_identity import (
-        expected_dec31_walkforward_snapshot_hash,
-        lstm_walkforward_expectation_bundle,
-        patchtst_walkforward_expectation_bundle,
-    )
-
-    bucket_type = snapshot_storage.forecaster_type
-    if bucket_type == "lstm_halal_new":
-        identity_bucket, wf_symbols, wf_cfg = lstm_walkforward_expectation_bundle()
-    elif bucket_type == "patchtst_halal_new":
-        identity_bucket, wf_symbols, wf_cfg = patchtst_walkforward_expectation_bundle()
-    else:
-        raise StoragePolicyError(
-            f"Walk-forward snapshot ensure is wired only for lstm_halal_new and "
-            f"patchtst_halal_new; got {bucket_type!r}"
-        )
-
-    snapshot_digest = expected_dec31_walkforward_snapshot_hash(
-        forecaster_bucket=identity_bucket,
-        cutoff_date=cutoff_date,
-        resolver_symbols=wf_symbols,
-        config_dict=wf_cfg,
-    )
-
-    return snapshot_storage.ensure_snapshot_available(
-        cutoff_date, snapshot_digest, policy=policy
-    )
 
 
 __all__ = [

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-# Length of hexadecimal snapshot suffix (matches :func:`brain_api.core.version.compute_model_hash`).
+# Length of hexadecimal snapshot identity suffix.
 SNAPSHOT_DIGEST_LEN = 12
 
 

@@ -19,7 +19,12 @@ def create_snapshot_metadata(
     config_symbols_hash: str,
     failure_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create metadata dictionary for a forecaster snapshot."""
+    """Create metadata for a forecaster snapshot.
+
+    ``config_symbols_hash`` is the compatibility key for the snapshot identity
+    hash. Its value fingerprints bucket, cutoff, and config; symbols remain
+    separate audit metadata.
+    """
 
     payload: dict[str, Any] = {
         "forecaster_type": forecaster_type,

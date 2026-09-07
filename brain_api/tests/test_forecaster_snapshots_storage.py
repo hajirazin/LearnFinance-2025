@@ -25,9 +25,7 @@ from brain_api.storage.forecaster_snapshots import (
     create_snapshot_metadata,
 )
 
-_TEST_SNAPSHOT_DIGEST = (
-    "aaaaaaaaaaaa"  # 12 lowercase hex chars (matches compute_model_hash format)
-)
+_TEST_SNAPSHOT_DIGEST = "aaaaaaaaaaaa"  # 12 lowercase hex snapshot identity
 
 
 class TestSnapshotLocalStorage:
