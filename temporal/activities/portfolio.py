@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import date, timedelta
 
 from temporalio import activity
 
@@ -18,6 +19,22 @@ from models import (
 )
 
 logger = logging.getLogger(__name__)
+
+IBKR_LEDGER_LOOKBACK_DAYS = 7
+
+
+def _ibkr_ledger_after(reference_date: str) -> str:
+    """Return a UTC-safe lower bound for querying the local IBKR ledger.
+
+    Workflow run dates are calendar dates in the workflow's reporting
+    timezone, while SQLite ``submitted_at`` values are UTC.  Near midnight
+    UTC, an order can therefore belong to run date D but be stored on D-1.
+    The exact client-order-id matcher still provides the real scope, so a
+    bounded lookback is both safe and immune to the date boundary.
+    """
+    return (
+        date.fromisoformat(reference_date) - timedelta(days=IBKR_LEDGER_LOOKBACK_DAYS)
+    ).isoformat()
 
 
 def _compute_max_attempt(run_id: str, orders: list[dict]) -> int:
@@ -110,11 +127,12 @@ def resolve_next_attempt_ibkr(
     workflow explicit about which IBKR account it owns.
     """
     max_attempt = 0
+    history_after = _ibkr_ledger_after(as_of_date)
     for account in accounts:
         with get_client() as client:
             response = client.get(
                 "/ibkr/order-history",
-                params={"account": account, "after": as_of_date},
+                params={"account": account, "after": history_after},
             )
             response.raise_for_status()
         max_attempt = max(max_attempt, _compute_max_attempt(run_id, response.json()))
@@ -449,11 +467,16 @@ def check_order_statuses_ibkr(account: str, client_order_ids: list[str]) -> list
     logger.info(
         f"Checking {len(client_order_ids)} IBKR order statuses for {account.upper()}..."
     )
-    today = activity.info().current_attempt_scheduled_time.strftime("%Y-%m-%d")
+    scheduled_date = activity.info().current_attempt_scheduled_time.strftime("%Y-%m-%d")
+    history_after = _ibkr_ledger_after(scheduled_date)
     with get_client() as client:
         response = client.get(
             "/ibkr/order-history",
-            params={"account": account, "after": today, "sync_broker": "true"},
+            params={
+                "account": account,
+                "after": history_after,
+                "sync_broker": "true",
+            },
         )
         response.raise_for_status()
     all_orders = response.json()

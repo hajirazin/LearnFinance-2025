@@ -304,8 +304,17 @@ def submit_order(config: IBKRConnectionConfig, spec: IBKROrderSpec) -> IBKRSubmi
 @dataclass(frozen=True)
 class IBKROrderStatus:
     status: str
-    filled_qty: float
-    filled_avg_price: float
+    filled_qty: float | None
+    filled_avg_price: float | None
+
+
+def _first_optional_float(data: dict, *keys: str) -> float | None:
+    """Return the first populated numeric field from an IBKR response."""
+    for key in keys:
+        value = data.get(key)
+        if value is not None and value != "":
+            return float(value)
+    return None
 
 
 def get_order_status(
@@ -321,10 +330,14 @@ def get_order_status(
             data = resp.json()
 
             status = data.get("order_status", "Unknown")
-            filled_qty = float(data.get("cum_fill", 0.0))
-            # Average price can be under 'avg_price' or 'price' depending on endpoint behavior,
-            # but usually 'avg_price' for fills.
-            filled_avg_price = float(data.get("avg_price", 0.0))
+            filled_qty = _first_optional_float(data, "cum_fill", "filledQuantity")
+            # The single-order status endpoint documents ``average_price``;
+            # retain the other spellings for compatibility with IBKR's live-
+            # orders response and older gateway variants.  Missing values stay
+            # None so the ledger never records a fabricated zero-price fill.
+            filled_avg_price = _first_optional_float(
+                data, "average_price", "avgPrice", "avg_price"
+            )
 
             return IBKROrderStatus(status, filled_qty, filled_avg_price)
         except httpx.HTTPStatusError as e:

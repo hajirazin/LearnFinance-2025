@@ -380,7 +380,9 @@ def get_order_history(
 
     If `sync_broker` is True, it will reach out to the broker API to
     get the live status for each non-terminal order before returning,
-    updating the local ledger in the process.
+    updating the local ledger in the process. Filled rows with missing
+    or zero fill details are also refreshed so previously incomplete
+    status snapshots can be repaired while IBKR still retains them.
 
     Mirrors the Alpaca ``/alpaca/order-history`` shape so the
     workflow's regex on ``client_order_id`` is unchanged.
@@ -401,12 +403,19 @@ def get_order_history(
 
             updates = []
             for row in rows:
-                if row.ibkr_perm_id and row.status not in (
+                is_terminal = row.status in (
                     "Filled",
                     "Cancelled",
                     "Inactive",
                     "ApiCancelled",
-                ):
+                )
+                needs_fill_repair = row.status == "Filled" and (
+                    row.filled_qty is None
+                    or row.filled_qty <= 0
+                    or row.filled_avg_price is None
+                    or row.filled_avg_price <= 0
+                )
+                if row.ibkr_perm_id and (not is_terminal or needs_fill_repair):
                     try:
                         live_status = get_order_status(config, row.ibkr_perm_id)
                         if live_status:

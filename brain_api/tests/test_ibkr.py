@@ -32,6 +32,7 @@ from fastapi.testclient import TestClient
 
 from brain_api.core.ibkr_client import (
     IBKRConnectionConfig,
+    IBKROrderStatus,
     IBKRPortfolio,
     IBKRPosition,
     IBKRSubmitResult,
@@ -369,6 +370,50 @@ class TestIBKROrderHistory:
         assert item["status"] == "Filled"
         assert item["filled_qty"] == "2.0"
         assert item["filled_avg_price"] == "174.5"
+
+    def test_sync_repairs_filled_row_with_zero_average_price(self, client, temp_ledger):
+        """A bad terminal snapshot is refreshed instead of staying at zero."""
+        coid = "paper:halal:2026-09-08:attempt-1:AAPL:SELL"
+        temp_ledger.record_submission(
+            SubmittedOrderRow(
+                account="sac_halal",
+                run_id="paper:halal:2026-09-08",
+                attempt=1,
+                symbol="AAPL",
+                side="sell",
+                qty=0.695,
+                limit_price=229.0,
+                order_ref=coid,
+                ibkr_perm_id=1074726065,
+                status="Filled",
+                filled_qty=0.695,
+                filled_avg_price=0.0,
+            )
+        )
+
+        with (
+            patch("brain_api.routes.ibkr.get_session_status", return_value=True),
+            patch(
+                "brain_api.routes.ibkr.get_order_status",
+                return_value=IBKROrderStatus(
+                    status="Filled",
+                    filled_qty=0.695,
+                    filled_avg_price=229.31,
+                ),
+            ) as mock_status,
+        ):
+            response = client.get(
+                "/ibkr/order-history",
+                params={
+                    "account": "sac_halal",
+                    "after": "2026-09-08",
+                    "sync_broker": "true",
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json()[0]["filled_avg_price"] == "229.31"
+        mock_status.assert_called_once()
 
     def test_history_after_filter_excludes_older_rows(self, client, temp_ledger):
         """The ``after`` query param excludes pre-cutoff rows."""

@@ -7,6 +7,7 @@ import pytest
 from brain_api.core.ibkr_client import (
     IBKROrderSpec,
     get_connection_config,
+    get_order_status,
     get_portfolio,
     get_session_status,
     list_open_order_refs,
@@ -59,6 +60,21 @@ class TestIBKRClientStatus:
 
         status = get_session_status(config)
         assert status is False
+
+    @patch("httpx.Client.get")
+    def test_get_order_status_uses_documented_average_price(self, mock_get, config):
+        mock_get.return_value.json.return_value = {
+            "order_status": "Filled",
+            "cum_fill": "0.695",
+            "average_price": "229.31",
+        }
+
+        status = get_order_status(config, 1074726065)
+
+        assert status is not None
+        assert status.status == "Filled"
+        assert status.filled_qty == 0.695
+        assert status.filled_avg_price == 229.31
 
 
 class TestIBKRClientPortfolio:

@@ -45,7 +45,11 @@ def _alloc_to_dict(alloc) -> dict:
             "weight_changes": [],
             "decision_state": None,
         }
-    return alloc.model_dump()
+    # SACInferenceResponse contains a nested SACNewsAudit whose timestamp
+    # fields are Python ``datetime`` objects.  This dict is passed directly
+    # to httpx's ``json=`` encoder, so use Pydantic's JSON mode to convert
+    # datetimes (and any future JSON-aware types) to wire-safe values.
+    return alloc.model_dump(mode="json")
 
 
 def _submit_to_dict(submit, order_details: list[OrderDetail] | None = None) -> dict:
