@@ -92,6 +92,12 @@ def run_ppo_discovery_inference(
     weights = validate_inference_weights(weights, eligible)
     k = len(order)
     explanations = build_explanations(state, weights, artifacts.metadata)
+    warnings: tuple[str, ...] = ()
+    head = artifacts.metadata.get("allocation_head_diagnostics") or {}
+    if head.get("ppo_outperformed_equal_weight") is False:
+        warnings = (
+            "allocation head did not outperform equal-weight-selected on the stored test split",
+        )
     return PPOInferenceResult(
         model_type=MODEL_TYPE,
         model_version=artifacts.version,
@@ -103,6 +109,7 @@ def run_ppo_discovery_inference(
         state_digest=state.state_digest,
         evidence_manifest_sha256=sha256_digest(state.evidence_manifest),
         explanations=explanations,
+        warnings=warnings,
     )
 
 

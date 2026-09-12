@@ -19,6 +19,26 @@
   <p>Test CAGR: {{ evaluation.get('test_cagr') }} | Max drawdown: {{ evaluation.get('test_max_drawdown') }}</p>
   <p>Failed seeds: {{ evaluation.get('failed_seeds') }}</p>
   <p>Ablations: {{ evaluation.get('ablations') }}</p>
+  {% set head = evaluation.get('allocation_head_diagnostics') %}
+  {% if head %}
+  <h2>Allocation head vs equal-weight-selected</h2>
+  {% if head.get('status') == 'unavailable' %}
+  <p>Comparison unavailable: {{ head }}</p>
+  {% else %}
+  <p>Full PPO CAGR: {{ head.get('full_ppo_cagr') }} | Equal-weight-selected CAGR: {{ head.get('equal_weight_selected_cagr') }} | Delta: {{ head.get('cagr_delta') }} | PPO outperformed equal-weight: {{ head.get('ppo_outperformed_equal_weight') }}</p>
+  {% endif %}
+  {% endif %}
+  {% set cost = evaluation.get('transaction_cost_training_diagnostics') %}
+  {% if cost %}
+  <h2>Cost-trained vs no-cost-trained</h2>
+  {% if cost.get('status') == 'unavailable' %}
+  <p>Comparison unavailable: {{ cost }}</p>
+  {% else %}
+  <p>Cost-trained net CAGR: {{ cost.get('cost_trained_net_cagr') }} | No-cost-trained net CAGR: {{ cost.get('no_cost_trained_net_cagr') }} | Net CAGR delta: {{ cost.get('net_cagr_delta') }}</p>
+  <p>Cost-trained mean turnover: {{ cost.get('cost_trained_mean_turnover') }} | No-cost-trained mean turnover: {{ cost.get('no_cost_trained_mean_turnover') }} | Turnover delta: {{ cost.get('mean_turnover_delta') }}</p>
+  <p>Cost training improved net CAGR: {{ cost.get('cost_training_improved_net_cagr') }} | Cost training reduced turnover: {{ cost.get('cost_training_reduced_turnover') }}</p>
+  {% endif %}
+  {% endif %}
   {% endif %}
   <p>{{ para_1_overall }}</p>
   <p>{{ para_2_metrics }}</p>

@@ -31,6 +31,7 @@ class PPOWeeklyEmailRequest(BaseModel):
     para_4_research: str = ""
     skipped: bool = False
     skip_reason: str = ""
+    explanations: dict[str, Any] = {}
 
 
 class PPOTrainingEmailRequest(BaseModel):

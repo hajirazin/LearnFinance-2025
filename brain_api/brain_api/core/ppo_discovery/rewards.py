@@ -62,6 +62,7 @@ def ppo_discovery_reward(
             target_weights=target,
             prices=prices,
             cfg=cost_config,
+            weight_epsilon=config.rebalance_weight_epsilon,
         )
         cost_fraction = float(cost.total_fraction)
     k = len(stocks)

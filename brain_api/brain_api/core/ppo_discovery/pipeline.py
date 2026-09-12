@@ -26,6 +26,10 @@ from brain_api.core.ppo_discovery.config import (
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.dataset_identity import build_dataset_identity
+from brain_api.core.ppo_discovery.diagnostics import (
+    build_allocation_head_diagnostics,
+    build_transaction_cost_training_diagnostics,
+)
 from brain_api.core.ppo_discovery.environment import WeeklyTransition
 from brain_api.core.ppo_discovery.evaluator import (
     block_bootstrap_mean_ci,
@@ -413,6 +417,28 @@ def run_ppo_discovery_training(
         "model_config_hash": model_config_hash(config),
         "train_recipe_hash": recipe,
     }
+    full_row = ablations.get("full_ppo") if isinstance(ablations, dict) else None
+    evaluation["allocation_head_diagnostics"] = build_allocation_head_diagnostics(
+        ablations if isinstance(ablations, dict) else {}
+    )
+    evaluation["transaction_cost_training_diagnostics"] = (
+        build_transaction_cost_training_diagnostics(
+            ablations if isinstance(ablations, dict) else {}
+        )
+    )
+    if (
+        isinstance(full_row, dict)
+        and full_row.get("status") == "ok"
+        and isinstance(full_row.get("portfolio_diagnostics"), dict)
+    ):
+        evaluation["portfolio_diagnostics"] = full_row["portfolio_diagnostics"]
+    else:
+        evaluation["portfolio_diagnostics"] = {
+            "status": "unavailable",
+            "full_ppo": full_row
+            if isinstance(full_row, dict)
+            else {"status": "missing"},
+        }
     news_manifest = {
         "complete": True,
         "store": "duckdb",

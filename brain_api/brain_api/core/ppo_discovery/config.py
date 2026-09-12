@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import Any
 
 from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
@@ -138,6 +139,7 @@ class PPODiscoveryConfig:
     pretrain_huber_beta: float = 0.01
     hhi_penalty_scale: float = 0.4
     reward_scale: float = 1.0
+    rebalance_weight_epsilon: float = 1e-9
     seeds: tuple[int, ...] = EXPERIMENT_SEEDS
     universe: str = UNIVERSE_NAME
 
@@ -152,6 +154,12 @@ class PPODiscoveryConfig:
             raise ValueError(
                 "minibatch_size must be divisible by ppo_microbatch_size, "
                 f"got {self.minibatch_size} % {self.ppo_microbatch_size}"
+            )
+        epsilon = float(self.rebalance_weight_epsilon)
+        if not isfinite(epsilon) or epsilon <= 0.0:
+            raise ValueError(
+                "rebalance_weight_epsilon must be finite and > 0, "
+                f"got {self.rebalance_weight_epsilon!r}"
             )
 
     @property
@@ -202,6 +210,7 @@ class PPODiscoveryConfig:
             "pretrain_huber_beta": self.pretrain_huber_beta,
             "hhi_penalty_scale": self.hhi_penalty_scale,
             "reward_scale": self.reward_scale,
+            "rebalance_weight_epsilon": self.rebalance_weight_epsilon,
             **ppo_discovery_cost_contract(),
             "seeds": list(self.seeds),
             "universe": self.universe,
@@ -236,6 +245,8 @@ class PPODiscoveryConfig:
             )
         payload.pop("asset_feature_names", None)
         payload.pop("global_feature_names", None)
+        if "rebalance_weight_epsilon" not in payload:
+            payload["rebalance_weight_epsilon"] = 0.005
         if "seeds" in payload and isinstance(payload["seeds"], list):
             payload["seeds"] = tuple(payload["seeds"])
         allowed = {f.name for f in cls.__dataclass_fields__.values()}

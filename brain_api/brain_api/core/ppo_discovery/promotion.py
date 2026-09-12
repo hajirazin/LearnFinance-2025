@@ -43,6 +43,7 @@ _PROTOCOL_FILES = (
     _PPO_DIR / "splits.py",
     _PPO_DIR / "weeks.py",
     _PPO_DIR / "news_adapter.py",
+    _PPO_DIR / "ablations.py",
     _PACKAGE_DIR / "news" / "models.py",
 )
 

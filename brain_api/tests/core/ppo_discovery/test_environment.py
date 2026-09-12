@@ -82,6 +82,12 @@ def test_closed_loop_reward_matches_sampled_weights() -> None:
     )
     assert steps[0].reward == expected
     assert steps[0].realized_net_return == economic
+    assert steps[0].diagnostics is not None
+    assert np.isfinite(steps[0].diagnostics.transaction_cost_fraction)
+
+
+def test_closed_loop_step_diagnostics_include_cost() -> None:
+    test_closed_loop_reward_matches_sampled_weights()
 
 
 def test_missing_unheld_price_frame_is_masked_not_aborted() -> None:
@@ -200,6 +206,37 @@ def test_reward_uses_locked_ibkr_costs_at_ten_thousand_dollars() -> None:
     assert [leg.commission for leg in expected.legs] == pytest.approx([0.35, 0.35])
     assert economic == pytest.approx(np.log1p(-expected.total_fraction))
     assert reward == pytest.approx(economic)
+
+
+def test_new_config_costs_a_49bp_rebalance() -> None:
+    _reward, _gross, cost_fraction, _economic = ppo_discovery_reward(
+        prior_weights={"AAPL": 0.10, "CASH": 0.90},
+        target_weights={"AAPL": 0.1049, "CASH": 0.8951},
+        symbol_returns={"AAPL": 0.0},
+        symbol_prices={"AAPL": 100.0},
+        nav_usd=10_000.0,
+        config=PPODiscoveryConfig(hhi_penalty_scale=0.0),
+    )
+
+    assert cost_fraction > 0.0
+
+
+def test_legacy_epsilon_skips_a_49bp_rebalance() -> None:
+    payload = PPODiscoveryConfig(hhi_penalty_scale=0.0).to_dict()
+    del payload["rebalance_weight_epsilon"]
+    config = PPODiscoveryConfig.from_dict(payload)
+
+    _reward, _gross, cost_fraction, _economic = ppo_discovery_reward(
+        prior_weights={"AAPL": 0.10, "CASH": 0.90},
+        target_weights={"AAPL": 0.1049, "CASH": 0.8951},
+        symbol_returns={"AAPL": 0.0},
+        symbol_prices={"AAPL": 100.0},
+        nav_usd=10_000.0,
+        config=config,
+    )
+
+    assert cost_fraction == 0.0
+    assert config.rebalance_weight_epsilon == 0.005
 
 
 def test_no_transaction_cost_ablation_is_zero_cost() -> None:

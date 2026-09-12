@@ -12,6 +12,11 @@
     <li>{{ symbol }}: {{ "%.2f"|format(weight * 100) }}%</li>
   {% endfor %}
   </ul>
+  {% set transition = explanations.portfolio_transition if explanations else none %}
+  {% if transition %}
+  <h2>Portfolio transition</h2>
+  <p>Turnover: {{ transition.turnover }} | Retained: {{ transition.retained_count }} | Entered: {{ transition.entered_count }} | Exited: {{ transition.exited_count }} | Replacement: {{ transition.replacement_fraction }} | Stock-weight CV: {{ transition.stock_weight_cv }}</p>
+  {% endif %}
   <h2>AI summary</h2>
   <p>{{ para_1_overall_summary }}</p>
   <p>{{ para_2_selection }}</p>

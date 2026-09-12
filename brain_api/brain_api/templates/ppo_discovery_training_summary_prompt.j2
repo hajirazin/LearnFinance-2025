@@ -13,6 +13,17 @@ You are a research analyst. Summarize a ppo_discovery training run. Training nev
 - Selected seed: {{ evaluation.get('selected_seed') }}
 - Experiment seeds: {{ evaluation.get('experiment_seeds') }}
 
+## Diagnostics
+These diagnostics explain the candidate and cannot alter or veto weights. Training never auto-promotes.
+{% set head = evaluation.get('allocation_head_diagnostics') %}
+{% if head %}
+Allocation head vs equal-weight-selected: {{ head | tojson }}
+{% endif %}
+{% set cost = evaluation.get('transaction_cost_training_diagnostics') %}
+{% if cost %}
+Cost-trained vs no-cost-trained: {{ cost | tojson }}
+{% endif %}
+
 {{ evaluation | tojson }}
 
 Respond with JSON only:

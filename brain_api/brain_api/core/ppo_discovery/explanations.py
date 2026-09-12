@@ -8,6 +8,9 @@ from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
 )
+from brain_api.core.ppo_discovery.diagnostics import (
+    compute_portfolio_transition_diagnostics,
+)
 from brain_api.core.ppo_discovery.schemas import CanonicalPPOState
 
 
@@ -60,6 +63,11 @@ def build_explanations(
             "Historical training applies today's halal_new roster retrospectively."
         ),
         "news_contract": "News evidence is mandatory; incomplete queries abort the week.",
+        "portfolio_transition": compute_portfolio_transition_diagnostics(
+            state.current_weights,
+            weights,
+            transaction_cost_fraction=None,
+        ).to_dict(),
     }
 
 

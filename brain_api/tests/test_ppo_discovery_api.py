@@ -335,6 +335,108 @@ def test_training_email_request_carries_evaluation() -> None:
     assert "execution remains Alpaca" in html
 
 
+def test_weekly_email_renders_portfolio_transition() -> None:
+    from jinja2 import Environment, FileSystemLoader
+
+    from brain_api.routes.email.ppo_discovery import PPOWeeklyEmailRequest
+    from brain_api.routes.email.weekly_report import TEMPLATE_DIR
+
+    request = PPOWeeklyEmailRequest(
+        universe="halal_new",
+        as_of="2026-09-07",
+        model_version="v1",
+        k=2,
+        cash_weight=0.4,
+        percentage_weights={"AAPL": 0.3, "MSFT": 0.3, "CASH": 0.4},
+        explanations={
+            "portfolio_transition": {
+                "turnover": 0.25,
+                "retained_count": 1,
+                "entered_count": 1,
+                "exited_count": 1,
+                "replacement_fraction": 0.5,
+                "stock_weight_cv": 0.01,
+            }
+        },
+    )
+    html = (
+        Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+        .get_template("ppo_discovery_weekly_report_email.html.j2")
+        .render(**request.model_dump())
+    )
+    assert "0.25" in html
+    assert "Retained: 1" in html
+    assert "Entered: 1" in html
+    assert "Exited: 1" in html
+    prompt = (
+        Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+        .get_template("ppo_discovery_weekly_summary_prompt.j2")
+        .render(
+            universe="halal_new",
+            model_version="v1",
+            k=2,
+            cash_weight=0.4,
+            state_digest="abc",
+            selected_symbols=["AAPL", "MSFT"],
+            percentage_weights={"AAPL": 0.3, "MSFT": 0.3, "CASH": 0.4},
+            explanations=request.explanations,
+        )
+    )
+    assert "cannot alter or veto weights" in prompt
+    assert "Replacement fraction" in prompt
+
+
+def test_training_templates_render_comparison_blocks() -> None:
+    from jinja2 import Environment, FileSystemLoader
+
+    from brain_api.routes.email.weekly_report import TEMPLATE_DIR
+
+    context = {
+        "version": "v1",
+        "promoted": False,
+        "snapshot_sha256": "sha256:abc",
+        "failure_reasons": [],
+        "para_1_overall": "",
+        "para_2_metrics": "",
+        "para_3_recommendations": "",
+        "evaluation": {
+            "test_cagr": 0.21,
+            "selected_seed": 42,
+            "failed_seeds": [],
+            "allocation_head_diagnostics": {
+                "full_ppo_cagr": 0.21,
+                "equal_weight_selected_cagr": 0.20,
+                "cagr_delta": 0.01,
+                "ppo_outperformed_equal_weight": True,
+            },
+            "transaction_cost_training_diagnostics": {
+                "cost_trained_net_cagr": 0.21,
+                "no_cost_trained_net_cagr": 0.22,
+                "net_cagr_delta": -0.01,
+                "cost_trained_mean_turnover": 0.10,
+                "no_cost_trained_mean_turnover": 0.40,
+                "mean_turnover_delta": -0.30,
+                "cost_training_improved_net_cagr": False,
+                "cost_training_reduced_turnover": True,
+            },
+        },
+    }
+    html = (
+        Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+        .get_template("ppo_discovery_training_summary_email.html.j2")
+        .render(**context)
+    )
+    assert "Allocation head vs equal-weight-selected" in html
+    assert "Cost-trained vs no-cost-trained" in html
+    prompt = (
+        Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+        .get_template("ppo_discovery_training_summary_prompt.j2")
+        .render(**context)
+    )
+    assert "cannot alter or veto weights" in prompt
+    assert "never auto-promotes" in prompt
+
+
 def test_backfill_job_exists_immediately_after_202(monkeypatch) -> None:
     jobs: dict[str, object] = {}
 

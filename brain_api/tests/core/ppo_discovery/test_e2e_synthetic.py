@@ -114,6 +114,11 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
         )
         assert result.model_type == "ppo_discovery"
         assert abs(sum(result.percentage_weights.values()) - 1.0) < 1e-6
+        assert result.warnings == ()
+        assert (
+            result.explanations["portfolio_transition"]["transaction_cost_fraction"]
+            is None
+        )
         patchtst_load.assert_not_called()
         sac_load.assert_not_called()
     assert artifacts.metadata["asset_feature_names"] == list(ASSET_FEATURE_NAMES)
@@ -374,3 +379,88 @@ def test_data_window_start_falls_back_to_first_week_cutoff(tmp_path: Path) -> No
     start = storage.load_artifacts(version).metadata["data_window"]["start"]
     assert start == "2020-06-01T20:00:00+00:00"
     assert not isinstance(start, dict)
+
+
+def _tiny_candidate(tmp_path: Path, *, extra_eval: dict | None = None):
+    storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
+    config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
+    policy = PPODiscoveryActorCritic(config)
+    evaluation = {
+        "test_cagr": 0.20,
+        "alpha_hrp_test_cagr": 0.15,
+        "test_max_drawdown": 0.10,
+        "alpha_hrp_test_max_drawdown": 0.12,
+        "paired_vs_alpha_hrp_point": 0.001,
+        "test_weekly_net_log": [0.01] * 52,
+        "ablations": {
+            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
+        },
+        "failed_seeds": [],
+        **(extra_eval or {}),
+    }
+    version = write_candidate_artifact(
+        storage,
+        policy,
+        config=config,
+        evaluation=evaluation,
+        universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
+        experiment_id="ci",
+        end_date="2026-08-31",
+        regime_hmm={"p_calm": 0.4, "p_stress": 0.3, "schema_version": 3},
+        news_manifest=_hashed_manifests()[0],
+        price_manifest=_hashed_manifests()[1],
+        pretrained_encoder_state_dict=policy.temporal.state_dict(),
+    )
+    storage.promote_version(version)
+    return storage.load_current_artifacts()
+
+
+def test_inference_explanations_include_portfolio_transition_with_null_cost(
+    tmp_path: Path,
+) -> None:
+    artifacts = _tiny_candidate(tmp_path)
+    state = make_synthetic_state()
+    first = run_ppo_discovery_inference(
+        state, expected_digest=state.state_digest, artifacts=artifacts
+    )
+    selected = first.selected_symbols
+    weights = dict(first.percentage_weights)
+    second = run_ppo_discovery_inference(
+        make_synthetic_state(),
+        expected_digest=make_synthetic_state().state_digest,
+        artifacts=artifacts,
+    )
+    assert (
+        second.explanations["portfolio_transition"]["transaction_cost_fraction"] is None
+    )
+    assert second.selected_symbols == selected
+    assert second.percentage_weights == weights
+    assert second.k == first.k
+
+
+def test_inference_warns_only_when_allocation_lost_to_equal_weight(
+    tmp_path: Path,
+) -> None:
+    artifacts = _tiny_candidate(tmp_path)
+    state = make_synthetic_state()
+    quiet = run_ppo_discovery_inference(
+        state, expected_digest=state.state_digest, artifacts=artifacts
+    )
+    assert quiet.warnings == ()
+
+    artifacts.metadata["allocation_head_diagnostics"] = {
+        "full_ppo_cagr": 0.10,
+        "equal_weight_selected_cagr": 0.20,
+        "cagr_delta": -0.10,
+        "ppo_outperformed_equal_weight": False,
+    }
+    warned = run_ppo_discovery_inference(
+        make_synthetic_state(),
+        expected_digest=make_synthetic_state().state_digest,
+        artifacts=artifacts,
+    )
+    assert warned.warnings == (
+        "allocation head did not outperform equal-weight-selected on the stored test split",
+    )
+    assert warned.selected_symbols == quiet.selected_symbols
+    assert warned.percentage_weights == quiet.percentage_weights

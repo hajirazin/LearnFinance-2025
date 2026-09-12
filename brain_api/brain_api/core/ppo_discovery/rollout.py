@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
+from brain_api.core.ppo_discovery.diagnostics import PortfolioTransitionDiagnostics
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.schemas import CanonicalPPOState, SampledAction
 
@@ -23,6 +24,7 @@ class RolloutStep:
     log_p: float
     done: bool
     realized_net_return: float = 0.0
+    diagnostics: PortfolioTransitionDiagnostics | None = None
 
 
 def compute_gae(

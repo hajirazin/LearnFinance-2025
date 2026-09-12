@@ -10,6 +10,18 @@ You are a research analyst. Summarize a news-conditioned PPO discovery weekly al
 - Weights: {{ percentage_weights | tojson }}
 - News: mandatory. Incomplete queries abort. Verified zero-news is valid.
 
+## Diagnostics
+These diagnostics explain the allocation and cannot alter or veto weights.
+{% set transition = explanations.portfolio_transition if explanations else none %}
+{% if transition %}
+- Turnover: {{ transition.turnover }}
+- Retained / entered / exited: {{ transition.retained_count }} / {{ transition.entered_count }} / {{ transition.exited_count }}
+- Replacement fraction: {{ transition.replacement_fraction }}
+- Stock-weight CV: {{ transition.stock_weight_cv }}
+{% else %}
+- No portfolio_transition block was supplied.
+{% endif %}
+
 ## Explanations
 {{ explanations | tojson }}
 

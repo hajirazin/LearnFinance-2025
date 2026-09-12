@@ -13,6 +13,9 @@ import torch
 
 from brain_api.core.portfolio_rl.rewards import RebalanceTransition
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
+from brain_api.core.ppo_discovery.diagnostics import (
+    compute_portfolio_transition_diagnostics,
+)
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.rewards import ppo_discovery_reward
 from brain_api.core.ppo_discovery.rollout import RolloutStep
@@ -156,6 +159,11 @@ def collect_closed_loop_rollout(
             config=config,
             include_transaction_cost=include_transaction_cost,
         )
+        diagnostics = compute_portfolio_transition_diagnostics(
+            prior,
+            target,
+            transaction_cost_fraction=cost_fraction,
+        )
         done = index == len(transitions) - 1
         steps.append(
             RolloutStep(
@@ -166,6 +174,7 @@ def collect_closed_loop_rollout(
                 log_p=log_p,
                 done=done,
                 realized_net_return=float(economic_net_log),
+                diagnostics=diagnostics,
             )
         )
         weights = _post_rebalance_weights(

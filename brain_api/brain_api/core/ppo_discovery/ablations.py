@@ -6,9 +6,13 @@ from copy import deepcopy
 from typing import Any
 
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
+from brain_api.core.ppo_discovery.diagnostics import (
+    summarize_portfolio_transition_diagnostics,
+)
 from brain_api.core.ppo_discovery.environment import collect_closed_loop_rollout
 from brain_api.core.ppo_discovery.evaluator import evaluate_policy_weeks, mark_ablations
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
+from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.trainer import train_ppo_discovery
 from brain_api.core.training_utils import is_accelerator_out_of_memory
 
@@ -28,6 +32,22 @@ def _metrics(
         **kwargs,
     )
     payload = evaluate_policy_weeks([step.realized_net_return for step in steps])
+    diagnostics_rows = []
+    weekly = []
+    for step in steps:
+        if (
+            step.diagnostics is None
+            or step.diagnostics.transaction_cost_fraction is None
+        ):
+            raise PPODiscoveryError(
+                "closed-loop diagnostics require a finite transaction_cost_fraction"
+            )
+        diagnostics_rows.append(step.diagnostics)
+        weekly.append({"as_of": step.state.as_of, **step.diagnostics.to_dict()})
+    payload["portfolio_diagnostics"] = {
+        "summary": summarize_portfolio_transition_diagnostics(diagnostics_rows),
+        "weekly": weekly,
+    }
     payload["status"] = "ok"
     return payload
 
@@ -98,13 +118,17 @@ def run_required_ablations(
     except Exception as exc:
         _reraise_oom(exc, device)
         available["no_hmm_globals"] = {"status": "failed", "error": str(exc)}
-    try:
-        available["no_transaction_cost_term"] = _metrics(
-            candidate, test_weeks, **eval_kw, include_transaction_cost=False
-        )
-    except Exception as exc:
-        _reraise_oom(exc, device)
-        available["no_transaction_cost_term"] = {"status": "failed", "error": str(exc)}
+    available["no_transaction_cost_term"] = _retrain_ablation(
+        pretrained,
+        train_weeks,
+        test_weeks,
+        eval_kw,
+        config,
+        freeze_encoder_updates=config.freeze_encoder_updates,
+        device=device,
+        train_include_transaction_cost=False,
+        eval_include_transaction_cost=True,
+    )
     available["frozen_pretrained_encoder"] = _retrain_ablation(
         pretrained,
         train_weeks,
@@ -159,6 +183,8 @@ def _retrain_ablation(
     *,
     freeze_encoder_updates: int,
     device,
+    train_include_transaction_cost: bool = True,
+    eval_include_transaction_cost: bool = True,
 ) -> dict[str, Any]:
     from dataclasses import replace
 
@@ -178,12 +204,18 @@ def _retrain_ablation(
                 feature_scalers=eval_kw["scalers"],
                 config=train_cfg,
                 temporal_cache=cache,
+                include_transaction_cost=train_include_transaction_cost,
             ),
             config=train_cfg,
             seed=int(config.seeds[0]),
             device=device,
         )
-        return _metrics(policy, test_weeks, **eval_kw)
+        return _metrics(
+            policy,
+            test_weeks,
+            **eval_kw,
+            include_transaction_cost=eval_include_transaction_cost,
+        )
     except Exception as exc:
         _reraise_oom(exc, device)
         return {"status": "failed", "error": str(exc)}

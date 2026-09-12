@@ -132,6 +132,13 @@ def create_ppo_discovery_metadata(
         "train_recipe_hash": evaluation.get("train_recipe_hash"),
         **cost_contract,
     }
+    for key in (
+        "allocation_head_diagnostics",
+        "transaction_cost_training_diagnostics",
+        "portfolio_diagnostics",
+    ):
+        if key in evaluation:
+            metadata[key] = evaluation[key]
     if approved_by is not None:
         metadata["approved_by"] = approved_by
     return metadata

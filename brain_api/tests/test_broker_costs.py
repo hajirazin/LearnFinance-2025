@@ -224,6 +224,21 @@ def test_zero_delta_symbol_skipped():
     assert cost.total_fraction == 0.0
 
 
+def test_default_weight_epsilon_skips_49bp_rebalance():
+    """SAC and the shared helper keep the 50 bp skip without an explicit epsilon."""
+    cfg = _cfg().with_nav(10_000.0)
+    cost = compute_ibkr_rebalance_cost(
+        symbol_order=["AAPL"],
+        current_weights=np.array([0.10, 0.90]),
+        target_weights=np.array([0.1049, 0.8951]),
+        prices=np.array([100.0]),
+        cfg=cfg,
+    )
+    assert len(cost.legs) == 0
+    assert cost.total_usd == 0.0
+    assert cost.total_fraction == 0.0
+
+
 def test_breakdown_aggregates_components():
     cfg = _cfg().with_nav(10_000.0)
     current = np.array([0.0, 0.0, 1.0])

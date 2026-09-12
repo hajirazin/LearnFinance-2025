@@ -89,3 +89,26 @@ def test_microbatch_must_divide_minibatch() -> None:
         PPODiscoveryConfig(minibatch_size=32, ppo_microbatch_size=3)
     with pytest.raises(ValueError, match="ppo_microbatch_size"):
         PPODiscoveryConfig(minibatch_size=8, ppo_microbatch_size=16)
+
+
+def test_new_config_rebalance_weight_epsilon_is_1e_9() -> None:
+    assert PPODiscoveryConfig().rebalance_weight_epsilon == 1e-9
+    assert PPODiscoveryConfig().to_dict()["rebalance_weight_epsilon"] == 1e-9
+
+
+def test_from_dict_missing_rebalance_weight_epsilon_restores_0_005() -> None:
+    payload = PPODiscoveryConfig().to_dict()
+    del payload["rebalance_weight_epsilon"]
+
+    restored = PPODiscoveryConfig.from_dict(payload)
+
+    assert restored.rebalance_weight_epsilon == 0.005
+
+
+def test_from_dict_persists_explicit_1e_9() -> None:
+    payload = PPODiscoveryConfig().to_dict()
+    assert payload["rebalance_weight_epsilon"] == 1e-9
+
+    restored = PPODiscoveryConfig.from_dict(payload)
+
+    assert restored.rebalance_weight_epsilon == 1e-9

@@ -66,6 +66,7 @@ def send_ppo_discovery_email(
                 "para_4_research": paras.get("para_4_research", ""),
                 "skipped": skipped,
                 "skip_reason": skip_reason,
+                "explanations": allocation.explanations,
             },
         )
         response.raise_for_status()
