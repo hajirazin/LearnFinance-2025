@@ -18,6 +18,9 @@ from brain_api.core.ppo_discovery.checkpoints import (
     write_seed_metadata,
 )
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
+from brain_api.core.ppo_discovery.diagnostics import (
+    summarize_portfolio_transition_diagnostics,
+)
 from brain_api.core.ppo_discovery.environment import (
     WeeklyTransition,
     collect_closed_loop_rollout,
@@ -60,6 +63,16 @@ class PPOSeedTrainingResult:
 
 
 def week_logs(policy, weeks, snapshot, ohlcv, spy, scalers, config) -> list[float]:
+    logs, _metrics, _diagnostics = test_rollout_metrics(
+        policy, weeks, snapshot, ohlcv, spy, scalers, config
+    )
+    return logs
+
+
+def test_rollout_metrics(
+    policy, weeks, snapshot, ohlcv, spy, scalers, config
+) -> tuple[list[float], dict[str, float], dict[str, Any]]:
+    """One deterministic test closed-loop: logs, metrics, portfolio diagnostics."""
     steps = collect_closed_loop_rollout(
         policy,
         weeks,
@@ -70,7 +83,25 @@ def week_logs(policy, weeks, snapshot, ohlcv, spy, scalers, config) -> list[floa
         config=config,
         deterministic=True,
     )
-    return [step.realized_net_return for step in steps]
+    logs = [step.realized_net_return for step in steps]
+    diagnostics_rows = []
+    weekly = []
+    for step in steps:
+        if (
+            step.diagnostics is None
+            or step.diagnostics.transaction_cost_fraction is None
+        ):
+            raise PPODiscoveryError(
+                "closed-loop diagnostics require a finite transaction_cost_fraction"
+            )
+        diagnostics_rows.append(step.diagnostics)
+        weekly.append({"as_of": step.state.as_of, **step.diagnostics.to_dict()})
+    metrics = evaluate_policy_weeks(logs)
+    portfolio_diagnostics = {
+        "summary": summarize_portfolio_transition_diagnostics(diagnostics_rows),
+        "weekly": weekly,
+    }
+    return logs, metrics, portfolio_diagnostics
 
 
 def eval_weeks(
@@ -344,6 +375,7 @@ def train_ppo_discovery_seeds(
 __all__ = [
     "PPOSeedTrainingResult",
     "eval_weeks",
+    "test_rollout_metrics",
     "train_ppo_discovery_seeds",
     "week_logs",
 ]

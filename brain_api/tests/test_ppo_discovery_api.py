@@ -138,50 +138,12 @@ def test_no_current_is_503() -> None:
 def test_promote_rejects_missing_approved_by() -> None:
     response = client.post(
         "/train/ppo-discovery/promote",
-        json={"version": "v1", "expected_config_hash": "abc", "approved_by": ""},
+        json={"version": "v1", "approved_by": "", "expected_current_version": ""},
     )
     assert response.status_code == 422
 
 
-def test_promote_rejects_hash_mismatch() -> None:
-    with patch(
-        "brain_api.routes.training.ppo_discovery.promote.promote_ppo_discovery",
-        side_effect=ValueError(
-            "expected_config_hash does not match artifact config_hash"
-        ),
-    ):
-        response = client.post(
-            "/train/ppo-discovery/promote",
-            json={
-                "version": "v1",
-                "expected_config_hash": "wrong",
-                "approved_by": "razin",
-                "expected_current_version": "",
-            },
-        )
-    assert response.status_code == 422
-    assert "hash" in response.json()["detail"].lower()
-
-
-def test_promote_rejects_no_news_variant() -> None:
-    with patch(
-        "brain_api.routes.training.ppo_discovery.promote.promote_ppo_discovery",
-        side_effect=ValueError("only experiment_variant='full' may be promoted"),
-    ):
-        response = client.post(
-            "/train/ppo-discovery/promote",
-            json={
-                "version": "v-no-news",
-                "expected_config_hash": "abc",
-                "approved_by": "razin",
-                "expected_current_version": "",
-            },
-        )
-    assert response.status_code == 422
-    assert "full" in response.json()["detail"].lower()
-
-
-def test_promote_accepts_repair_override() -> None:
+def test_promote_does_not_pass_expected_config_hash() -> None:
     with patch(
         "brain_api.routes.training.ppo_discovery.promote.promote_ppo_discovery",
         return_value={
@@ -189,25 +151,21 @@ def test_promote_accepts_repair_override() -> None:
             "approved_by": "razin",
             "promoted": True,
             "failure_reasons": [],
-            "config_changed": False,
-            "unpaired_acknowledged": False,
-            "repair_override": True,
         },
     ) as promote:
         response = client.post(
             "/train/ppo-discovery/promote",
             json={
                 "version": "v1",
-                "expected_config_hash": "abc",
                 "approved_by": "razin",
                 "expected_current_version": "",
-                "repair_override": True,
             },
         )
     assert response.status_code == 200
-    assert response.json()["repair_override"] is True
     promote.assert_called_once()
-    assert promote.call_args.kwargs["repair_override"] is True
+    assert "expected_config_hash" not in promote.call_args.kwargs
+    assert promote.call_args.kwargs["approved_by"] == "razin"
+    assert promote.call_args.kwargs["expected_current_version"] == ""
 
 
 def test_incomplete_news_state_is_422() -> None:
@@ -318,9 +276,8 @@ def test_training_email_request_carries_evaluation() -> None:
         snapshot_sha256="sha256:abc",
         evaluation={
             "test_cagr": 0.21,
+            "test_sharpe": 1.1,
             "selected_seed": 42,
-            "failed_seeds": [],
-            "ablations": {"full_ppo": {"status": "ok"}},
         },
     )
     html = (
@@ -330,7 +287,7 @@ def test_training_email_request_carries_evaluation() -> None:
     )
     assert "0.21" in html
     assert "42" in html
-    assert "full_ppo" in html
+    assert "full_ppo" not in html
     assert "IBKR Singapore Tiered costs at $10,000 training capital" in html
     assert "execution remains Alpaca" in html
 
@@ -386,7 +343,7 @@ def test_weekly_email_renders_portfolio_transition() -> None:
     assert "Replacement fraction" in prompt
 
 
-def test_training_templates_render_comparison_blocks() -> None:
+def test_training_templates_render_test_metrics() -> None:
     from jinja2 import Environment, FileSystemLoader
 
     from brain_api.routes.email.weekly_report import TEMPLATE_DIR
@@ -401,23 +358,15 @@ def test_training_templates_render_comparison_blocks() -> None:
         "para_3_recommendations": "",
         "evaluation": {
             "test_cagr": 0.21,
+            "test_sharpe": 1.1,
+            "test_max_drawdown": 0.08,
             "selected_seed": 42,
-            "failed_seeds": [],
-            "allocation_head_diagnostics": {
-                "full_ppo_cagr": 0.21,
-                "equal_weight_selected_cagr": 0.20,
-                "cagr_delta": 0.01,
-                "ppo_outperformed_equal_weight": True,
-            },
-            "transaction_cost_training_diagnostics": {
-                "cost_trained_net_cagr": 0.21,
-                "no_cost_trained_net_cagr": 0.22,
-                "net_cagr_delta": -0.01,
-                "cost_trained_mean_turnover": 0.10,
-                "no_cost_trained_mean_turnover": 0.40,
-                "mean_turnover_delta": -0.30,
-                "cost_training_improved_net_cagr": False,
-                "cost_training_reduced_turnover": True,
+            "portfolio_diagnostics": {
+                "summary": {
+                    "mean_turnover": 0.10,
+                    "mean_transaction_cost_bps": 12.0,
+                    "mean_replacement_fraction": 0.2,
+                }
             },
         },
     }
@@ -426,8 +375,10 @@ def test_training_templates_render_comparison_blocks() -> None:
         .get_template("ppo_discovery_training_summary_email.html.j2")
         .render(**context)
     )
-    assert "Allocation head vs equal-weight-selected" in html
-    assert "Cost-trained vs no-cost-trained" in html
+    assert "1.1" in html
+    assert "equal-weight-selected" not in html
+    assert "no-cost-trained" not in html
+    assert "full_ppo" not in html
     prompt = (
         Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
         .get_template("ppo_discovery_training_summary_prompt.j2")
@@ -435,6 +386,7 @@ def test_training_templates_render_comparison_blocks() -> None:
     )
     assert "cannot alter or veto weights" in prompt
     assert "never auto-promotes" in prompt
+    assert "test CAGR > 12%" in prompt
 
 
 def test_backfill_job_exists_immediately_after_202(monkeypatch) -> None:

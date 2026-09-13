@@ -4,31 +4,29 @@ You are a research analyst. Summarize a ppo_discovery training run. Training nev
 - Version: {{ version }}
 - Promoted: {{ promoted }}
 - Universe snapshot: {{ snapshot_sha256 }}
+- Training seed: 42
 - Cost contract: IBKR Singapore Tiered costs at $10,000 training capital; execution remains Alpaca.
 - Survivorship bias: today's halal_new roster was applied retrospectively.
-- News is mandatory; no-news ablation is research-only and cannot be current.
+- Promotion is manual. A candidate may become current only if test CAGR > 12% and, when an incumbent exists, both test CAGR and test Sharpe are strictly greater than that incumbent.
 - Failure reasons: {% if failure_reasons %}{% for reason in failure_reasons %}- {{ reason }}
 {% endfor %}{% else %}none{% endif %}
 - Device: {{ evaluation.get('device') }}
 - Selected seed: {{ evaluation.get('selected_seed') }}
-- Experiment seeds: {{ evaluation.get('experiment_seeds') }}
 
-## Diagnostics
+## Test metrics
+- Test CAGR: {{ evaluation.get('test_cagr') }}
+- Test Sharpe: {{ evaluation.get('test_sharpe') }}
+- Test max drawdown: {{ evaluation.get('test_max_drawdown') }}
+{% set diag = (evaluation.get('portfolio_diagnostics') or {}).get('summary') %}
+{% if diag %}
+- Portfolio diagnostics summary: {{ diag | tojson }}
+{% endif %}
+
 These diagnostics explain the candidate and cannot alter or veto weights. Training never auto-promotes.
-{% set head = evaluation.get('allocation_head_diagnostics') %}
-{% if head %}
-Allocation head vs equal-weight-selected: {{ head | tojson }}
-{% endif %}
-{% set cost = evaluation.get('transaction_cost_training_diagnostics') %}
-{% if cost %}
-Cost-trained vs no-cost-trained: {{ cost | tojson }}
-{% endif %}
-
-{{ evaluation | tojson }}
 
 Respond with JSON only:
 {
   "para_1_overall": "2-3 sentences on candidate health and that promotion is manual",
-  "para_2_metrics": "2-3 sentences on CAGR/drawdown vs Alpha-HRP if available",
-  "para_3_recommendations": "2-3 sentences; do not recommend promoting a no-news variant"
+  "para_2_metrics": "2-3 sentences on test CAGR, Sharpe, and max drawdown",
+  "para_3_recommendations": "2-3 sentences; do not recommend auto-promotion"
 }

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import matched_k as matched_k_module
 import numpy as np
+from matched_k import matched_k_average_rank
 
 from brain_api.core.ppo_discovery.config import MAX_SELECTED, PPODiscoveryConfig
-from brain_api.core.ppo_discovery.matched_k import matched_k_average_rank
 from brain_api.core.ppo_discovery.synthetic import make_synthetic_state
 
 
@@ -19,11 +20,13 @@ def test_matched_k_average_rank_percentile_on_cagr_ties(monkeypatch) -> None:
         return [float(cagrs[force_k])]
 
     monkeypatch.setattr(
-        "brain_api.core.ppo_discovery.matched_k._week_logs_forced_k",
+        matched_k_module,
+        "_week_logs_forced_k",
         _fake_logs,
     )
     monkeypatch.setattr(
-        "brain_api.core.ppo_discovery.matched_k.evaluate_policy_weeks",
+        matched_k_module,
+        "evaluate_policy_weeks",
         lambda logs: {"cagr": logs[0]},
     )
     result = matched_k_average_rank(

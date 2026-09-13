@@ -17,7 +17,6 @@ from brain_api.core.ppo_discovery.config import (
     PPO_DISCOVERY_ARCHITECTURE,
     PPO_DISCOVERY_SCHEMA_VERSION,
     PROMOTION_CAGR_FLOOR,
-    REQUIRED_ABLATIONS,
     ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.schemas import canonical_json_bytes
@@ -43,7 +42,6 @@ _PROTOCOL_FILES = (
     _PPO_DIR / "splits.py",
     _PPO_DIR / "weeks.py",
     _PPO_DIR / "news_adapter.py",
-    _PPO_DIR / "ablations.py",
     _PACKAGE_DIR / "news" / "models.py",
 )
 
@@ -85,19 +83,6 @@ def _finite_number(value: Any) -> bool:
     return number == number and abs(number) != float("inf")
 
 
-def _is_inaugural_skippable_reason(reason: str) -> bool:
-    """Holes that block replacing current, not writing the first pointer.
-
-    ``code_revision`` is skippable on inaugural so gate-only edits (this
-    module) after a candidate is written do not trap the first promote.
-    """
-    return (
-        reason == "one or more seeds failed"
-        or reason.startswith("required ablation ")
-        or reason == "code_revision does not match current ppo_discovery sources"
-    )
-
-
 def evaluate_ppo_discovery_candidate(
     metadata: dict[str, Any],
     evaluation: dict[str, Any],
@@ -108,8 +93,6 @@ def evaluate_ppo_discovery_candidate(
         reasons.append("ppo_discovery_schema_version mismatch")
     if metadata.get("architecture") != PPO_DISCOVERY_ARCHITECTURE:
         reasons.append("architecture mismatch")
-    if metadata.get("experiment_variant") != FULL_VARIANT:
-        reasons.append("only experiment_variant='full' may be promoted")
     if metadata.get("asset_feature_names") != list(ASSET_FEATURE_NAMES):
         reasons.append("asset feature schema mismatch")
     if metadata.get("global_feature_names") != list(GLOBAL_FEATURE_NAMES):
@@ -121,50 +104,19 @@ def evaluate_ppo_discovery_candidate(
             reasons.append(f"evaluation.{key} does not match locked PPO cost contract")
     if metadata.get("news_required") is not True:
         reasons.append("news_required must be true")
-    expected_protocol = protocol_file_digest()
-    if metadata.get("protocol_digest") != expected_protocol:
-        reasons.append("protocol_digest does not match current reward/cost/evaluator")
-    if metadata.get("code_revision") != ppo_discovery_source_digest():
-        reasons.append("code_revision does not match current ppo_discovery sources")
-    if not metadata.get("evaluation_dataset_hash"):
-        reasons.append("evaluation_dataset_hash is required")
-    if not metadata.get("model_config_hash"):
-        reasons.append("model_config_hash is required")
-    try:
-        evaluation_digest = result_hash(evaluation)
-    except (TypeError, ValueError):
-        reasons.append("evaluation payload is not JSON-canonical")
-        evaluation_digest = None
-    if (
-        evaluation_digest is not None
-        and metadata.get("result_hash") != evaluation_digest
-    ):
-        reasons.append("metadata.result_hash does not match evaluation payload")
     cagr_raw = evaluation.get("test_cagr")
     if not _finite_number(cagr_raw):
         reasons.append("test CAGR is missing or non-finite")
-        cagr = float("nan")
     else:
         cagr = float(cagr_raw)
-        if cagr < PROMOTION_CAGR_FLOOR:
-            reasons.append(f"test CAGR {cagr} is below the 12% floor")
+        if not (cagr > PROMOTION_CAGR_FLOOR):
+            reasons.append(f"test CAGR {cagr} is not above the 12% floor")
+    sharpe_raw = evaluation.get("test_sharpe")
+    if not _finite_number(sharpe_raw):
+        reasons.append("test Sharpe is missing or non-finite")
     drawdown = evaluation.get("test_max_drawdown")
     if not _finite_number(drawdown) or not (0.0 <= float(drawdown) <= 1.0):
         reasons.append("test_max_drawdown must be finite in [0, 1]")
-    ablations = evaluation.get("ablations") or {}
-    for name in REQUIRED_ABLATIONS:
-        row = ablations.get(name)
-        if not isinstance(row, dict) or row.get("status") != "ok":
-            reasons.append(
-                f"required ablation {name!r} is missing, failed, or unavailable"
-            )
-            continue
-        ablation_cagr = row.get("cagr")
-        if ablation_cagr is None or not _finite_number(ablation_cagr):
-            reasons.append(f"required ablation {name!r} has a non-finite CAGR")
-    if evaluation.get("failed_seeds"):
-        reasons.append("one or more seeds failed")
-    del cagr
     if reasons:
         return ArtifactHealthCheck(is_healthy=False, failure_reasons=reasons)
     return ArtifactHealthCheck(is_healthy=True, failure_reasons=[])
@@ -175,56 +127,27 @@ def evaluate_ppo_discovery_promotion(
     metadata: dict[str, Any],
     evaluation: dict[str, Any],
     approved_by: str,
-    expected_config_hash: str,
     incumbent_cagr: float | None = None,
-    incumbent_protocol_digest: str | None = None,
-    incumbent_evaluation_dataset_hash: str | None = None,
-    incumbent_model_config_hash: str | None = None,
-    acknowledge_unpaired_evaluation: bool = False,
-    repair_override: bool = False,
+    incumbent_sharpe: float | None = None,
 ) -> ArtifactHealthCheck:
-    """Hard gates from the research spec. Failures never write ``current``.
-
-    With no incumbent, failed seeds, failed required ablations, and a
-    ``code_revision`` mismatch do not block the first ``current`` pointer.
-    The 12% test CAGR floor, ``full`` variant, schema, protocol digest,
-    and cost contract still apply. Replacing an incumbent still requires
-    a complete seed set, every required ablation, and a matching
-    ``code_revision``.
+    """Promote when test CAGR > 12% and, if an incumbent exists, both
+    test CAGR and test Sharpe are strictly greater than the incumbent.
     """
+    if incumbent_cagr is not None and incumbent_sharpe is None:
+        raise ValueError("incumbent test_sharpe is required")
     candidate = evaluate_ppo_discovery_candidate(metadata, evaluation)
     reasons = list(candidate.failure_reasons)
     if not approved_by or not str(approved_by).strip():
         reasons.append("approved_by is required")
-    if metadata.get("config_hash") != expected_config_hash:
-        reasons.append("expected_config_hash does not match artifact config_hash")
     cagr_raw = evaluation.get("test_cagr")
-    cagr = float(cagr_raw) if _finite_number(cagr_raw) else float("nan")
-    eval_hash = metadata.get("evaluation_dataset_hash")
-    paired = (
-        incumbent_cagr is not None
-        and incumbent_evaluation_dataset_hash is not None
-        and eval_hash == incumbent_evaluation_dataset_hash
-    )
-    if (
-        incumbent_protocol_digest is not None
-        and incumbent_protocol_digest != metadata.get("protocol_digest")
-        and not repair_override
-    ):
-        reasons.append("incumbent protocol_digest differs; pass repair_override")
-    if incumbent_cagr is not None and not paired:
-        if not acknowledge_unpaired_evaluation:
-            reasons.append(
-                "incumbent evaluation_dataset_hash differs; pass "
-                "acknowledge_unpaired_evaluation"
-            )
-    elif paired and _finite_number(cagr_raw) and cagr < float(incumbent_cagr):
-        reasons.append("test CAGR is below the incumbent")
-    _ = incumbent_model_config_hash
-    if incumbent_cagr is None:
-        reasons = [
-            reason for reason in reasons if not _is_inaugural_skippable_reason(reason)
-        ]
+    sharpe_raw = evaluation.get("test_sharpe")
+    if incumbent_cagr is not None:
+        if _finite_number(cagr_raw) and not (float(cagr_raw) > float(incumbent_cagr)):
+            reasons.append("test CAGR is not strictly greater than the incumbent")
+        if _finite_number(sharpe_raw) and not (
+            float(sharpe_raw) > float(incumbent_sharpe)
+        ):
+            reasons.append("test Sharpe is not strictly greater than the incumbent")
     if reasons:
         return ArtifactHealthCheck(is_healthy=False, failure_reasons=reasons)
     return ArtifactHealthCheck(is_healthy=True, failure_reasons=[])
@@ -243,6 +166,7 @@ def reevaluate_ppo_discovery(
         raise ValueError("evaluation.json has no test_weekly_net_log")
     metrics = evaluate_policy_weeks(logs)
     evaluation["test_cagr"] = metrics["cagr"]
+    evaluation["test_sharpe"] = metrics["sharpe"]
     evaluation["test_max_drawdown"] = metrics["max_drawdown"]
     evaluation["result_hash"] = result_hash(evaluation)
     (artifacts.artifact_dir / "evaluation.json").write_text(
@@ -262,10 +186,7 @@ def promote_ppo_discovery(
     version: str,
     *,
     approved_by: str,
-    expected_config_hash: str,
     expected_current_version: str,
-    acknowledge_unpaired_evaluation: bool = False,
-    repair_override: bool = False,
 ) -> dict[str, Any]:
     """Promote a candidate only after the locked gates pass.
 
@@ -280,66 +201,52 @@ def promote_ppo_discovery(
             approved_by=approved_by,
             expected_current_version=expected_current_version,
             config_changed=False,
-            unpaired_acknowledged=acknowledge_unpaired_evaluation,
+            unpaired_acknowledged=False,
         )
         return {
             "version": version,
             "approved_by": approved_by,
             "promoted": True,
             "failure_reasons": [],
-            "config_changed": False,
-            "unpaired_acknowledged": acknowledge_unpaired_evaluation,
-            "repair_override": repair_override,
         }
     evaluation = _load_json(artifacts.artifact_dir / "evaluation.json")
     incumbent = storage.read_current_version()
     incumbent_cagr = None
-    incumbent_protocol = None
-    incumbent_eval_hash = None
-    incumbent_model_hash = None
+    incumbent_sharpe = None
     if incumbent:
         incumbent_eval = _load_json(
             storage._version_path(incumbent) / "evaluation.json"
         )
-        incumbent_meta = _load_json(storage._version_path(incumbent) / "metadata.json")
-        incumbent_cagr = incumbent_eval.get("test_cagr")
-        incumbent_protocol = incumbent_meta.get("protocol_digest")
-        incumbent_eval_hash = incumbent_meta.get("evaluation_dataset_hash")
-        incumbent_model_hash = incumbent_meta.get("model_config_hash")
+        incumbent_cagr_raw = incumbent_eval.get("test_cagr")
+        incumbent_sharpe_raw = incumbent_eval.get("test_sharpe")
+        if not _finite_number(incumbent_sharpe_raw):
+            raise ValueError("incumbent test_sharpe is required")
+        if not _finite_number(incumbent_cagr_raw):
+            raise ValueError("incumbent test_cagr is required")
+        incumbent_cagr = float(incumbent_cagr_raw)
+        incumbent_sharpe = float(incumbent_sharpe_raw)
     check = evaluate_ppo_discovery_promotion(
         metadata=artifacts.metadata,
         evaluation=evaluation,
         approved_by=approved_by,
-        expected_config_hash=expected_config_hash,
-        incumbent_cagr=None if incumbent_cagr is None else float(incumbent_cagr),
-        incumbent_protocol_digest=incumbent_protocol,
-        incumbent_evaluation_dataset_hash=incumbent_eval_hash,
-        incumbent_model_config_hash=incumbent_model_hash,
-        acknowledge_unpaired_evaluation=acknowledge_unpaired_evaluation,
-        repair_override=repair_override,
+        incumbent_cagr=incumbent_cagr,
+        incumbent_sharpe=incumbent_sharpe,
     )
     if not check.is_healthy:
         raise ValueError("; ".join(check.failure_reasons))
-    config_changed = bool(
-        incumbent_model_hash
-        and incumbent_model_hash != artifacts.metadata.get("model_config_hash")
-    )
     _commit_promotion(
         storage,
         version,
         approved_by=approved_by,
         expected_current_version=expected_current_version,
-        config_changed=config_changed,
-        unpaired_acknowledged=acknowledge_unpaired_evaluation,
+        config_changed=False,
+        unpaired_acknowledged=False,
     )
     return {
         "version": version,
         "approved_by": approved_by,
         "promoted": True,
         "failure_reasons": [],
-        "config_changed": config_changed,
-        "unpaired_acknowledged": acknowledge_unpaired_evaluation,
-        "repair_override": repair_override,
     }
 
 

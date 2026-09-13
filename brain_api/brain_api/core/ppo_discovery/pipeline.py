@@ -12,9 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from brain_api.core.ppo_discovery.ablations import run_required_ablations
 from brain_api.core.ppo_discovery.artifacts import write_candidate_artifact
-from brain_api.core.ppo_discovery.baselines import locked_random_test_metrics
 from brain_api.core.ppo_discovery.checkpoints import (
     hash_state_dict,
     model_config_hash,
@@ -26,17 +24,10 @@ from brain_api.core.ppo_discovery.config import (
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.dataset_identity import build_dataset_identity
-from brain_api.core.ppo_discovery.diagnostics import (
-    build_allocation_head_diagnostics,
-    build_transaction_cost_training_diagnostics,
-)
 from brain_api.core.ppo_discovery.environment import WeeklyTransition
 from brain_api.core.ppo_discovery.evaluator import (
-    block_bootstrap_mean_ci,
-    evaluate_policy_weeks,
     reject_current_patchtst_on_old_weeks,
 )
-from brain_api.core.ppo_discovery.matched_k import matched_k_average_rank
 from brain_api.core.ppo_discovery.news_adapter import (
     load_historical_ppo_news_features,
 )
@@ -56,12 +47,11 @@ from brain_api.core.ppo_discovery.seed_ledger import (
     fail_job_on_accelerator_oom,
 )
 from brain_api.core.ppo_discovery.seed_training import (
+    test_rollout_metrics,
     train_ppo_discovery_seeds,
-    week_logs,
 )
 from brain_api.core.ppo_discovery.splits import (
     FULL_VARIANT,
-    is_locked_full_training,
     split_walk_forward,
 )
 from brain_api.core.ppo_discovery.training_features import (
@@ -115,24 +105,11 @@ def run_ppo_discovery_training(
     end_date: date,
     experiment_id: str,
     start_date: date | None = None,
-    alpha_hrp_weekly_log: Sequence[float] | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
     base_path: Path | str | None = None,
-    skip_supervised_pretraining: bool = False,
-    freeze_encoder: bool = False,
-    experiment_variant: str = FULL_VARIANT,
 ) -> dict[str, Any]:
     """Historical two-stage train. Never writes ``current``."""
     reject_current_patchtst_on_old_weeks(False)
-    if experiment_variant == FULL_VARIANT and not is_locked_full_training(
-        config,
-        skip_supervised_pretraining=skip_supervised_pretraining,
-        freeze_encoder=freeze_encoder,
-    ):
-        raise PPODiscoveryError(
-            "experiment_variant='full' requires locked default seeds and "
-            "10_000 timesteps with both training stages"
-        )
     report = progress or (lambda _payload: None)
     device = get_device()
     line = (
@@ -194,7 +171,7 @@ def run_ppo_discovery_training(
             "need at least five weekly transitions after history warmup"
         )
     train_weeks, val_weeks, test_weeks = split_walk_forward(
-        transitions, experiment_variant=experiment_variant
+        transitions, experiment_variant=FULL_VARIANT
     )
     hmm_cutoff = train_weeks[-1].cutoff.date()
     hmm_weeks = [week.cutoff.date() for week in transitions]
@@ -244,10 +221,6 @@ def run_ppo_discovery_training(
         checkpoint_root = Path(DEFAULT_DATA_PATH)
     else:
         checkpoint_root = Path(base_path)
-    if freeze_encoder:
-        from dataclasses import replace
-
-        config = replace(config, freeze_encoder_updates=10**9)
     recipe = train_recipe_hash(config)
     ckpt_dir = seed_checkpoint_dir(
         checkpoint_root,
@@ -259,32 +232,31 @@ def run_ppo_discovery_training(
     torch.manual_seed(config.seeds[0])
     np.random.seed(config.seeds[0])
     policy = PPODiscoveryActorCritic(config).to(device)
-    if not skip_supervised_pretraining:
-        report({"stage": "pretrain", "device": device.type})
-        histories, targets = pretrain_arrays(
-            train_weeks, snapshot, ohlcv, feature_scalers=scalers
+    report({"stage": "pretrain", "device": device.type})
+    histories, targets = pretrain_arrays(
+        train_weeks, snapshot, ohlcv, feature_scalers=scalers
+    )
+    try:
+        pretrain_temporal_encoder(
+            policy,
+            histories,
+            targets,
+            config=config,
+            seed=config.seeds[0],
+            device=device,
         )
-        try:
-            pretrain_temporal_encoder(
-                policy,
-                histories,
-                targets,
-                config=config,
-                seed=config.seeds[0],
+    except Exception as exc:
+        if is_accelerator_out_of_memory(exc, device):
+            fail_job_on_accelerator_oom(
+                exc,
+                seed=int(config.seeds[0]),
                 device=device,
+                directory=ckpt_dir,
+                ledger=empty_seeds_ledger(),
+                checkpoint_expected={},
+                progress=report,
             )
-        except Exception as exc:
-            if is_accelerator_out_of_memory(exc, device):
-                fail_job_on_accelerator_oom(
-                    exc,
-                    seed=int(config.seeds[0]),
-                    device=device,
-                    directory=ckpt_dir,
-                    ledger=empty_seeds_ledger(),
-                    checkpoint_expected={},
-                    progress=report,
-                )
-            raise
+        raise
     pretrained_encoder_state = {
         key: tensor.detach().cpu().clone()
         for key, tensor in policy.temporal.state_dict().items()
@@ -320,65 +292,9 @@ def run_ppo_discovery_training(
     chosen_policy = seed_result.selected_policy
     failed_seeds = seed_result.failed_seeds
     try:
-        test_logs = week_logs(
+        report({"stage": "test_eval", "device": device.type})
+        test_logs, test_metrics, portfolio_diagnostics = test_rollout_metrics(
             chosen_policy, test_weeks, snapshot, ohlcv, spy, scalers, config
-        )
-        test_metrics = evaluate_policy_weeks(test_logs)
-    except Exception as exc:
-        if is_accelerator_out_of_memory(exc, device):
-            fail_job_on_accelerator_oom(
-                exc,
-                seed=int(chosen),
-                device=device,
-                directory=ckpt_dir,
-                ledger=seed_result.ledger,
-                checkpoint_expected=dict(checkpoint_expected),
-                progress=report,
-            )
-        raise
-    alpha_cagr = alpha_dd = paired = None
-    if alpha_hrp_weekly_log is not None:
-        alpha_logs = list(alpha_hrp_weekly_log)
-        if len(alpha_logs) != len(test_logs):
-            raise PPODiscoveryError(
-                "Alpha-HRP weekly log length must match the test split"
-            )
-        alpha_metrics = evaluate_policy_weeks(alpha_logs)
-        alpha_cagr = alpha_metrics["cagr"]
-        alpha_dd = alpha_metrics["max_drawdown"]
-        paired, _lo, _hi = block_bootstrap_mean_ci(
-            [float(p) - float(a) for p, a in zip(test_logs, alpha_logs, strict=True)]
-        )
-    try:
-        report({"stage": "ablations", "device": device.type})
-        ablations = run_required_ablations(
-            chosen_policy,
-            train_weeks=train_weeks,
-            test_weeks=test_weeks,
-            snapshot=snapshot,
-            ohlcv=ohlcv,
-            spy=spy,
-            scalers=scalers,
-            config=config,
-            pretrained=policy,
-        )
-        report({"stage": "matched_k", "device": device.type})
-        matched_k = matched_k_average_rank(
-            chosen_policy,
-            test_weeks=test_weeks,
-            snapshot=snapshot,
-            ohlcv=ohlcv,
-            spy=spy,
-            scalers=scalers,
-            config=config,
-        )
-        random_baseline = locked_random_test_metrics(
-            test_weeks,
-            snapshot=snapshot,
-            ohlcv=ohlcv,
-            spy=spy,
-            scalers=scalers,
-            config=config,
         )
     except Exception as exc:
         if is_accelerator_out_of_memory(exc, device):
@@ -397,18 +313,13 @@ def run_ppo_discovery_training(
         "test_sharpe": test_metrics["sharpe"],
         "test_max_drawdown": test_metrics["max_drawdown"],
         "test_weekly_net_log": test_logs,
-        "alpha_hrp_test_cagr": alpha_cagr,
-        "alpha_hrp_test_max_drawdown": alpha_dd,
-        "paired_vs_alpha_hrp_point": paired,
-        "ablations": ablations,
-        "matched_k": matched_k,
+        "portfolio_diagnostics": portfolio_diagnostics,
         "failed_seeds": failed_seeds,
         "candidate": True,
         "survivorship_bias": True,
         "selected_seed": chosen,
         "seed_metrics": seed_result.seed_metrics,
         "seed_aggregates": seed_result.seed_aggregates,
-        "locked_random_baseline": random_baseline,
         "training_dataset_hash": identity.training_dataset_hash,
         "validation_dataset_hash": identity.validation_dataset_hash,
         "evaluation_dataset_hash": identity.evaluation_dataset_hash,
@@ -417,28 +328,6 @@ def run_ppo_discovery_training(
         "model_config_hash": model_config_hash(config),
         "train_recipe_hash": recipe,
     }
-    full_row = ablations.get("full_ppo") if isinstance(ablations, dict) else None
-    evaluation["allocation_head_diagnostics"] = build_allocation_head_diagnostics(
-        ablations if isinstance(ablations, dict) else {}
-    )
-    evaluation["transaction_cost_training_diagnostics"] = (
-        build_transaction_cost_training_diagnostics(
-            ablations if isinstance(ablations, dict) else {}
-        )
-    )
-    if (
-        isinstance(full_row, dict)
-        and full_row.get("status") == "ok"
-        and isinstance(full_row.get("portfolio_diagnostics"), dict)
-    ):
-        evaluation["portfolio_diagnostics"] = full_row["portfolio_diagnostics"]
-    else:
-        evaluation["portfolio_diagnostics"] = {
-            "status": "unavailable",
-            "full_ppo": full_row
-            if isinstance(full_row, dict)
-            else {"status": "missing"},
-        }
     news_manifest = {
         "complete": True,
         "store": "duckdb",
@@ -480,7 +369,7 @@ def run_ppo_discovery_training(
         news_manifest=news_manifest,
         price_manifest=price_manifest,
         experiment_id=experiment_id,
-        experiment_variant=experiment_variant,
+        experiment_variant=FULL_VARIANT,
         end_date=end_date.isoformat(),
         pretrained_encoder_state_dict=pretrained_encoder_state,
         seeds_ledger=seed_result.ledger,

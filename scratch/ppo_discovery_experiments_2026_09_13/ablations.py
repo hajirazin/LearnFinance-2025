@@ -1,7 +1,8 @@
-"""Required ppo_discovery ablations. Unavailable is not a passing status."""
+"""Research-only ppo_discovery ablations. Never called by the production train job."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
@@ -10,11 +11,35 @@ from brain_api.core.ppo_discovery.diagnostics import (
     summarize_portfolio_transition_diagnostics,
 )
 from brain_api.core.ppo_discovery.environment import collect_closed_loop_rollout
-from brain_api.core.ppo_discovery.evaluator import evaluate_policy_weeks, mark_ablations
+from brain_api.core.ppo_discovery.evaluator import evaluate_policy_weeks
 from brain_api.core.ppo_discovery.policy import PPODiscoveryActorCritic
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.trainer import train_ppo_discovery
 from brain_api.core.training_utils import is_accelerator_out_of_memory
+
+REQUIRED_ABLATIONS: tuple[str, ...] = (
+    "full_ppo",
+    "no_news_features",
+    "news_time_shuffled",
+    "no_temporal_encoder",
+    "frozen_pretrained_encoder",
+    "fixed_k_15",
+    "equal_weight_selected",
+    "no_hmm_globals",
+    "no_transaction_cost_term",
+    "no_supervised_pretraining",
+)
+
+
+def mark_ablations(available: Mapping[str, Any]) -> dict[str, Any]:
+    """Every required ablation is present or explicitly marked unavailable."""
+    report: dict[str, Any] = {}
+    for name in REQUIRED_ABLATIONS:
+        if name in available:
+            report[name] = available[name]
+        else:
+            report[name] = {"status": "unavailable"}
+    return report
 
 
 def _metrics(
@@ -221,4 +246,4 @@ def _retrain_ablation(
         return {"status": "failed", "error": str(exc)}
 
 
-__all__ = ["run_required_ablations"]
+__all__ = ["REQUIRED_ABLATIONS", "mark_ablations", "run_required_ablations"]

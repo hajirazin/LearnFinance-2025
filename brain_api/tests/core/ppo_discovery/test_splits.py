@@ -8,13 +8,11 @@ import pytest
 
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.environment import WeeklyTransition
-from brain_api.core.ppo_discovery.pipeline import run_ppo_discovery_training
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.splits import (
     resolve_experiment_variant,
     split_walk_forward,
 )
-from brain_api.core.ppo_discovery.universe_snapshot import build_universe_snapshot
 
 
 def _weeks(n: int) -> list[WeeklyTransition]:
@@ -61,16 +59,11 @@ def test_timestep_override_is_diagnostic_not_full() -> None:
     assert resolve_experiment_variant(reduced) == "diagnostic"
 
 
-def test_pipeline_rejects_full_variant_for_unlocked_config() -> None:
-    snapshot = build_universe_snapshot(
-        ["AAPL", "MSFT"], retrieved_at=datetime(2026, 8, 24, tzinfo=UTC)
+def test_reduced_timesteps_still_use_the_full_purge_split() -> None:
+    """Production always uses FULL_VARIANT; tiny test configs no longer raise."""
+    train, val, test = split_walk_forward(_weeks(40), experiment_variant="full")
+    assert train and val and test
+    assert (
+        resolve_experiment_variant(PPODiscoveryConfig(total_timesteps=4, seeds=(42,)))
+        == "diagnostic"
     )
-    with pytest.raises(PPODiscoveryError, match="10_000 timesteps"):
-        run_ppo_discovery_training(
-            snapshot,
-            config=PPODiscoveryConfig(total_timesteps=4, seeds=(42,)),
-            storage=object(),  # type: ignore[arg-type]
-            end_date=datetime(2026, 8, 24, tzinfo=UTC).date(),
-            experiment_id="diag",
-            experiment_variant="full",
-        )

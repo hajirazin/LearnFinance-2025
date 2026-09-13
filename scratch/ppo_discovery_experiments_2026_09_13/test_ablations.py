@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import ablations as ablation_module
 import pytest
 import torch
 
-from brain_api.core.ppo_discovery import ablations as ablation_module
 from brain_api.core.ppo_discovery.config import PPODiscoveryConfig
 from brain_api.core.ppo_discovery.diagnostics import (
     compute_portfolio_transition_diagnostics,
@@ -204,9 +204,3 @@ def test_no_transaction_cost_eval_uses_locked_costs(monkeypatch) -> None:
         eval_include_transaction_cost=True,
     )
     assert eval_flags == [True]
-
-
-def test_protocol_files_include_ablations() -> None:
-    from brain_api.core.ppo_discovery import promotion
-
-    assert "ablations.py" in {path.name for path in promotion._PROTOCOL_FILES}

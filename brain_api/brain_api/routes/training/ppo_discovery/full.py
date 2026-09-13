@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from brain_api.core.ppo_discovery.config import UNIVERSE_NAME, PPODiscoveryConfig
 from brain_api.core.ppo_discovery.pipeline import run_ppo_discovery_training
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
-from brain_api.core.ppo_discovery.splits import resolve_experiment_variant
 from brain_api.core.ppo_discovery.universe_snapshot import (
     load_universe_snapshot,
     resolve_universe_snapshot,
@@ -37,8 +36,6 @@ class PPOTrainRequest(BaseModel):
     start_date: str | None = None
     experiment_id: str = "ppo-discovery-default"
     snapshot_sha256: str | None = None
-    total_timesteps: int | None = None
-    seeds: list[int] | None = None
 
 
 def _load_training_snapshot(request: PPOTrainRequest):
@@ -62,10 +59,6 @@ def _run_training(job_id: str, request: PPOTrainRequest) -> None:
         _report({"stage": "freeze_universe"})
         snapshot = _load_training_snapshot(request)
         config = PPODiscoveryConfig()
-        if request.total_timesteps is not None:
-            config.total_timesteps = request.total_timesteps
-        if request.seeds is not None:
-            config.seeds = tuple(request.seeds)
         end = (
             date.fromisoformat(request.end_date)
             if request.end_date
@@ -80,7 +73,6 @@ def _run_training(job_id: str, request: PPOTrainRequest) -> None:
             end_date=end,
             start_date=start,
             experiment_id=request.experiment_id,
-            experiment_variant=resolve_experiment_variant(config),
             progress=_report,
             base_path=DEFAULT_DATA_PATH,
         )

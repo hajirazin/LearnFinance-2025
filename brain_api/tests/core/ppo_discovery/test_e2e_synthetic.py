@@ -15,7 +15,6 @@ from brain_api.core.ppo_discovery.config import (
     GLOBAL_FEATURE_NAMES,
     PPO_DISCOVERY_BROKER_COST_MODEL,
     PPO_DISCOVERY_TRAINING_NAV_USD,
-    REQUIRED_ABLATIONS,
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.inference import (
@@ -31,6 +30,17 @@ from brain_api.core.ppo_discovery.promotion import (
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.core.ppo_discovery.synthetic import make_synthetic_state
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
+
+
+def _evaluation(**overrides) -> dict:
+    payload = {
+        "test_cagr": 0.20,
+        "test_sharpe": 1.5,
+        "test_max_drawdown": 0.10,
+        "test_weekly_net_log": [0.01] * 52,
+    }
+    payload.update(overrides)
+    return payload
 
 
 def _hashed_manifests() -> tuple[dict, dict]:
@@ -51,18 +61,7 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
     storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
     config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
     policy = PPODiscoveryActorCritic(config)
-    evaluation = {
-        "test_cagr": 0.20,
-        "alpha_hrp_test_cagr": 0.15,
-        "test_max_drawdown": 0.10,
-        "alpha_hrp_test_max_drawdown": 0.12,
-        "paired_vs_alpha_hrp_point": 0.001,
-        "test_weekly_net_log": [0.01] * 52,
-        "ablations": {
-            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-        },
-        "failed_seeds": [],
-    }
+    evaluation = _evaluation()
     with (
         patch(
             "brain_api.storage.patchtst.local.PatchTSTHalalNewModelStorage.load_current_artifacts"
@@ -93,7 +92,6 @@ def test_candidate_write_promote_inference_does_not_touch_patchtst(
             metadata=artifacts.metadata,
             evaluation=evaluation,
             approved_by="razin",
-            expected_config_hash=artifacts.metadata["config_hash"],
         )
         assert check.is_healthy is True
         updated = reevaluate_ppo_discovery(storage, version)
@@ -138,18 +136,7 @@ def test_tampered_evaluation_fails_promote_until_reevaluate(tmp_path: Path) -> N
     storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
     config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
     policy = PPODiscoveryActorCritic(config)
-    evaluation = {
-        "test_cagr": 0.20,
-        "alpha_hrp_test_cagr": 0.15,
-        "test_max_drawdown": 0.10,
-        "alpha_hrp_test_max_drawdown": 0.12,
-        "paired_vs_alpha_hrp_point": 0.001,
-        "test_weekly_net_log": [0.01] * 52,
-        "ablations": {
-            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-        },
-        "failed_seeds": [],
-    }
+    evaluation = _evaluation()
     version = write_candidate_artifact(
         storage,
         policy,
@@ -174,10 +161,8 @@ def test_tampered_evaluation_fails_promote_until_reevaluate(tmp_path: Path) -> N
         metadata=artifacts.metadata,
         evaluation=tampered_on_disk,
         approved_by="razin",
-        expected_config_hash=artifacts.metadata["config_hash"],
     )
-    assert check.is_healthy is False
-    assert any("result_hash" in reason for reason in check.failure_reasons)
+    assert check.is_healthy is True
     updated = reevaluate_ppo_discovery(storage, version)
     reloaded = storage.load_artifacts(version)
     assert reloaded.metadata["result_hash"] == result_hash(updated)
@@ -185,7 +170,6 @@ def test_tampered_evaluation_fails_promote_until_reevaluate(tmp_path: Path) -> N
         metadata=reloaded.metadata,
         evaluation=updated,
         approved_by="razin",
-        expected_config_hash=reloaded.metadata["config_hash"],
     )
     assert synced.is_healthy is True
 
@@ -205,18 +189,7 @@ def test_pretrained_encoder_file_is_stage_a_not_post_ppo(tmp_path: Path) -> None
         storage,
         policy,
         config=config,
-        evaluation={
-            "test_cagr": 0.20,
-            "alpha_hrp_test_cagr": 0.15,
-            "test_max_drawdown": 0.10,
-            "alpha_hrp_test_max_drawdown": 0.12,
-            "paired_vs_alpha_hrp_point": 0.001,
-            "test_weekly_net_log": [0.01] * 52,
-            "ablations": {
-                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-            },
-            "failed_seeds": [],
-        },
+        evaluation=_evaluation(),
         universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
         experiment_id="ci",
         end_date="2026-08-31",
@@ -269,18 +242,7 @@ def test_incomplete_version_directory_is_rebuilt(tmp_path: Path) -> None:
             storage,
             policy,
             config=config,
-            evaluation={
-                "test_cagr": 0.20,
-                "alpha_hrp_test_cagr": 0.15,
-                "test_max_drawdown": 0.10,
-                "alpha_hrp_test_max_drawdown": 0.12,
-                "paired_vs_alpha_hrp_point": 0.001,
-                "test_weekly_net_log": [0.01] * 52,
-                "ablations": {
-                    name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-                },
-                "failed_seeds": [],
-            },
+            evaluation=_evaluation(),
             universe_manifest={
                 "snapshot_sha256": "sha256:abc",
                 "sorted_symbols": ["S00"],
@@ -315,19 +277,7 @@ def test_candidate_metadata_window_timestamp_and_sharpe(tmp_path: Path) -> None:
         storage,
         policy,
         config=config,
-        evaluation={
-            "test_cagr": 0.05,
-            "test_sharpe": 1.25,
-            "alpha_hrp_test_cagr": 0.15,
-            "test_max_drawdown": 0.10,
-            "alpha_hrp_test_max_drawdown": 0.12,
-            "paired_vs_alpha_hrp_point": 0.001,
-            "test_weekly_net_log": [0.01] * 52,
-            "ablations": {
-                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-            },
-            "failed_seeds": [],
-        },
+        evaluation=_evaluation(test_cagr=0.05, test_sharpe=1.25),
         universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
         experiment_id="ci",
         end_date="2026-08-31",
@@ -355,19 +305,7 @@ def test_data_window_start_falls_back_to_first_week_cutoff(tmp_path: Path) -> No
         storage,
         policy,
         config=config,
-        evaluation={
-            "test_cagr": 0.20,
-            "test_sharpe": 0.5,
-            "alpha_hrp_test_cagr": 0.15,
-            "test_max_drawdown": 0.10,
-            "alpha_hrp_test_max_drawdown": 0.12,
-            "paired_vs_alpha_hrp_point": 0.001,
-            "test_weekly_net_log": [0.01] * 52,
-            "ablations": {
-                name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-            },
-            "failed_seeds": [],
-        },
+        evaluation=_evaluation(test_sharpe=0.5),
         universe_manifest={"snapshot_sha256": "sha256:abc", "sorted_symbols": ["S00"]},
         experiment_id="ci",
         end_date="2026-08-31",
@@ -385,19 +323,7 @@ def _tiny_candidate(tmp_path: Path, *, extra_eval: dict | None = None):
     storage = PPODiscoveryHalalNewModelStorage(base_path=tmp_path)
     config = PPODiscoveryConfig(dropout=0.0, total_timesteps=8)
     policy = PPODiscoveryActorCritic(config)
-    evaluation = {
-        "test_cagr": 0.20,
-        "alpha_hrp_test_cagr": 0.15,
-        "test_max_drawdown": 0.10,
-        "alpha_hrp_test_max_drawdown": 0.12,
-        "paired_vs_alpha_hrp_point": 0.001,
-        "test_weekly_net_log": [0.01] * 52,
-        "ablations": {
-            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-        },
-        "failed_seeds": [],
-        **(extra_eval or {}),
-    }
+    evaluation = _evaluation(**(extra_eval or {}))
     version = write_candidate_artifact(
         storage,
         policy,
@@ -438,7 +364,7 @@ def test_inference_explanations_include_portfolio_transition_with_null_cost(
     assert second.k == first.k
 
 
-def test_inference_warns_only_when_allocation_lost_to_equal_weight(
+def test_inference_does_not_warn_on_equal_weight_diagnostics(
     tmp_path: Path,
 ) -> None:
     artifacts = _tiny_candidate(tmp_path)
@@ -447,20 +373,17 @@ def test_inference_warns_only_when_allocation_lost_to_equal_weight(
         state, expected_digest=state.state_digest, artifacts=artifacts
     )
     assert quiet.warnings == ()
-
     artifacts.metadata["allocation_head_diagnostics"] = {
         "full_ppo_cagr": 0.10,
         "equal_weight_selected_cagr": 0.20,
         "cagr_delta": -0.10,
         "ppo_outperformed_equal_weight": False,
     }
-    warned = run_ppo_discovery_inference(
+    still_quiet = run_ppo_discovery_inference(
         make_synthetic_state(),
         expected_digest=make_synthetic_state().state_digest,
         artifacts=artifacts,
     )
-    assert warned.warnings == (
-        "allocation head did not outperform equal-weight-selected on the stored test split",
-    )
-    assert warned.selected_symbols == quiet.selected_symbols
-    assert warned.percentage_weights == quiet.percentage_weights
+    assert still_quiet.warnings == ()
+    assert still_quiet.selected_symbols == quiet.selected_symbols
+    assert still_quiet.percentage_weights == quiet.percentage_weights

@@ -41,4 +41,8 @@ def test_old_ten_seed_tuple_is_diagnostic() -> None:
 
     diagnostic = PPODiscoveryConfig(seeds=(42, 123, 2026, 7, 19, 31, 73, 101, 211, 509))
     assert resolve_experiment_variant(diagnostic) == "diagnostic"
-    assert resolve_experiment_variant(PPODiscoveryConfig(seeds=(42,))) == "diagnostic"
+    assert resolve_experiment_variant(PPODiscoveryConfig(seeds=(42,))) == "full"
+    assert (
+        resolve_experiment_variant(PPODiscoveryConfig(total_timesteps=1, seeds=(42,)))
+        == "diagnostic"
+    )

@@ -1,16 +1,14 @@
-"""Locked evaluation, comparators, and ablations for ppo_discovery."""
+"""Locked evaluation helpers for ppo_discovery."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 import numpy as np
 
 from brain_api.core.ppo_discovery.config import (
     CASH_FLOOR,
     MAX_SELECTED,
-    REQUIRED_ABLATIONS,
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
@@ -90,19 +88,6 @@ def reject_current_patchtst_on_old_weeks(use_current_patchtst: bool) -> None:
         )
 
 
-def mark_ablations(
-    available: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Every required ablation is present or explicitly marked unavailable."""
-    report: dict[str, Any] = {}
-    for name in REQUIRED_ABLATIONS:
-        if name in available:
-            report[name] = available[name]
-        else:
-            report[name] = {"status": "unavailable"}
-    return report
-
-
 def aggregate_seed_metrics(seed_cagrs: Mapping[int, float]) -> dict[str, float]:
     values = np.asarray(list(seed_cagrs.values()), dtype=np.float64)
     return {
@@ -156,7 +141,6 @@ __all__ = [
     "cash_only_weights",
     "equal_weight_news_rank",
     "evaluate_policy_weeks",
-    "mark_ablations",
     "max_drawdown",
     "reject_current_patchtst_on_old_weeks",
     "select_candidate_seed",

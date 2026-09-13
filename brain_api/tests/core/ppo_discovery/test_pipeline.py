@@ -61,6 +61,9 @@ def test_pipeline_delegates_seed_training_with_device_and_recipe_hash() -> None:
     assert '"test_sharpe"' in source
     assert "[PPO] hmm start" in source
     assert "[PPO] hmm complete" in source
-    assert source.index("freeze_encoder_updates=10**9") < source.index(
-        "train_recipe_hash(config)"
-    )
+    assert "run_required_ablations" not in source
+    assert "matched_k_average_rank" not in source
+    assert "locked_random_test_metrics" not in source
+    assert "alpha_hrp_weekly_log" not in source
+    assert "skip_supervised_pretraining" not in source
+    assert "freeze_encoder_updates=10**9" not in source

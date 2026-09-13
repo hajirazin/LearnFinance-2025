@@ -6,9 +6,9 @@ import pytest
 
 from brain_api.core.portfolio_rl.broker_costs import IBKRSingaporeCostConfig
 from brain_api.core.ppo_discovery.config import (
-    EXPERIMENT_SEEDS,
     PPO_DISCOVERY_BROKER_COST_MODEL,
     PPO_DISCOVERY_TRAINING_NAV_USD,
+    TRAINING_SEED,
     PPODiscoveryConfig,
 )
 
@@ -63,9 +63,9 @@ def test_deserialization_rejects_missing_cost_contract() -> None:
         PPODiscoveryConfig.from_dict(payload)
 
 
-def test_default_experiment_seeds_are_the_full_protocol() -> None:
-    assert EXPERIMENT_SEEDS == (42, 123, 2026)
-    assert PPODiscoveryConfig().seeds == (42, 123, 2026)
+def test_default_training_seed_is_42() -> None:
+    assert TRAINING_SEED == 42
+    assert PPODiscoveryConfig().seeds == (42,)
     assert PPODiscoveryConfig().ppo_microbatch_size == 8
     assert PPODiscoveryConfig().minibatch_size == 32
 
@@ -77,7 +77,7 @@ def test_recipe_hash_ignores_only_seeds() -> None:
     )
 
     base = PPODiscoveryConfig()
-    other_seeds = PPODiscoveryConfig(seeds=(42,))
+    other_seeds = PPODiscoveryConfig(seeds=(123,))
     other_dropout = PPODiscoveryConfig(dropout=0.0)
     assert train_recipe_hash(base) == train_recipe_hash(other_seeds)
     assert train_recipe_hash(base) != train_recipe_hash(other_dropout)

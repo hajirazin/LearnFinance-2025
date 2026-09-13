@@ -63,21 +63,9 @@ AUDIT_NEWS_FIELDS: tuple[str, ...] = (
     "fraction_positive_news",
     "news_sentiment_dispersion",
 )
-EXPERIMENT_SEEDS: tuple[int, ...] = (42, 123, 2026)
+TRAINING_SEED = 42
 PPO_DISCOVERY_SCHEMA_VERSION = 1
 PPO_DISCOVERY_ARCHITECTURE = "temporal_set_factored"
-REQUIRED_ABLATIONS: tuple[str, ...] = (
-    "full_ppo",
-    "no_news_features",
-    "news_time_shuffled",
-    "no_temporal_encoder",
-    "frozen_pretrained_encoder",
-    "fixed_k_15",
-    "equal_weight_selected",
-    "no_hmm_globals",
-    "no_transaction_cost_term",
-    "no_supervised_pretraining",
-)
 
 if len(ASSET_FEATURE_NAMES) != EXPLICIT_ASSET_FEATURES:
     raise RuntimeError("ASSET_FEATURE_NAMES length must match EXPLICIT_ASSET_FEATURES")
@@ -140,7 +128,7 @@ class PPODiscoveryConfig:
     hhi_penalty_scale: float = 0.4
     reward_scale: float = 1.0
     rebalance_weight_epsilon: float = 1e-9
-    seeds: tuple[int, ...] = EXPERIMENT_SEEDS
+    seeds: tuple[int, ...] = (TRAINING_SEED,)
     universe: str = UNIVERSE_NAME
 
     def __post_init__(self) -> None:
@@ -276,7 +264,6 @@ __all__ = [
     "DEFAULT_PPO_DISCOVERY_CONFIG",
     "ENCODER_CHANNELS",
     "ENCODER_SESSIONS",
-    "EXPERIMENT_SEEDS",
     "EXPLICIT_ASSET_FEATURES",
     "GLOBAL_FEATURES",
     "GLOBAL_FEATURE_NAMES",
@@ -294,10 +281,10 @@ __all__ = [
     "PPO_DISCOVERY_SCHEMA_VERSION",
     "PPO_DISCOVERY_TRAINING_NAV_USD",
     "PROMOTION_CAGR_FLOOR",
-    "REQUIRED_ABLATIONS",
     "SET_D_MODEL",
     "TEMPORAL_D_MODEL",
     "TOKEN_WIDTH",
+    "TRAINING_SEED",
     "UNIVERSE_NAME",
     "PPODiscoveryConfig",
     "TrainingConfig",

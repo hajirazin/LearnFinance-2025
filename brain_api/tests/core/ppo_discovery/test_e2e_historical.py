@@ -19,7 +19,7 @@ import torch
 from brain_api.core.ppo_discovery.config import (
     HISTORY_BARS,
     MIN_ELIGIBLE_ASSETS,
-    REQUIRED_ABLATIONS,
+    PROMOTION_CAGR_FLOOR,
     PPODiscoveryConfig,
 )
 from brain_api.core.ppo_discovery.inference import run_ppo_discovery_inference
@@ -150,42 +150,39 @@ def test_historical_train_eval_candidate_with_yfinance_mocked(
             end_date=end,
             start_date=start,
             experiment_id="e2e",
-            experiment_variant="diagnostic",
             base_path=tmp_path,
-            alpha_hrp_weekly_log=None,
         )
 
     assert result["promoted"] is False
     assert storage.read_current_version() is None
     artifacts = storage.load_artifacts(result["version"])
-    assert artifacts.metadata["experiment_variant"] == "diagnostic"
+    assert artifacts.metadata["experiment_variant"] == "full"
     assert artifacts.regime_hmm.get("schema_version") == 3
     assert "terminal_posterior" in artifacts.regime_hmm
     evaluation = result["evaluation"]
     assert np.isfinite(evaluation["test_cagr"])
     assert np.isfinite(evaluation["test_sharpe"])
+    assert evaluation["selected_seed"] == 42
+    assert "ablations" not in evaluation
     assert result["failure_reasons"] == artifacts.metadata["failure_reasons"]
     assert isinstance(artifacts.metadata["data_window"]["start"], str)
     assert artifacts.metadata["trained_at"] == artifacts.metadata["training_timestamp"]
     assert artifacts.metadata["metrics"]["test_sharpe"] == evaluation["test_sharpe"]
-    for name in REQUIRED_ABLATIONS:
-        assert evaluation["ablations"][name]["status"] in {"ok", "failed"}
-        assert evaluation["ablations"][name]["status"] != "unavailable"
     check = evaluate_ppo_discovery_promotion(
         metadata=artifacts.metadata,
         evaluation=evaluation,
         approved_by="razin",
-        expected_config_hash=artifacts.metadata["config_hash"],
     )
-    assert check.is_healthy is False
+    above_floor = float(evaluation["test_cagr"]) > PROMOTION_CAGR_FLOOR
+    assert check.is_healthy is above_floor
     mutated = make_synthetic_state()
     payload = mutated.to_dict()
     payload["asset_features"][0][0] = float(payload["asset_features"][0][0]) + 1.0
     with pytest.raises(PPODiscoveryError, match="state_digest"):
         CanonicalPPOState.from_dict(payload)
     state = make_synthetic_state()
-    with pytest.raises(PPODiscoveryError, match="full experiment variant"):
-        run_ppo_discovery_inference(
-            state, expected_digest=state.state_digest, artifacts=artifacts
-        )
+    inferred = run_ppo_discovery_inference(
+        state, expected_digest=state.state_digest, artifacts=artifacts
+    )
+    assert inferred.model_type == "ppo_discovery"
     assert HISTORY_BARS == 253

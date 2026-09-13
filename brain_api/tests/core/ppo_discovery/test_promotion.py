@@ -1,4 +1,4 @@
-"""Promotion gates and comparator safety tests."""
+"""Promotion gates: CAGR > 12% and beat incumbent CAGR and Sharpe."""
 
 from __future__ import annotations
 
@@ -10,20 +10,16 @@ from brain_api.core.ppo_discovery import promotion as promotion_mod
 from brain_api.core.ppo_discovery.config import (
     ASSET_FEATURE_NAMES,
     GLOBAL_FEATURE_NAMES,
-    REQUIRED_ABLATIONS,
     PPODiscoveryConfig,
     ppo_discovery_cost_contract,
 )
 from brain_api.core.ppo_discovery.evaluator import (
-    mark_ablations,
     reject_current_patchtst_on_old_weeks,
     weekly_net_cagr,
 )
 from brain_api.core.ppo_discovery.promotion import (
+    evaluate_ppo_discovery_candidate,
     evaluate_ppo_discovery_promotion,
-    ppo_discovery_source_digest,
-    protocol_file_digest,
-    result_hash,
 )
 from brain_api.core.ppo_discovery.schemas import PPODiscoveryError
 from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStorage
@@ -31,18 +27,11 @@ from brain_api.storage.ppo_discovery.local import PPODiscoveryHalalNewModelStora
 
 def _meta(**overrides):
     payload = {
-        "config_hash": "abc123",
-        "experiment_variant": "full",
         "ppo_discovery_schema_version": 1,
         "architecture": "temporal_set_factored",
         "asset_feature_names": list(ASSET_FEATURE_NAMES),
         "global_feature_names": list(GLOBAL_FEATURE_NAMES),
         "news_required": True,
-        "protocol_digest": protocol_file_digest(),
-        "code_revision": ppo_discovery_source_digest(),
-        "evaluation_dataset_hash": "eval-a",
-        "model_config_hash": "cfg-a",
-        "result_hash": result_hash(_eval()),
         **ppo_discovery_cost_contract(),
     }
     payload.update(overrides)
@@ -52,91 +41,85 @@ def _meta(**overrides):
 def _eval(**overrides):
     payload = {
         "test_cagr": 0.20,
-        "alpha_hrp_test_cagr": 0.15,
+        "test_sharpe": 1.5,
         "test_max_drawdown": 0.10,
-        "alpha_hrp_test_max_drawdown": 0.12,
-        "paired_vs_alpha_hrp_point": 0.001,
-        "ablations": {
-            name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS
-        },
-        "failed_seeds": [],
         **ppo_discovery_cost_contract(),
     }
     payload.update(overrides)
     return payload
 
 
-def _meta_for(evaluation: dict, **overrides):
-    return _meta(result_hash=result_hash(evaluation), **overrides)
-
-
-def test_promotion_requires_approved_by_and_hash() -> None:
+def test_inaugural_promotion_requires_cagr_above_floor_and_approved_by() -> None:
     check = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.13, test_sharpe=0.8),
+        approved_by="razin",
+    )
+    assert check.is_healthy is True
+    floor = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.12, test_sharpe=0.8),
+        approved_by="razin",
+    )
+    assert floor.is_healthy is False
+    assert any("12%" in reason for reason in floor.failure_reasons)
+    missing = evaluate_ppo_discovery_promotion(
         metadata=_meta(),
         evaluation=_eval(),
         approved_by="",
-        expected_config_hash="abc123",
     )
-    assert check.is_healthy is False
+    assert missing.is_healthy is False
+    assert any("approved_by" in reason for reason in missing.failure_reasons)
+
+
+def test_incumbent_requires_strictly_greater_cagr_and_sharpe() -> None:
     check = evaluate_ppo_discovery_promotion(
         metadata=_meta(),
-        evaluation=_eval(),
+        evaluation=_eval(test_cagr=0.21, test_sharpe=1.6),
         approved_by="razin",
-        expected_config_hash="nope",
-    )
-    assert check.is_healthy is False
-
-
-def test_promotion_rejects_cagr_floor_and_incumbent_underrun() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(test_cagr=0.05),
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert any("12%" in reason for reason in check.failure_reasons)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(test_cagr=0.13),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest=protocol_file_digest(),
-        incumbent_evaluation_dataset_hash="eval-a",
-    )
-    assert any("incumbent" in reason for reason in check.failure_reasons)
-
-
-def test_no_news_variant_cannot_promote() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(experiment_variant="no_news_features"),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert check.is_healthy is False
-
-
-def test_healthy_full_variant_passes() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
+        incumbent_cagr=0.20,
+        incumbent_sharpe=1.5,
     )
     assert check.is_healthy is True
+    equal_cagr = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.20, test_sharpe=1.6),
+        approved_by="razin",
+        incumbent_cagr=0.20,
+        incumbent_sharpe=1.5,
+    )
+    assert equal_cagr.is_healthy is False
+    assert any("CAGR" in reason for reason in equal_cagr.failure_reasons)
+    equal_sharpe = evaluate_ppo_discovery_promotion(
+        metadata=_meta(),
+        evaluation=_eval(test_cagr=0.21, test_sharpe=1.5),
+        approved_by="razin",
+        incumbent_cagr=0.20,
+        incumbent_sharpe=1.5,
+    )
+    assert equal_sharpe.is_healthy is False
+    assert any("Sharpe" in reason for reason in equal_sharpe.failure_reasons)
+
+
+def test_missing_incumbent_sharpe_raises() -> None:
+    with pytest.raises(ValueError, match="incumbent test_sharpe is required"):
+        evaluate_ppo_discovery_promotion(
+            metadata=_meta(),
+            evaluation=_eval(),
+            approved_by="razin",
+            incumbent_cagr=0.14,
+            incumbent_sharpe=None,
+        )
 
 
 def test_candidate_health_does_not_require_approved_by() -> None:
-    from brain_api.core.ppo_discovery.promotion import (
-        evaluate_ppo_discovery_candidate,
-    )
-
     check = evaluate_ppo_discovery_candidate(_meta(), _eval())
     assert check.is_healthy is True
-    failed = evaluate_ppo_discovery_candidate(_meta(), _eval(failed_seeds=[42]))
+    failed = evaluate_ppo_discovery_candidate(
+        _meta(), _eval(test_cagr=float("nan"), test_sharpe=1.0)
+    )
     assert failed.is_healthy is False
-    assert any("seeds failed" in reason for reason in failed.failure_reasons)
+    assert any("CAGR" in reason for reason in failed.failure_reasons)
 
 
 @pytest.mark.parametrize(
@@ -151,18 +134,16 @@ def test_promotion_rejects_cost_contract_mismatch(
     location: str, field: str, value: object
 ) -> None:
     evaluation = _eval()
-    metadata = _meta_for(evaluation)
+    metadata = _meta()
     if location == "metadata":
         metadata[field] = value
     else:
         evaluation[field] = value
-        metadata["result_hash"] = result_hash(evaluation)
 
     check = evaluate_ppo_discovery_promotion(
         metadata=metadata,
         evaluation=evaluation,
         approved_by="razin",
-        expected_config_hash="abc123",
     )
 
     assert check.is_healthy is False
@@ -173,80 +154,6 @@ def test_reject_current_patchtst_on_old_weeks() -> None:
     with pytest.raises(PPODiscoveryError, match="PatchTST current"):
         reject_current_patchtst_on_old_weeks(True)
     reject_current_patchtst_on_old_weeks(False)
-
-
-def test_ablations_marked_unavailable() -> None:
-    report = mark_ablations({"full_ppo": {"cagr": 0.2}})
-    assert report["no_news_features"]["status"] == "unavailable"
-    assert "full_ppo" in report
-
-
-def test_promotion_rejects_unavailable_ablations() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(ablations=mark_ablations({})),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest=protocol_file_digest(),
-        incumbent_evaluation_dataset_hash="eval-a",
-    )
-    assert check.is_healthy is False
-    assert any(
-        "unavailable" in reason or "ablation" in reason
-        for reason in check.failure_reasons
-    )
-
-
-def test_inaugural_promotion_allows_failed_seeds_and_ablations() -> None:
-    ablations = {name: {"status": "ok", "cagr": 0.18} for name in REQUIRED_ABLATIONS}
-    ablations["frozen_pretrained_encoder"] = {
-        "status": "failed",
-        "error": "held asset HUBB lacks a finite positive execution price",
-    }
-    ablations["no_supervised_pretraining"] = {
-        "status": "failed",
-        "error": "held asset HUBB lacks a finite positive execution price",
-    }
-    evaluation = _eval(failed_seeds=[123, 2026], ablations=ablations, test_cagr=0.36)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta_for(evaluation),
-        evaluation=evaluation,
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert check.is_healthy is True
-    below_floor = _eval(failed_seeds=[123], ablations=ablations, test_cagr=0.05)
-    floor_check = evaluate_ppo_discovery_promotion(
-        metadata=_meta_for(below_floor),
-        evaluation=below_floor,
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert floor_check.is_healthy is False
-    assert any("12%" in reason for reason in floor_check.failure_reasons)
-    drifted = evaluate_ppo_discovery_promotion(
-        metadata=_meta_for(evaluation, code_revision="deadbeefdead"),
-        evaluation=evaluation,
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert drifted.is_healthy is True
-
-
-def test_incumbent_promotion_rejects_failed_seeds_and_ablations() -> None:
-    evaluation = _eval(failed_seeds=[123])
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta_for(evaluation),
-        evaluation=evaluation,
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest=protocol_file_digest(),
-        incumbent_evaluation_dataset_hash="eval-a",
-    )
-    assert check.is_healthy is False
-    assert any("seeds failed" in reason for reason in check.failure_reasons)
 
 
 def test_cagr_formula() -> None:
@@ -261,7 +168,6 @@ def test_promotion_rejects_non_finite_cagr_and_drawdown() -> None:
         metadata=_meta(),
         evaluation=_eval(test_cagr=float("inf")),
         approved_by="razin",
-        expected_config_hash="abc123",
     )
     assert check.is_healthy is False
     assert any("non-finite" in reason for reason in check.failure_reasons)
@@ -269,109 +175,9 @@ def test_promotion_rejects_non_finite_cagr_and_drawdown() -> None:
         metadata=_meta(),
         evaluation=_eval(test_max_drawdown=1.5),
         approved_by="razin",
-        expected_config_hash="abc123",
     )
     assert check.is_healthy is False
     assert any("drawdown" in reason for reason in check.failure_reasons)
-
-
-def test_unpaired_incumbent_requires_acknowledgement() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(test_cagr=0.13),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_evaluation_dataset_hash="eval-other",
-    )
-    assert check.is_healthy is False
-    assert any("unpaired" in reason for reason in check.failure_reasons)
-    evaluation = _eval(test_cagr=0.13)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta_for(evaluation),
-        evaluation=evaluation,
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_evaluation_dataset_hash="eval-other",
-        acknowledge_unpaired_evaluation=True,
-    )
-    assert check.is_healthy is True
-
-
-def test_protocol_drift_requires_repair_override() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest="drifted",
-        incumbent_evaluation_dataset_hash="eval-a",
-    )
-    assert check.is_healthy is False
-    assert any("repair_override" in reason for reason in check.failure_reasons)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest="drifted",
-        incumbent_evaluation_dataset_hash="eval-a",
-        repair_override=True,
-    )
-    assert check.is_healthy is True
-
-
-def test_protocol_and_unpaired_eval_need_both_flags() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest="drifted",
-        incumbent_evaluation_dataset_hash="eval-other",
-        repair_override=True,
-    )
-    assert check.is_healthy is False
-    assert any("unpaired" in reason for reason in check.failure_reasons)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest="drifted",
-        incumbent_evaluation_dataset_hash="eval-other",
-        acknowledge_unpaired_evaluation=True,
-    )
-    assert check.is_healthy is False
-    assert any("repair_override" in reason for reason in check.failure_reasons)
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(),
-        approved_by="razin",
-        expected_config_hash="abc123",
-        incumbent_cagr=0.14,
-        incumbent_protocol_digest="drifted",
-        incumbent_evaluation_dataset_hash="eval-other",
-        acknowledge_unpaired_evaluation=True,
-        repair_override=True,
-    )
-    assert check.is_healthy is True
-
-
-def test_result_hash_mismatch_rejects_promotion() -> None:
-    check = evaluate_ppo_discovery_promotion(
-        metadata=_meta(),
-        evaluation=_eval(test_cagr=0.21),
-        approved_by="razin",
-        expected_config_hash="abc123",
-    )
-    assert check.is_healthy is False
-    assert any("result_hash" in reason for reason in check.failure_reasons)
 
 
 def _storage_with_pointer(
@@ -516,7 +322,6 @@ def test_promote_resumes_pending_without_rechecking_gates(
         storage,
         "v2",
         approved_by="razin",
-        expected_config_hash="ignored",
         expected_current_version="",
     )
     assert result["promoted"] is True

@@ -8,8 +8,6 @@ import pytest
 
 from brain_api.core.ppo_discovery.diagnostics import (
     PortfolioTransitionDiagnostics,
-    build_allocation_head_diagnostics,
-    build_transaction_cost_training_diagnostics,
     compute_portfolio_transition_diagnostics,
     summarize_portfolio_transition_diagnostics,
 )
@@ -161,49 +159,6 @@ def test_summarize_rejects_null_cost_on_closed_loop_rows() -> None:
     )
     with pytest.raises(PPODiscoveryError, match="transaction_cost_fraction"):
         summarize_portfolio_transition_diagnostics([live])
-
-
-def test_allocation_head_diagnostics_boolean_only_when_both_ok() -> None:
-    ok = build_allocation_head_diagnostics(
-        {
-            "full_ppo": {"status": "ok", "cagr": 0.20},
-            "equal_weight_selected": {"status": "ok", "cagr": 0.15},
-        }
-    )
-    assert ok["ppo_outperformed_equal_weight"] is True
-    assert ok["cagr_delta"] == pytest.approx(0.05)
-
-    missing = build_allocation_head_diagnostics(
-        {"full_ppo": {"status": "failed", "error": "boom"}}
-    )
-    assert missing["status"] == "unavailable"
-    assert "ppo_outperformed_equal_weight" not in missing
-
-
-def test_cost_training_diagnostics_require_turnover() -> None:
-    ablations = {
-        "full_ppo": {
-            "status": "ok",
-            "cagr": 0.18,
-            "portfolio_diagnostics": {"summary": {"mean_turnover": 0.10}},
-        },
-        "no_transaction_cost_term": {
-            "status": "ok",
-            "cagr": 0.20,
-            "portfolio_diagnostics": {"summary": {"mean_turnover": 0.40}},
-        },
-    }
-    payload = build_transaction_cost_training_diagnostics(ablations)
-    assert payload["cost_training_improved_net_cagr"] is False
-    assert payload["cost_training_reduced_turnover"] is True
-    assert payload["net_cagr_delta"] == pytest.approx(-0.02)
-    assert payload["mean_turnover_delta"] == pytest.approx(-0.30)
-
-    unavailable = build_transaction_cost_training_diagnostics(
-        {"full_ppo": {"status": "ok", "cagr": 0.18}}
-    )
-    assert unavailable["status"] == "unavailable"
-    assert "cost_training_improved_net_cagr" not in unavailable
 
 
 def test_diagnostics_to_dict_preserves_null_cost() -> None:
