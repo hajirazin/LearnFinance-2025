@@ -75,8 +75,9 @@ def _cutoffs_requiring_training(
 ) -> list[date]:
     """Copy one-sided annual digests and return cutoffs that still need training.
 
-    Upload failures propagate. A download that returns ``False`` (unhealthy
-    branch or failed install) is trained. ``STORAGE_BACKEND`` is not read.
+    Listing and copy failures abort: an outage or a refused install cannot
+    establish that an existing digest needs retraining. ``STORAGE_BACKEND``
+    is not read.
     """
     uploads: list[tuple[date, str]] = []
     downloads: list[tuple[date, str]] = []
@@ -104,7 +105,10 @@ def _cutoffs_requiring_training(
             )
     for cutoff_date, digest in downloads:
         if not snapshot_storage.download_snapshot_from_hf(cutoff_date, digest):
-            trains.append(cutoff_date)
+            raise RuntimeError(
+                f"Failed to download existing {snapshot_storage.forecaster_type} "
+                f"snapshot {cutoff_date} ({digest}); refusing to retrain it"
+            )
     return trains
 
 

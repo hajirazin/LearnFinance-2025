@@ -77,7 +77,7 @@ class PatchTSTHalalNewHuggingFaceModelStorage(
     def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
         from brain_api.core.patchtst import PatchTSTConfig
 
-        return PatchTSTConfig.from_artifact_dict(config_dict)
+        return PatchTSTConfig(**config_dict)
 
     def _artifact_config(
         self, config: "PatchTSTConfig", model: "PatchTSTForPrediction"

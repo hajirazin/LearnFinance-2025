@@ -248,8 +248,13 @@ class SnapshotLocalStorage(SnapshotHFMixin):
     def snapshot_digest_exists_on_hf(
         self, cutoff_date: date, snapshot_digest: str
     ) -> bool:
-        branch = self._snapshot_branch_name(cutoff_date, snapshot_digest)
-        return branch in self._list_hf_hashed_snapshot_branch_names()
+        """Probe an exact digest; HF failures must not mean snapshot absence."""
+        if not self._get_hf_repo():
+            return False
+        return (
+            cutoff_date,
+            snapshot_digest,
+        ) in self.list_hf_snapshot_identities_strict()
 
     def list_local_snapshot_identities(self) -> list[tuple[date, str]]:
         """Pairs ``(cutoff_date, snapshot_digest)`` for every local hashed snapshot."""
@@ -390,7 +395,7 @@ class SnapshotLocalStorage(SnapshotHFMixin):
 
         from brain_api.core.patchtst import PatchTSTConfig
 
-        config = PatchTSTConfig.from_artifact_dict(config_dict)
+        config = PatchTSTConfig(**config_dict)
         hf_config = config.to_hf_config()
         model = PatchTSTForPrediction(hf_config)
         model.load_state_dict(

@@ -12,7 +12,10 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from brain_api.core.portfolio_rl.walkforward_data import load_daily_ohlcv
+from brain_api.core.portfolio_rl.walkforward_data import (
+    load_daily_close_prices,
+    load_daily_ohlcv,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +355,7 @@ def _run_patchtst_snapshot_inference(
 ) -> list[float]:
     """Run PatchTST snapshot inference for a symbol.
 
-    Loads daily OHLCV data only (no external signals -- PatchTST uses
+    Loads adjusted daily closes only (no external signals -- PatchTST uses
     close-only log-return input). Single forward pass per week produces
     direct 5-day predictions.
 
@@ -360,10 +363,10 @@ def _run_patchtst_snapshot_inference(
         artifacts: Loaded PatchTST snapshot artifacts
         year_indices: Indices to predict
         weekly_dates: DatetimeIndex of weekly dates (for loading daily data)
-        symbol: Stock symbol (for loading historical OHLCV)
+        symbol: Stock symbol (for loading historical closes)
 
     Raises:
-        SnapshotInferenceError: If daily OHLCV data cannot be loaded.
+        SnapshotInferenceError: If daily closes cannot be loaded.
 
     Returns:
         List of predictions
@@ -392,13 +395,13 @@ def _run_patchtst_snapshot_inference(
     start_date = weekly_dates[max(0, min_idx - 10)].date() - timedelta(days=buffer_days)
     end_date = weekly_dates[min(max_idx, len(weekly_dates) - 1)].date()
 
-    daily_ohlcv = load_daily_ohlcv(symbol, start_date, end_date)
-    if daily_ohlcv is None:
+    daily_closes = load_daily_close_prices(symbol, start_date, end_date)
+    if daily_closes is None:
         raise SnapshotInferenceError(
-            f"Failed to load daily OHLCV for {symbol} ({start_date} to {end_date})"
+            f"Failed to load daily closes for {symbol} ({start_date} to {end_date})"
         )
 
-    logger.debug(f"[WalkForward] Loaded {len(daily_ohlcv)} days of OHLCV for {symbol}")
+    logger.debug(f"[WalkForward] Loaded {len(daily_closes)} daily closes for {symbol}")
 
     model.eval()
 
@@ -410,7 +413,7 @@ def _run_patchtst_snapshot_inference(
                 config=config,
                 weekly_idx=i,
                 weekly_dates=weekly_dates,
-                daily_ohlcv=daily_ohlcv,
+                daily_ohlcv=daily_closes,
                 symbol=symbol,
             )
             predictions.append(ret)
@@ -433,9 +436,8 @@ def _predict_single_week_patchtst(
     RevIN denormalizes output to original log-return scale automatically.
     Compound the close_ret channel. NO scaler inverse-transform needed.
 
-    Bug fixes applied:
-    - Bug #E: Removed .permute(0, 2, 1) that crashed PatchTST
-    - Bug #F: Uses exp(sum(log_returns)) - 1 instead of prod(1 + log_returns) - 1
+    Uses the live feature builder's exact completed-session context. Historical
+    actor cutoffs are calendar Fridays; the last close is Thursday on Good Friday.
 
     Raises:
         SnapshotInferenceError: If insufficient data for prediction.
@@ -445,58 +447,43 @@ def _predict_single_week_patchtst(
     """
     import torch
 
-    from brain_api.core.features import compute_ohlcv_log_returns
+    from brain_api.core.patchtst.inference import build_inference_features
 
-    context_length = config.context_length
-
-    week_date = weekly_dates[weekly_idx]
-    cutoff = week_date.date()
-
-    if daily_ohlcv.index.tz is not None:
-        cutoff_ts = pd.Timestamp(cutoff).tz_localize(daily_ohlcv.index.tz)
-    else:
-        cutoff_ts = pd.Timestamp(cutoff)
-
-    # A Friday close is known at the next week's Monday-open decision.
-    ohlcv_subset = daily_ohlcv[daily_ohlcv.index <= cutoff_ts].copy()
-
-    if len(ohlcv_subset) < context_length:
-        raise SnapshotInferenceError(
-            f"Insufficient daily data for PatchTST [{symbol}]: need {context_length}, "
-            f"got {len(ohlcv_subset)} (cutoff={cutoff})"
-        )
-
-    features_df = compute_ohlcv_log_returns(
-        ohlcv_subset, use_returns=config.use_returns
+    actor_cutoff = weekly_dates[weekly_idx].date()
+    # The live builder's cutoff is exclusive. The day after the actor cutoff
+    # yields the same completed context as the following Monday pre-open,
+    # including weeks with Friday/Monday holidays, and never admits future bars.
+    features = build_inference_features(
+        symbol,
+        daily_ohlcv,
+        config,
+        cutoff_date=actor_cutoff + timedelta(days=1),
+        exchange="XNYS",
     )
-    if features_df.index.tz is not None:
-        features_df.index = features_df.index.tz_localize(None)
-
-    if len(features_df) < context_length:
+    if features.features is None:
         raise SnapshotInferenceError(
-            f"Insufficient features after log-return computation for PatchTST [{symbol}]: "
-            f"need {context_length}, got {len(features_df)} (cutoff={cutoff})"
+            f"Invalid or incomplete completed-session context for PatchTST "
+            f"[{symbol}] (actor_cutoff={actor_cutoff}, "
+            f"data_end_date={features.data_end_date})"
         )
-
-    channel_names = list(config.feature_names)
-    ohlcv_features = (
-        features_df[channel_names].iloc[-context_length:].values
-    )  # (context_length, n_channels)
 
     close_ret_idx = config.feature_names.index("close_ret")
 
-    # NO scaler transform -- RevIN normalizes internally
-    # Single forward pass -- NO permute! (Bug #E fix)
-    x = torch.tensor(ohlcv_features, dtype=torch.float32).unsqueeze(
-        0
-    )  # (1, context_length, n_channels)
-    output = model(past_values=x).prediction_outputs  # ORIGINAL scale
-
-    daily_log_returns = output[0, :, close_ret_idx].cpu().numpy()  # (5,)
+    # Match live tensor layout/device; RevIN handles scaling internally.
+    model.eval()
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        x = torch.from_numpy(features.features).float().unsqueeze(0).to(device)
+        output = model(past_values=x).prediction_outputs  # ORIGINAL scale
+        daily_log_returns = output[0, :, close_ret_idx].cpu().numpy()  # (5,)
 
     # NO inverse-transform needed! RevIN already denormalized
-    # Bug #F fix: exp(sum) not prod(1+)
     weekly_return = float(np.exp(np.sum(daily_log_returns)) - 1)
+    if not np.isfinite(daily_log_returns).all() or not np.isfinite(weekly_return):
+        raise SnapshotInferenceError(
+            f"Non-finite PatchTST snapshot prediction [{symbol}] "
+            f"(actor_cutoff={actor_cutoff})"
+        )
     return weekly_return
 
 

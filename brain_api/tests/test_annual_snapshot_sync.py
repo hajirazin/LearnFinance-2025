@@ -86,7 +86,7 @@ class TestAnnualSnapshotSync:
         mock_train.assert_not_called()
 
     @pytest.mark.parametrize("policy_name", ["local_first", "hf_first"])
-    def test_refused_download_trains(self, policy_name):
+    def test_refused_download_aborts(self, policy_name):
         from brain_api.storage.policy import StoragePolicy
 
         policy = StoragePolicy(policy_name)
@@ -97,9 +97,9 @@ class TestAnnualSnapshotSync:
         storage.snapshot_digest_exists_on_hf.return_value = True
         storage.download_snapshot_from_hf.return_value = False
 
-        _mock_load, mock_train = self._run(storage, policy)
-
-        mock_train.assert_called_once()
+        with pytest.raises(RuntimeError, match="refusing to retrain"):
+            self._run(storage, policy)
+        storage.upload_snapshot_to_hf.assert_not_called()
 
     @pytest.mark.parametrize("policy_name", ["local_first", "hf_first"])
     def test_neither_side_trains(self, policy_name):
@@ -117,6 +117,65 @@ class TestAnnualSnapshotSync:
         mock_train.assert_called_once()
         storage.download_snapshot_from_hf.assert_not_called()
         storage.upload_snapshot_to_hf.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "bucket", ["lstm_halal_new", "patchtst_halal_new", "patchtst_nifty_shariah_500"]
+)
+@pytest.mark.parametrize("local_exists", [False, True])
+def test_hf_listing_outage_aborts_before_copy_or_training(
+    tmp_path, monkeypatch, bucket, local_exists
+):
+    """Exercise real storage: unknown HF inventory must not become 'missing'."""
+    from brain_api.routes.training.snapshot_phase import _cutoffs_requiring_training
+
+    storage = SnapshotLocalStorage(bucket, base_path=tmp_path)
+    monkeypatch.setattr(storage, "_get_hf_repo", lambda: "user/repo")
+    monkeypatch.setattr(storage, "snapshot_exists", lambda *args: local_exists)
+    api = MagicMock()
+    api.list_repo_refs.side_effect = ConnectionError("HF listing unavailable")
+    monkeypatch.setattr(
+        "brain_api.storage.forecaster_snapshots.snapshot_hf.HfApi", lambda **kwargs: api
+    )
+    upload = MagicMock()
+    download = MagicMock()
+    monkeypatch.setattr(storage, "upload_snapshot_to_hf", upload)
+    monkeypatch.setattr(storage, "download_snapshot_from_hf", download)
+
+    with pytest.raises(ConnectionError, match="HF listing unavailable"):
+        _cutoffs_requiring_training(storage, {}, date(2020, 1, 1), date(2020, 6, 1))
+    upload.assert_not_called()
+    download.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "bucket", ["lstm_halal_new", "patchtst_halal_new", "patchtst_nifty_shariah_500"]
+)
+def test_confirmed_hf_snapshot_download_outage_aborts(tmp_path, monkeypatch, bucket):
+    """The real download helper returns False on network errors; never retrain."""
+    from brain_api.core.version import compute_snapshot_identity_hash
+    from brain_api.routes.training.snapshot_phase import _cutoffs_requiring_training
+
+    storage = SnapshotLocalStorage(bucket, base_path=tmp_path)
+    monkeypatch.setattr(storage, "_get_hf_repo", lambda: "user/repo")
+    cutoff = date(2019, 12, 31)
+    digest = compute_snapshot_identity_hash(bucket, cutoff, {})
+    api = MagicMock()
+    branch = MagicMock()
+    branch.name = f"snapshot-{cutoff}-{digest}"
+    api.list_repo_refs.return_value.branches = [branch]
+    monkeypatch.setattr(
+        "brain_api.storage.forecaster_snapshots.snapshot_hf.HfApi", lambda **kwargs: api
+    )
+    download = MagicMock(side_effect=ConnectionError("HF download unavailable"))
+    monkeypatch.setattr(
+        "brain_api.storage.forecaster_snapshots.snapshot_hf.snapshot_download", download
+    )
+
+    with pytest.raises(RuntimeError, match="refusing to retrain"):
+        _cutoffs_requiring_training(storage, {}, date(2020, 1, 1), date(2020, 6, 1))
+    download.assert_called_once()
+    assert not storage.snapshot_exists(cutoff, digest)
 
 
 def test_rejected_annual_snapshot_is_retrained(tmp_path):

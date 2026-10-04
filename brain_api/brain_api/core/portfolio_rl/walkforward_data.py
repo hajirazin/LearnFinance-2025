@@ -7,9 +7,26 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.prices import load_close_prices_yfinance, load_prices_yfinance
 
 logger = logging.getLogger(__name__)
+
+
+def load_daily_close_prices(
+    symbol: str, start_date: date, end_date: date
+) -> pd.DataFrame | None:
+    """Load adjusted closes without requiring unrelated OHLCV evidence.
+
+    The shared close loader accepts an inclusive end date, matching the
+    historical actor's last completed session.
+    """
+    prices = load_close_prices_yfinance(
+        [symbol], start_date, end_date, log_prefix="[WalkForward]"
+    )
+    frame = prices.get(symbol)
+    if frame is None or frame.empty:
+        return None
+    return frame[["close"]]
 
 
 def load_daily_ohlcv(

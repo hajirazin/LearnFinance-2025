@@ -154,9 +154,9 @@ def test_good_friday_uses_thursday_anchor_and_missing_friday_does_not():
     assert date(2024, 3, 22) not in missing.anchor_dates
 
 
-@pytest.mark.parametrize("case", ["legacy5", "current5", "current1"])
+@pytest.mark.parametrize("case", ["recorded5_stride1", "current5", "current1"])
 def test_checkpoint_reload_preserves_actual_geometry_and_predictions(tmp_path, case):
-    legacy = case == "legacy5"
+    recorded_stride_one = case == "recorded5_stride1"
     five_channels = case != "current1"
     config = PatchTSTConfig(
         num_input_channels=5 if five_channels else 1,
@@ -171,20 +171,17 @@ def test_checkpoint_reload_preserves_actual_geometry_and_predictions(tmp_path, c
     )
     storage = PatchTSTModelStorage(tmp_path)
     hf = config.to_hf_config()
-    if legacy:
-        hf.patch_stride = 1  # Architecture actually trained by the old adapter
+    if recorded_stride_one:
+        hf.patch_stride = 1  # Saved effective geometry must take precedence.
     model = PatchTSTForPrediction(hf).eval()
     storage.write_artifacts(
         "vold", model, StandardScaler(), config, {"version": "vold"}
     )
     config_path = storage._version_path("vold") / "config.json"
     saved = json.loads(config_path.read_text())
-    expected_stride = 1 if legacy else config.stride
+    expected_stride = 1 if recorded_stride_one else config.stride
     assert saved["hf_config"]["patch_stride"] == expected_stride
     assert config.hf_config is None  # Training/version hash is not mutated.
-    if legacy:
-        saved.pop("hf_config")  # Simulate an original pre-fix artifact.
-        config_path.write_text(json.dumps(saved))
     storage.promote_version("vother")
     loaded = storage.load_version_artifacts("vold")
     assert loaded.config.to_hf_config().patch_stride == expected_stride
@@ -195,6 +192,33 @@ def test_checkpoint_reload_preserves_actual_geometry_and_predictions(tmp_path, c
             model(past_values=x).prediction_outputs,
             loaded.model(past_values=x).prediction_outputs,
         )
+
+
+def test_unpinned_old_five_channel_geometry_is_not_reconstructed(tmp_path):
+    """Retired artifacts fail strict weight loading instead of guessing geometry."""
+    config = PatchTSTConfig(
+        num_input_channels=5,
+        patch_length=16,
+        stride=8,
+        d_model=8,
+        num_attention_heads=2,
+        ffn_dim=16,
+        feature_names=["open_ret", "high_ret", "low_ret", "close_ret", "volume_ret"],
+    )
+    actual = config.to_hf_config()
+    actual.patch_stride = 1
+    model = PatchTSTForPrediction(actual)
+    storage = PatchTSTModelStorage(tmp_path)
+    storage.write_artifacts(
+        "vold", model, StandardScaler(), config, {"version": "vold"}
+    )
+    config_path = storage._version_path("vold") / "config.json"
+    saved = json.loads(config_path.read_text())
+    saved.pop("hf_config")
+    config_path.write_text(json.dumps(saved))
+
+    with pytest.raises(RuntimeError, match="size mismatch"):
+        storage.load_version_artifacts("vold")
 
 
 def test_explicit_hf_cache_returns_requested_version_without_network_or_pointer_change(
