@@ -57,12 +57,16 @@ def repair_ohlc_envelope(frame: pd.DataFrame) -> pd.DataFrame:
     return repaired
 
 
-def _symbol_ohlcv_from_yahoo_download(data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+def _symbol_ohlcv_from_yahoo_download(
+    data: pd.DataFrame,
+    symbol: str,
+    required_columns: tuple[str, ...] = ("open", "high", "low", "close", "volume"),
+) -> pd.DataFrame:
     """Return one symbol's lowercase OHLCV from a yfinance download DataFrame."""
     frame = data[symbol] if isinstance(data.columns, pd.MultiIndex) else data
-    ohlcv = frame.loc[:, _OHLCV_COLUMNS].copy()
+    ohlcv = frame.reindex(columns=_OHLCV_COLUMNS).copy()
     ohlcv.columns = ["open", "high", "low", "close", "volume"]
-    return repair_ohlc_envelope(ohlcv).dropna()
+    return repair_ohlc_envelope(ohlcv).dropna(subset=list(required_columns))
 
 
 @contextmanager
@@ -82,6 +86,8 @@ def load_prices_yfinance(
     start_date: date,
     end_date: date,
     log_prefix: str = "[Prices]",
+    *,
+    required_columns: tuple[str, ...] = ("open", "high", "low", "close", "volume"),
 ) -> dict[str, pd.DataFrame]:
     """Load OHLCV price data for symbols using yfinance.
 
@@ -92,7 +98,11 @@ def load_prices_yfinance(
     """
     with yfinance_io_lock():
         return _load_prices_yfinance_unlocked(
-            symbols, start_date, end_date, log_prefix=log_prefix
+            symbols,
+            start_date,
+            end_date,
+            log_prefix=log_prefix,
+            required_columns=required_columns,
         )
 
 
@@ -101,6 +111,7 @@ def _load_prices_yfinance_unlocked(
     start_date: date,
     end_date: date,
     log_prefix: str = "[Prices]",
+    required_columns: tuple[str, ...] = ("open", "high", "low", "close", "volume"),
 ) -> dict[str, pd.DataFrame]:
     prices: dict[str, pd.DataFrame] = {}
     failed_symbols: list[str] = []
@@ -128,7 +139,9 @@ def _load_prices_yfinance_unlocked(
         if data is not None and not data.empty and hasattr(data, "columns"):
             for symbol in symbols:
                 try:
-                    df = _symbol_ohlcv_from_yahoo_download(data, symbol)
+                    df = _symbol_ohlcv_from_yahoo_download(
+                        data, symbol, required_columns
+                    )
                     if len(df) > 0:
                         prices[symbol] = df
                     else:
@@ -156,9 +169,9 @@ def _load_prices_yfinance_unlocked(
                     auto_adjust=True,
                 )
                 if df is not None and not df.empty:
-                    df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
+                    df = df.reindex(columns=_OHLCV_COLUMNS).copy()
                     df.columns = ["open", "high", "low", "close", "volume"]
-                    df = repair_ohlc_envelope(df).dropna()
+                    df = repair_ohlc_envelope(df).dropna(subset=list(required_columns))
                     if len(df) > 0:
                         prices[symbol] = df
                         print(f"{log_prefix} ✓ {symbol}: {len(df)} days")
@@ -180,6 +193,22 @@ def _load_prices_yfinance_unlocked(
         print(f"{log_prefix} Missing symbols: {missing}")
 
     return prices
+
+
+def load_close_prices_yfinance(
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    log_prefix: str = "[Prices]",
+) -> dict[str, pd.DataFrame]:
+    """Adjusted-close consumers retain valid closes despite missing other fields."""
+    return load_prices_yfinance(
+        symbols,
+        start_date,
+        end_date,
+        log_prefix,
+        required_columns=("close",),
+    )
 
 
 def compute_min_walkforward_days(cutoff_date: date) -> int:

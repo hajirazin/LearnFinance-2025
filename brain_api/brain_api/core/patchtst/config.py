@@ -55,9 +55,13 @@ class PatchTSTConfig:
     # Feature channel names (close-only)
     feature_names: list[str] = field(default_factory=lambda: ["close_ret"])
 
+    # Persisted actual HF architecture; absent on artifacts before this fix.
+    # This is artifact lineage, not a new training hyperparameter.
+    hf_config: dict[str, Any] | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        result = {
             "num_input_channels": self.num_input_channels,
             "context_length": self.context_length,
             "prediction_length": self.prediction_length,
@@ -79,6 +83,38 @@ class PatchTSTConfig:
             "min_week_days": self.min_week_days,
             "feature_names": self.feature_names,
         }
+        if self.hf_config is not None:
+            result["hf_config"] = self.hf_config
+        return result
+
+    @classmethod
+    def from_artifact_dict(cls, values: dict[str, Any]) -> "PatchTSTConfig":
+        """Reconstruct known legacy OHLCV architecture, without changing training defaults.
+
+        The pre-close-only adapter passed `stride` instead of `patch_stride`.
+        Its actual stride was HF's default 1. This is an explicit legacy schema
+        migration; strict checkpoint loading still rejects incompatible weights.
+        """
+        config = cls(**values)
+        if config.hf_config is None and config.num_input_channels == 5:
+            from transformers import PatchTSTConfig as HFPatchTSTConfig
+
+            config.hf_config = HFPatchTSTConfig(
+                num_input_channels=config.num_input_channels,
+                context_length=config.context_length,
+                patch_length=config.patch_length,
+                patch_stride=1,
+                d_model=config.d_model,
+                num_attention_heads=config.num_attention_heads,
+                num_hidden_layers=config.num_hidden_layers,
+                ffn_dim=config.ffn_dim,
+                prediction_length=config.prediction_length,
+                attention_dropout=config.dropout,
+                positional_dropout=config.dropout,
+                use_cls_token=False,
+                pooling_type="mean",
+            ).to_dict()
+        return config
 
     def to_hf_config(self) -> "HFPatchTSTConfig":
         """Convert to HuggingFace PatchTSTConfig.
@@ -92,6 +128,9 @@ class PatchTSTConfig:
         positional dropout.
         """
         from transformers import PatchTSTConfig as HFPatchTSTConfig
+
+        if self.hf_config is not None:
+            return HFPatchTSTConfig.from_dict(self.hf_config)
 
         return HFPatchTSTConfig(
             num_input_channels=self.num_input_channels,

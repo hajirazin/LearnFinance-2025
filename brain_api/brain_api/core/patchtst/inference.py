@@ -21,10 +21,14 @@ import torch
 from sklearn.preprocessing import StandardScaler
 from transformers import PatchTSTForPrediction
 
-from brain_api.core.features import compute_ohlcv_log_returns
+from brain_api.core.features import compute_close_log_returns, compute_ohlcv_log_returns
 from brain_api.core.inference_utils import WeekBoundaries, compute_week_from_cutoff
 from brain_api.core.model_types import classify_direction
 from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.price_history import (
+    completed_context_dates,
+    normalize_price_dates,
+)
 
 if TYPE_CHECKING:
     from brain_api.storage.local import PatchTSTModelStorage
@@ -66,6 +70,7 @@ def build_inference_features(
     prices_df: pd.DataFrame,
     config: PatchTSTConfig,
     cutoff_date: date,
+    exchange: str = "XNYS",
 ) -> InferenceFeatures:
     """Build close-only feature sequence for inference (no signals).
 
@@ -104,6 +109,23 @@ def build_inference_features(
     if prices_df.index.tz is not None:
         cutoff_ts = cutoff_ts.tz_localize(prices_df.index.tz)
     df = prices_df[prices_df.index < cutoff_ts].copy()
+    try:
+        df = normalize_price_dates(df)
+    except ValueError as exc:
+        logger.warning("[PatchTST] Excluding %s: %s", symbol, exc)
+        return InferenceFeatures(symbol, None, False, len(df), None, None)
+    if exchange == "XNYS":
+        expected = completed_context_dates(cutoff_date, config.context_length)
+        actual_end = df.index[-1].date() if len(df) else None
+        missing = expected.difference(df.index)
+        if len(missing):
+            logger.warning(
+                "[PatchTST] Excluding %s: missing completed sessions %s",
+                symbol,
+                [d.date().isoformat() for d in missing],
+            )
+            return InferenceFeatures(symbol, None, False, len(df), actual_end, None)
+        df = df.loc[expected]
 
     if len(df) < config.context_length + 1:
         return InferenceFeatures(
@@ -116,7 +138,12 @@ def build_inference_features(
         )
 
     # Compute OHLCV log returns; select locked close-only channels
-    features_df = compute_ohlcv_log_returns(df, use_returns=config.use_returns)
+    compute_features = (
+        compute_close_log_returns
+        if config.feature_names == ["close_ret"]
+        else compute_ohlcv_log_returns
+    )
+    features_df = compute_features(df, use_returns=config.use_returns)
 
     # Normalize index to timezone-naive for consistent comparisons
     if features_df.index.tz is not None:
@@ -138,6 +165,11 @@ def build_inference_features(
         features_df[list(config.feature_names)].iloc[-config.context_length :].values
     )  # (context_length, n_channels)
     data_end_date = features_df.index[-1].date()
+    if not np.isfinite(sequence).all():
+        logger.warning("[PatchTST] Excluding %s: non-finite feature context", symbol)
+        return InferenceFeatures(
+            symbol, None, False, len(features_df), data_end_date, None
+        )
 
     # Get starting price: last close price before cutoff_date (for weekly return calculation)
     starting_price = None
@@ -217,7 +249,7 @@ def run_inference(
     device = next(model.parameters()).device
 
     # Single forward pass -- NO scaler transform, RevIN normalizes internally
-    # Output is (batch, 5, 5) already in ORIGINAL scale (denormalized by RevIN)
+    # Output is (batch, prediction_length, channels), denormalized by RevIN.
     with torch.no_grad():
         X_tensor = torch.from_numpy(X_batch).float().to(device)
         outputs = model(past_values=X_tensor).prediction_outputs
@@ -304,7 +336,7 @@ def run_batch_inference(
         ValueError: If no current PatchTST model is promoted (only
             when ``artifacts`` is not supplied).
     """
-    from brain_api.core.prices import load_prices_yfinance
+    from brain_api.core.prices import load_close_prices_yfinance, load_prices_yfinance
     from brain_api.storage.local import PatchTSTModelStorage as _DefaultStorage
 
     if artifacts is None:
@@ -328,7 +360,12 @@ def run_batch_inference(
     data_start = week_boundaries.target_week_start - timedelta(days=buffer_days)
     data_end = week_boundaries.target_week_start - timedelta(days=1)
 
-    prices = load_prices_yfinance(symbols, data_start, data_end)
+    price_loader = (
+        load_close_prices_yfinance
+        if config.feature_names == ["close_ret"]
+        else load_prices_yfinance
+    )
+    prices = price_loader(symbols, data_start, data_end)
 
     features_list: list[InferenceFeatures] = []
     for symbol in symbols:
@@ -351,6 +388,7 @@ def run_batch_inference(
                     prices_df=prices_df,
                     config=config,
                     cutoff_date=week_boundaries.target_week_start,
+                    exchange=exchange,
                 )
             )
 

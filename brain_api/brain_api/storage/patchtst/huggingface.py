@@ -1,5 +1,6 @@
 """HuggingFace Hub storage for PatchTST model artifacts."""
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from brain_api.core.config import (
@@ -76,7 +77,12 @@ class PatchTSTHalalNewHuggingFaceModelStorage(
     def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
         from brain_api.core.patchtst import PatchTSTConfig
 
-        return PatchTSTConfig(**config_dict)
+        return PatchTSTConfig.from_artifact_dict(config_dict)
+
+    def _artifact_config(
+        self, config: "PatchTSTConfig", model: "PatchTSTForPrediction"
+    ) -> dict[str, Any]:
+        return replace(config, hf_config=model.config.to_dict()).to_dict()
 
     def _create_model(self, config: "PatchTSTConfig") -> "PatchTSTForPrediction":
         from transformers import PatchTSTForPrediction

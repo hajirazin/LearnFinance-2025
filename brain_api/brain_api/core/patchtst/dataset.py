@@ -21,6 +21,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.price_history import session_dates
 
 
 @dataclass
@@ -104,6 +105,13 @@ def build_dataset(
             continue
 
         channel_df = features_df[channel_names]
+        if not symbol.endswith(".NS") and len(channel_df):
+            # Keep absent sessions as NaN; never compress multi-day returns
+            # into a five-observation target or a 60-observation context.
+            expected = session_dates(
+                channel_df.index[0].date(), channel_df.index[-1].date()
+            )
+            channel_df = channel_df.reindex(expected)
 
         if len(channel_df) < config.context_length + horizon:
             continue
@@ -111,10 +119,20 @@ def build_dataset(
         dates = channel_df.index
         n_dates = len(dates)
         week_ends = _week_end_anchors(dates, config.min_week_days)
+        valid_us_anchors = None
+        if not symbol.endswith(".NS"):
+            first_monday = dates[0] - pd.Timedelta(days=dates[0].weekday())
+            last_friday = dates[-1] + pd.Timedelta(days=4 - dates[-1].weekday())
+            sessions = session_dates(first_monday.date(), last_friday.date())
+            valid_us_anchors = set(
+                sessions.to_series().groupby(sessions.to_period("W")).last()
+            )
 
         symbol_samples = 0
 
         for t in week_ends:
+            if valid_us_anchors is not None and dates[t] not in valid_us_anchors:
+                continue  # An incomplete provider week is not a valid anchor.
             if t < config.context_length - 1:
                 continue
             if t + horizon >= n_dates:

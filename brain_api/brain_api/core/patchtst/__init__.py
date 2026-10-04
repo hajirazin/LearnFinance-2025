@@ -41,7 +41,7 @@ from brain_api.core.patchtst.training import TrainingResult, train_model_pytorch
 
 # Version
 from brain_api.core.patchtst.version import compute_version
-from brain_api.core.prices import load_prices_yfinance
+from brain_api.core.prices import load_close_prices_yfinance as load_prices_yfinance
 from brain_api.core.training_utils import get_device
 
 __all__ = [

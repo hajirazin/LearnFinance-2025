@@ -143,6 +143,10 @@ class BaseHuggingFaceModelStorage(
                 exist_ok=True,
             )
 
+    def _artifact_config(self, config: ConfigT, model: ModelT) -> dict[str, Any]:
+        """Serialize configuration; model-specific storage can pin architecture."""
+        return config.to_dict()
+
     def upload_model(
         self,
         version: str,
@@ -181,7 +185,7 @@ class BaseHuggingFaceModelStorage(
             # Save config
             config_path = tmppath / "config.json"
             with open(config_path, "w") as f:
-                json.dump(config.to_dict(), f, indent=2)
+                json.dump(self._artifact_config(config, model), f, indent=2)
 
             # Save metadata
             metadata_path = tmppath / "metadata.json"
@@ -261,7 +265,7 @@ class BaseHuggingFaceModelStorage(
                 logger.info(
                     f"Loading {self.model_type.upper()} model {version} from local cache"
                 )
-                return self.local_cache.load_current_artifacts()
+                return self.local_cache.load_version_artifacts(version)
 
         logger.info(
             f"Downloading {self.model_type.upper()} model from {self.repo_id} (revision: {revision})"

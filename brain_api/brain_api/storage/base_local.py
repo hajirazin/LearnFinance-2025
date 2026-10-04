@@ -265,6 +265,10 @@ class BaseLocalModelStorage(ABC, Generic[ConfigT, ModelT, ArtifactsT]):
                 f"Train a model first with POST /train/{self.model_type}"
             )
 
+        return self.load_version_artifacts(version)
+
+    def load_version_artifacts(self, version: str) -> ArtifactsT:
+        """Read the exact requested version without changing the current pointer."""
         config = self.load_config(version)
         feature_scaler = self.load_feature_scaler(version)
         model = self.load_model(version, config)

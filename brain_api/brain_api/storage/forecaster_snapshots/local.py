@@ -353,7 +353,7 @@ class SnapshotLocalStorage(SnapshotHFMixin):
 
         from brain_api.core.patchtst import PatchTSTConfig
 
-        config = PatchTSTConfig(**config_dict)
+        config = PatchTSTConfig.from_artifact_dict(config_dict)
         hf_config = config.to_hf_config()
         model = PatchTSTForPrediction(hf_config)
         model.load_state_dict(

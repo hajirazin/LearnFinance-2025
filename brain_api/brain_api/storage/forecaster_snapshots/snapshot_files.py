@@ -6,6 +6,7 @@ import json
 import logging
 import pickle
 import shutil
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -59,7 +60,14 @@ def write_snapshot_artifact_files(
     with open(snapshot_dir / "feature_scaler.pkl", "wb") as f:
         pickle.dump(feature_scaler, f)
     with open(snapshot_dir / "config.json", "w") as f:
-        json.dump(config.to_dict(), f, indent=2)
+        from brain_api.core.patchtst.config import PatchTSTConfig
+
+        stored_config = (
+            replace(config, hf_config=model.config.to_dict())
+            if isinstance(config, PatchTSTConfig)
+            else config
+        )
+        json.dump(stored_config.to_dict(), f, indent=2)
     with open(snapshot_dir / "metadata.json", "w") as f:
         json.dump(metadata, f, indent=2, default=str)
 

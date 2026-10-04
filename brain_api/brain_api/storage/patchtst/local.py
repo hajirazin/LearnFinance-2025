@@ -1,6 +1,7 @@
 """Local filesystem storage for PatchTST model artifacts."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sklearn.preprocessing import StandardScaler
@@ -58,7 +59,25 @@ class PatchTSTHalalNewModelStorage(
     def _load_config(self, config_dict: dict[str, Any]) -> "PatchTSTConfig":
         from brain_api.core.patchtst import PatchTSTConfig
 
-        return PatchTSTConfig(**config_dict)
+        return PatchTSTConfig.from_artifact_dict(config_dict)
+
+    def write_artifacts(
+        self,
+        version: str,
+        model: "PatchTSTForPrediction",
+        feature_scaler: StandardScaler,
+        config: "PatchTSTConfig",
+        metadata: dict[str, Any],
+    ) -> Path:
+        """Pin the model's actual architecture so later adapters cannot alter it."""
+        stored_config = replace(config, hf_config=model.config.to_dict())
+        return super().write_artifacts(
+            version,
+            model,
+            feature_scaler,
+            stored_config,
+            metadata,
+        )
 
     def _create_model(self, config: "PatchTSTConfig") -> "PatchTSTForPrediction":
         from transformers import PatchTSTForPrediction

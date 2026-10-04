@@ -3,8 +3,12 @@
 import numpy as np
 import pandas as pd
 
-from brain_api.core.features import compute_ohlcv_log_returns
+from brain_api.core.features import compute_close_log_returns, compute_ohlcv_log_returns
 from brain_api.core.patchtst.config import PatchTSTConfig
+from brain_api.core.patchtst.price_history import (
+    align_us_price_sessions,
+    normalize_price_dates,
+)
 
 
 def align_multivariate_data(
@@ -29,10 +33,20 @@ def align_multivariate_data(
         if len(price_df) < config.context_length + 5:
             continue
 
-        # OHLCV log returns; config.feature_names selects the model channels
-        features_df = compute_ohlcv_log_returns(
-            price_df, use_returns=config.use_returns
+        # US evidence is aligned before differencing: missing bars cannot turn
+        # multi-session moves into a single daily return. India retains its
+        # existing market contract; XNYS must never be applied to .NS symbols.
+        price_df = (
+            normalize_price_dates(price_df)
+            if symbol.endswith(".NS")
+            else align_us_price_sessions(price_df)
         )
+        compute_features = (
+            compute_close_log_returns
+            if config.feature_names == ["close_ret"]
+            else compute_ohlcv_log_returns
+        )
+        features_df = compute_features(price_df, use_returns=config.use_returns)
 
         # Ensure column order matches config.feature_names
         features_df = features_df[config.feature_names]

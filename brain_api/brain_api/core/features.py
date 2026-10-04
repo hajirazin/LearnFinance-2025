@@ -23,6 +23,15 @@ def _log_return_positive(series: pd.Series) -> pd.Series:
     return pd.Series(out, index=series.index, dtype="float64")
 
 
+def compute_close_log_returns(
+    df: pd.DataFrame, use_returns: bool = True
+) -> pd.DataFrame:
+    """Close-only models must not depend on missing open/high/low/volume bars."""
+    values = _log_return_positive(df["close"]) if use_returns else df["close"]
+    result = values.to_frame("close_ret")
+    return result.iloc[1:] if use_returns else result
+
+
 def compute_ohlcv_log_returns(
     df: pd.DataFrame, use_returns: bool = True
 ) -> pd.DataFrame:
