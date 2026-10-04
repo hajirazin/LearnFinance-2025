@@ -1,0 +1,22 @@
+{
+  "source": "Chrome Alpaca HRP paper account orders table, read October 3 2026; market orders, all sampled legs filled",
+  "url": "https://app.alpaca.markets/account/orders",
+  "sampling": "All six completed weekly runs after the August 23 migration; consecutive complete coverage rather than a random subset",
+  "weeks": [
+    {"trade_date":"2026-08-24","buys":7,"sells":17,"buy_notional":55212.606483,"sell_notional":56022.850404,"buy_symbols":"ZBRA VLO STX PSX PINS OKTA CSLLY","sell_symbols":"SNDK CRWD IBM MRVL AMD WDAY TECH SSDOY RCRUY PANW NTAP MMYT HPE GPC EXPE AXON ATEYY"},
+    {"trade_date":"2026-08-31","buys":9,"sells":7,"buy_notional":48076.848475,"sell_notional":48634.642517,"buy_symbols":"SMCI RCRUY PANW ONC MMYT INCY DASH CRL ATEYY","sell_symbols":"ZBRA WDAY VLO STX PSX PINS OKTA"},
+    {"trade_date":"2026-09-08","buys":8,"sells":14,"buy_notional":61839.487857,"sell_notional":60395.231473,"buy_symbols":"VLO OKTA ILMN GDDY DOCU CTVA CTSH ACN","sell_symbols":"MMYT ONC DASH TEAM SMCI CRL ZBRA PANW CSLLY AXON INCY RCRUY SSDOY EXPE"},
+    {"trade_date":"2026-09-14","buys":11,"sells":8,"buy_notional":56781.941363,"sell_notional":56600.637787,"buy_symbols":"ZBRA PSX ILMN IBM EXPGY DELL CSLLY CRWD CRM CRL ADSK","sell_symbols":"VLO PANW ONC GDDY CTVA CTSH ATEYY ACN"},
+    {"trade_date":"2026-09-21","buys":7,"sells":8,"buy_notional":40070.305687,"sell_notional":39917.935820,"buy_symbols":"SSDOY NTAP NCLTY MSTR CTSH CSLLY ACN","sell_symbols":"ZBRA VLO PSX OKTA ILMN CRWD CRL ADSK"},
+    {"trade_date":"2026-09-28","buys":5,"sells":11,"buy_notional":35332.952209,"sell_notional":36281.613606,"buy_symbols":"SMCI NCLTY ILMN HPQ COP","sell_symbols":"VLO SSDOY PSX NTAP MSTR EXPGY DOCU DELL CSLLY CRM ACN"}
+  ],
+  "equal_quantity_round_trips": [
+    {"symbol":"DASH","buy_date":"2026-08-31","sell_date":"2026-09-08","qty":21.9045,"buy_price":235.901305,"sell_price":203.417053},
+    {"symbol":"MMYT","buy_date":"2026-08-31","sell_date":"2026-09-08","qty":63.0605,"buy_price":59.62666,"sell_price":53.326353},
+    {"symbol":"CTVA","buy_date":"2026-09-08","sell_date":"2026-09-14","qty":304.3688,"buy_price":87.37,"sell_price":84.155853},
+    {"symbol":"EXPGY","buy_date":"2026-09-14","sell_date":"2026-09-28","qty":274.9993,"buy_price":38.890365,"sell_price":33.63},
+    {"symbol":"CRM","buy_date":"2026-09-14","sell_date":"2026-09-28","qty":10.293,"buy_price":254.888676,"sell_price":225.433984},
+    {"symbol":"OKTA","buy_date":"2026-08-24","sell_date":"2026-08-31","qty":21.408,"buy_price":132.52,"sell_price":167.907062}
+  ],
+  "account_equity_snapshot": {"alpha_hrp":94734.97,"double_hrp":99829.42,"sac":98738.70,"warning":"Different account balances do not establish equal-period strategy returns without starting NAV, cash-flow and timestamp reconciliation."}
+}

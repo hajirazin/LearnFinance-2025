@@ -1,0 +1,105 @@
+{
+  "cutoff_probes": [
+    {
+      "cutoff": "2026-08-21",
+      "median_error_pp": 0.5988306188583374
+    },
+    {
+      "cutoff": "2026-08-22",
+      "median_error_pp": 1.2051265907287598
+    },
+    {
+      "cutoff": "2026-08-23",
+      "median_error_pp": 1.2051265907287598
+    },
+    {
+      "cutoff": "2026-08-24",
+      "median_error_pp": 1.2051265907287598
+    },
+    {
+      "cutoff": "2026-08-25",
+      "median_error_pp": 0.7115269804000854
+    },
+    {
+      "cutoff": "2026-08-26",
+      "median_error_pp": 1.6122533035278321
+    },
+    {
+      "cutoff": "2026-08-27",
+      "median_error_pp": 1.1940466594696044
+    },
+    {
+      "cutoff": "2026-08-28",
+      "median_error_pp": 0.001995348930358798
+    },
+    {
+      "cutoff": "2026-08-29",
+      "median_error_pp": 1.3122201871871948
+    },
+    {
+      "cutoff": "2026-08-30",
+      "median_error_pp": 1.3122201871871948
+    },
+    {
+      "cutoff": "2026-08-31",
+      "median_error_pp": 1.3122201871871948
+    },
+    {
+      "cutoff": "2026-09-01",
+      "median_error_pp": 0.8819840192794801
+    },
+    {
+      "cutoff": "2026-09-02",
+      "median_error_pp": 1.1897269177436827
+    },
+    {
+      "cutoff": "2026-09-03",
+      "median_error_pp": 1.147265167236328
+    },
+    {
+      "cutoff": "2026-09-04",
+      "median_error_pp": 0.5072370529174806
+    },
+    {
+      "cutoff": "2026-09-05",
+      "median_error_pp": 1.0708977341651915
+    },
+    {
+      "cutoff": "2026-09-06",
+      "median_error_pp": 1.0708977341651915
+    },
+    {
+      "cutoff": "2026-09-07",
+      "median_error_pp": 1.0708977341651915
+    },
+    {
+      "cutoff": "2026-09-08",
+      "median_error_pp": 1.0708977341651915
+    },
+    {
+      "cutoff": "2026-09-09",
+      "median_error_pp": 0.7997342872619628
+    },
+    {
+      "cutoff": "2026-09-10",
+      "median_error_pp": 1.46336496591568
+    }
+  ],
+  "legacy_current_loader": "Error(s) in loading state_dict for PatchTSTForPrediction:\n\tsize mismatch for model.encoder.positional_encoder.position_enc: copying a param with shape torch.Size([45, 64]) from checkpoint, the shape in current model is torch.Size([6, 64]).",
+  "legacy_effective_stride": 1,
+  "legacy_reconstructed": "loaded strict state_dict successfully",
+  "current_effective_stride": 5,
+  "stale_input_accepted": {
+    "has_enough_history": true,
+    "data_end_date": "2026-09-17",
+    "requested_cutoff": "2026-09-28"
+  },
+  "missing5_sessions_accepted": {
+    "has_enough_history": true,
+    "shape": [
+      60,
+      1
+    ]
+  },
+  "same_version_seed": null
+}

@@ -1,0 +1,70 @@
+"""Six original Gmail tables transcribed from visible reports on October 3."""
+
+import json
+from pathlib import Path
+
+DATA = [
+    (
+        "2026-05-18",
+        "v2026-05-08-d40d9199c8bb",
+        "INTC:7.65 SNDK:6.99 MRVL:6.84 FLEX:6.39 AMD:6.27 DELL:6.07 STX:5.67 NOK:5.15 TWLO:4.92 CIEN:4.68 MU:4.66 UMC:4.47 WDC:4.44 ON:4.28 ARM:4.19 COHR:4.18 MRAAY:4.11 PANW:4.01 GFS:3.75 HPE:3.73 VRT:3.55 CSCO:3.49 FTNT:3.42 GLW:3.26 FIX:3.12",
+        "UMC:16.27 NOK:14.64 TWLO:11.97 DELL:8.38 MRVL:6.29 ARM:5.37 CIEN:5.17 VRT:4.88 MU:4.68 FLEX:4.60 INTC:4.53 STX:4.08 AMD:3.87 WDC:3.74 SNDK:1.54",
+    ),
+    (
+        "2026-06-01",
+        "v2026-05-08-d40d9199c8bb",
+        "DELL:9.12 ARM:9.04 SNDK:8.99 MRVL:8.33 MRAAY:8.29 AMD:8.08 INTC:7.93 MU:7.60 FLEX:7.35 STX:7.34 UMC:6.93 WDC:6.05 HPE:5.95 ON:5.58 IFNNY:5.32 NOK:5.08 QCOM:5.03 CRWD:4.95 PANW:4.87 NTAP:4.78 OKTA:4.56 CIEN:4.41 GFS:4.38 FTNT:4.31 RNECY:3.94",
+        "NOK:14.25 TWLO:13.41 UMC:10.09 GFS:8.66 DELL:8.60 MRVL:7.66 INTC:5.13 ARM:4.98 FLEX:4.83 MU:4.66 STX:4.19 AMD:4.11 CIEN:3.93 WDC:3.86 SNDK:1.61",
+    ),
+    (
+        "2026-06-29",
+        "v2026-05-08-d40d9199c8bb",
+        "MU:10.53 SNDK:10.36 MRAAY:9.68 INTC:9.24 UMC:9.06 MRVL:8.54 AMD:8.11 DELL:7.66 STX:7.14 FLEX:6.89 ARM:6.76 WDC:6.61 RNECY:6.34 IFNNY:5.79 PANW:5.45 TOELY:5.32 FTNT:5.23 HPE:5.17 AMAT:5.15 CRWD:4.96 GFS:4.95 LRCX:4.85 KLAC:4.43 GLW:4.09 NOK:4.04",
+        "NOK:14.89 IFNNY:10.92 MRAAY:10.18 UMC:8.14 GFS:7.92 DELL:7.29 FLEX:6.52 AMD:5.29 MRVL:5.14 INTC:4.82 ARM:4.73 STX:4.27 MU:3.98 WDC:3.87 SNDK:2.03",
+    ),
+    (
+        "2026-07-13",
+        "v2026-05-08-d40d9199c8bb",
+        "UMC:8.17 DELL:7.37 MRAAY:6.85 AMD:6.68 OKTA:6.59 MU:6.32 SNDK:5.99 PANW:5.98 FTNT:5.92 ARM:5.90 HPE:5.85 CRWD:5.36 MRVL:4.76 TWLO:4.63 INTC:4.56 NTAP:4.55 RNECY:4.52 STX:4.51 RCRUY:4.47 FLEX:4.43 TOELY:4.09 WDC:3.89 IFNNY:3.84 AMAT:3.53 AXON:3.31",
+        "PANW:17.40 DELL:10.59 OKTA:9.52 UMC:9.28 IFNNY:9.04 MRAAY:8.70 FLEX:5.57 AMD:5.55 ARM:5.05 INTC:4.01 MRVL:4.00 STX:3.48 MU:3.16 WDC:3.07 SNDK:1.58",
+    ),
+    (
+        "2026-07-27",
+        "v2026-07-24-786e036ecc83",
+        "SHECY:7.51 FTNT:7.08 PANW:6.63 OKTA:6.55 RCRUY:6.37 DELL:6.32 AMD:6.26 MU:6.00 FLEX:5.55 ICLR:5.13 WST:4.82 CHRW:4.56 ILMN:4.38 CRWD:4.23 SNDK:4.23 BBY:4.16 STX:3.91 HPE:3.76 DLTR:3.72 MNST:3.61 TOELY:3.60 TECH:3.57 UBER:3.37 WFAFY:3.26 ADDYY:3.26",
+        "SHECY:19.50 WST:15.29 CHRW:13.71 RCRUY:7.66 FTNT:7.38 PANW:7.16 CRWD:5.46 OKTA:4.66 FLEX:3.81 DELL:3.50 ICLR:3.49 AMD:2.90 STX:2.36 MU:1.97 SNDK:1.15",
+    ),
+    (
+        "2026-08-03",
+        "v2026-07-24-786e036ecc83",
+        "RBLX:8.99 GDDY:6.31 CTVA:5.53 BBY:5.47 RCRUY:5.14 DELL:4.88 FICO:4.66 ICLR:4.14 OKTA:4.07 IP:4.03 DSNKY:4.03 NTAP:3.85 PANW:3.69 TECH:3.68 ABBV:3.63 INCY:3.61 DLTR:3.46 SW:3.40 HPE:3.37 MU:3.24 MAS:3.23 NXPI:3.17 MNST:3.05 SYK:3.05 NVO:2.92",
+        "CTVA:25.94 BBY:10.16 DSNKY:9.03 IP:7.65 PANW:6.88 GDDY:6.55 RCRUY:6.49 NTAP:6.46 FICO:4.72 OKTA:3.57 ICLR:3.06 RBLX:3.00 DELL:2.36 AMD:2.33 MU:1.80",
+    ),
+]
+
+
+def parse(s):
+    return {a: float(b) for a, b in (v.split(":") for v in s.split())}
+
+
+samples = [
+    {
+        "week": d,
+        "model": v,
+        "k_in": 15,
+        "k_hold": 30,
+        "email_top25_scores": parse(sc),
+        "weights_pct": parse(w),
+    }
+    for d, v, sc, w in DATA
+]
+Path(__file__).with_suffix(".json").write_text(
+    json.dumps(
+        {
+            "source": "Visible Gmail US Alpha-HRP Portfolio Analysis reports, personal account; tables transcribed October 3, 2026",
+            "sample_selection": "Six deliberately spaced pre-migration weeks; not claimed to be statistically random. Fifteen reports May4-Aug3 were inspected for model and hold-band history.",
+            "samples": samples,
+        },
+        indent=2,
+    )
+)

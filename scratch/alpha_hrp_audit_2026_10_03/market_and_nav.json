@@ -1,0 +1,324 @@
+{
+  "start": "2026-08-21",
+  "end": "2026-10-02",
+  "actual_nav_returns_pct": {
+    "hrp": -4.994987753189662,
+    "dhrp": -4.161763364677984,
+    "sac": -5.295784801260006
+  },
+  "benchmark_returns_pct": {
+    "SPY": 0.7615338392006787,
+    "QQQ": 5.175075709734345,
+    "SPUS": 2.962981915468532,
+    "HLAL": 4.640620850205313
+  },
+  "weeks": [
+    {
+      "week_ending": "2026-08-28",
+      "hrp": 1.5971096243963867,
+      "dhrp": 0.3590474681873346,
+      "sac": 0.7741696750885207,
+      "SPY": 0.47406684097142104,
+      "QQQ": 0.4190947648994525,
+      "SPUS": 0.3347193329597653,
+      "HLAL": 0.42853997451843817
+    },
+    {
+      "week_ending": "2026-09-04",
+      "hrp": -1.920997019692261,
+      "dhrp": 0.03991830760914361,
+      "sac": 1.2300884652532984,
+      "SPY": 0.10918729705331476,
+      "QQQ": 0.3531366935274338,
+      "SPUS": 0.40822905261452824,
+      "HLAL": 0.8355155572304929
+    },
+    {
+      "week_ending": "2026-09-11",
+      "hrp": -3.980296329992694,
+      "dhrp": -0.659130315548162,
+      "sac": -4.2898783241691385,
+      "SPY": -0.766051433735726,
+      "QQQ": -0.5674852060973956,
+      "SPUS": -0.8809088065677706,
+      "HLAL": -0.28256549910398165
+    },
+    {
+      "week_ending": "2026-09-18",
+      "hrp": 3.197239959336451,
+      "dhrp": -0.10261725496484297,
+      "sac": -1.1857721487950168,
+      "SPY": -0.09270593988092157,
+      "QQQ": 0.9190367989065695,
+      "SPUS": 0.6836464490748373,
+      "HLAL": 0.8569377711231008
+    },
+    {
+      "week_ending": "2026-09-25",
+      "hrp": -4.322252533042359,
+      "dhrp": -0.4810650551191342,
+      "sac": -0.5383742380446255,
+      "SPY": 1.2682289531920743,
+      "QQQ": 3.302483169577597,
+      "SPUS": 1.9181820930948001,
+      "HLAL": 2.423748375107304
+    },
+    {
+      "week_ending": "2026-10-02",
+      "hrp": 0.565666795113895,
+      "dhrp": -3.3457026637839005,
+      "sac": -1.3089973615751593,
+      "SPY": -0.22168418897026143,
+      "QQQ": 0.6823394344988243,
+      "SPUS": 0.48301284327985083,
+      "HLAL": 0.31181664832837797
+    }
+  ],
+  "market_conditions": {
+    "SPY": {
+      "start_level": 763.8232421875,
+      "end_level": 769.6400146484375,
+      "change_pct": 0.7615338392006787,
+      "max_drawdown_pct": -2.472935182691627,
+      "annualized_20_session_log_vol_start_pct": 13.147227578985865,
+      "annualized_20_session_log_vol_end_pct": 10.328432639787206
+    },
+    "QQQ": {
+      "start_level": 712.6973876953125,
+      "end_level": 749.5800170898438,
+      "change_pct": 5.175075709734345,
+      "max_drawdown_pct": -2.2978524309697823,
+      "annualized_20_session_log_vol_start_pct": 22.32208368124129,
+      "annualized_20_session_log_vol_end_pct": 15.214752776614457
+    },
+    "RSP": {
+      "start_level": 220.83985900878906,
+      "end_level": 209.72999572753906,
+      "change_pct": -5.0307328265446145,
+      "max_drawdown_pct": -5.991646904026149,
+      "annualized_20_session_log_vol_start_pct": 11.297855504235207,
+      "annualized_20_session_log_vol_end_pct": 9.073708611895198
+    },
+    "IWM": {
+      "start_level": 299.1786193847656,
+      "end_level": 281.5199890136719,
+      "change_pct": -5.90237043255536,
+      "max_drawdown_pct": -7.115683861402344,
+      "annualized_20_session_log_vol_start_pct": 15.6304573445295,
+      "annualized_20_session_log_vol_end_pct": 11.213901276198088
+    },
+    "^VIX": {
+      "start_level": 15.130000114440918,
+      "end_level": 15.3100004196167,
+      "change_pct": 1.189691366915313,
+      "max_drawdown_pct": -20.347534099736798,
+      "annualized_20_session_log_vol_start_pct": 105.02904304331136,
+      "annualized_20_session_log_vol_end_pct": 99.41333286244033
+    },
+    "^TNX": {
+      "start_level": 4.73799991607666,
+      "end_level": 5.2769999504089355,
+      "change_pct": 11.376108988591938,
+      "max_drawdown_pct": -2.089488789898375,
+      "annualized_20_session_log_vol_start_pct": 14.633752715472554,
+      "annualized_20_session_log_vol_end_pct": 15.115122217129178
+    },
+    "TLT": {
+      "start_level": 81.40892028808594,
+      "end_level": 77.4800033569336,
+      "change_pct": -4.826150398812423,
+      "max_drawdown_pct": -6.4597574337882495,
+      "annualized_20_session_log_vol_start_pct": 12.050370146593242,
+      "annualized_20_session_log_vol_end_pct": 10.507204811082737
+    },
+    "XLE": {
+      "start_level": 63.26395797729492,
+      "end_level": 62.81999969482422,
+      "change_pct": -0.7017554649837665,
+      "max_drawdown_pct": -6.1647875593023205,
+      "annualized_20_session_log_vol_start_pct": 25.036358949326914,
+      "annualized_20_session_log_vol_end_pct": 20.119926824461754
+    },
+    "XLK": {
+      "start_level": 183.09632873535156,
+      "end_level": 199.80999755859375,
+      "change_pct": 9.128347323337227,
+      "max_drawdown_pct": -2.6562696287975918,
+      "annualized_20_session_log_vol_start_pct": 32.42029247340212,
+      "annualized_20_session_log_vol_end_pct": 17.69516272582202
+    },
+    "XLV": {
+      "start_level": 173.95425415039062,
+      "end_level": 166.17999267578125,
+      "change_pct": -4.469141334070626,
+      "max_drawdown_pct": -5.664895171769812,
+      "annualized_20_session_log_vol_start_pct": 20.511115862854187,
+      "annualized_20_session_log_vol_end_pct": 14.36488325459431
+    },
+    "XLF": {
+      "start_level": 57.277286529541016,
+      "end_level": 53.4900016784668,
+      "change_pct": -6.6121932105161925,
+      "max_drawdown_pct": -8.48874165899306,
+      "annualized_20_session_log_vol_start_pct": 11.965799290288333,
+      "annualized_20_session_log_vol_end_pct": 11.473024412103127
+    },
+    "XLI": {
+      "start_level": 179.76686096191406,
+      "end_level": 169.9499969482422,
+      "change_pct": -5.460886373129526,
+      "max_drawdown_pct": -7.159379466488868,
+      "annualized_20_session_log_vol_start_pct": 18.0806669015009,
+      "annualized_20_session_log_vol_end_pct": 12.925468462454601
+    },
+    "XLY": {
+      "start_level": 117.76063537597656,
+      "end_level": 110.04000091552734,
+      "change_pct": -6.556209921761546,
+      "max_drawdown_pct": -7.819403917154255,
+      "annualized_20_session_log_vol_start_pct": 19.68527454239289,
+      "annualized_20_session_log_vol_end_pct": 14.593246998937698
+    },
+    "XLP": {
+      "start_level": 85.42815399169922,
+      "end_level": 80.52999877929688,
+      "change_pct": -5.733654519654352,
+      "max_drawdown_pct": -7.537659758360016,
+      "annualized_20_session_log_vol_start_pct": 16.532893505432824,
+      "annualized_20_session_log_vol_end_pct": 11.27663590923285
+    },
+    "XLU": {
+      "start_level": 42.45781326293945,
+      "end_level": 39.83000183105469,
+      "change_pct": -6.18922933126782,
+      "max_drawdown_pct": -9.127551714791382,
+      "annualized_20_session_log_vol_start_pct": 12.97128237028442,
+      "annualized_20_session_log_vol_end_pct": 13.982618500319822
+    },
+    "XLB": {
+      "start_level": 53.29473876953125,
+      "end_level": 48.86000061035156,
+      "change_pct": -8.321155636689303,
+      "max_drawdown_pct": -9.142196635472166,
+      "annualized_20_session_log_vol_start_pct": 19.445882218391606,
+      "annualized_20_session_log_vol_end_pct": 12.703149481068893
+    },
+    "XLRE": {
+      "start_level": 44.70371627807617,
+      "end_level": 40.810001373291016,
+      "change_pct": -8.71004746129962,
+      "max_drawdown_pct": -9.562579256638559,
+      "annualized_20_session_log_vol_start_pct": 11.856470488404968,
+      "annualized_20_session_log_vol_end_pct": 10.259589705520513
+    },
+    "XLC": {
+      "start_level": 111.0340576171875,
+      "end_level": 110.31999969482422,
+      "change_pct": -0.6430981067314878,
+      "max_drawdown_pct": -4.191719005310457,
+      "annualized_20_session_log_vol_start_pct": 21.220565117129127,
+      "annualized_20_session_log_vol_end_pct": 21.345115890063862
+    },
+    "SMH": {
+      "start_level": 560.4199829101562,
+      "end_level": 630.5999755859375,
+      "change_pct": 12.522749869008898,
+      "max_drawdown_pct": -5.709655275541392,
+      "annualized_20_session_log_vol_start_pct": 45.00535837723645,
+      "annualized_20_session_log_vol_end_pct": 31.30636413245918
+    },
+    "GLD": {
+      "start_level": 423.3599853515625,
+      "end_level": 380.1400146484375,
+      "change_pct": -10.208799177663119,
+      "max_drawdown_pct": -11.717710375377543,
+      "annualized_20_session_log_vol_start_pct": 25.189171550154466,
+      "annualized_20_session_log_vol_end_pct": 21.31924481644311
+    },
+    "SPUS": {
+      "start_level": 58.593875885009766,
+      "end_level": 60.33000183105469,
+      "change_pct": 2.962981915468532,
+      "max_drawdown_pct": -2.4966254600416904,
+      "annualized_20_session_log_vol_start_pct": 16.72449823850883,
+      "annualized_20_session_log_vol_end_pct": 11.512063775240335
+    },
+    "HLAL": {
+      "start_level": 72.24727630615234,
+      "end_level": 75.5999984741211,
+      "change_pct": 4.640620850205313,
+      "max_drawdown_pct": -1.611646306396275,
+      "annualized_20_session_log_vol_start_pct": 16.953953381298692,
+      "annualized_20_session_log_vol_end_pct": 12.379354988717811
+    },
+    "SPTE": {
+      "start_level": 46.79296875,
+      "end_level": 51.400001525878906,
+      "change_pct": 9.845566329618505,
+      "max_drawdown_pct": -3.619441686097824,
+      "annualized_20_session_log_vol_start_pct": 31.165059480392436,
+      "annualized_20_session_log_vol_end_pct": 20.389587707196007
+    },
+    "SPWO": {
+      "start_level": 33.72401428222656,
+      "end_level": 34.2599983215332,
+      "change_pct": 1.589324553183813,
+      "max_drawdown_pct": -4.597705155496412,
+      "annualized_20_session_log_vol_start_pct": 24.49677893134394,
+      "annualized_20_session_log_vol_end_pct": 19.983479917926427
+    },
+    "UMMA": {
+      "start_level": 37.795623779296875,
+      "end_level": 37.77000045776367,
+      "change_pct": -0.06779441366764338,
+      "max_drawdown_pct": -4.953887283435354,
+      "annualized_20_session_log_vol_start_pct": 24.584056522529647,
+      "annualized_20_session_log_vol_end_pct": 19.19212939094343
+    }
+  },
+  "earlier_periods": {
+    "2026-01-16 through 2026-08-21": {
+      "hrp": -0.28424000000000227,
+      "dhrp": 4.164499999999993,
+      "sac": 4.260090000000005,
+      "SPY": 11.295905465607504,
+      "QQQ": 15.108748113203085,
+      "SPUS": 14.148124262748496,
+      "HLAL": 15.61324093157246
+    },
+    "2026-07-01 through 2026-08-21": {
+      "hrp": -15.4607727919292,
+      "dhrp": -0.06139396243771689,
+      "sac": 4.879075817567702,
+      "SPY": 2.6764594733984293,
+      "QQQ": -1.6175411584827715,
+      "SPUS": 2.943818263802611,
+      "HLAL": 1.9591310514040172
+    },
+    "2026-08-14 through 2026-08-21": {
+      "hrp": -1.9973652563725075,
+      "dhrp": 1.2391344661207615,
+      "sac": 0.10599166392222248,
+      "SPY": -1.3679645600331858,
+      "QQQ": -2.411531665973421,
+      "SPUS": -1.1633868017242088,
+      "HLAL": -1.425344305186027
+    },
+    "2026-08-21 through 2026-10-02": {
+      "hrp": -4.994987753189662,
+      "dhrp": -4.161763364677984,
+      "sac": -5.295784801260006,
+      "SPY": 0.7615338392006787,
+      "QQQ": 5.175075709734345,
+      "SPUS": 2.962981915468532,
+      "HLAL": 4.640620850205313
+    }
+  },
+  "caveats": [
+    "NAV includes actual paper fills and broker marks. No CSD/CSW cash-flow entries returned.",
+    "CTVA/Vylor corporate-action credit appears absent from dhrp, so its economic return is unresolved.",
+    "Earlier hrp account history may cover older HRP strategy variants.",
+    "Market prices are retrospective Yahoo auto-adjusted evidence, not original run snapshots.",
+    "VIX/TNX levels are not investable total returns."
+  ]
+}

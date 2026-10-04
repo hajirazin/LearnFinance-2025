@@ -1,0 +1,10 @@
+{
+  "raw_loss_equals_hf": true,
+  "translation_equivariance": true,
+  "frozen_5_to_1_eval_equivalence": true,
+  "batchnorm_train_coupling": true,
+  "may_nearly_constant_normalized_head": true,
+  "147_reported_scores_reproduce_rounding": true,
+  "1404_orders_435_prices": true,
+  "pointers_unchanged": true
+}

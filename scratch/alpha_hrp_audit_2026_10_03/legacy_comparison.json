@@ -1,0 +1,140 @@
+{
+  "old_model": "v2026-08-14-e7b14b211a54",
+  "effective_patch_stride": 1,
+  "nonclose_input_perturbation_max_close_output_delta": 0.0,
+  "rows": [
+    {
+      "week": "2026-08-24",
+      "old5channel_rank_ic_next5": 0.07879939125416598,
+      "old5channel_top15_return_next5": 2.2524591333962234,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "CRL",
+        "TECH",
+        "RCRUY",
+        "ZBRA",
+        "SSDOY",
+        "CSLLY",
+        "AXON",
+        "DASH",
+        "GPC",
+        "WDAY",
+        "EXPE",
+        "VLO",
+        "PANW",
+        "PSX"
+      ]
+    },
+    {
+      "week": "2026-08-31",
+      "old5channel_rank_ic_next5": -0.2535130039195268,
+      "old5channel_top15_return_next5": -1.6132221789177081,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "CSLLY",
+        "RCRUY",
+        "SSDOY",
+        "CRL",
+        "TECH",
+        "DASH",
+        "WDAY",
+        "ZBRA",
+        "EXPE",
+        "PSX",
+        "GPC",
+        "SGPYY",
+        "VLO",
+        "MRK"
+      ]
+    },
+    {
+      "week": "2026-09-07",
+      "old5channel_rank_ic_next5": 0.10769656338011044,
+      "old5channel_top15_return_next5": -0.9479468485468501,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "CSLLY",
+        "ZBRA",
+        "RCRUY",
+        "SSDOY",
+        "DOCU",
+        "CRL",
+        "WDAY",
+        "CRM",
+        "PSX",
+        "VLO",
+        "GPC",
+        "GFI",
+        "REGN",
+        "ONC"
+      ]
+    },
+    {
+      "week": "2026-09-14",
+      "old5channel_rank_ic_next5": 0.18323176108081418,
+      "old5channel_top15_return_next5": 1.4495017767769403,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "RCRUY",
+        "PSX",
+        "VLO",
+        "CSLLY",
+        "CRM",
+        "WDAY",
+        "SSDOY",
+        "DOCU",
+        "ZBRA",
+        "HPQ",
+        "CRL",
+        "NCLTY",
+        "ACN",
+        "IBM"
+      ]
+    },
+    {
+      "week": "2026-09-21",
+      "old5channel_rank_ic_next5": -0.29059447398938815,
+      "old5channel_top15_return_next5": -2.4121765594644935,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "VLO",
+        "PSX",
+        "SSDOY",
+        "RCRUY",
+        "HPQ",
+        "DOCU",
+        "WDAY",
+        "CRM",
+        "CSLLY",
+        "CTSH",
+        "OKTA",
+        "ACN",
+        "NCLTY",
+        "MSTR"
+      ]
+    },
+    {
+      "week": "2026-09-28",
+      "old5channel_rank_ic_next5": -0.07152914462195054,
+      "old5channel_top15_return_next5": 0.6156074456293832,
+      "old5channel_top15_symbols": [
+        "TEAM",
+        "SSDOY",
+        "RCRUY",
+        "MSTR",
+        "SMCI",
+        "HPQ",
+        "CSLLY",
+        "PSX",
+        "NCLTY",
+        "ZBRA",
+        "DOCU",
+        "CTSH",
+        "ILMN",
+        "VLO",
+        "WPM"
+      ]
+    }
+  ],
+  "mean_rank_ic": -0.04098481780262915
+}

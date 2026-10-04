@@ -1,0 +1,66 @@
+{
+  "active_version": "v2026-08-21-0af698826abd",
+  "legacy_version": "v2026-08-14-e7b14b211a54",
+  "legacy_effective_stride": 1,
+  "legacy_model_vs_original_adapter_output_delta": 0.0,
+  "current_pointer_unchanged": true,
+  "rows": [
+    {
+      "week": "2026-08-24",
+      "valid_sessions_scores": 430,
+      "common_symbols": 430,
+      "max_prior_audit_score_delta_pp": 0.0,
+      "ATEYY": 1.9018,
+      "SMCI": 2.161
+    },
+    {
+      "week": "2026-08-31",
+      "valid_sessions_scores": 430,
+      "common_symbols": 430,
+      "max_prior_audit_score_delta_pp": 5.0504999999999995,
+      "ATEYY": -0.3423,
+      "SMCI": -1.0724,
+      "fresh_session_selected": [
+        "CRL",
+        "CSLLY",
+        "CTSH",
+        "DASH",
+        "EXPE",
+        "GDDY",
+        "ILMN",
+        "LH",
+        "PANW",
+        "RCRUY",
+        "SSDOY",
+        "TEAM",
+        "VLO",
+        "WDAY",
+        "ZBRA"
+      ],
+      "added_vs_email": [
+        "CTSH",
+        "GDDY",
+        "ILMN",
+        "LH",
+        "VLO",
+        "WDAY"
+      ],
+      "removed_vs_email": [
+        "ATEYY",
+        "AXON",
+        "INCY",
+        "MMYT",
+        "ONC",
+        "SMCI"
+      ]
+    },
+    {
+      "week": "2026-09-28",
+      "valid_sessions_scores": 430,
+      "common_symbols": 430,
+      "max_prior_audit_score_delta_pp": 0.0,
+      "ATEYY": 2.1459,
+      "SMCI": 3.9042
+    }
+  ]
+}
