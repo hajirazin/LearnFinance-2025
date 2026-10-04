@@ -3,16 +3,12 @@
 Houses the snapshot-phase helpers that the main-training background
 runners and the snapshots-only background runners both depend on:
 
-* Per-family ``_*MainTrainingArtifacts`` dataclasses bundle the in-memory
-  outputs of a successful main training pass that the end-of-window
-  snapshot writer consumes.
-* Per-family ``_run_*_snapshot_phase`` orchestrates "write end-window
-  (or warn-and-skip) -> backfill historical Dec-31 cutoffs". Both
-  branches share the ``StoragePolicy``-aware existence-check rule via
-  :func:`brain_api.core.forecaster_snapshot_identity._resolve_check_hf`.
-* Per-family ``_backfill_*_snapshots`` re-trains the missing year-end
-  snapshots only. Both functions accept ``policy: StoragePolicy | None
-  = None`` so callers can override the env-var default for tests.
+* Per-family ``_run_*_snapshot_phase`` backfills December 31 snapshots
+  only. An expected digest already on disk or Hugging Face is copied
+  to the other side and is not trained.
+* Per-family ``_backfill_*_snapshots`` trains the cutoffs whose parity
+  is ``train`` (or whose download was refused). ``policy`` is accepted
+  and ignored: annual parity does not read ``STORAGE_BACKEND``.
 
 Splitting these out of the route files keeps both ``routes/training/lstm.py``
 and ``routes/training/patchtst.py`` under the AGENTS.md 600-line ceiling.
@@ -27,13 +23,14 @@ from __future__ import annotations
 import gc
 import logging
 import time
-from dataclasses import dataclass
 from datetime import date
-from typing import Any
 
 import torch
 
-from brain_api.core.forecaster_snapshot_identity import _resolve_check_hf
+from brain_api.core.forecaster_snapshot_identity import (
+    annual_snapshot_cutoffs,
+    annual_snapshot_parity,
+)
 from brain_api.core.lstm import (
     LSTMConfig,
     build_dataset,
@@ -65,31 +62,55 @@ from brain_api.storage.forecaster_snapshots import (
     SnapshotLocalStorage,
     create_snapshot_metadata,
 )
-from brain_api.storage.policy import (
-    StoragePolicy,
-    get_storage_policy,
-)
+from brain_api.storage.policy import StoragePolicy
 
 logger = logging.getLogger(__name__)
+
+
+def _cutoffs_requiring_training(
+    snapshot_storage: SnapshotLocalStorage,
+    config_dict: dict,
+    start_date: date,
+    end_date: date,
+) -> list[date]:
+    """Copy one-sided annual digests and return cutoffs that still need training.
+
+    Upload failures propagate. A download that returns ``False`` (unhealthy
+    branch or failed install) is trained. ``STORAGE_BACKEND`` is not read.
+    """
+    uploads: list[tuple[date, str]] = []
+    downloads: list[tuple[date, str]] = []
+    trains: list[date] = []
+    for cutoff_date in annual_snapshot_cutoffs(start_date, end_date):
+        digest = compute_snapshot_identity_hash(
+            snapshot_storage.forecaster_type,
+            cutoff_date,
+            config_dict,
+        )
+        action = annual_snapshot_parity(snapshot_storage, cutoff_date, digest)
+        if action == "upload":
+            uploads.append((cutoff_date, digest))
+        elif action == "download":
+            downloads.append((cutoff_date, digest))
+        elif action == "train":
+            trains.append(cutoff_date)
+
+    for cutoff_date, digest in uploads:
+        uploaded = snapshot_storage.upload_snapshot_to_hf(cutoff_date, digest)
+        if not uploaded:
+            raise RuntimeError(
+                f"Failed to upload {snapshot_storage.forecaster_type} "
+                f"snapshot {cutoff_date} ({digest})"
+            )
+    for cutoff_date, digest in downloads:
+        if not snapshot_storage.download_snapshot_from_hf(cutoff_date, digest):
+            trains.append(cutoff_date)
+    return trains
 
 
 # ---------------------------------------------------------------------------
 # LSTM snapshot phase
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _LSTMMainTrainingArtifacts:
-    """In-memory LSTM main-training outputs piggybacked into the
-    end-of-window snapshot. ``None`` in the snapshots-only path."""
-
-    model: Any
-    feature_scaler: Any
-    train_loss: float
-    val_loss: float
-    best_epoch: int
-    stopped_epoch: int
-    available_symbols: list[str]
 
 
 def _run_lstm_snapshot_phase(
@@ -98,92 +119,23 @@ def _run_lstm_snapshot_phase(
     symbols: list[str],
     config: LSTMConfig,
     snapshot_storage: SnapshotLocalStorage,
-    main_artifacts: _LSTMMainTrainingArtifacts | None,
     policy: StoragePolicy | None = None,
     log_prefix: str = "[LSTM]",
 ) -> None:
-    """Snapshot phase shared by main training and snapshots-only reruns.
+    """Backfill December 31 LSTM snapshots for the training window.
 
-    * ``main_artifacts`` set: write end-window snapshot with the
-      in-memory model (byte-equivalent to the legacy in-line block).
-    * ``main_artifacts`` ``None`` (snapshots-only path): warn-and-skip
-      the end-window snapshot if missing, because regenerating it
-      would require retraining main. The operator can delete the
-      cached main version and rerun ``/train/lstm`` to recreate it.
-
-    Historical backfill (``_backfill_lstm_snapshots``) always runs.
-
-    ``policy`` (default ``get_storage_policy()``) is threaded through
-    both the end-window check and the backfill loop. Under
-    ``hf_first`` with no HF repo configured ``_resolve_check_hf``
-    raises ``StoragePolicyError``; the caller routes that to
-    ``fail_job``.
+    ``policy`` is ignored. A digest on either side is copied; neither
+    side is trained.
     """
-    if policy is None:
-        policy = get_storage_policy()
+    del policy
     start_date, end_date = train_window
-    snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
-
-    end_snap_digest = compute_snapshot_identity_hash(
-        snapshot_storage.forecaster_type,
-        end_date,
-        config.to_dict(),
-    )
-
-    end_window_present = snapshot_storage.snapshot_exists_anywhere(
-        end_date,
-        end_snap_digest,
-        check_hf=check_hf,
-    )
-
-    if not end_window_present:
-        if main_artifacts is not None:
-            snapshot_metadata = create_snapshot_metadata(
-                forecaster_type=snapshot_storage.forecaster_type,
-                cutoff_date=end_date,
-                data_window_start=start_date.isoformat(),
-                data_window_end=end_date.isoformat(),
-                symbols=main_artifacts.available_symbols,
-                config=config,
-                train_loss=main_artifacts.train_loss,
-                val_loss=main_artifacts.val_loss,
-                best_epoch=main_artifacts.best_epoch,
-                stopped_epoch=main_artifacts.stopped_epoch,
-                config_symbols_hash=end_snap_digest,
-            )
-            persist_forecaster_snapshot(
-                snapshot_storage=snapshot_storage,
-                cutoff_date=end_date,
-                snapshot_digest=end_snap_digest,
-                model=main_artifacts.model,
-                feature_scaler=main_artifacts.feature_scaler,
-                config=config,
-                metadata=snapshot_metadata,
-                train_loss=main_artifacts.train_loss,
-                val_loss=main_artifacts.val_loss,
-                snapshot_hf_repo=snapshot_hf_repo,
-                log_prefix=log_prefix,
-            )
-        else:
-            # Snapshots-only path: cannot recreate the end-window
-            # snapshot without retraining main. Log loudly so the
-            # operator can choose to delete the cached main version
-            # and rerun if they want this snapshot back.
-            logger.warning(
-                f"{log_prefix} End-of-window snapshot for {end_date} is "
-                f"missing and main is cached; skipping. Delete the cached "
-                f"main version and rerun /train/lstm to recreate it."
-            )
-
-    logger.info(f"{log_prefix} Backfilling historical snapshots...")
+    logger.info(f"{log_prefix} Backfilling annual snapshots...")
     _backfill_lstm_snapshots(
         symbols,
         config,
         start_date,
         end_date,
         snapshot_storage,
-        policy=policy,
     )
 
 
@@ -196,46 +148,34 @@ def _backfill_lstm_snapshots(
     *,
     policy: StoragePolicy | None = None,
 ) -> None:
-    """Backfill LSTM snapshots for the RL walk-forward window.
+    """Backfill LSTM December 31 snapshots for the RL walk-forward window.
 
     RL year Y needs ``snapshot-(Y-1)-12-31``; the earliest snapshot is
-    ``(start_year-1)-12-31``. We extend the price window back by
-    ``bootstrap_years`` so the earliest snapshot still has enough
+    ``(start_year-1)-12-31``. A cutoff is included only when that
+    December 31 is on or before ``end_date``. We extend the price window
+    back by ``bootstrap_years`` so the earliest snapshot still has enough
     history to train. Prices are loaded ONCE for the extended window
     and filtered incrementally per cutoff.
 
-    Existence checks (``check_hf``) and policy semantics: see
-    :func:`_run_lstm_snapshot_phase` -- same rules apply.
+    ``policy`` is ignored. One-sided digests are copied; only cutoffs
+    with neither side (or a refused download) are trained.
     """
-    if policy is None:
-        policy = get_storage_policy()
-    start_year = start_date.year
-    end_year = end_date.year
+    del policy
     bootstrap_years = 4
     snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
-
-    # RL year Y needs snapshot-(Y-1)-12-31.  Create from (start_year-1) onward.
-    first_snapshot_year = start_year - 1
+    cutoffs = annual_snapshot_cutoffs(start_date, end_date)
+    first_snapshot_year = cutoffs[0].year if cutoffs else start_date.year - 1
     snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
 
-    snapshots_needed = []
-    for year in range(first_snapshot_year, end_year):
-        cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_snapshot_identity_hash(
-            snapshot_storage.forecaster_type,
-            cutoff_date,
-            config.to_dict(),
-        )
-        if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date,
-            backfill_digest,
-            check_hf=check_hf,
-        ):
-            snapshots_needed.append(cutoff_date)
+    snapshots_needed = _cutoffs_requiring_training(
+        snapshot_storage,
+        config.to_dict(),
+        start_date,
+        end_date,
+    )
 
     if not snapshots_needed:
-        logger.info("[LSTM Backfill] All snapshots already exist, nothing to do")
+        logger.info("[LSTM Backfill] All annual snapshots are ready, nothing to train")
         return
 
     logger.info(
@@ -335,90 +275,19 @@ def _backfill_lstm_snapshots(
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class _PatchTSTMainTrainingArtifacts:
-    """In-memory PatchTST main-training outputs piggybacked into the
-    end-of-window snapshot. Mirror of :class:`_LSTMMainTrainingArtifacts`."""
-
-    model: Any
-    feature_scaler: Any
-    train_loss: float
-    val_loss: float
-    best_epoch: int
-    stopped_epoch: int
-    available_symbols: list[str]
-
-
 def _run_patchtst_snapshot_phase(
     *,
     train_window: tuple[date, date],
     symbols: list[str],
     config: PatchTSTConfig,
     snapshot_storage: SnapshotLocalStorage,
-    main_artifacts: _PatchTSTMainTrainingArtifacts | None,
     policy: StoragePolicy | None = None,
     log_prefix: str = "[PatchTST]",
 ) -> None:
-    """PatchTST snapshot phase. Mirror of :func:`_run_lstm_snapshot_phase`
-    -- same warn-and-skip rule for the missing end-window snapshot in
-    the snapshots-only path, same policy semantics for existence
-    checks, same ``StoragePolicyError`` propagation contract."""
-    if policy is None:
-        policy = get_storage_policy()
+    """Backfill December 31 PatchTST snapshots. Mirror of the LSTM phase."""
+    del policy
     start_date, end_date = train_window
-    snapshot_forecaster_type = snapshot_storage.forecaster_type
-    snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
-
-    end_snap_digest = compute_snapshot_identity_hash(
-        snapshot_forecaster_type,
-        end_date,
-        config.to_dict(),
-    )
-
-    end_window_present = snapshot_storage.snapshot_exists_anywhere(
-        end_date,
-        end_snap_digest,
-        check_hf=check_hf,
-    )
-
-    if not end_window_present:
-        if main_artifacts is not None:
-            snapshot_metadata = create_snapshot_metadata(
-                forecaster_type=snapshot_forecaster_type,
-                cutoff_date=end_date,
-                data_window_start=start_date.isoformat(),
-                data_window_end=end_date.isoformat(),
-                symbols=main_artifacts.available_symbols,
-                config=config,
-                train_loss=main_artifacts.train_loss,
-                val_loss=main_artifacts.val_loss,
-                best_epoch=main_artifacts.best_epoch,
-                stopped_epoch=main_artifacts.stopped_epoch,
-                config_symbols_hash=end_snap_digest,
-            )
-            persist_forecaster_snapshot(
-                snapshot_storage=snapshot_storage,
-                cutoff_date=end_date,
-                snapshot_digest=end_snap_digest,
-                model=main_artifacts.model,
-                feature_scaler=main_artifacts.feature_scaler,
-                config=config,
-                metadata=snapshot_metadata,
-                train_loss=main_artifacts.train_loss,
-                val_loss=main_artifacts.val_loss,
-                snapshot_hf_repo=snapshot_hf_repo,
-                log_prefix=log_prefix,
-            )
-        else:
-            logger.warning(
-                f"{log_prefix} End-of-window snapshot for {end_date} is "
-                f"missing and main is cached; skipping. Delete the cached "
-                f"main version and rerun /train/patchtst (or "
-                f"/train/patchtst/india) to recreate it."
-            )
-
-    logger.info(f"{log_prefix} Backfilling historical snapshots...")
+    logger.info(f"{log_prefix} Backfilling annual snapshots...")
     _backfill_patchtst_snapshots(
         symbols,
         config,
@@ -426,7 +295,6 @@ def _run_patchtst_snapshot_phase(
         end_date,
         snapshot_storage,
         log_prefix=log_prefix,
-        policy=policy,
     )
 
 
@@ -440,44 +308,34 @@ def _backfill_patchtst_snapshots(
     *,
     policy: StoragePolicy | None = None,
 ) -> None:
-    """Backfill PatchTST snapshots for the RL walk-forward window.
+    """Backfill PatchTST December 31 snapshots for the RL walk-forward window.
 
-    Mirror of :func:`_backfill_lstm_snapshots` -- same window math,
-    same digest formula, same ``policy`` semantics. Adds OHLCV-specific
-    ``align_multivariate_data`` + ``patchtst_build_dataset`` plumbing
-    per cutoff.
+    Mirror of :func:`_backfill_lstm_snapshots` -- same cutoff math,
+    same digest formula, same parity copy-or-train rule. Adds
+    OHLCV-specific ``align_multivariate_data`` + ``patchtst_build_dataset``
+    plumbing per cutoff. ``policy`` is ignored.
     """
-    if policy is None:
-        policy = get_storage_policy()
+    del policy
     backfill_prefix = (
         f"{log_prefix} Backfill" if "Backfill" not in log_prefix else log_prefix
     )
-    start_year = start_date.year
-    end_year = end_date.year
     bootstrap_years = 4
     snapshot_hf_repo = snapshot_storage._get_hf_repo()
-    check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
-
-    first_snapshot_year = start_year - 1
+    cutoffs = annual_snapshot_cutoffs(start_date, end_date)
+    first_snapshot_year = cutoffs[0].year if cutoffs else start_date.year - 1
     snapshot_data_start = date(first_snapshot_year - bootstrap_years, 1, 1)
 
-    snapshots_needed = []
-    for year in range(first_snapshot_year, end_year):
-        cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_snapshot_identity_hash(
-            snapshot_storage.forecaster_type,
-            cutoff_date,
-            config.to_dict(),
-        )
-        if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date,
-            backfill_digest,
-            check_hf=check_hf,
-        ):
-            snapshots_needed.append(cutoff_date)
+    snapshots_needed = _cutoffs_requiring_training(
+        snapshot_storage,
+        config.to_dict(),
+        start_date,
+        end_date,
+    )
 
     if not snapshots_needed:
-        logger.info(f"[{backfill_prefix}] All snapshots already exist, nothing to do")
+        logger.info(
+            f"[{backfill_prefix}] All annual snapshots are ready, nothing to train"
+        )
         return
 
     logger.info(

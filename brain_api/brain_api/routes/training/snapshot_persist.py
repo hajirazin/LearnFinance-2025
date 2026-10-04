@@ -92,8 +92,8 @@ def persist_forecaster_snapshot(
     logger.warning(
         f"{log_prefix} Snapshot for cutoff {cutoff_date} failed health check "
         f"({health.failure_reasons}); wrote rejected copy at {path}. "
-        "Canonical snapshot-* dirs were not modified. Delete the rejected "
-        "dir to retry this digest."
+        "Canonical snapshot-* dirs were not modified. The rejected path "
+        "is audit-only; the next training run retries this cutoff."
     )
     return SnapshotPersistResult(
         is_canonical=False,

@@ -374,7 +374,7 @@ class TestRejectedSnapshots:
         assert storage.snapshot_exists(cutoff, digest_b) is False
         assert storage.rejected_snapshot_exists(cutoff, digest_b) is True
         assert (
-            storage.snapshot_exists_anywhere(cutoff, digest_b, check_hf=False) is True
+            storage.snapshot_exists_anywhere(cutoff, digest_b, check_hf=False) is False
         )
 
     def test_download_nan_metadata_does_not_evict_sibling(

@@ -12,16 +12,28 @@ from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.utils import RepositoryNotFoundError
 
 from brain_api.core.training_utils import evaluate_forecaster_artifact_health
+from brain_api.storage.forecaster_snapshots.delete_snapshots import (
+    HuggingFaceSnapshotRepoNotConfiguredError,
+)
 from brain_api.storage.forecaster_snapshots.snapshot_files import (
     copy_snapshot_artifacts,
     evict_sibling_hashed_snapshot_dirs,
     snapshot_train_val_losses,
+)
+from brain_api.storage.forecaster_snapshots.snapshot_layout import (
+    parse_hashed_snapshot_folder_name,
 )
 
 if TYPE_CHECKING:
     from brain_api.storage.policy import StoragePolicy
 
 logger = logging.getLogger(__name__)
+
+
+def _hf_branch_already_absent(exc: BaseException) -> bool:
+    """True when Hugging Face reports the snapshot branch is already gone."""
+    response = getattr(exc, "response", None)
+    return getattr(response, "status_code", None) == 404
 
 
 class SnapshotHFMixin:
@@ -263,3 +275,57 @@ class SnapshotHFMixin:
                 downloaded.append((cutoff, digest))
 
         return downloaded
+
+    def list_hf_snapshot_identities_strict(self) -> list[tuple[date, str]]:
+        """Hashed HF snapshot identities. Listing errors propagate.
+
+        Unlike ``list_hf_snapshot_identities``, a missing repo or a failed
+        ``list_repo_refs`` call raises. An empty branch list is a real empty
+        inventory, not a swallowed outage.
+        """
+        repo_id = self._get_hf_repo()
+        if not repo_id:
+            raise HuggingFaceSnapshotRepoNotConfiguredError(
+                f"HF repo not configured for {self.forecaster_type}"
+            )
+
+        token = self._get_hf_token()
+        api = HfApi(token=token)
+        refs = api.list_repo_refs(repo_id=repo_id, repo_type="model")
+        identities: list[tuple[date, str]] = []
+        for branch in refs.branches:
+            parsed = parse_hashed_snapshot_folder_name(branch.name)
+            if parsed is not None:
+                identities.append(parsed)
+        return sorted(set(identities))
+
+    def delete_hf_snapshot(self, cutoff_date: date, snapshot_digest: str) -> bool:
+        """Delete the HF branch ``snapshot-{cutoff}-{digest}``.
+
+        Returns True when the branch was deleted. Returns False when Hugging
+        Face responds 404 because the branch is already absent. Any other HF
+        error propagates. ``main`` and version revisions are not candidates.
+        """
+        repo_id = self._get_hf_repo()
+        if not repo_id:
+            raise HuggingFaceSnapshotRepoNotConfiguredError(
+                f"HF repo not configured for {self.forecaster_type}"
+            )
+
+        branch = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+        if parse_hashed_snapshot_folder_name(branch) != (cutoff_date, snapshot_digest):
+            raise ValueError(
+                f"Refusing to delete HF branch {branch!r}: not a hashed snapshot name"
+            )
+
+        token = self._get_hf_token()
+        api = HfApi(token=token)
+        try:
+            api.delete_branch(repo_id=repo_id, repo_type="model", branch=branch)
+        except Exception as exc:
+            if _hf_branch_already_absent(exc):
+                self._hf_missing.discard(branch)
+                return False
+            raise
+        self._hf_missing.discard(branch)
+        return True

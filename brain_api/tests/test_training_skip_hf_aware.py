@@ -468,11 +468,8 @@ def test_lstm_hf_main_present_with_missing_snapshots_returns_202(monkeypatch):
             assert response.status_code == 202, response.text
             body = response.json()
             assert body["job_id"].startswith("lstm_halal_new_snapshots:")
-            # Snapshot phase ran exactly once with main_artifacts=None
-            # (the cached-main contract: no end-window recreation).
             assert snapshot_phase_spy.call_count == 1
             kwargs = snapshot_phase_spy.call_args.kwargs
-            assert kwargs["main_artifacts"] is None
             assert kwargs["log_prefix"] == "[LSTM Snapshots-only]"
         finally:
             app.dependency_overrides.clear()
@@ -480,39 +477,31 @@ def test_lstm_hf_main_present_with_missing_snapshots_returns_202(monkeypatch):
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
 
 
-def test_lstm_hf_main_present_with_hf_first_no_repo_returns_503(monkeypatch):
-    """Operator chose ``hf_first`` but the LSTM bucket has no HF repo
-    configured (the conftest clears the bucket-keyed HF env vars).
-    The synchronous inventory scan must surface ``StoragePolicyError``
-    as a 503 -- per AGENTS.md rule #1 (no silent fallback to local).
-
-    No background task is enqueued in this branch, so no snapshot
-    phase mock is needed; the synchronous inventory scan itself
-    raises before any ``add_task`` call.
-    """
-    from brain_api.storage.policy import StoragePolicy
-
+def test_lstm_hf_main_present_with_hf_first_no_repo_returns_202(monkeypatch):
+    """``hf_first`` with no HF repo still backfills missing local snapshots."""
     with tempfile.TemporaryDirectory() as tmpdir:
         _bind_lstm_bucket(monkeypatch, tmpdir)
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-        monkeypatch.setattr(
-            "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
-            lambda: StoragePolicy.HF_FIRST,
-        )
+        monkeypatch.setenv("STORAGE_BACKEND", "hf_first")
 
         try:
-            with patch(
-                "brain_api.routes.training.lstm.try_load_existing_train_metadata",
-                return_value=_FAKE_METADATA,
+            with (
+                patch(
+                    "brain_api.routes.training.lstm.try_load_existing_train_metadata",
+                    return_value=_FAKE_METADATA,
+                ),
+                patch(
+                    "brain_api.routes.training.lstm._run_lstm_snapshot_phase",
+                    return_value=None,
+                ),
             ):
                 client = TestClient(app)
                 response = client.post("/train/lstm", json={})
 
-            assert response.status_code == 503, response.text
-            assert "hf_first" in response.text
+            assert response.status_code == 202, response.text
+            assert response.json()["job_id"].startswith("lstm_halal_new_snapshots:")
         finally:
             os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
             os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
@@ -579,7 +568,6 @@ def test_patchtst_us_hf_main_present_with_missing_snapshots_returns_202(monkeypa
             body = response.json()
             assert body["job_id"].startswith("patchtst_halal_new_snapshots:")
             assert snapshot_phase_spy.call_count == 1
-            assert snapshot_phase_spy.call_args.kwargs["main_artifacts"] is None
             # US route's log_prefix is "[PatchTST]" -> snapshots-only
             # variant becomes "[PatchTST] Snapshots-only" (the route
             # appends, the runner forwards verbatim).
@@ -618,9 +606,7 @@ def test_lstm_hf_main_present_with_all_snapshots_present_returns_200(monkeypatch
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
-        empty_inventory = MissingSnapshotInventory(
-            end_window_cutoff=None, historical_cutoffs=()
-        )
+        empty_inventory = MissingSnapshotInventory(historical_cutoffs=())
 
         try:
             with (
@@ -666,7 +652,6 @@ def test_lstm_hf_main_present_with_one_hf_snapshot_missing_returns_202(monkeypat
         os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
 
         partial_inventory = MissingSnapshotInventory(
-            end_window_cutoff=None,
             historical_cutoffs=(date(2022, 12, 31),),
         )
 

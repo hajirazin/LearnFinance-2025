@@ -5,19 +5,19 @@ bucket, cutoff, and config. The training symbol slate and price-loading window
 remain training inputs, but they do not affect snapshot lookup identity.
 
 This module is also the read-side mirror of the snapshot backfill loops:
-:func:`count_missing_snapshots` answers "which snapshots would the backfill
-need to train?" without touching the trainer code, and
-:func:`_resolve_check_hf` is the single source of truth that translates
-:class:`~brain_api.storage.policy.StoragePolicy` + HF repo presence into
-the boolean accepted by
-:meth:`~brain_api.storage.forecaster_snapshots.local.SnapshotLocalStorage.snapshot_exists_anywhere`.
+:func:`annual_snapshot_cutoffs` and :func:`annual_snapshot_parity` decide
+which December 31 digests are ready, need a copy, or need training.
+:func:`count_missing_snapshots` classifies that parity and does not upload
+or download. :func:`_resolve_check_hf` still translates
+:class:`~brain_api.storage.policy.StoragePolicy` for SAC
+``ensure_snapshot_available``; the annual loop does not call it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from brain_api.core.lstm.config import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
 from brain_api.core.patchtst.config import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
@@ -25,7 +25,6 @@ from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.storage.policy import (
     StoragePolicy,
     StoragePolicyError,
-    get_storage_policy,
 )
 
 if TYPE_CHECKING:
@@ -52,6 +51,52 @@ def patchtst_walkforward_expectation_bundle() -> tuple[str, dict[str, Any]]:
     return "patchtst_halal_new", PATCHTST_DEFAULT_CONFIG.to_dict()
 
 
+SnapshotParity = Literal["ready", "upload", "download", "train"]
+
+
+def annual_snapshot_cutoffs(start_date: date, end_date: date) -> list[date]:
+    """December 31 cutoffs SAC can consume inside ``[start_date, end_date]``.
+
+    The first cutoff is December 31 of ``start_date.year - 1``. A cutoff is
+    included only when that December 31 is on or before ``end_date``. The
+    training window's raw end date is not a cutoff unless it is that
+    December 31.
+    """
+    first_snapshot_year = start_date.year - 1
+    cutoffs: list[date] = []
+    for year in range(first_snapshot_year, end_date.year + 1):
+        cutoff = date(year, 12, 31)
+        if cutoff <= end_date:
+            cutoffs.append(cutoff)
+    return cutoffs
+
+
+def annual_snapshot_parity(
+    storage: SnapshotLocalStorage,
+    cutoff_date: date,
+    snapshot_digest: str,
+) -> SnapshotParity:
+    """How to obtain one expected annual digest without reading storage policy.
+
+    A rejected audit copy and a different digest for the same date do not
+    count. No Hugging Face repo means a canonical local directory is enough.
+    """
+    local = storage.snapshot_exists(cutoff_date, snapshot_digest)
+    repo = storage._get_hf_repo()
+    on_hf = (
+        storage.snapshot_digest_exists_on_hf(cutoff_date, snapshot_digest)
+        if repo
+        else False
+    )
+    if local and (not repo or on_hf):
+        return "ready"
+    if local and repo and not on_hf:
+        return "upload"
+    if not local and repo and on_hf:
+        return "download"
+    return "train"
+
+
 # ---------------------------------------------------------------------------
 # Policy translator + missing-snapshot inventory
 # ---------------------------------------------------------------------------
@@ -65,9 +110,9 @@ def _resolve_check_hf(
     """Translate ``StoragePolicy`` + HF repo presence into the
     ``check_hf`` flag accepted by ``snapshot_exists_anywhere``.
 
-    Single source of truth. Mirrors
-    :func:`brain_api.storage.forecaster_snapshots.local.SnapshotLocalStorage.ensure_snapshot_available`
-    so every existence-check call site behaves identically:
+    Used by SAC snapshot availability. Annual training inventory and
+    backfill call :func:`annual_snapshot_parity` instead, so this
+    translator does not decide whether a December 31 digest is trained.
 
     * ``hf_first`` + no HF repo configured for this bucket -> raises
       :class:`StoragePolicyError`. Per AGENTS.md rule #1 (no silent
@@ -92,26 +137,22 @@ def _resolve_check_hf(
 
 @dataclass(frozen=True)
 class MissingSnapshotInventory:
-    """Snapshots that exist neither locally nor (per the storage policy)
-    on HuggingFace.
+    """Annual cutoffs whose parity is upload, download, or train.
 
-    ``end_window_cutoff`` is ``None`` when the end-of-window snapshot
-    (the one piggybacked on main training) is present. ``historical_cutoffs``
-    is the ordered tuple of Dec-31 backfill cutoffs that are missing.
+    ``historical_cutoffs`` is the ordered tuple of December 31 dates that
+    are not yet ``ready`` on both sides (or locally, when no HF repo is
+    configured). The training window end date is not a cutoff.
     """
 
-    end_window_cutoff: date | None
     historical_cutoffs: tuple[date, ...]
 
     @property
     def is_empty(self) -> bool:
-        return self.end_window_cutoff is None and not self.historical_cutoffs
+        return not self.historical_cutoffs
 
     @property
     def total_missing(self) -> int:
-        return (1 if self.end_window_cutoff is not None else 0) + len(
-            self.historical_cutoffs
-        )
+        return len(self.historical_cutoffs)
 
 
 def count_missing_snapshots(
@@ -128,12 +169,14 @@ def count_missing_snapshots(
 
     Used by the training routes' synchronous "any backfill needed?"
     scan that decides between returning a 200 cached response and
-    enqueuing a snapshots-only background job.
+    enqueuing a snapshots-only background job. The scan classifies
+    parity and does not upload or download.
 
     Math correctness invariant: every cutoff uses
     :func:`compute_snapshot_identity_hash`, bit-identical to the writer.
-    The training window determines which cutoffs to inventory, but its start
-    and the training symbols are not snapshot identity inputs.
+    The training window determines which December 31 cutoffs to inventory,
+    but its raw end date and the training symbols are not snapshot
+    identity inputs.
 
     Args:
         forecaster_type: Canonical snapshot bucket name.
@@ -141,52 +184,21 @@ def count_missing_snapshots(
             :func:`brain_api.core.config.resolve_training_window`.
         config_dict: Forecaster config as a plain dict.
         snapshot_storage: Bucket storage instance used to probe local
-            and (per policy) HF presence.
-        policy: Optional override; when ``None`` resolves via
-            :func:`get_storage_policy` (i.e. ``STORAGE_BACKEND`` env).
+            and Hugging Face presence.
+        policy: Ignored. Annual parity does not consult ``STORAGE_BACKEND``.
 
     Returns:
-        :class:`MissingSnapshotInventory` describing which cutoffs
-        need to be created to fully populate the bucket.
-
-    Raises:
-        StoragePolicyError: when ``hf_first`` is active and the
-            bucket has no HF repo configured. Surfaced from
-            :func:`_resolve_check_hf` so callers can map it to a 503.
+        :class:`MissingSnapshotInventory` of December 31 cutoffs that are
+        not yet ``ready``.
     """
-    if policy is None:
-        policy = get_storage_policy()
-    check_hf = _resolve_check_hf(snapshot_storage=snapshot_storage, policy=policy)
-
+    del policy
     start_date, end_date = train_window
-
-    end_window_digest = compute_snapshot_identity_hash(
-        forecaster_type, end_date, config_dict
-    )
-    end_window_present = snapshot_storage.snapshot_exists_anywhere(
-        end_date,
-        end_window_digest,
-        check_hf=check_hf,
-    )
-    end_window_cutoff: date | None = None if end_window_present else end_date
-
-    start_year = start_date.year
-    end_year = end_date.year
-    first_snapshot_year = start_year - 1
     historical: list[date] = []
-    for year in range(first_snapshot_year, end_year):
-        cutoff_date = date(year, 12, 31)
-        backfill_digest = compute_snapshot_identity_hash(
+    for cutoff_date in annual_snapshot_cutoffs(start_date, end_date):
+        digest = compute_snapshot_identity_hash(
             forecaster_type, cutoff_date, config_dict
         )
-        if not snapshot_storage.snapshot_exists_anywhere(
-            cutoff_date,
-            backfill_digest,
-            check_hf=check_hf,
-        ):
+        if annual_snapshot_parity(snapshot_storage, cutoff_date, digest) != "ready":
             historical.append(cutoff_date)
 
-    return MissingSnapshotInventory(
-        end_window_cutoff=end_window_cutoff,
-        historical_cutoffs=tuple(historical),
-    )
+    return MissingSnapshotInventory(historical_cutoffs=tuple(historical))

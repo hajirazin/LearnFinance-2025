@@ -9,9 +9,8 @@ Covers:
 * :class:`TestFilterByCutoffTzHandling` -- regression coverage for the
   tz-aware ``DatetimeIndex`` bug; the snapshot-phase filter helpers
   must not crash on yfinance frames whose index carries a timezone.
-* :class:`TestBackfillLoopsRespectPolicy` -- the ``policy``-aware
-  refactor of the backfill loops (no silent ``check_hf = repo is not
-  None`` collapse; ``hf_first`` + missing repo MUST raise).
+* :class:`TestBackfillLoopsRespectPolicy` -- ``hf_first`` with no HF
+  repo trains the missing local December 31 copy.
 """
 
 from datetime import date
@@ -19,7 +18,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
@@ -41,7 +39,8 @@ class TestBackfillSnapshotRange:
         )
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.snapshot_exists.return_value = False
+        mock_storage._get_hf_repo.return_value = None
         mock_storage.forecaster_type = "lstm_halal_new"
 
         mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
@@ -94,7 +93,7 @@ class TestBackfillSnapshotRange:
         assert written_cutoffs == expected
         observed_identities = [
             (call.args[0], call.args[1])
-            for call in mock_storage.snapshot_exists_anywhere.call_args_list
+            for call in mock_storage.snapshot_exists.call_args_list
         ]
         assert observed_identities == [
             (
@@ -113,7 +112,8 @@ class TestBackfillSnapshotRange:
         )
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.snapshot_exists.return_value = False
+        mock_storage._get_hf_repo.return_value = None
         mock_storage.forecaster_type = "patchtst_halal_new"
 
         mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
@@ -168,7 +168,7 @@ class TestBackfillSnapshotRange:
         assert written_cutoffs == expected
         observed_identities = [
             (call.args[0], call.args[1])
-            for call in mock_storage.snapshot_exists_anywhere.call_args_list
+            for call in mock_storage.snapshot_exists.call_args_list
         ]
         assert observed_identities == [
             (
@@ -190,12 +190,11 @@ class TestBackfillSnapshotRange:
         mock_storage.forecaster_type = "lstm_halal_new"
 
         # Simulate: 2015-12-31 exists, all others don't
-        def exists_side_effect(
-            cutoff_date, _snapshot_digest, *, check_hf=False
-        ) -> bool:
+        def exists_side_effect(cutoff_date, _snapshot_digest) -> bool:
             return cutoff_date == date(2015, 12, 31)
 
-        mock_storage.snapshot_exists_anywhere.side_effect = exists_side_effect
+        mock_storage.snapshot_exists.side_effect = exists_side_effect
+        mock_storage._get_hf_repo.return_value = None
 
         mock_prices = {"AAPL": MagicMock()}
         mock_dataset = MagicMock()
@@ -247,7 +246,8 @@ class TestBackfillSnapshotRange:
         )
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists_anywhere.return_value = False
+        mock_storage.snapshot_exists.return_value = False
+        mock_storage._get_hf_repo.return_value = None
         mock_storage.forecaster_type = "lstm_halal_new"
 
         mock_prices = {"AAPL": MagicMock()}
@@ -440,158 +440,77 @@ class TestBackfillLoopsRespectPolicy:
         stack.enter_context(patch("brain_api.routes.training.snapshot_phase.torch"))
         return stack
 
-    def test_lstm_backfill_local_first_no_repo_skips_hf_check(self):
+    def test_hf_first_without_repo_trains_the_missing_local_copy(self):
         from brain_api.routes.training.snapshot_phase import (
             _backfill_lstm_snapshots,
         )
         from brain_api.storage.policy import StoragePolicy
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists_anywhere.return_value = False
-        mock_storage.forecaster_type = "lstm_halal_new"
+        mock_storage.snapshot_exists.return_value = False
         mock_storage._get_hf_repo.return_value = None
+        mock_storage.forecaster_type = "lstm_halal_new"
 
         with self._common_patches(mock_storage):
             _backfill_lstm_snapshots(
                 symbols=["AAPL"],
                 config=MagicMock(to_dict=dict),
-                start_date=date(2016, 1, 1),
-                end_date=date(2025, 12, 26),
-                snapshot_storage=mock_storage,
-                policy=StoragePolicy.LOCAL_FIRST,
-            )
-
-        for call in mock_storage.snapshot_exists_anywhere.call_args_list:
-            assert call.kwargs["check_hf"] is False
-
-    def test_lstm_backfill_hf_first_with_repo_consults_hf(self):
-        from brain_api.routes.training.snapshot_phase import (
-            _backfill_lstm_snapshots,
-        )
-        from brain_api.storage.policy import StoragePolicy
-
-        mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists_anywhere.return_value = True  # all present
-        mock_storage.forecaster_type = "lstm_halal_new"
-        mock_storage._get_hf_repo.return_value = "user/repo"
-
-        with self._common_patches(mock_storage):
-            _backfill_lstm_snapshots(
-                symbols=["AAPL"],
-                config=MagicMock(to_dict=dict),
-                start_date=date(2016, 1, 1),
-                end_date=date(2025, 12, 26),
+                start_date=date(2020, 1, 1),
+                end_date=date(2020, 6, 1),
                 snapshot_storage=mock_storage,
                 policy=StoragePolicy.HF_FIRST,
             )
 
-        for call in mock_storage.snapshot_exists_anywhere.call_args_list:
-            assert call.kwargs["check_hf"] is True
+        assert mock_storage.write_snapshot.call_count == 1
 
-    def test_lstm_backfill_hf_first_no_repo_raises(self):
-        from brain_api.routes.training.snapshot_phase import (
-            _backfill_lstm_snapshots,
-        )
-        from brain_api.storage.policy import StoragePolicy, StoragePolicyError
-
-        mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.forecaster_type = "lstm_halal_new"
-        mock_storage._get_hf_repo.return_value = None
-
-        with pytest.raises(StoragePolicyError):
-            _backfill_lstm_snapshots(
-                symbols=["AAPL"],
-                config=MagicMock(to_dict=dict),
-                start_date=date(2016, 1, 1),
-                end_date=date(2025, 12, 26),
-                snapshot_storage=mock_storage,
-                policy=StoragePolicy.HF_FIRST,
-            )
-
-    def test_patchtst_backfill_hf_first_no_repo_raises(self):
+    def test_patchtst_hf_first_without_repo_trains_the_missing_local_copy(self):
         from brain_api.routes.training.snapshot_phase import (
             _backfill_patchtst_snapshots,
         )
-        from brain_api.storage.policy import StoragePolicy, StoragePolicyError
+        from brain_api.storage.policy import StoragePolicy
 
         mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.forecaster_type = "patchtst_halal_new"
+        mock_storage.snapshot_exists.return_value = False
         mock_storage._get_hf_repo.return_value = None
+        mock_storage.forecaster_type = "patchtst_halal_new"
+        mock_prices = {"AAPL": MagicMock()}
+        mock_dataset = MagicMock()
+        mock_dataset.X = [1]
+        mock_result = MagicMock()
+        mock_result.train_loss = 0.01
+        mock_result.val_loss = 0.02
+        mock_result.best_epoch = 1
+        mock_result.stopped_epoch = 1
 
-        with pytest.raises(StoragePolicyError):
+        with (
+            patch(
+                "brain_api.routes.training.snapshot_phase.patchtst_load_prices",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.snapshot_phase._filter_prices_by_cutoff",
+                return_value=mock_prices,
+            ),
+            patch(
+                "brain_api.routes.training.snapshot_phase.align_multivariate_data",
+                return_value={"AAPL": MagicMock()},
+            ),
+            patch(
+                "brain_api.routes.training.snapshot_phase.patchtst_build_dataset",
+                return_value=mock_dataset,
+            ),
+            patch(
+                "brain_api.routes.training.snapshot_phase.patchtst_train_model",
+                return_value=mock_result,
+            ),
+        ):
             _backfill_patchtst_snapshots(
                 symbols=["AAPL"],
                 config=MagicMock(to_dict=dict),
-                start_date=date(2016, 1, 1),
-                end_date=date(2025, 12, 26),
+                start_date=date(2020, 1, 1),
+                end_date=date(2020, 6, 1),
                 snapshot_storage=mock_storage,
                 policy=StoragePolicy.HF_FIRST,
             )
 
-
-class TestSnapshotEndWindowIdentity:
-    def test_lstm_end_window_uses_snapshot_identity_hash(self):
-        from brain_api.routes.training.snapshot_phase import (
-            _run_lstm_snapshot_phase,
-        )
-        from brain_api.storage.policy import StoragePolicy
-
-        storage = MagicMock(spec=SnapshotLocalStorage)
-        storage.forecaster_type = "lstm_halal_new"
-        storage._get_hf_repo.return_value = None
-        storage.snapshot_exists_anywhere.return_value = True
-        config = MagicMock()
-        config.to_dict.return_value = {"hidden": 16}
-        end_date = date(2025, 12, 26)
-
-        with patch("brain_api.routes.training.snapshot_phase._backfill_lstm_snapshots"):
-            _run_lstm_snapshot_phase(
-                train_window=(date(2016, 1, 1), end_date),
-                symbols=["AAPL"],
-                config=config,
-                snapshot_storage=storage,
-                main_artifacts=None,
-                policy=StoragePolicy.LOCAL_FIRST,
-            )
-
-        storage.snapshot_exists_anywhere.assert_called_once_with(
-            end_date,
-            compute_snapshot_identity_hash(
-                "lstm_halal_new", end_date, config.to_dict()
-            ),
-            check_hf=False,
-        )
-
-    def test_patchtst_end_window_uses_snapshot_identity_hash(self):
-        from brain_api.routes.training.snapshot_phase import (
-            _run_patchtst_snapshot_phase,
-        )
-        from brain_api.storage.policy import StoragePolicy
-
-        storage = MagicMock(spec=SnapshotLocalStorage)
-        storage.forecaster_type = "patchtst_halal_new"
-        storage._get_hf_repo.return_value = None
-        storage.snapshot_exists_anywhere.return_value = True
-        config = MagicMock()
-        config.to_dict.return_value = {"d_model": 32}
-        end_date = date(2025, 12, 26)
-
-        with patch(
-            "brain_api.routes.training.snapshot_phase._backfill_patchtst_snapshots"
-        ):
-            _run_patchtst_snapshot_phase(
-                train_window=(date(2016, 1, 1), end_date),
-                symbols=["AAPL"],
-                config=config,
-                snapshot_storage=storage,
-                main_artifacts=None,
-                policy=StoragePolicy.LOCAL_FIRST,
-            )
-
-        storage.snapshot_exists_anywhere.assert_called_once_with(
-            end_date,
-            compute_snapshot_identity_hash(
-                "patchtst_halal_new", end_date, config.to_dict()
-            ),
-            check_hf=False,
-        )
+        assert mock_storage.write_snapshot.call_count == 1

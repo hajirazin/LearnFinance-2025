@@ -58,10 +58,7 @@ from .job_registry import (
     update_progress,
 )
 from .models import LSTMTrainResponse, TrainingJobResponse
-from .snapshot_phase import (
-    _LSTMMainTrainingArtifacts,
-    _run_lstm_snapshot_phase,
-)
+from .snapshot_phase import _run_lstm_snapshot_phase
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -152,11 +149,10 @@ def train_lstm(
     )
     if existing_metadata:
         # Main version is cached. Don't skip outright -- check whether
-        # any forecaster snapshot is missing (per AGENTS.md plan: "if
+        # any annual snapshot is not ready (per AGENTS.md plan: "if
         # main exists, then start checking snapshots, if any are
-        # missing, do those"). The scan is policy-aware
-        # (``count_missing_snapshots`` consults HF via _resolve_check_hf)
-        # so the decision matches the storage backend the operator chose.
+        # missing, do those"). The scan classifies December 31 parity
+        # and does not consult STORAGE_BACKEND.
         return _handle_lstm_existing_metadata(
             background_tasks=background_tasks,
             bucket=bucket,
@@ -221,14 +217,12 @@ def _handle_lstm_existing_metadata(
 
     * ``inventory.is_empty`` (or ``skip_snapshot=True``): return 200
       with the cached metadata. Backwards-compatible fast path.
-    * Some snapshots missing: schedule the snapshots-only background
-      runner under a dedicated job key (``{bucket}_snapshots``) so it
-      cannot collide with a real main-training job for the same
-      ``version``. Return 202 with the new ``job_id``.
-    * ``StoragePolicyError`` raised by ``count_missing_snapshots`` (i.e.
-      ``hf_first`` + the snapshot bucket has no HF repo configured):
-      surface as 503. Same shape as the inference layer's transient
-      config error contract.
+    * Some annual snapshots are not ready (upload, download, or train):
+      schedule the snapshots-only background runner under a dedicated
+      job key (``{bucket}_snapshots``) so it cannot collide with a real
+      main-training job for the same ``version``. Return 202 with the
+      new ``job_id``. A missing HF repo does not raise from the scan;
+      local-only parity applies.
     """
     cached_response_kwargs = build_common_train_response_kwargs(
         version, existing_metadata
@@ -363,7 +357,6 @@ def _run_lstm_training(
         if len(dataset.X) == 0:
             raise ValueError("No training samples could be built from price data")
 
-        available_symbols = list(prices.keys())
         X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
         del dataset, prices
         gc.collect()
@@ -507,15 +500,6 @@ def _run_lstm_training(
                 symbols=symbols,
                 config=config,
                 snapshot_storage=snapshot_storage,
-                main_artifacts=_LSTMMainTrainingArtifacts(
-                    model=result.model,
-                    feature_scaler=result.feature_scaler,
-                    train_loss=result.train_loss,
-                    val_loss=result.val_loss,
-                    best_epoch=result.best_epoch,
-                    stopped_epoch=result.stopped_epoch,
-                    available_symbols=available_symbols,
-                ),
             )
 
         response = LSTMTrainResponse(
@@ -562,16 +546,8 @@ def _run_lstm_snapshots_only(
     when at least one snapshot is missing. Skips the entire main
     training pipeline (price load, dataset build, model train,
     artifact write, promotion check, HF upload of main) and goes
-    straight to the snapshot phase with ``main_artifacts=None`` so
-    the end-of-window snapshot is warned-and-skipped if missing while
-    historical year-end snapshots are backfilled by
-    :func:`_backfill_lstm_snapshots`.
-
-    On ``StoragePolicyError`` (``hf_first`` + no HF repo) the job is
-    marked failed with the policy error message; the route handler
-    already mapped that case to 503 synchronously, but a transient
-    HF outage between the synchronous scan and the background run is
-    still possible.
+    straight to the annual snapshot phase. December 31 digests already
+    on disk or Hugging Face are copied; only a missing digest is trained.
     """
     try:
         update_progress(job_id, {"phase": "snapshots_only_backfill"})
@@ -581,7 +557,6 @@ def _run_lstm_snapshots_only(
             symbols=symbols,
             config=config,
             snapshot_storage=snapshot_storage,
-            main_artifacts=None,
             log_prefix="[LSTM Snapshots-only]",
         )
         response = LSTMTrainResponse(

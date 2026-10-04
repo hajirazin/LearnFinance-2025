@@ -9,6 +9,7 @@ This module provides training endpoints for various model types:
 from fastapi import APIRouter, HTTPException
 
 # Re-export dependencies for backward compatibility
+from .delete_snapshots import router as delete_snapshots_router
 from .dependencies import (
     get_config,
     get_dataset_builder,
@@ -64,6 +65,7 @@ router = APIRouter()
 router.include_router(lstm_router)
 router.include_router(patchtst_router)
 router.include_router(patchtst_india_router)
+router.include_router(delete_snapshots_router)
 router.include_router(sac_router)
 router.include_router(ppo_discovery_router)
 

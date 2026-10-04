@@ -12,6 +12,7 @@ as the main model but with branch naming convention:
 import json
 import logging
 import pickle
+import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any, ClassVar
@@ -185,6 +186,40 @@ class SnapshotLocalStorage(SnapshotHFMixin):
         """Check if a hashed snapshot exists locally."""
         return self._snapshot_path(cutoff_date, snapshot_digest).exists()
 
+    def delete_local_snapshot(self, cutoff_date: date, snapshot_digest: str) -> bool:
+        """Remove one hashed local snapshot directory.
+
+        Returns True when a directory was removed. Returns False when that
+        hashed path is already absent. Version directories, ``current``,
+        ``rejected/`` audit copies, and legacy unhashed ``snapshot-{date}/``
+        folders are not candidates: the path is built only from a parsed
+        ``snapshot-{date}-{digest}`` basename whose parent is this bucket's
+        models directory.
+
+        Raises:
+            ValueError: The basename is not a hashed snapshot name, the
+                parent is not this bucket's models directory, or the path
+                exists and is not a directory.
+            OSError: Removing the directory fails.
+        """
+        branch = self._snapshot_branch_name(cutoff_date, snapshot_digest)
+        if parse_hashed_snapshot_folder_name(branch) != (cutoff_date, snapshot_digest):
+            raise ValueError(
+                f"Refusing to delete {branch!r}: it is not a hashed snapshot name"
+            )
+        path = self._snapshot_path(cutoff_date, snapshot_digest)
+        if path.parent.resolve() != self._models_path.resolve():
+            raise ValueError(
+                f"Refusing to delete {path}: parent is not {self._models_path}"
+            )
+        if not path.exists():
+            return False
+        if not path.is_dir():
+            raise ValueError(f"Refusing to delete {path}: not a directory")
+        shutil.rmtree(path)
+        self._hf_missing.discard(branch)
+        return True
+
     def snapshot_exists_anywhere(
         self,
         cutoff_date: date,
@@ -192,11 +227,13 @@ class SnapshotLocalStorage(SnapshotHFMixin):
         *,
         check_hf: bool = False,
     ) -> bool:
-        """Whether ``snapshot-{cutoff}-{digest}`` exists locally or on HF."""
+        """Whether the canonical snapshot exists locally or on HF.
+
+        A ``rejected/`` audit copy does not count. The next training run
+        retries that cutoff.
+        """
 
         if self.snapshot_exists(cutoff_date, snapshot_digest):
-            return True
-        if self.rejected_snapshot_exists(cutoff_date, snapshot_digest):
             return True
 
         if check_hf:

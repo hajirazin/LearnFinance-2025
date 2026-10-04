@@ -472,16 +472,11 @@ def test_train_patchtst_india_skip_snapshot_false_writes_snapshots(
         "skip_snapshot=false must write at least one India snapshot, but "
         "on-disk snapshot list was empty."
     )
-    end_date_iso = "2024-12-27"
-    end_date_snapshots = [s for s in snapshots if s.isoformat() == end_date_iso]
-    assert end_date_snapshots, (
-        f"Expected end-date snapshot {end_date_iso} on disk, got: "
-        f"{[s.isoformat() for s in snapshots]}"
+    assert all(s.month == 12 and s.day == 31 for s in snapshots), (
+        f"Every snapshot must be December 31, got: {[s.isoformat() for s in snapshots]}"
     )
-    assert len(snapshots) > 1, (
-        "Backfill must populate historical India snapshots in addition to "
-        f"the end-date one. Got only: {[s.isoformat() for s in snapshots]}"
-    )
+    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
+    assert len(snapshots) > 1
 
 
 # ============================================================================
@@ -592,10 +587,10 @@ def test_train_patchtst_india_cached_main_skip_snapshot_returns_200(
     assert response2.status_code == 200, response2.text
 
 
-def test_train_patchtst_india_cached_main_hf_first_no_repo_returns_503(
+def test_train_patchtst_india_cached_main_hf_first_no_repo_returns_202(
     client_india_with_backfill_mocks, monkeypatch
 ):
-    """Scenario J: ``hf_first`` + no HF repo on India bucket -> 503."""
+    """``hf_first`` with no HF repo uses the local-only rule and backfills."""
     _ = _wait_for_terminal_response(
         client_india_with_backfill_mocks, "/train/patchtst/india"
     )
@@ -607,13 +602,10 @@ def test_train_patchtst_india_cached_main_hf_first_no_repo_returns_503(
 
         shutil.rmtree(snap_dir)
 
-    from brain_api.storage.policy import StoragePolicy
-
-    monkeypatch.setattr(
-        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
-        lambda: StoragePolicy.HF_FIRST,
-    )
+    monkeypatch.setenv("STORAGE_BACKEND", "hf_first")
 
     response = client_india_with_backfill_mocks.post("/train/patchtst/india")
-    assert response.status_code == 503, response.text
-    assert "patchtst_nifty_shariah_500" in response.text
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_india_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"

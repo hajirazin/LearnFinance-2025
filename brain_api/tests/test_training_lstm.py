@@ -606,16 +606,11 @@ def test_train_lstm_skip_snapshot_false_writes_snapshots(client_with_backfill_mo
         "skip_snapshot=false must write at least one snapshot, but on-disk "
         "snapshot list was empty."
     )
-    end_date_iso = "2024-12-27"
-    end_date_snapshots = [s for s in snapshots if s.isoformat() == end_date_iso]
-    assert end_date_snapshots, (
-        f"Expected end-date snapshot {end_date_iso} on disk, got: "
-        f"{[s.isoformat() for s in snapshots]}"
+    assert all(s.month == 12 and s.day == 31 for s in snapshots), (
+        f"Every snapshot must be December 31, got: {[s.isoformat() for s in snapshots]}"
     )
-    assert len(snapshots) > 1, (
-        "Backfill must populate historical snapshots in addition to the "
-        f"end-date one. Got only: {[s.isoformat() for s in snapshots]}"
-    )
+    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
+    assert len(snapshots) > 1
 
 
 # ============================================================================
@@ -696,43 +691,14 @@ def test_train_lstm_cached_main_one_historical_missing_returns_202(
     assert earliest.isoformat() in snapshots_after
 
 
-def test_train_lstm_cached_main_end_window_missing_warn_and_skip(
-    client_with_backfill_mocks, caplog
-):
-    """Scenario C: end-window snapshot missing while main is cached ->
-    snapshots-only path warns and skips it (does not retrain main)."""
-    import logging
-
+def test_train_lstm_writes_only_december_31_snapshots(client_with_backfill_mocks):
+    """Annual snapshots only: the training window end is not a cutoff."""
     _seed_main_version(client_with_backfill_mocks)
 
-    snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
-    snapshots = sorted(snapshot_storage.list_snapshots())
-    end_window = snapshots[-1]
-    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(end_window):
-        import shutil
-
-        shutil.rmtree(snap_dir)
-
-    caplog.set_level(logging.WARNING, logger="brain_api.routes.training.snapshot_phase")
-
-    response = client_with_backfill_mocks.post("/train/lstm", json={})
-    assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
-    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
-    assert final["status"] == "completed"
-
-    # End-window snapshot must NOT have been recreated; warn must be emitted.
-    snapshots_after = sorted(SnapshotLocalStorage("lstm_halal_new").list_snapshots())
-    assert end_window not in snapshots_after, (
-        "Snapshots-only path must not regenerate the end-window snapshot. "
-        f"Found: {[s.isoformat() for s in snapshots_after]}"
-    )
-    warning_messages = [
-        r.message for r in caplog.records if r.levelno >= logging.WARNING
-    ]
-    assert any("End-of-window snapshot" in m for m in warning_messages), (
-        f"Expected warn-and-skip log, got: {warning_messages}"
-    )
+    snapshots = SnapshotLocalStorage("lstm_halal_new").list_snapshots()
+    assert snapshots
+    assert all(s.month == 12 and s.day == 31 for s in snapshots)
+    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
 
 
 def test_train_lstm_cached_main_dedup_concurrent_snapshots_only_jobs(
@@ -775,11 +741,10 @@ def test_train_lstm_cached_main_skip_snapshot_returns_200_fast(
     # when the operator opted out of snapshot bookkeeping.
 
 
-def test_train_lstm_cached_main_hf_first_no_repo_returns_503(
+def test_train_lstm_cached_main_hf_first_no_repo_returns_202(
     client_with_backfill_mocks, monkeypatch
 ):
-    """Scenario J: ``hf_first`` policy + the bucket has no HF repo
-    configured -> 503 from the synchronous inventory scan."""
+    """``hf_first`` with no HF repo uses the local-only rule and backfills."""
     _seed_main_version(client_with_backfill_mocks)
 
     snapshot_storage = SnapshotLocalStorage("lstm_halal_new")
@@ -789,19 +754,13 @@ def test_train_lstm_cached_main_hf_first_no_repo_returns_503(
 
         shutil.rmtree(snap_dir)
 
-    from brain_api.storage.policy import StoragePolicy
-
-    # ``count_missing_snapshots`` reads the env-default via the rebound
-    # name on its module, so we patch there (not on the storage policy
-    # module itself).
-    monkeypatch.setattr(
-        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
-        lambda: StoragePolicy.HF_FIRST,
-    )
+    monkeypatch.setenv("STORAGE_BACKEND", "hf_first")
 
     response = client_with_backfill_mocks.post("/train/lstm", json={})
-    assert response.status_code == 503, response.text
-    assert "hf_first" in response.text
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
 
 
 def test_train_lstm_cached_main_local_first_no_repo_with_missing_returns_202(
@@ -824,3 +783,47 @@ def test_train_lstm_cached_main_local_first_no_repo_with_missing_returns_202(
     assert job_id.startswith("lstm_halal_new_snapshots:")
     final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
     assert final["status"] == "completed"
+
+
+def test_cached_main_uploads_local_annual_snapshot_missing_on_hf(
+    client_with_backfill_mocks, monkeypatch
+):
+    """A local December 31 digest with no HF branch is uploaded, not trained."""
+    from datetime import date
+
+    from brain_api.routes.training import snapshot_phase
+
+    _seed_main_version(client_with_backfill_mocks)
+
+    def _fail_train(*_args, **_kwargs):
+        raise AssertionError("upload path must not train")
+
+    monkeypatch.setattr(snapshot_phase, "train_model_pytorch", _fail_train)
+    monkeypatch.setattr(
+        "brain_api.storage.forecaster_snapshots.local.get_hf_lstm_halal_new_model_repo",
+        lambda: "user/lstm-snapshots",
+    )
+    uploads: list[date] = []
+
+    def _upload(self, cutoff, digest):
+        uploads.append(cutoff)
+        return "user/lstm-snapshots"
+
+    monkeypatch.setattr(
+        snapshot_phase.SnapshotLocalStorage,
+        "upload_snapshot_to_hf",
+        _upload,
+    )
+    monkeypatch.setattr(
+        snapshot_phase.SnapshotLocalStorage,
+        "snapshot_digest_exists_on_hf",
+        lambda self, cutoff, digest: False,
+    )
+
+    response = client_with_backfill_mocks.post("/train/lstm", json={})
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed", final
+    assert uploads
+    assert all(cutoff.month == 12 and cutoff.day == 31 for cutoff in uploads)

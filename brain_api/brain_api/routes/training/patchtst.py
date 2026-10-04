@@ -56,10 +56,7 @@ from .patchtst_jobs import (
     _run_patchtst_training,
     handle_patchtst_existing_metadata,
 )
-from .snapshot_phase import (
-    _PatchTSTMainTrainingArtifacts,
-    _run_patchtst_snapshot_phase,
-)
+from .snapshot_phase import _run_patchtst_snapshot_phase
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -184,8 +181,6 @@ def _train_patchtst_core(
     logger.info(
         f"{log_prefix} Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples"
     )
-
-    available_symbols = list(prices.keys())
 
     del aligned_features, prices
 
@@ -346,15 +341,6 @@ def _train_patchtst_core(
             symbols=symbols,
             config=config,
             snapshot_storage=snapshot_storage,
-            main_artifacts=_PatchTSTMainTrainingArtifacts(
-                model=result.model,
-                feature_scaler=result.feature_scaler,
-                train_loss=result.train_loss,
-                val_loss=result.val_loss,
-                best_epoch=result.best_epoch,
-                stopped_epoch=result.stopped_epoch,
-                available_symbols=available_symbols,
-            ),
             log_prefix=log_prefix,
         )
 
@@ -499,16 +485,9 @@ def _run_patchtst_snapshots_only(
     Mirror of :func:`brain_api.routes.training.lstm._run_lstm_snapshots_only`.
 
     Used by the cached-main path in :func:`handle_patchtst_existing_metadata`
-    when at least one snapshot is missing. Skips the entire main
-    training pipeline and goes straight to the snapshot phase with
-    ``main_artifacts=None`` so the end-of-window snapshot is
-    warned-and-skipped if missing while historical year-end snapshots
-    are backfilled.
-
-    On ``StoragePolicyError`` (``hf_first`` + no HF repo) the job is
-    marked failed; the route handler already mapped that case to 503
-    synchronously, but a transient HF outage between the synchronous
-    scan and the background run is still possible.
+    when at least one annual snapshot is not ready. Skips the entire
+    main training pipeline. December 31 digests already on disk or
+    Hugging Face are copied; only a missing digest is trained.
     """
     try:
         update_progress(job_id, {"phase": "snapshots_only_backfill"})
@@ -518,7 +497,6 @@ def _run_patchtst_snapshots_only(
             symbols=symbols,
             config=config,
             snapshot_storage=snapshot_storage,
-            main_artifacts=None,
             log_prefix=log_prefix,
         )
         response = PatchTSTTrainResponse(

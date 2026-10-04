@@ -607,16 +607,11 @@ def test_train_patchtst_skip_snapshot_false_writes_snapshots(
         "skip_snapshot=false must write at least one snapshot, but on-disk "
         "snapshot list was empty."
     )
-    end_date_iso = "2024-12-27"
-    end_date_snapshots = [s for s in snapshots if s.isoformat() == end_date_iso]
-    assert end_date_snapshots, (
-        f"Expected end-date snapshot {end_date_iso} on disk, got: "
-        f"{[s.isoformat() for s in snapshots]}"
+    assert all(s.month == 12 and s.day == 31 for s in snapshots), (
+        f"Every snapshot must be December 31, got: {[s.isoformat() for s in snapshots]}"
     )
-    assert len(snapshots) > 1, (
-        "Backfill must populate historical snapshots in addition to the "
-        f"end-date one. Got only: {[s.isoformat() for s in snapshots]}"
-    )
+    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
+    assert len(snapshots) > 1
 
 
 # ============================================================================
@@ -685,42 +680,16 @@ def test_train_patchtst_cached_main_one_historical_missing_returns_202(
     assert earliest.isoformat() in snapshots_after
 
 
-def test_train_patchtst_cached_main_end_window_missing_warn_and_skip(
-    client_with_backfill_mocks, caplog
+def test_train_patchtst_writes_only_december_31_snapshots(
+    client_with_backfill_mocks,
 ):
-    """Scenario C: end-window snapshot missing while main is cached ->
-    snapshots-only path warns and skips it."""
-    import logging
-
+    """Annual snapshots only: the training window end is not a cutoff."""
     _seed_main_version(client_with_backfill_mocks)
 
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    snapshots = sorted(snapshot_storage.list_snapshots())
-    end_window = snapshots[-1]
-    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(end_window):
-        import shutil
-
-        shutil.rmtree(snap_dir)
-
-    caplog.set_level(logging.WARNING, logger="brain_api.routes.training.snapshot_phase")
-
-    response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
-    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
-    assert final["status"] == "completed"
-
-    snapshots_after = sorted(
-        SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
-    )
-    assert end_window not in snapshots_after, (
-        "Snapshots-only path must not regenerate the end-window snapshot. "
-        f"Found: {[s.isoformat() for s in snapshots_after]}"
-    )
-    warning_messages = [
-        r.message for r in caplog.records if r.levelno >= logging.WARNING
-    ]
-    assert any("End-of-window snapshot" in m for m in warning_messages)
+    snapshots = SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
+    assert snapshots
+    assert all(s.month == 12 and s.day == 31 for s in snapshots)
+    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
 
 
 def test_train_patchtst_cached_main_skip_snapshot_returns_200_fast(
@@ -736,10 +705,10 @@ def test_train_patchtst_cached_main_skip_snapshot_returns_200_fast(
     assert data["signals_used"] == ["ohlcv"]
 
 
-def test_train_patchtst_cached_main_hf_first_no_repo_returns_503(
+def test_train_patchtst_cached_main_hf_first_no_repo_returns_202(
     client_with_backfill_mocks, monkeypatch
 ):
-    """Scenario J: ``hf_first`` policy + no HF repo -> 503."""
+    """``hf_first`` with no HF repo uses the local-only rule and backfills."""
     _seed_main_version(client_with_backfill_mocks)
 
     snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
@@ -749,16 +718,13 @@ def test_train_patchtst_cached_main_hf_first_no_repo_returns_503(
 
         shutil.rmtree(snap_dir)
 
-    from brain_api.storage.policy import StoragePolicy
-
-    monkeypatch.setattr(
-        "brain_api.core.forecaster_snapshot_identity.get_storage_policy",
-        lambda: StoragePolicy.HF_FIRST,
-    )
+    monkeypatch.setenv("STORAGE_BACKEND", "hf_first")
 
     response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 503, response.text
-    assert "hf_first" in response.text
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
+    assert final["status"] == "completed"
 
 
 def test_train_patchtst_cached_main_local_first_no_repo_with_missing_returns_202(

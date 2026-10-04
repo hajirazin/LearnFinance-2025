@@ -146,6 +146,9 @@ temporal/                         # Temporal workflow orchestration
 | `POST /train/lstm` | Full LSTM retrain |
 | `POST /train/patchtst` | Full PatchTST retrain (US) |
 | `POST /train/patchtst/india` | Full PatchTST retrain (India NiftyShariah500) |
+| `DELETE /train/lstm/snapshots` | Delete every hashed LSTM snapshot. Required query: `universe` (allowlist `halal_new`) and `storage` (`local`, `hf`, or `both`). A missing or invalid argument returns 422 and deletes nothing. Does not delete versioned artifacts, `current`, or rejected audit copies. |
+| `DELETE /train/patchtst/snapshots` | Delete every hashed US PatchTST snapshot. Required query: `universe` (allowlist `halal_new`) and `storage` (`local`, `hf`, or `both`). A missing or invalid argument returns 422 and deletes nothing. Does not delete versioned artifacts, `current`, or rejected audit copies. |
+| `DELETE /train/patchtst/india/snapshots` | Delete every hashed India PatchTST snapshot. Required query: `universe` (allowlist `nifty_shariah_500`) and `storage` (`local`, `hf`, or `both`). A missing or invalid argument returns 422 and deletes nothing. Does not delete versioned artifacts, `current`, or rejected audit copies. |
 | `POST /train/sac/full` | Full SAC retrain (PatchTST-only forecasts). Body `{"universe": "halal_filtered"\|"halal"}` selects the bucket; ``n_stocks`` and ``target_entropy`` are resized at training time from the bucket's symbol count via `make_sac_config_for_n_stocks`. |
 | `POST /train/ppo-discovery/preflight` | Freeze `halal_new` snapshot and report readiness (survivorship disclosed). Universe must be `halal_new`. |
 | `POST /train/ppo-discovery/full` | Two-stage ppo_discovery train on seed 42; writes a **candidate** only (`current` unchanged). |
