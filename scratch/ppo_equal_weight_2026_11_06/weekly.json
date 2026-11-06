@@ -1,0 +1,3452 @@
+[
+  {
+    "as_of": "2025-05-09T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1468988488204359,
+    "weights": {
+      "SMCI": 0.0953301213628478,
+      "MSTR": 0.08210193597983373,
+      "RDDT": 0.08056144648725316,
+      "ARM": 0.08762744508039366,
+      "HKD": 0.0855519881890553,
+      "RKT": 0.08492326197914957,
+      "MRVL": 0.08609033067619487,
+      "ALB": 0.08832475359470493,
+      "SZKMY": 0.08463198740253342,
+      "CVNA": 0.07795788042759755,
+      "CASH": 0.1468988488204359
+    },
+    "equity_equal_portfolio_weight": 0.08531011511795641,
+    "eligible_count": 421,
+    "cv": 0.05281809668547693,
+    "max_relative_deviation": 0.11745390603490513,
+    "equity_tv": 0.01919357779646002,
+    "effective_names_fraction": 0.997218009723618,
+    "max_min_ratio": 1.2228413707499977,
+    "ppo": {
+      "net_log": 0.026778070442382975,
+      "gross": 0.02760063902241415,
+      "cost": 0.0004608142424398422
+    },
+    "equal_fixed": {
+      "net_log": 0.023789644212734752,
+      "gross": 0.0245352554743718,
+      "cost": 0.00046038031935080923
+    },
+    "sampled_conditional_cv_median": 0.5867419838905334,
+    "sampled_conditional_cv_p05_p95": [
+      0.39540135860443115,
+      0.8665181398391721
+    ],
+    "alpha_min_max_sum": [
+      2.112818717956543,
+      2.58364200592041,
+      23.120792388916016
+    ],
+    "selection_score_weight_spearman": 0.2606060606060606,
+    "selection_score_realized_rank_ic": -0.0771792987325853,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.018623478047739367,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-05-16T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14687653302677317,
+    "weights": {
+      "MSTR": 0.08997109188969343,
+      "SMCI": 0.09127947824990557,
+      "HKD": 0.08843346046546419,
+      "RDDT": 0.08204078648598756,
+      "ABX": 0.08666735308531814,
+      "SZKMY": 0.08294705643503919,
+      "RCRUY": 0.0863008317597922,
+      "UAL": 0.08345314863384434,
+      "TSLA": 0.08007195873688744,
+      "CHGCY": 0.08195830123129477,
+      "CASH": 0.14687653302677317
+    },
+    "equity_equal_portfolio_weight": 0.08531234669732268,
+    "eligible_count": 421,
+    "cv": 0.04199072213482692,
+    "max_relative_deviation": 0.0699445248382804,
+    "equity_tv": 0.01886067209081365,
+    "effective_names_fraction": 0.9982398827298806,
+    "max_min_ratio": 1.1399680948213782,
+    "ppo": {
+      "net_log": -0.015925617256465564,
+      "gross": -0.015258174248002248,
+      "cost": 0.0005413008841060653
+    },
+    "equal_fixed": {
+      "net_log": -0.015132976545600241,
+      "gross": -0.014492826801024272,
+      "cost": 0.0005262216693072345
+    },
+    "sampled_conditional_cv_median": 0.5884569883346558,
+    "sampled_conditional_cv_p05_p95": [
+      0.37315010130405424,
+      0.8392051190137864
+    ],
+    "alpha_min_max_sum": [
+      2.137373924255371,
+      2.4365382194519043,
+      22.772565841674805
+    ],
+    "selection_score_weight_spearman": 0.8181818181818182,
+    "selection_score_realized_rank_ic": -0.08768013740376991,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.013469585724756287,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-05-23T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14793010743776325,
+    "weights": {
+      "SMCI": 0.09736838020854943,
+      "MSTR": 0.08859200147995461,
+      "RDDT": 0.08444526137551189,
+      "HKD": 0.08329715690845796,
+      "FSLR": 0.09311072060082848,
+      "ABX": 0.08458081907660508,
+      "TSLA": 0.07914361765177103,
+      "ARM": 0.08022036593654203,
+      "MRVL": 0.07998285269385952,
+      "INTC": 0.08132871663015684,
+      "CASH": 0.14793010743776325
+    },
+    "equity_equal_portfolio_weight": 0.08520698925622368,
+    "eligible_count": 421,
+    "cv": 0.06746077934812346,
+    "max_relative_deviation": 0.14272762197659095,
+    "equity_tv": 0.027521374391184253,
+    "effective_names_fraction": 0.9954696606282885,
+    "max_min_ratio": 1.2302745704267233,
+    "ppo": {
+      "net_log": -0.008752869178783502,
+      "gross": -0.008285065943208464,
+      "cost": 0.00042960839552681936
+    },
+    "equal_fixed": {
+      "net_log": -0.008562898497574429,
+      "gross": -0.008082239979457345,
+      "cost": 0.00044410132237826874
+    },
+    "sampled_conditional_cv_median": 0.5787526965141296,
+    "sampled_conditional_cv_p05_p95": [
+      0.38833835273981093,
+      0.8617640674114226
+    ],
+    "alpha_min_max_sum": [
+      2.1416430473327637,
+      2.6348090171813965,
+      23.05718994140625
+    ],
+    "selection_score_weight_spearman": 0.7575757575757575,
+    "selection_score_realized_rank_ic": -0.05424039548613178,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0031267635955851683,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-05-30T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14750769294775523,
+    "weights": {
+      "MSTR": 0.08421868074366756,
+      "SMCI": 0.09127421904130983,
+      "HKD": 0.08823225235141763,
+      "MRVL": 0.0862436415445842,
+      "RDDT": 0.08155395877657412,
+      "COHR": 0.08647957034595066,
+      "TSLA": 0.0865087113162204,
+      "ABX": 0.08387935485097131,
+      "AI": 0.08172234505879317,
+      "CVNA": 0.08237957302275589,
+      "CASH": 0.14750769294775523
+    },
+    "equity_equal_portfolio_weight": 0.08524923070522447,
+    "eligible_count": 421,
+    "cv": 0.034510899875076814,
+    "max_relative_deviation": 0.07067498775348025,
+    "equity_tv": 0.01465378745358549,
+    "effective_names_fraction": 0.9988104145886666,
+    "max_min_ratio": 1.1191880861524506,
+    "ppo": {
+      "net_log": -0.0027890513053873034,
+      "gross": -0.00234092333283066,
+      "cost": 0.00044424218236012534
+    },
+    "equal_fixed": {
+      "net_log": -0.002698979546114456,
+      "gross": -0.002278202660895586,
+      "cost": 0.00041713791449576724
+    },
+    "sampled_conditional_cv_median": 0.59637451171875,
+    "sampled_conditional_cv_p05_p95": [
+      0.38260389119386673,
+      0.8849317997694015
+    ],
+    "alpha_min_max_sum": [
+      2.175078868865967,
+      2.4343223571777344,
+      22.7363338470459
+    ],
+    "selection_score_weight_spearman": 0.5272727272727272,
+    "selection_score_realized_rank_ic": 0.3627083209368673,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.02098637163076169,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-06-06T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14729397172088365,
+    "weights": {
+      "MSTR": 0.08224518822074978,
+      "SMCI": 0.08890880343055585,
+      "HKD": 0.0880714638812734,
+      "TSLA": 0.08979267349113917,
+      "RDDT": 0.08672645002457124,
+      "ABX": 0.08537564209000092,
+      "AI": 0.08435798727969424,
+      "CEG": 0.08167203829215763,
+      "CVNA": 0.08403434482929972,
+      "SZKMY": 0.08152143673967438,
+      "CASH": 0.14729397172088365
+    },
+    "equity_equal_portfolio_weight": 0.08527060282791163,
+    "eligible_count": 421,
+    "cv": 0.0336191680554495,
+    "max_relative_deviation": 0.05303200063395508,
+    "equity_tv": 0.014685036064836628,
+    "effective_names_fraction": 0.9988710275586236,
+    "max_min_ratio": 1.1014608805028507,
+    "ppo": {
+      "net_log": -0.0067571370759801075,
+      "gross": -0.0063419799953655836,
+      "cost": 0.0003923789637120061
+    },
+    "equal_fixed": {
+      "net_log": -0.0071984941858877615,
+      "gross": -0.00678643616381605,
+      "cost": 0.00038621092005718116
+    },
+    "sampled_conditional_cv_median": 0.5869890451431274,
+    "sampled_conditional_cv_p05_p95": [
+      0.3755799114704132,
+      0.863260582089424
+    ],
+    "alpha_min_max_sum": [
+      2.1735291481018066,
+      2.394057273864746,
+      22.73489761352539
+    ],
+    "selection_score_weight_spearman": 0.6,
+    "selection_score_realized_rank_ic": -0.030176563201070414,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.006397902575415761,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-06-13T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14631790140744916,
+    "weights": {
+      "SMCI": 0.08653461679856478,
+      "MSTR": 0.08493594250691239,
+      "HKD": 0.09032649995255437,
+      "RDDT": 0.0889620420315601,
+      "CVNA": 0.09081907687546464,
+      "COHR": 0.08280088703032706,
+      "AI": 0.08734848434029496,
+      "TSLA": 0.08004628142293857,
+      "VRT": 0.08162827231408487,
+      "NVDA": 0.08027999531984908,
+      "CASH": 0.14631790140744916
+    },
+    "equity_equal_portfolio_weight": 0.08536820985925508,
+    "eligible_count": 421,
+    "cv": 0.044984086079402685,
+    "max_relative_deviation": 0.0638512512467615,
+    "equity_tv": 0.02008905976878017,
+    "effective_names_fraction": 0.9979805185576252,
+    "max_min_ratio": 1.1345820850266124,
+    "ppo": {
+      "net_log": 0.007503119708429208,
+      "gross": 0.00795296588857337,
+      "cost": 0.00042162724493242064
+    },
+    "equal_fixed": {
+      "net_log": 0.007005675818731368,
+      "gross": 0.007455820717979121,
+      "cost": 0.0004255477460649011
+    },
+    "sampled_conditional_cv_median": 0.5835486650466919,
+    "sampled_conditional_cv_p05_p95": [
+      0.38195863664150237,
+      0.8629458010196683
+    ],
+    "alpha_min_max_sum": [
+      2.1273436546325684,
+      2.4136459827423096,
+      22.687814712524414
+    ],
+    "selection_score_weight_spearman": 0.6,
+    "selection_score_realized_rank_ic": 0.16060352161488028,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.019739382001746828,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-06-20T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14747429113796806,
+    "weights": {
+      "MSTR": 0.07974978069997907,
+      "HKD": 0.09238845624866365,
+      "SMCI": 0.0806694785294928,
+      "FSLR": 0.09347951959821255,
+      "ABX": 0.09058811152618595,
+      "MMYT": 0.08706099511279464,
+      "TSLA": 0.08238669709604551,
+      "CHGCY": 0.0836074517309674,
+      "RDDT": 0.07715970256125126,
+      "RCRUY": 0.0854355157584391,
+      "CASH": 0.14747429113796806
+    },
+    "equity_equal_portfolio_weight": 0.0852525708862032,
+    "eligible_count": 421,
+    "cv": 0.06185481256538073,
+    "max_relative_deviation": 0.09650088702885973,
+    "equity_tv": 0.02661473264374238,
+    "effective_names_fraction": 0.9961885647816334,
+    "max_min_ratio": 1.2115069977622868,
+    "ppo": {
+      "net_log": 0.037859233015992276,
+      "gross": 0.039129998347410724,
+      "cost": 0.0005449742408346572
+    },
+    "equal_fixed": {
+      "net_log": 0.039145090510411845,
+      "gross": 0.04043505363590319,
+      "cost": 0.0005136982107946288
+    },
+    "sampled_conditional_cv_median": 0.5855224132537842,
+    "sampled_conditional_cv_p05_p95": [
+      0.373422372341156,
+      0.8536821603775024
+    ],
+    "alpha_min_max_sum": [
+      2.0357789993286133,
+      2.466360569000244,
+      22.493009567260742
+    ],
+    "selection_score_weight_spearman": 0.17575757575757575,
+    "selection_score_realized_rank_ic": 0.2780411278559448,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.012542644133730622,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-06-27T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1461038951120981,
+    "weights": {
+      "SMCI": 0.08372147755784742,
+      "HKD": 0.0920932175080349,
+      "MSTR": 0.07957597779207459,
+      "TSLA": 0.08342461289669667,
+      "ABX": 0.09015012244838627,
+      "RDDT": 0.08379593866097435,
+      "MU": 0.08415385328330127,
+      "FSLR": 0.08767394722023902,
+      "RNECY": 0.08745529725507617,
+      "RKT": 0.08185166026527124,
+      "CASH": 0.1461038951120981
+    },
+    "equity_equal_portfolio_weight": 0.0853896104887902,
+    "eligible_count": 421,
+    "cv": 0.04288735008007252,
+    "max_relative_deviation": 0.07850612013419056,
+    "equity_tv": 0.018519984323680294,
+    "effective_names_fraction": 0.9981640521075936,
+    "max_min_ratio": 1.1572992260134938,
+    "ppo": {
+      "net_log": 0.020805359780408792,
+      "gross": 0.021493970976439923,
+      "cost": 0.0004706708801440044
+    },
+    "equal_fixed": {
+      "net_log": 0.019625841740296628,
+      "gross": 0.020296315536988817,
+      "cost": 0.0004766208658311795
+    },
+    "sampled_conditional_cv_median": 0.5921878814697266,
+    "sampled_conditional_cv_p05_p95": [
+      0.3965977936983109,
+      0.8414312541484832
+    ],
+    "alpha_min_max_sum": [
+      2.1180930137634277,
+      2.4512674808502197,
+      22.72835922241211
+    ],
+    "selection_score_weight_spearman": -0.006060606060606061,
+    "selection_score_realized_rank_ic": 0.09283937235553226,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.00848895401043304,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-07-04T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1451887830874128,
+    "weights": {
+      "SMCI": 0.08640273796320985,
+      "TSLA": 0.090109192290182,
+      "MSTR": 0.08150676277413171,
+      "HKD": 0.0887527696242063,
+      "RDDT": 0.08449146201351565,
+      "ABX": 0.09038023735501777,
+      "SZKMY": 0.0849929189481674,
+      "COHR": 0.08251220507265511,
+      "MRVL": 0.08566087008097079,
+      "CHGCY": 0.08000206079053052,
+      "CASH": 0.1451887830874128
+    },
+    "equity_equal_portfolio_weight": 0.08548112169125872,
+    "eligible_count": 421,
+    "cv": 0.039299544265079325,
+    "max_relative_deviation": 0.06409673612517053,
+    "equity_tv": 0.016261132963951958,
+    "effective_names_fraction": 0.9984579274809042,
+    "max_min_ratio": 1.1297238653846735,
+    "ppo": {
+      "net_log": 0.005778371464190802,
+      "gross": 0.00627020963527797,
+      "cost": 0.00047511117996213413
+    },
+    "equal_fixed": {
+      "net_log": 0.006060496537490365,
+      "gross": 0.006522260024404768,
+      "cost": 0.0004433615215406353
+    },
+    "sampled_conditional_cv_median": 0.5868262648582458,
+    "sampled_conditional_cv_p05_p95": [
+      0.3776663213968277,
+      0.8657850325107573
+    ],
+    "alpha_min_max_sum": [
+      2.1584320068359375,
+      2.438432216644287,
+      23.06255340576172
+    ],
+    "selection_score_weight_spearman": 0.4424242424242424,
+    "selection_score_realized_rank_ic": 0.1511716469636565,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.008860608350408972,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-07-11T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14497648395562912,
+    "weights": {
+      "HKD": 0.08414282083581526,
+      "RDDT": 0.08803350481799832,
+      "MSTR": 0.08058730384125479,
+      "SMCI": 0.08391585545777147,
+      "TSLA": 0.08676237638885986,
+      "ABX": 0.09040565868075134,
+      "VRT": 0.08445317503160332,
+      "SZKMY": 0.08387853752848606,
+      "MRVL": 0.09001949009841059,
+      "COHR": 0.08282479336341986,
+      "CASH": 0.14497648395562912
+    },
+    "equity_equal_portfolio_weight": 0.08550235160443709,
+    "eligible_count": 421,
+    "cv": 0.035449626032151904,
+    "max_relative_deviation": 0.05748435769253435,
+    "equity_tv": 0.01545176632029166,
+    "effective_names_fraction": 0.9987449012666184,
+    "max_min_ratio": 1.1218350083883843,
+    "ppo": {
+      "net_log": 0.019969478458137093,
+      "gross": 0.020548021635925676,
+      "cost": 0.0003778192518913815
+    },
+    "equal_fixed": {
+      "net_log": 0.019823613412366447,
+      "gross": 0.0203442387956718,
+      "cost": 0.0003228327325470541
+    },
+    "sampled_conditional_cv_median": 0.5875710248947144,
+    "sampled_conditional_cv_p05_p95": [
+      0.366247795522213,
+      0.8439418464899061
+    ],
+    "alpha_min_max_sum": [
+      2.18845272064209,
+      2.455082893371582,
+      23.21927261352539
+    ],
+    "selection_score_weight_spearman": 0.006060606060606061,
+    "selection_score_realized_rank_ic": 0.07665518954933688,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.015126407002002577,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-07-18T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14477357709787864,
+    "weights": {
+      "MSTR": 0.08527560309002657,
+      "SMCI": 0.08546135767705954,
+      "HKD": 0.08827986748741434,
+      "TSLA": 0.08717970230190608,
+      "RDDT": 0.08783671230015555,
+      "SZKMY": 0.08619569745262212,
+      "MPWR": 0.08323778249493241,
+      "ABX": 0.0892242325423126,
+      "MU": 0.08332585535106474,
+      "CHGCY": 0.0792096122046273,
+      "CASH": 0.14477357709787864
+    },
+    "equity_equal_portfolio_weight": 0.08552264229021214,
+    "eligible_count": 421,
+    "cv": 0.033035741717435146,
+    "max_relative_deviation": 0.07381706079849848,
+    "equity_tv": 0.012982527592720068,
+    "effective_names_fraction": 0.9989098295378661,
+    "max_min_ratio": 1.1264318819263233,
+    "ppo": {
+      "net_log": 0.012249055893281366,
+      "gross": 0.012736531281868347,
+      "cost": 0.00041214845638178906
+    },
+    "equal_fixed": {
+      "net_log": 0.012302748386103967,
+      "gross": 0.012783802179706413,
+      "cost": 0.00040506367532780593
+    },
+    "sampled_conditional_cv_median": 0.5865684747695923,
+    "sampled_conditional_cv_p05_p95": [
+      0.36980814933776857,
+      0.8641298949718474
+    ],
+    "alpha_min_max_sum": [
+      2.122746229171753,
+      2.3911290168762207,
+      22.919296264648438
+    ],
+    "selection_score_weight_spearman": 0.32121212121212117,
+    "selection_score_realized_rank_ic": 0.14110132080660384,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.005811158424298683,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-07-25T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14588055868357852,
+    "weights": {
+      "MSTR": 0.08496270037675946,
+      "TSLA": 0.08927890837778674,
+      "RDDT": 0.08447999572615272,
+      "HKD": 0.08383923621407552,
+      "SMCI": 0.08810320471927757,
+      "AI": 0.09127278474171108,
+      "COHR": 0.08105994739866562,
+      "INTC": 0.08776777484658327,
+      "MPWR": 0.07855488252698828,
+      "CVNA": 0.08480000638842133,
+      "CASH": 0.14588055868357852
+    },
+    "equity_equal_portfolio_weight": 0.08541194413164215,
+    "eligible_count": 421,
+    "cv": 0.04253280966075163,
+    "max_relative_deviation": 0.08028223305730353,
+    "equity_tv": 0.01729839580283765,
+    "effective_names_fraction": 0.9981942268180946,
+    "max_min_ratio": 1.161898303524971,
+    "ppo": {
+      "net_log": 0.005235321052330663,
+      "gross": 0.005758669933055774,
+      "cost": 0.0005096206406722308
+    },
+    "equal_fixed": {
+      "net_log": 0.00696840599195189,
+      "gross": 0.007472376548911825,
+      "cost": 0.00047963472143887424
+    },
+    "sampled_conditional_cv_median": 0.5881310105323792,
+    "sampled_conditional_cv_p05_p95": [
+      0.38135969191789626,
+      0.854127687215805
+    ],
+    "alpha_min_max_sum": [
+      2.1184639930725098,
+      2.461439609527588,
+      23.03384780883789
+    ],
+    "selection_score_weight_spearman": 0.309090909090909,
+    "selection_score_realized_rank_ic": 0.005475083505275667,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.03193465116201831,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-08-01T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14587094308724424,
+    "weights": {
+      "MSTR": 0.08418927921326969,
+      "HKD": 0.08932062508895022,
+      "SMCI": 0.08699411806814084,
+      "RDDT": 0.08311057776716702,
+      "TSLA": 0.08617958256049008,
+      "ALB": 0.08647108083749444,
+      "AI": 0.08436362707807099,
+      "ARM": 0.08296249949341217,
+      "ABX": 0.08899676074119434,
+      "ILMN": 0.08154090606456599,
+      "CASH": 0.14587094308724424
+    },
+    "equity_equal_portfolio_weight": 0.08541290569127558,
+    "eligible_count": 421,
+    "cv": 0.028967809208418845,
+    "max_relative_deviation": 0.04575092447737439,
+    "equity_tv": 0.012758773105415108,
+    "effective_names_fraction": 0.9991615695851076,
+    "max_min_ratio": 1.0954087880532513,
+    "ppo": {
+      "net_log": 0.004931989098728304,
+      "gross": 0.0054426500243740334,
+      "cost": 0.0004984786480245742
+    },
+    "equal_fixed": {
+      "net_log": 0.004598938597055723,
+      "gross": 0.005130351239165556,
+      "cost": 0.000520821293904557
+    },
+    "sampled_conditional_cv_median": 0.5830341577529907,
+    "sampled_conditional_cv_p05_p95": [
+      0.36174977719783785,
+      0.8609318196773528
+    ],
+    "alpha_min_max_sum": [
+      2.2047290802001953,
+      2.4150795936584473,
+      23.094215393066406
+    ],
+    "selection_score_weight_spearman": 0.34545454545454546,
+    "selection_score_realized_rank_ic": -0.12176637177819197,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0021095872551392643,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-08-08T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14560202183718973,
+    "weights": {
+      "SMCI": 0.08938503875779746,
+      "HKD": 0.08925232536954164,
+      "MSTR": 0.08031178572334918,
+      "AI": 0.0884210333537343,
+      "ON": 0.085521002648269,
+      "TSLA": 0.08513324503992159,
+      "CVNA": 0.08019850700385511,
+      "CHGCY": 0.0833407676522363,
+      "RDDT": 0.08645485980757106,
+      "TECH": 0.0863794128065346,
+      "CASH": 0.14560202183718973
+    },
+    "equity_equal_portfolio_weight": 0.08543979781628103,
+    "eligible_count": 421,
+    "cv": 0.03685885242007658,
+    "max_relative_deviation": 0.06134484100367521,
+    "equity_tv": 0.014951914883075249,
+    "effective_names_fraction": 0.9986432682201553,
+    "max_min_ratio": 1.1145474161196138,
+    "ppo": {
+      "net_log": 0.03556374109712211,
+      "gross": 0.036739343547162295,
+      "cost": 0.0005356487637155219
+    },
+    "equal_fixed": {
+      "net_log": 0.03423304615434783,
+      "gross": 0.03535838188251423,
+      "cost": 0.0005326410938594267
+    },
+    "sampled_conditional_cv_median": 0.5810738801956177,
+    "sampled_conditional_cv_p05_p95": [
+      0.36815397143363954,
+      0.86077721118927
+    ],
+    "alpha_min_max_sum": [
+      2.145054817199707,
+      2.3907651901245117,
+      22.852426528930664
+    ],
+    "selection_score_weight_spearman": 0.406060606060606,
+    "selection_score_realized_rank_ic": 0.16976973007210056,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.021440226736069483,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-08-15T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1457597273385467,
+    "weights": {
+      "MSTR": 0.08300181163747622,
+      "SMCI": 0.0798581644736367,
+      "COHR": 0.08894553289135021,
+      "HKD": 0.08759021979115955,
+      "TSLA": 0.0868640269093085,
+      "AI": 0.0891966667201487,
+      "RDDT": 0.08235695816289479,
+      "VRT": 0.08733487260652284,
+      "SZKMY": 0.08825697380567954,
+      "LITE": 0.08083504566327615,
+      "CASH": 0.1457597273385467
+    },
+    "equity_equal_portfolio_weight": 0.08542402726614533,
+    "eligible_count": 421,
+    "cv": 0.0392446609583997,
+    "max_relative_deviation": 0.06515570584336583,
+    "equity_tv": 0.01831349987581002,
+    "effective_names_fraction": 0.9984622249803287,
+    "max_min_ratio": 1.116938603686476,
+    "ppo": {
+      "net_log": -0.02097551100443082,
+      "gross": -0.020276634963659855,
+      "cost": 0.0004804200843694273
+    },
+    "equal_fixed": {
+      "net_log": -0.021306528369349632,
+      "gross": -0.020620413208428647,
+      "cost": 0.00046073461572627056
+    },
+    "sampled_conditional_cv_median": 0.583853006362915,
+    "sampled_conditional_cv_p05_p95": [
+      0.3866992324590683,
+      0.8601480066776275
+    ],
+    "alpha_min_max_sum": [
+      2.140338897705078,
+      2.390627145767212,
+      22.895137786865234
+    ],
+    "selection_score_weight_spearman": -0.05454545454545454,
+    "selection_score_realized_rank_ic": -0.12371485501361332,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.033405595048764655,
+    "selection_evaluable_count": 421
+  },
+  {
+    "as_of": "2025-08-22T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14593511199564713,
+    "weights": {
+      "MSTR": 0.08210802209317403,
+      "HKD": 0.08319156122491278,
+      "RDDT": 0.09211777160951484,
+      "SMCI": 0.08639725387106822,
+      "TSLA": 0.08473204105145438,
+      "COHR": 0.08310982490739349,
+      "VRT": 0.08435745391222449,
+      "ABX": 0.09210993841318427,
+      "NVDA": 0.08166625145527784,
+      "AI": 0.08427476946614854,
+      "CASH": 0.14593511199564713
+    },
+    "equity_equal_portfolio_weight": 0.08540648880043529,
+    "eligible_count": 422,
+    "cv": 0.042028428491007234,
+    "max_relative_deviation": 0.07858047911045096,
+    "equity_tv": 0.01686698246795046,
+    "effective_names_fraction": 0.9982367258263306,
+    "max_min_ratio": 1.1279784484777104,
+    "ppo": {
+      "net_log": -0.021645159999764574,
+      "gross": -0.02101996954789702,
+      "cost": 0.0003926150425606779
+    },
+    "equal_fixed": {
+      "net_log": -0.022359161160186873,
+      "gross": -0.02181217665032384,
+      "cost": 0.0002988711088815032
+    },
+    "sampled_conditional_cv_median": 0.5838323831558228,
+    "sampled_conditional_cv_p05_p95": [
+      0.37455904930830003,
+      0.844275641441345
+    ],
+    "alpha_min_max_sum": [
+      2.1987900733947754,
+      2.4801878929138184,
+      22.994924545288086
+    ],
+    "selection_score_weight_spearman": 0.05454545454545454,
+    "selection_score_realized_rank_ic": 0.012077998775425902,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.008100575391257683,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-08-29T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14559858415118665,
+    "weights": {
+      "MSTR": 0.08376647707836082,
+      "SMCI": 0.08152402702574335,
+      "HKD": 0.08831439210150116,
+      "MRVL": 0.08929457676806529,
+      "TSLA": 0.08866219319804414,
+      "RDDT": 0.08471937798513685,
+      "RKT": 0.08802308099197631,
+      "AI": 0.08439972002952323,
+      "RNECY": 0.08721184429199558,
+      "NVDA": 0.07848572637846662,
+      "CASH": 0.14559858415118665
+    },
+    "equity_equal_portfolio_weight": 0.08544014158488134,
+    "eligible_count": 422,
+    "cv": 0.03906664699892111,
+    "max_relative_deviation": 0.08139517418174891,
+    "equity_tv": 0.01674315978627445,
+    "effective_names_fraction": 0.9984761228380173,
+    "max_min_ratio": 1.1377174027475674,
+    "ppo": {
+      "net_log": 0.02736220007541478,
+      "gross": 0.02817602039031317,
+      "cost": 0.00043603753342396745
+    },
+    "equal_fixed": {
+      "net_log": 0.026611475871304958,
+      "gross": 0.02736387538601147,
+      "cost": 0.0003951522718834298
+    },
+    "sampled_conditional_cv_median": 0.5895131826400757,
+    "sampled_conditional_cv_p05_p95": [
+      0.3791100487112999,
+      0.85905941426754
+    ],
+    "alpha_min_max_sum": [
+      2.0978426933288574,
+      2.386752128601074,
+      22.837268829345703
+    ],
+    "selection_score_weight_spearman": 0.13939393939393938,
+    "selection_score_realized_rank_ic": 0.08399190717635713,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.007413490497396279,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-09-05T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14687662264337087,
+    "weights": {
+      "MSTR": 0.08335686989235158,
+      "SMCI": 0.09025303527405615,
+      "AI": 0.0901648039694094,
+      "HKD": 0.08550130820183155,
+      "NVDA": 0.07981950711324426,
+      "RNECY": 0.08693076847861325,
+      "VRT": 0.08110482002839647,
+      "MRVL": 0.08727221428388765,
+      "ARM": 0.0854328893729851,
+      "SHECY": 0.08328716074185372,
+      "CASH": 0.14687662264337087
+    },
+    "equity_equal_portfolio_weight": 0.08531233773566291,
+    "eligible_count": 422,
+    "cv": 0.03892344805954875,
+    "max_relative_deviation": 0.06438495026871704,
+    "equity_tv": 0.016036359487880486,
+    "effective_names_fraction": 0.9984872570493826,
+    "max_min_ratio": 1.1307140138814598,
+    "ppo": {
+      "net_log": 0.045516136984461754,
+      "gross": 0.046982286682864055,
+      "cost": 0.000414393755352475
+    },
+    "equal_fixed": {
+      "net_log": 0.04523274473926731,
+      "gross": 0.046659127108391,
+      "cost": 0.0003877813842309879
+    },
+    "sampled_conditional_cv_median": 0.5914072394371033,
+    "sampled_conditional_cv_p05_p95": [
+      0.38592722564935683,
+      0.8854689568281173
+    ],
+    "alpha_min_max_sum": [
+      2.1025285720825195,
+      2.3773584365844727,
+      22.472152709960938
+    ],
+    "selection_score_weight_spearman": 0.33333333333333326,
+    "selection_score_realized_rank_ic": 0.14260124672150187,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.044294356327169396,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-09-12T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14626186885915327,
+    "weights": {
+      "MSTR": 0.0848757316367117,
+      "SMCI": 0.08549833109811122,
+      "HKD": 0.08788138969247195,
+      "AI": 0.08252220008260247,
+      "RDDT": 0.08205981121207206,
+      "TTD": 0.08872433516881162,
+      "RNECY": 0.08361817995385912,
+      "CVNA": 0.08354143000390768,
+      "INTC": 0.08486203673846493,
+      "FSLR": 0.09015468555383399,
+      "CASH": 0.14626186885915327
+    },
+    "equity_equal_portfolio_weight": 0.08537381311408468,
+    "eligible_count": 422,
+    "cv": 0.030194233458293203,
+    "max_relative_deviation": 0.05599928438666146,
+    "equity_tv": 0.012607483096141993,
+    "effective_names_fraction": 0.9990891386905929,
+    "max_min_ratio": 1.0986460268698628,
+    "ppo": {
+      "net_log": 0.04571841088189037,
+      "gross": 0.0473167713528899,
+      "cost": 0.0005371636472875574
+    },
+    "equal_fixed": {
+      "net_log": 0.04582885120817933,
+      "gross": 0.04741025978840245,
+      "cost": 0.0005150390173176859
+    },
+    "sampled_conditional_cv_median": 0.5877853631973267,
+    "sampled_conditional_cv_p05_p95": [
+      0.3844353049993515,
+      0.8567251980304718
+    ],
+    "alpha_min_max_sum": [
+      2.1487574577331543,
+      2.3607239723205566,
+      22.35535430908203
+    ],
+    "selection_score_weight_spearman": -0.06666666666666665,
+    "selection_score_realized_rank_ic": 0.16380686539129888,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.04379810862641475,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-09-19T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14637947718516386,
+    "weights": {
+      "MSTR": 0.08659866739478161,
+      "SMCI": 0.08882549590376243,
+      "HKD": 0.08859502972335065,
+      "ARM": 0.09033336176780438,
+      "RDDT": 0.07715406321560181,
+      "NVDA": 0.08166571678678736,
+      "ABX": 0.08716595114972847,
+      "SZKMY": 0.0812733258070466,
+      "CHGCY": 0.0821008912749761,
+      "RKT": 0.08990801979099672,
+      "CASH": 0.14637947718516386
+    },
+    "equity_equal_portfolio_weight": 0.08536205228148361,
+    "eligible_count": 422,
+    "cv": 0.049839233350079795,
+    "max_relative_deviation": 0.09615501088019474,
+    "equity_tv": 0.022555938531130082,
+    "effective_names_fraction": 0.9975222055346091,
+    "max_min_ratio": 1.1708179453280887,
+    "ppo": {
+      "net_log": -0.025672404570853926,
+      "gross": -0.02474962290421645,
+      "cost": 0.0005960474772928366
+    },
+    "equal_fixed": {
+      "net_log": -0.025544994141972227,
+      "gross": -0.024620810564898704,
+      "cost": 0.0006006707791411587
+    },
+    "sampled_conditional_cv_median": 0.5907219052314758,
+    "sampled_conditional_cv_p05_p95": [
+      0.3765843167901039,
+      0.8605410873889922
+    ],
+    "alpha_min_max_sum": [
+      2.027946949005127,
+      2.374356746673584,
+      22.4368896484375
+    ],
+    "selection_score_weight_spearman": 0.16363636363636364,
+    "selection_score_realized_rank_ic": 0.05597711999301248,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.026306827228684736,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-09-26T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14627120552679496,
+    "weights": {
+      "MSTR": 0.09222413752363634,
+      "HKD": 0.0909631711453397,
+      "SMCI": 0.08641023660023395,
+      "AI": 0.08576698415546025,
+      "RDDT": 0.0830144923908206,
+      "CHGCY": 0.0833920107423134,
+      "CVNA": 0.0804516089653774,
+      "ABX": 0.08614683691134384,
+      "MU": 0.08279806702461712,
+      "VRT": 0.08256124901406248,
+      "CASH": 0.14627120552679496
+    },
+    "equity_equal_portfolio_weight": 0.0853728794473205,
+    "eligible_count": 422,
+    "cv": 0.041949589158116196,
+    "max_relative_deviation": 0.08025098978351108,
+    "equity_tv": 0.017156466074743894,
+    "effective_names_fraction": 0.9982433233129393,
+    "max_min_ratio": 1.1463305545986693,
+    "ppo": {
+      "net_log": 0.07963806748855767,
+      "gross": 0.08339857018600204,
+      "cost": 0.0005035083759472984
+    },
+    "equal_fixed": {
+      "net_log": 0.07980761672584591,
+      "gross": 0.08356316465681662,
+      "cost": 0.0004844832491273027
+    },
+    "sampled_conditional_cv_median": 0.5957003831863403,
+    "sampled_conditional_cv_p05_p95": [
+      0.38802618235349656,
+      0.8569322317838667
+    ],
+    "alpha_min_max_sum": [
+      2.1190342903137207,
+      2.4291136264801025,
+      22.4865665435791
+    ],
+    "selection_score_weight_spearman": 0.8060606060606059,
+    "selection_score_realized_rank_ic": 0.07935723991313175,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.06429325194974347,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-10-03T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14641135276505435,
+    "weights": {
+      "HKD": 0.09176991142053026,
+      "MSTR": 0.08618597830539854,
+      "RDDT": 0.08501923472108686,
+      "SMCI": 0.08607992978601864,
+      "TSLA": 0.08477982899613712,
+      "SZKMY": 0.08437795757547051,
+      "RKT": 0.08705129606515072,
+      "UAL": 0.07813463479998817,
+      "RNECY": 0.08848413080693496,
+      "RBLX": 0.08170574475822989,
+      "CASH": 0.14641135276505435
+    },
+    "equity_equal_portfolio_weight": 0.08535886472349456,
+    "eligible_count": 422,
+    "cv": 0.04090026317586075,
+    "max_relative_deviation": 0.08463362237663374,
+    "equity_tv": 0.014968477858683979,
+    "effective_names_fraction": 0.99832996216409,
+    "max_min_ratio": 1.1745100192180606,
+    "ppo": {
+      "net_log": -0.024919436829781566,
+      "gross": -0.0239902928718645,
+      "cost": 0.0006212178761717303
+    },
+    "equal_fixed": {
+      "net_log": -0.024089922841142253,
+      "gross": -0.023183408809501857,
+      "cost": 0.0006186678703147765
+    },
+    "sampled_conditional_cv_median": 0.584980845451355,
+    "sampled_conditional_cv_p05_p95": [
+      0.3797552853822708,
+      0.8557992249727249
+    ],
+    "alpha_min_max_sum": [
+      2.0453739166259766,
+      2.4023122787475586,
+      22.344867706298828
+    ],
+    "selection_score_weight_spearman": 0.4424242424242424,
+    "selection_score_realized_rank_ic": -0.03398141230966029,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.0009725904535593348,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-10-10T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1463283682020755,
+    "weights": {
+      "MSTR": 0.08983794067264306,
+      "HKD": 0.08736525936803918,
+      "RDDT": 0.08016431962680315,
+      "SMCI": 0.08716225609048323,
+      "AI": 0.09547668951205157,
+      "CVNA": 0.08326936596773393,
+      "SZKMY": 0.08425006190917816,
+      "LITE": 0.0817046881692205,
+      "TSLA": 0.08317212894334958,
+      "RKT": 0.08126892153842213,
+      "CASH": 0.1463283682020755
+    },
+    "equity_equal_portfolio_weight": 0.08536716317979245,
+    "eligible_count": 422,
+    "cv": 0.052012590090537075,
+    "max_relative_deviation": 0.1184240632544784,
+    "equity_tv": 0.02152290440453162,
+    "effective_names_fraction": 0.9973019894257865,
+    "max_min_ratio": 1.1910122852228222,
+    "ppo": {
+      "net_log": 0.0068175036930028425,
+      "gross": 0.007231250430654969,
+      "cost": 0.0003904546581557933
+    },
+    "equal_fixed": {
+      "net_log": 0.007359813562549267,
+      "gross": 0.007777099097713277,
+      "cost": 0.0003901355419008509
+    },
+    "sampled_conditional_cv_median": 0.6016742587089539,
+    "sampled_conditional_cv_p05_p95": [
+      0.37230429500341417,
+      0.8721365898847578
+    ],
+    "alpha_min_max_sum": [
+      2.0929088592529297,
+      2.492680072784424,
+      22.287433624267578
+    ],
+    "selection_score_weight_spearman": 0.5393939393939393,
+    "selection_score_realized_rank_ic": -0.02986106936184744,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.01019981181930223,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-10-17T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14754954004918863,
+    "weights": {
+      "MSTR": 0.08889957777683344,
+      "SMCI": 0.08873114261289705,
+      "HKD": 0.08717005604373218,
+      "RDDT": 0.08413560637766071,
+      "AI": 0.08970128342816686,
+      "ABX": 0.0864628887564709,
+      "SZKMY": 0.08105796820801581,
+      "VRT": 0.08108969905564123,
+      "UAL": 0.08219431489828755,
+      "CHGCY": 0.08300792279310576,
+      "CASH": 0.14754954004918863
+    },
+    "equity_equal_portfolio_weight": 0.08524504599508113,
+    "eligible_count": 422,
+    "cv": 0.03726221552777798,
+    "max_relative_deviation": 0.052275617674519825,
+    "equity_tv": 0.017290997348450257,
+    "effective_names_fraction": 0.9986134524773521,
+    "max_min_ratio": 1.1066312838975936,
+    "ppo": {
+      "net_log": 0.013425207112052143,
+      "gross": 0.013993485396024536,
+      "cost": 0.0004777555490963863
+    },
+    "equal_fixed": {
+      "net_log": 0.013805939587383787,
+      "gross": 0.014318681540624809,
+      "cost": 0.00041699987355091323
+    },
+    "sampled_conditional_cv_median": 0.5920711755752563,
+    "sampled_conditional_cv_p05_p95": [
+      0.3808967173099518,
+      0.8470757842063902
+    ],
+    "alpha_min_max_sum": [
+      2.1421444416046143,
+      2.3705639839172363,
+      22.52797508239746
+    ],
+    "selection_score_weight_spearman": 0.7333333333333332,
+    "selection_score_realized_rank_ic": 0.156646563947111,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0003684201768509379,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-10-24T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14613564747976282,
+    "weights": {
+      "MSTR": 0.09259878962021795,
+      "SMCI": 0.09024719397022596,
+      "TSLA": 0.0833037255339647,
+      "RDDT": 0.08187192311927882,
+      "HKD": 0.08410070451008334,
+      "SZKMY": 0.08125969674098787,
+      "RNECY": 0.0878456837552205,
+      "AI": 0.0875072177085201,
+      "GEV": 0.07849235844204994,
+      "TPL": 0.086637059119688,
+      "CASH": 0.14613564747976282
+    },
+    "equity_equal_portfolio_weight": 0.08538643525202372,
+    "eligible_count": 422,
+    "cv": 0.04838060940471069,
+    "max_relative_deviation": 0.084467214808845,
+    "equity_tv": 0.02096792993045063,
+    "effective_names_fraction": 0.9976647826380647,
+    "max_min_ratio": 1.179717254751399,
+    "ppo": {
+      "net_log": 0.03239372327621933,
+      "gross": 0.03343552593035243,
+      "cost": 0.0005114144103785202
+    },
+    "equal_fixed": {
+      "net_log": 0.033709783494782125,
+      "gross": 0.034763555077285554,
+      "cost": 0.0004791583130340502
+    },
+    "sampled_conditional_cv_median": 0.5956480503082275,
+    "sampled_conditional_cv_p05_p95": [
+      0.3831461802124977,
+      0.8753334462642668
+    ],
+    "alpha_min_max_sum": [
+      2.0665388107299805,
+      2.437931537628174,
+      22.480453491210938
+    ],
+    "selection_score_weight_spearman": 0.3939393939393939,
+    "selection_score_realized_rank_ic": 0.009490409352495068,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.04591978258700946,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-10-31T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14612364367572273,
+    "weights": {
+      "MSTR": 0.08958982018207884,
+      "RDDT": 0.08318080455610666,
+      "SMCI": 0.08484113283067396,
+      "HKD": 0.084655334296456,
+      "CVNA": 0.08842453478173296,
+      "RKT": 0.0822529252129911,
+      "SZKMY": 0.08199076510348746,
+      "ABX": 0.08854983825476692,
+      "RBLX": 0.08466796261662113,
+      "AI": 0.08572323848936225,
+      "CASH": 0.14612364367572273
+    },
+    "equity_equal_portfolio_weight": 0.08538763563242772,
+    "eligible_count": 422,
+    "cv": 0.02976176152372815,
+    "max_relative_deviation": 0.04921303322814152,
+    "equity_tv": 0.012574290292390405,
+    "effective_names_fraction": 0.9991150214317883,
+    "max_min_ratio": 1.092681841290296,
+    "ppo": {
+      "net_log": -0.04433022542541716,
+      "gross": -0.042789298192701025,
+      "cost": 0.0005727026903509204
+    },
+    "equal_fixed": {
+      "net_log": -0.045611963631095924,
+      "gross": -0.044028161869861,
+      "cost": 0.0005592130135679095
+    },
+    "sampled_conditional_cv_median": 0.58675217628479,
+    "sampled_conditional_cv_p05_p95": [
+      0.37903315722942355,
+      0.8623883306980132
+    ],
+    "alpha_min_max_sum": [
+      2.148219585418701,
+      2.347320556640625,
+      22.37220001220703
+    ],
+    "selection_score_weight_spearman": 0.07878787878787878,
+    "selection_score_realized_rank_ic": -0.10068660938840676,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.04080013144688662,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-11-07T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14676620045778832,
+    "weights": {
+      "MSTR": 0.09135480596193801,
+      "SMCI": 0.08763904380509868,
+      "HKD": 0.08715200190160721,
+      "RDDT": 0.07885437526961225,
+      "AI": 0.08860822629760134,
+      "TSLA": 0.08446428251064653,
+      "SZKMY": 0.08201202328445234,
+      "TTD": 0.08757124546666528,
+      "CEG": 0.08582453395630507,
+      "ARM": 0.07975326108828495,
+      "CASH": 0.14676620045778832
+    },
+    "equity_equal_portfolio_weight": 0.08532337995422117,
+    "eligible_count": 422,
+    "cv": 0.04474505303960936,
+    "max_relative_deviation": 0.07581749208809763,
+    "equity_tv": 0.01899781475204753,
+    "effective_names_fraction": 0.9980018807026338,
+    "max_min_ratio": 1.1585255180779168,
+    "ppo": {
+      "net_log": -0.0954171983940346,
+      "gross": -0.09047767791013869,
+      "cost": 0.0005286974202474117
+    },
+    "equal_fixed": {
+      "net_log": -0.09366154513053661,
+      "gross": -0.08893423700580169,
+      "cost": 0.00047485897686145966
+    },
+    "sampled_conditional_cv_median": 0.5902462005615234,
+    "sampled_conditional_cv_p05_p95": [
+      0.37831608653068544,
+      0.8730142414569855
+    ],
+    "alpha_min_max_sum": [
+      2.084218978881836,
+      2.414620876312256,
+      22.55202865600586
+    ],
+    "selection_score_weight_spearman": 0.5272727272727272,
+    "selection_score_realized_rank_ic": -0.22833995639660334,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.08034036804770164,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-11-14T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14623466116456452,
+    "weights": {
+      "MSTR": 0.0943145878147672,
+      "HKD": 0.08730961114640501,
+      "SMCI": 0.082245173886078,
+      "RDDT": 0.08580973332468766,
+      "AI": 0.08992947865419931,
+      "TSLA": 0.08431273705762354,
+      "VRT": 0.08308344548720592,
+      "INTC": 0.08119338735450843,
+      "CEG": 0.08037056037743795,
+      "COHR": 0.08519662373252246,
+      "CASH": 0.14623466116456452
+    },
+    "equity_equal_portfolio_weight": 0.08537653388354355,
+    "eligible_count": 422,
+    "cv": 0.04733613560214435,
+    "max_relative_deviation": 0.10468981961033297,
+    "equity_tv": 0.018573341742257728,
+    "effective_names_fraction": 0.9977642998214072,
+    "max_min_ratio": 1.17349670540861,
+    "ppo": {
+      "net_log": -0.022718709373842298,
+      "gross": -0.022068873802808274,
+      "cost": 0.00039370898164637345
+    },
+    "equal_fixed": {
+      "net_log": -0.021801137428046034,
+      "gross": -0.021165838270385342,
+      "cost": 0.00039937196508929584
+    },
+    "sampled_conditional_cv_median": 0.586155891418457,
+    "sampled_conditional_cv_p05_p95": [
+      0.3741702526807785,
+      0.8781703025102615
+    ],
+    "alpha_min_max_sum": [
+      2.112492084503174,
+      2.4790024757385254,
+      22.440711975097656
+    ],
+    "selection_score_weight_spearman": 0.6242424242424242,
+    "selection_score_realized_rank_ic": -0.07991308062780143,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.011775017310906131,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-11-21T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14764354243019273,
+    "weights": {
+      "MSTR": 0.0949614953519432,
+      "SMCI": 0.08263668281631653,
+      "HKD": 0.08827230136422148,
+      "RDDT": 0.07982260766627147,
+      "VRT": 0.0812869621381076,
+      "TSLA": 0.07990832105126877,
+      "AI": 0.08644822628930415,
+      "RNECY": 0.08626952813857147,
+      "NVDA": 0.0828458636111914,
+      "ABX": 0.08990446914261119,
+      "CASH": 0.14764354243019273
+    },
+    "equity_equal_portfolio_weight": 0.08523564575698073,
+    "eligible_count": 422,
+    "cv": 0.05425924214971727,
+    "max_relative_deviation": 0.11410542512568389,
+    "equity_tv": 0.023086340611358926,
+    "effective_names_fraction": 0.997064576719332,
+    "max_min_ratio": 1.1896566414989294,
+    "ppo": {
+      "net_log": 0.041613894243551164,
+      "gross": 0.042942524396687505,
+      "cost": 0.0004506354814107247
+    },
+    "equal_fixed": {
+      "net_log": 0.0422888889755576,
+      "gross": 0.04358509733023355,
+      "cost": 0.00038929433935946776
+    },
+    "sampled_conditional_cv_median": 0.5742979049682617,
+    "sampled_conditional_cv_p05_p95": [
+      0.37614209204912186,
+      0.8568748503923416
+    ],
+    "alpha_min_max_sum": [
+      2.111445903778076,
+      2.5118956565856934,
+      22.546302795410156
+    ],
+    "selection_score_weight_spearman": -0.0303030303030303,
+    "selection_score_realized_rank_ic": 0.30017498363894596,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.01858384755951623,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-11-28T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14741799650897136,
+    "weights": {
+      "MSTR": 0.08892983755188544,
+      "SMCI": 0.09047740619963673,
+      "RDDT": 0.0806433775241504,
+      "TSLA": 0.08373975350471252,
+      "CVNA": 0.08377902934944603,
+      "MMYT": 0.08732462875936431,
+      "RNECY": 0.08492039822890862,
+      "CHGCY": 0.08756027112330322,
+      "ARM": 0.08516261515200962,
+      "NVDA": 0.08004468609761173,
+      "CASH": 0.14741799650897136
+    },
+    "equity_equal_portfolio_weight": 0.08525820034910286,
+    "eligible_count": 422,
+    "cv": 0.03771311055808372,
+    "max_relative_deviation": 0.06121646749712095,
+    "equity_tv": 0.015551984657764098,
+    "effective_names_fraction": 0.9985797412957486,
+    "max_min_ratio": 1.130336198574165,
+    "ppo": {
+      "net_log": 0.06191464453509553,
+      "gross": 0.06451771592661733,
+      "cost": 0.000646182323490777
+    },
+    "equal_fixed": {
+      "net_log": 0.062220734530531535,
+      "gross": 0.0648463646316302,
+      "cost": 0.0006491407529139028
+    },
+    "sampled_conditional_cv_median": 0.5852009654045105,
+    "sampled_conditional_cv_p05_p95": [
+      0.36269750595092776,
+      0.8558723300695419
+    ],
+    "alpha_min_max_sum": [
+      2.1096396446228027,
+      2.3846020698547363,
+      22.470458984375
+    ],
+    "selection_score_weight_spearman": 0.3696969696969697,
+    "selection_score_realized_rank_ic": 0.24403459242193185,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.049113951168914656,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-12-05T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14559097385373,
+    "weights": {
+      "SMCI": 0.08595967872041965,
+      "MSTR": 0.08752670101757909,
+      "HKD": 0.08588332043273628,
+      "CVNA": 0.08511602626938986,
+      "RDDT": 0.08290810998897913,
+      "TSLA": 0.08450601935673796,
+      "RKT": 0.08734601929358432,
+      "LITE": 0.08252491806508577,
+      "SZKMY": 0.08505702126992865,
+      "AI": 0.08758121173182942,
+      "CASH": 0.14559097385373
+    },
+    "equity_equal_portfolio_weight": 0.085440902614627,
+    "eligible_count": 422,
+    "cv": 0.01995547842884689,
+    "max_relative_deviation": 0.03412867210326076,
+    "equity_tv": 0.008300963479989626,
+    "effective_names_fraction": 0.9996019373976108,
+    "max_min_ratio": 1.0612699022949146,
+    "ppo": {
+      "net_log": -0.0127717951914271,
+      "gross": -0.012020251656242296,
+      "cost": 0.0006703302730323731
+    },
+    "equal_fixed": {
+      "net_log": -0.01259723032230851,
+      "gross": -0.011885230941534994,
+      "cost": 0.0006329864044318434
+    },
+    "sampled_conditional_cv_median": 0.5899454355239868,
+    "sampled_conditional_cv_p05_p95": [
+      0.38428212851285937,
+      0.8539907038211823
+    ],
+    "alpha_min_max_sum": [
+      2.187300443649292,
+      2.3213162422180176,
+      22.645877838134766
+    ],
+    "selection_score_weight_spearman": 0.13939393939393938,
+    "selection_score_realized_rank_ic": -0.048530515072409,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.017446899767518266,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-12-12T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14588279168395113,
+    "weights": {
+      "SMCI": 0.08540574725537642,
+      "MSTR": 0.0862381088161599,
+      "RDDT": 0.08833824054444683,
+      "VRT": 0.08526378016037173,
+      "HKD": 0.08284778771396395,
+      "TSLA": 0.08193745847878908,
+      "LITE": 0.08669323206989787,
+      "MRVL": 0.0869779808095581,
+      "CVNA": 0.08181786604450592,
+      "TTD": 0.08859700642297907,
+      "CASH": 0.14588279168395113
+    },
+    "equity_equal_portfolio_weight": 0.08541172083160489,
+    "eligible_count": 422,
+    "cv": 0.027475370823138067,
+    "max_relative_deviation": 0.04207683385965855,
+    "equity_tv": 0.011457402344475703,
+    "effective_names_fraction": 0.9992456734362383,
+    "max_min_ratio": 1.0828564799622806,
+    "ppo": {
+      "net_log": 0.012324250562436771,
+      "gross": 0.012838991292597192,
+      "cost": 0.0004384842080327431
+    },
+    "equal_fixed": {
+      "net_log": 0.01195491740323584,
+      "gross": 0.012432147470982995,
+      "cost": 0.00040548442332737615
+    },
+    "sampled_conditional_cv_median": 0.5881872177124023,
+    "sampled_conditional_cv_p05_p95": [
+      0.38501775413751604,
+      0.8513036429882048
+    ],
+    "alpha_min_max_sum": [
+      2.199019432067871,
+      2.3812224864959717,
+      22.95611572265625
+    ],
+    "selection_score_weight_spearman": -0.07878787878787878,
+    "selection_score_realized_rank_ic": 0.04274823872664094,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.015503191733218968,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-12-19T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1453180971552106,
+    "weights": {
+      "MSTR": 0.08859758781056215,
+      "SMCI": 0.08691216365555976,
+      "HKD": 0.08438083711678868,
+      "CVNA": 0.08582306568963138,
+      "VRT": 0.07969127793987063,
+      "ARM": 0.08552694668354122,
+      "CHGCY": 0.08401984854992606,
+      "TSLA": 0.08519903923655814,
+      "RDDT": 0.08697821127353678,
+      "RNECY": 0.08755292488881461,
+      "CASH": 0.1453180971552106
+    },
+    "equity_equal_portfolio_weight": 0.08546819028447894,
+    "eligible_count": 422,
+    "cv": 0.027528959542555603,
+    "max_relative_deviation": 0.06759137318082886,
+    "equity_tv": 0.01004087984805583,
+    "effective_names_fraction": 0.9992427302785265,
+    "max_min_ratio": 1.1117601587141266,
+    "ppo": {
+      "net_log": -0.03710434086733571,
+      "gross": -0.03597540224895866,
+      "cost": 0.0004490079601842826
+    },
+    "equal_fixed": {
+      "net_log": -0.03679213399088298,
+      "gross": -0.03569538936636624,
+      "cost": 0.0004281389514082691
+    },
+    "sampled_conditional_cv_median": 0.5856611728668213,
+    "sampled_conditional_cv_p05_p95": [
+      0.37492968142032623,
+      0.856855809688568
+    ],
+    "alpha_min_max_sum": [
+      2.128939628601074,
+      2.366870403289795,
+      22.832691192626953
+    ],
+    "selection_score_weight_spearman": 0.0303030303030303,
+    "selection_score_realized_rank_ic": -0.3261474963554391,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.03642206643581968,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2025-12-26T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1461858131559819,
+    "weights": {
+      "HKD": 0.08554522121390318,
+      "MSTR": 0.08906677775828464,
+      "RDDT": 0.08932192125107441,
+      "SZKMY": 0.07841707513750384,
+      "TSLA": 0.08818013694502913,
+      "ABX": 0.08961943810592343,
+      "CVNA": 0.08817287221308623,
+      "SMCI": 0.08117334751598071,
+      "CHGCY": 0.07724636549332864,
+      "CNR": 0.08707103120990389,
+      "CASH": 0.1461858131559819
+    },
+    "equity_equal_portfolio_weight": 0.08538141868440181,
+    "eligible_count": 422,
+    "cv": 0.0521112948259128,
+    "max_relative_deviation": 0.09527896486638443,
+    "equity_tv": 0.02261319641192551,
+    "effective_names_fraction": 0.9972917673929586,
+    "max_min_ratio": 1.1601767608556728,
+    "ppo": {
+      "net_log": 0.008253061523820764,
+      "gross": 0.00875278373418798,
+      "cost": 0.00046557181431840434
+    },
+    "equal_fixed": {
+      "net_log": 0.00893245335574318,
+      "gross": 0.00928281720834102,
+      "cost": 0.000310350440545976
+    },
+    "sampled_conditional_cv_median": 0.575731635093689,
+    "sampled_conditional_cv_p05_p95": [
+      0.38185756504535673,
+      0.855726659297943
+    ],
+    "alpha_min_max_sum": [
+      2.0848259925842285,
+      2.418766736984253,
+      23.043855667114258
+    ],
+    "selection_score_weight_spearman": 0.33333333333333326,
+    "selection_score_realized_rank_ic": 0.22874090900635213,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.004389368584540536,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-01-02T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14714502630479687,
+    "weights": {
+      "HKD": 0.09035325119214876,
+      "MSTR": 0.09138694396005176,
+      "TSLA": 0.08903683175719956,
+      "SMCI": 0.08119706668172266,
+      "CVNA": 0.08608992063099485,
+      "AI": 0.08874882469593581,
+      "CHGCY": 0.08355242115320238,
+      "SZKMY": 0.08112235323381667,
+      "RDDT": 0.08012050804210902,
+      "LITE": 0.08124685234802165,
+      "CASH": 0.14714502630479687
+    },
+    "equity_equal_portfolio_weight": 0.08528549736952032,
+    "eligible_count": 422,
+    "cv": 0.0482967145698211,
+    "max_relative_deviation": 0.07154143176413008,
+    "equity_tv": 0.02249888431275863,
+    "effective_names_fraction": 0.9976728555951254,
+    "max_min_ratio": 1.1406186280299349,
+    "ppo": {
+      "net_log": -0.005531413700413124,
+      "gross": -0.0051325208033961055,
+      "cost": 0.00038362279630925933
+    },
+    "equal_fixed": {
+      "net_log": -0.006201686799876702,
+      "gross": -0.005834728788012324,
+      "cost": 0.00034776724448631056
+    },
+    "sampled_conditional_cv_median": 0.5926477313041687,
+    "sampled_conditional_cv_p05_p95": [
+      0.389102865755558,
+      0.8675601512193678
+    ],
+    "alpha_min_max_sum": [
+      2.0807080268859863,
+      2.3732943534851074,
+      22.148414611816406
+    ],
+    "selection_score_weight_spearman": 0.7939393939393938,
+    "selection_score_realized_rank_ic": 0.021890719096769224,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.024589407862595742,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-01-09T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1465715638782319,
+    "weights": {
+      "SMCI": 0.08482672750194631,
+      "MSTR": 0.08740634791397373,
+      "RDDT": 0.08400000320547907,
+      "LITE": 0.08583458744911932,
+      "HKD": 0.08980559569976565,
+      "TSLA": 0.08226721278471061,
+      "VRT": 0.0856196116631569,
+      "FSLR": 0.08520900276155352,
+      "COHR": 0.08481684633505626,
+      "MRVL": 0.08364250080700675,
+      "CASH": 0.1465715638782319
+    },
+    "equity_equal_portfolio_weight": 0.08534284361217681,
+    "eligible_count": 422,
+    "cv": 0.02320156668786594,
+    "max_relative_deviation": 0.052292048151909576,
+    "equity_tv": 0.008547603956645666,
+    "effective_names_fraction": 0.9994619769278794,
+    "max_min_ratio": 1.091632895534976,
+    "ppo": {
+      "net_log": 0.0012644035960342837,
+      "gross": 0.001739881651118724,
+      "cost": 0.0004746783598472244
+    },
+    "equal_fixed": {
+      "net_log": 0.0009303996473550391,
+      "gross": 0.001380911241555682,
+      "cost": 0.0004500786381851742
+    },
+    "sampled_conditional_cv_median": 0.5931100249290466,
+    "sampled_conditional_cv_p05_p95": [
+      0.39322495013475417,
+      0.8744737207889556
+    ],
+    "alpha_min_max_sum": [
+      2.139802932739258,
+      2.335879325866699,
+      22.198013305664062
+    ],
+    "selection_score_weight_spearman": 0.35757575757575755,
+    "selection_score_realized_rank_ic": -0.09894084479964388,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.00842430537258175,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-01-16T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14668422520199975,
+    "weights": {
+      "RDDT": 0.08640581161264305,
+      "HKD": 0.09226859443907043,
+      "LITE": 0.08009886730162807,
+      "TSLA": 0.08302753444132904,
+      "MSTR": 0.08830815559444738,
+      "SMCI": 0.0857809897870111,
+      "ARM": 0.08316990236844779,
+      "CHGCY": 0.080769299251368,
+      "AI": 0.08651101879604683,
+      "RNECY": 0.08697560120600867,
+      "CASH": 0.14668422520199975
+    },
+    "equity_equal_portfolio_weight": 0.08533157747980002,
+    "eligible_count": 422,
+    "cv": 0.04069868450293506,
+    "max_relative_deviation": 0.0812948402472995,
+    "equity_tv": 0.01671210937100405,
+    "effective_names_fraction": 0.9983463561471647,
+    "max_min_ratio": 1.1519338231290444,
+    "ppo": {
+      "net_log": 0.01606891560285682,
+      "gross": 0.01665992791332184,
+      "cost": 0.0004612129732561706
+    },
+    "equal_fixed": {
+      "net_log": 0.017094198599315102,
+      "gross": 0.017710156161306927,
+      "cost": 0.0004690156585050869
+    },
+    "sampled_conditional_cv_median": 0.5956873893737793,
+    "sampled_conditional_cv_p05_p95": [
+      0.3768156722187996,
+      0.8642277181148528
+    ],
+    "alpha_min_max_sum": [
+      2.110377311706543,
+      2.4310150146484375,
+      22.48244285583496
+    ],
+    "selection_score_weight_spearman": -0.006060606060606061,
+    "selection_score_realized_rank_ic": -0.0706688156193636,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 1.2891757758395211e-05,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-01-23T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14537485160492158,
+    "weights": {
+      "MSTR": 0.09040783576880629,
+      "RDDT": 0.08280887861280628,
+      "HKD": 0.08881504275725383,
+      "SZKMY": 0.0847025019627643,
+      "UAL": 0.08806325663037207,
+      "ABX": 0.08923143600838501,
+      "LITE": 0.08061492795326552,
+      "TSLA": 0.08236063535950122,
+      "COHR": 0.08202082983850745,
+      "INTC": 0.08559980350341645,
+      "CASH": 0.14537485160492158
+    },
+    "equity_equal_portfolio_weight": 0.08546251483950784,
+    "eligible_count": 422,
+    "cv": 0.038678690667691806,
+    "max_relative_deviation": 0.05786538037858335,
+    "equity_tv": 0.017323150972677004,
+    "effective_names_fraction": 0.9985061936838946,
+    "max_min_ratio": 1.1214775980599765,
+    "ppo": {
+      "net_log": -0.02277555627293344,
+      "gross": -0.02204578968618734,
+      "cost": 0.0004723614897213162
+    },
+    "equal_fixed": {
+      "net_log": -0.021149910569912576,
+      "gross": -0.020420775811728954,
+      "cost": 0.0005070438893275432
+    },
+    "sampled_conditional_cv_median": 0.5807098150253296,
+    "sampled_conditional_cv_p05_p95": [
+      0.3785588458180428,
+      0.8535054415464399
+    ],
+    "alpha_min_max_sum": [
+      2.1578946113586426,
+      2.4200305938720703,
+      22.876544952392578
+    ],
+    "selection_score_weight_spearman": 0.5151515151515151,
+    "selection_score_realized_rank_ic": -0.2167239872413718,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.007826204834672557,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-01-30T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14528707319291434,
+    "weights": {
+      "MSTR": 0.09093161733864563,
+      "RDDT": 0.08692006637650107,
+      "HKD": 0.08803032040550374,
+      "ABX": 0.08655098998381694,
+      "TSLA": 0.08431168964127633,
+      "SZKMY": 0.0835209426580169,
+      "CVNA": 0.0809765080878273,
+      "ALB": 0.09020797746973142,
+      "SMCI": 0.07909313399647122,
+      "AI": 0.0841696808492951,
+      "CASH": 0.14528707319291434
+    },
+    "equity_equal_portfolio_weight": 0.08547129268070856,
+    "eligible_count": 422,
+    "cv": 0.042150491951500176,
+    "max_relative_deviation": 0.07462340259745415,
+    "equity_tv": 0.017882621979000188,
+    "effective_names_fraction": 0.9982264869649592,
+    "max_min_ratio": 1.1496777627082344,
+    "ppo": {
+      "net_log": -0.010907089118939832,
+      "gross": -0.010411178776200783,
+      "cost": 0.0004366437173779091
+    },
+    "equal_fixed": {
+      "net_log": -0.008994564460939344,
+      "gross": -0.008475413235413589,
+      "cost": 0.00047882113837310414
+    },
+    "sampled_conditional_cv_median": 0.5886635780334473,
+    "sampled_conditional_cv_p05_p95": [
+      0.37683846354484557,
+      0.8590098023414611
+    ],
+    "alpha_min_max_sum": [
+      2.1304335594177246,
+      2.449312210083008,
+      23.022340774536133
+    ],
+    "selection_score_weight_spearman": 0.6363636363636362,
+    "selection_score_realized_rank_ic": -0.052825226897101854,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.028215863691440638,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-02-06T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14625777940260043,
+    "weights": {
+      "RDDT": 0.08781776692508847,
+      "MSTR": 0.09136597764697918,
+      "TSLA": 0.08355211308138732,
+      "ABX": 0.08937508729592458,
+      "HKD": 0.08660181564741842,
+      "CHGCY": 0.08351571615308695,
+      "MRVL": 0.08836549553379469,
+      "COHR": 0.0816085476423486,
+      "ALB": 0.08393858078022443,
+      "SZKMY": 0.07760111989114693,
+      "CASH": 0.14625777940260043
+    },
+    "equity_equal_portfolio_weight": 0.08537422205973996,
+    "eligible_count": 422,
+    "cv": 0.04563169644597026,
+    "max_relative_deviation": 0.09104741432553098,
+    "equity_tv": 0.019508268829496717,
+    "effective_names_fraction": 0.9979220750422814,
+    "max_min_ratio": 1.1773796277056383,
+    "ppo": {
+      "net_log": 0.0252418036600912,
+      "gross": 0.026004567537912505,
+      "cost": 0.0004414920875979796
+    },
+    "equal_fixed": {
+      "net_log": 0.025272525667777223,
+      "gross": 0.02601892050495706,
+      "cost": 0.00042433721396632713
+    },
+    "sampled_conditional_cv_median": 0.5881486535072327,
+    "sampled_conditional_cv_p05_p95": [
+      0.38001578152179716,
+      0.8396380722522736
+    ],
+    "alpha_min_max_sum": [
+      2.087286949157715,
+      2.457529067993164,
+      22.96364974975586
+    ],
+    "selection_score_weight_spearman": 0.6363636363636362,
+    "selection_score_realized_rank_ic": -0.11052647945990046,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.022288837037940514,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-02-13T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1464392461159174,
+    "weights": {
+      "MSTR": 0.08999721617071366,
+      "RDDT": 0.08585934829049091,
+      "CVNA": 0.08152294247499248,
+      "TSLA": 0.08536701949080794,
+      "SMCI": 0.08878444885609726,
+      "HKD": 0.08371543239945645,
+      "AI": 0.08268594016593522,
+      "COHR": 0.08870744775675654,
+      "ALB": 0.08230010793129683,
+      "MRVL": 0.08462085034753519,
+      "CASH": 0.1464392461159174
+    },
+    "equity_equal_portfolio_weight": 0.08535607538840825,
+    "eligible_count": 422,
+    "cv": 0.032965029422724904,
+    "max_relative_deviation": 0.05437387744441313,
+    "equity_tv": 0.013982723044042293,
+    "effective_names_fraction": 0.9989144864553081,
+    "max_min_ratio": 1.1039495562653505,
+    "ppo": {
+      "net_log": 0.026398302136880353,
+      "gross": 0.027123143816695346,
+      "cost": 0.0003733201277779225
+    },
+    "equal_fixed": {
+      "net_log": 0.02567736463654503,
+      "gross": 0.026402160813930233,
+      "cost": 0.00039229281342113744
+    },
+    "sampled_conditional_cv_median": 0.5906060934066772,
+    "sampled_conditional_cv_p05_p95": [
+      0.3813495323061943,
+      0.8488367199897765
+    ],
+    "alpha_min_max_sum": [
+      2.1837897300720215,
+      2.4107937812805176,
+      22.86469268798828
+    ],
+    "selection_score_weight_spearman": 0.35757575757575755,
+    "selection_score_realized_rank_ic": 0.03874573848133492,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.021819045990224196,
+    "selection_evaluable_count": 422
+  },
+  {
+    "as_of": "2026-02-20T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14713491937920287,
+    "weights": {
+      "CVNA": 0.08677177653790502,
+      "SZKMY": 0.08317906456853874,
+      "SNDK": 0.08105689934047478,
+      "HKD": 0.0912614544092899,
+      "MSTR": 0.08661176790659308,
+      "RNECY": 0.08399871086348043,
+      "INTC": 0.0829910777789461,
+      "RDDT": 0.08015075777173863,
+      "TEAM": 0.0897071574690006,
+      "BLDR": 0.08713641397482985,
+      "CASH": 0.14713491937920287
+    },
+    "equity_equal_portfolio_weight": 0.08528650806207971,
+    "eligible_count": 423,
+    "cv": 0.04032182763112087,
+    "max_relative_deviation": 0.0700573453290061,
+    "equity_tv": 0.017653472195462233,
+    "effective_names_fraction": 0.9983767893132297,
+    "max_min_ratio": 1.13862247777112,
+    "ppo": {
+      "net_log": -0.001135315612425499,
+      "gross": -0.0005862912253269273,
+      "cost": 0.0005483801601520467
+    },
+    "equal_fixed": {
+      "net_log": -0.003212164539436048,
+      "gross": -0.0026394582594779017,
+      "cost": 0.0005675527988638247
+    },
+    "sampled_conditional_cv_median": 0.5939481258392334,
+    "sampled_conditional_cv_p05_p95": [
+      0.3911389172077179,
+      0.8791352212429047
+    ],
+    "alpha_min_max_sum": [
+      2.127002239227295,
+      2.4218525886535645,
+      22.632923126220703
+    ],
+    "selection_score_weight_spearman": -0.10303030303030303,
+    "selection_score_realized_rank_ic": -0.09554982455005476,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0010855107485911192,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-02-27T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14774435758590698,
+    "weights": {
+      "RDDT": 0.08953275505868952,
+      "SNDK": 0.08343851608025998,
+      "HKD": 0.08571072193093432,
+      "AI": 0.08971335605188724,
+      "MSTR": 0.0844242652816174,
+      "TTD": 0.08771233743198037,
+      "SMCI": 0.08581996387900315,
+      "FSLR": 0.08262171599028756,
+      "SZKMY": 0.08277190144458446,
+      "TSLA": 0.08051010926484903,
+      "CASH": 0.14774435758590698
+    },
+    "equity_equal_portfolio_weight": 0.0852255642414093,
+    "eligible_count": 423,
+    "cv": 0.03407516418035047,
+    "max_relative_deviation": 0.05532911419868469,
+    "equity_tv": 0.01450423151254654,
+    "effective_names_fraction": 0.9988402298147445,
+    "max_min_ratio": 1.1143116916754252,
+    "ppo": {
+      "net_log": -0.0058376859473456,
+      "gross": -0.0052506381404526245,
+      "cost": 0.000570041626621742
+    },
+    "equal_fixed": {
+      "net_log": -0.007305342079082672,
+      "gross": -0.006746651790405824,
+      "cost": 0.0005320711373416704
+    },
+    "sampled_conditional_cv_median": 0.590097963809967,
+    "sampled_conditional_cv_p05_p95": [
+      0.3862488389015198,
+      0.8643872499465942
+    ],
+    "alpha_min_max_sum": [
+      2.147749662399292,
+      2.3932626247406006,
+      22.735427856445312
+    ],
+    "selection_score_weight_spearman": 0.6363636363636362,
+    "selection_score_realized_rank_ic": 0.12855489874131393,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.02970984714493613,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-03-06T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14741004783794232,
+    "weights": {
+      "HKD": 0.09477949912065142,
+      "SNDK": 0.08539453022188237,
+      "LITE": 0.08480963039259137,
+      "SZKMY": 0.08303036659832408,
+      "RDDT": 0.08639264017960446,
+      "RKT": 0.08620387552255426,
+      "RNECY": 0.08578694295203704,
+      "COHR": 0.08358147859577869,
+      "CIEN": 0.07996437653885469,
+      "MU": 0.0826466120397793,
+      "CASH": 0.14741004783794232
+    },
+    "equity_equal_portfolio_weight": 0.08525899521620577,
+    "eligible_count": 423,
+    "cv": 0.04324719495281569,
+    "max_relative_deviation": 0.11166568266847254,
+    "equity_tv": 0.014382660603264874,
+    "effective_names_fraction": 0.9981331716947884,
+    "max_min_ratio": 1.1852715324379233,
+    "ppo": {
+      "net_log": 0.06843313027574544,
+      "gross": 0.07142138160534366,
+      "cost": 0.0005923650896141244
+    },
+    "equal_fixed": {
+      "net_log": 0.06921257499121751,
+      "gross": 0.07225747584241929,
+      "cost": 0.0005934819415100625
+    },
+    "sampled_conditional_cv_median": 0.5874512195587158,
+    "sampled_conditional_cv_p05_p95": [
+      0.38056738674640656,
+      0.8690997809171674
+    ],
+    "alpha_min_max_sum": [
+      2.1295042037963867,
+      2.524040699005127,
+      22.705034255981445
+    ],
+    "selection_score_weight_spearman": 0.6121212121212121,
+    "selection_score_realized_rank_ic": 0.06147153449099221,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.07504919752720665,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-03-13T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14705067237504332,
+    "weights": {
+      "SZKMY": 0.08466802219298408,
+      "HKD": 0.08720924666214991,
+      "RDDT": 0.08867840079646694,
+      "SNDK": 0.08007501379917015,
+      "ABX": 0.09035386260100253,
+      "RKT": 0.08229975452374028,
+      "RNECY": 0.08609813776094599,
+      "TEAM": 0.08541616711610356,
+      "CVNA": 0.0811632956565278,
+      "RBLX": 0.08698742651586544,
+      "CASH": 0.14705067237504332
+    },
+    "equity_equal_portfolio_weight": 0.08529493276249567,
+    "eligible_count": 423,
+    "cv": 0.036685465164765126,
+    "max_relative_deviation": 0.06119846507013993,
+    "equity_tv": 0.015210334843320128,
+    "effective_names_fraction": 0.9986559854518124,
+    "max_min_ratio": 1.1283652454636095,
+    "ppo": {
+      "net_log": -0.02345516078494271,
+      "gross": -0.02271237623278233,
+      "cost": 0.00046985033811761687
+    },
+    "equal_fixed": {
+      "net_log": -0.023012641890802953,
+      "gross": -0.02228070694358947,
+      "cost": 0.00046916365064761134
+    },
+    "sampled_conditional_cv_median": 0.5826572179794312,
+    "sampled_conditional_cv_p05_p95": [
+      0.3804478198289871,
+      0.8702846825122833
+    ],
+    "alpha_min_max_sum": [
+      2.113447666168213,
+      2.3847408294677734,
+      22.512187957763672
+    ],
+    "selection_score_weight_spearman": 0.16363636363636364,
+    "selection_score_realized_rank_ic": 0.1701626645814347,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.01069243598156123,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-03-20T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1472646826238344,
+    "weights": {
+      "HKD": 0.0901964673322404,
+      "SMCI": 0.08696044007682047,
+      "SZKMY": 0.08088063013875146,
+      "SNDK": 0.08158987628200409,
+      "RKT": 0.08431617238200262,
+      "MSTR": 0.08537548940477313,
+      "ABX": 0.08683326459959162,
+      "CVNA": 0.08490697258320712,
+      "LITE": 0.08326299271802728,
+      "TTD": 0.08841301185874739,
+      "CASH": 0.1472646826238344
+    },
+    "equity_equal_portfolio_weight": 0.08527353173761656,
+    "eligible_count": 423,
+    "cv": 0.03261289136876812,
+    "max_relative_deviation": 0.057731109458108554,
+    "equity_tv": 0.013381660582795468,
+    "effective_names_fraction": 0.9989375293610664,
+    "max_min_ratio": 1.1151800768306024,
+    "ppo": {
+      "net_log": -0.02559445505342427,
+      "gross": -0.02475551480452716,
+      "cost": 0.0005141787811887627
+    },
+    "equal_fixed": {
+      "net_log": -0.025429332387791992,
+      "gross": -0.024636258171281962,
+      "cost": 0.00047247205898282035
+    },
+    "sampled_conditional_cv_median": 0.5774570107460022,
+    "sampled_conditional_cv_p05_p95": [
+      0.37713698446750643,
+      0.8218894034624099
+    ],
+    "alpha_min_max_sum": [
+      2.1692261695861816,
+      2.4190778732299805,
+      22.87044334411621
+    ],
+    "selection_score_weight_spearman": 0.04242424242424241,
+    "selection_score_realized_rank_ic": -0.1214094278105762,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.017250848214537987,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-03-27T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1469462662935257,
+    "weights": {
+      "SNDK": 0.08764931641607054,
+      "RDDT": 0.08764754951879472,
+      "HKD": 0.08875854020480622,
+      "LITE": 0.08350548469058183,
+      "MSTR": 0.08715288819476574,
+      "RNECY": 0.08493294066133361,
+      "SZKMY": 0.08013435273598601,
+      "COHR": 0.08610943366146251,
+      "MU": 0.08064327635313351,
+      "ABX": 0.0865199512695396,
+      "CASH": 0.1469462662935257
+    },
+    "equity_equal_portfolio_weight": 0.08530537337064743,
+    "eligible_count": 423,
+    "cv": 0.03321698103449446,
+    "max_relative_deviation": 0.06061775982379913,
+    "equity_tv": 0.014073485136032099,
+    "effective_names_fraction": 0.998897848249738,
+    "max_min_ratio": 1.1076216026506611,
+    "ppo": {
+      "net_log": 0.04356201895734532,
+      "gross": 0.044998222111591206,
+      "cost": 0.0004734494710074963
+    },
+    "equal_fixed": {
+      "net_log": 0.04290243687245669,
+      "gross": 0.044294986334636105,
+      "cost": 0.0004589363617727738
+    },
+    "sampled_conditional_cv_median": 0.581507682800293,
+    "sampled_conditional_cv_p05_p95": [
+      0.37399994432926176,
+      0.8640436083078384
+    ],
+    "alpha_min_max_sum": [
+      2.1316304206848145,
+      2.361039876937866,
+      22.691831588745117
+    ],
+    "selection_score_weight_spearman": 0.6242424242424242,
+    "selection_score_realized_rank_ic": 0.1959794597042243,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.0288798853753855,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-04-03T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14682052175089333,
+    "weights": {
+      "MSTR": 0.09342502741263203,
+      "SNDK": 0.08197504032146963,
+      "TSLA": 0.08628309755133512,
+      "RNECY": 0.08619154225309034,
+      "SMCI": 0.08484866764534171,
+      "CVNA": 0.08796688104229333,
+      "CEG": 0.08354699705364688,
+      "SZKMY": 0.08112244392263745,
+      "ARM": 0.0863009089757385,
+      "LITE": 0.08151887207092168,
+      "CASH": 0.14682052175089333
+    },
+    "equity_equal_portfolio_weight": 0.08531794782491067,
+    "eligible_count": 423,
+    "cv": 0.040934052515208305,
+    "max_relative_deviation": 0.09502197127805623,
+    "equity_tv": 0.01591425773437513,
+    "effective_names_fraction": 0.9983272062722576,
+    "max_min_ratio": 1.1516544977580676,
+    "ppo": {
+      "net_log": 0.039198607460276064,
+      "gross": 0.04067368177357855,
+      "cost": 0.0006966714402020103
+    },
+    "equal_fixed": {
+      "net_log": 0.039829683003995586,
+      "gross": 0.04133457989501635,
+      "cost": 0.0007010583720980058
+    },
+    "sampled_conditional_cv_median": 0.5823142528533936,
+    "sampled_conditional_cv_p05_p95": [
+      0.38072660863399505,
+      0.8636667013168333
+    ],
+    "alpha_min_max_sum": [
+      2.166987419128418,
+      2.4956207275390625,
+      22.790599822998047
+    ],
+    "selection_score_weight_spearman": 0.41818181818181815,
+    "selection_score_realized_rank_ic": -0.06991314070305547,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.02249577406669519,
+    "selection_evaluable_count": 423
+  },
+  {
+    "as_of": "2026-04-10T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14723327317138768,
+    "weights": {
+      "SNDK": 0.08032382349007072,
+      "TSLA": 0.08529331023924591,
+      "SMCI": 0.08544326808152469,
+      "RDDT": 0.08130888678415182,
+      "CHGCY": 0.08551033676142872,
+      "MSTR": 0.08527330908309416,
+      "LITE": 0.08599662916598483,
+      "TEAM": 0.09071660975185658,
+      "RKT": 0.08423770919561058,
+      "AI": 0.0886628442756443,
+      "CASH": 0.14723327317138768
+    },
+    "equity_equal_portfolio_weight": 0.08527667268286124,
+    "eligible_count": 424,
+    "cv": 0.03378657838265895,
+    "max_relative_deviation": 0.06379161965225988,
+    "equity_tv": 0.011683103790375696,
+    "effective_names_fraction": 0.9988597687326736,
+    "max_min_ratio": 1.1293861000412981,
+    "ppo": {
+      "net_log": 0.09671841599939303,
+      "gross": 0.10208527141671331,
+      "cost": 0.0005351203689108118
+    },
+    "equal_fixed": {
+      "net_log": 0.09658384563535954,
+      "gross": 0.10193049717065666,
+      "cost": 0.0005285721540426423
+    },
+    "sampled_conditional_cv_median": 0.5938542485237122,
+    "sampled_conditional_cv_p05_p95": [
+      0.3894168049097061,
+      0.8531880557537078
+    ],
+    "alpha_min_max_sum": [
+      2.135833263397217,
+      2.4121804237365723,
+      22.675310134887695
+    ],
+    "selection_score_weight_spearman": -0.5636363636363636,
+    "selection_score_realized_rank_ic": 0.34673593564282396,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.06584145327853926,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-04-17T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14650608779436247,
+    "weights": {
+      "SNDK": 0.08255548585144679,
+      "LITE": 0.08361746222884303,
+      "CHGCY": 0.08832530971192964,
+      "MSTR": 0.08881039527324841,
+      "SMCI": 0.0883268931093415,
+      "FSLR": 0.08724196700801201,
+      "GEV": 0.08412202548603531,
+      "VRT": 0.08254962918873066,
+      "RDDT": 0.08180262807480387,
+      "CNR": 0.0861421162732463,
+      "CASH": 0.14650608779436247
+    },
+    "equity_equal_portfolio_weight": 0.08534939122056376,
+    "eligible_count": 424,
+    "cv": 0.03024605700549404,
+    "max_relative_deviation": 0.041555810709817176,
+    "equity_tv": 0.01417669780642073,
+    "effective_names_fraction": 0.9990860121735871,
+    "max_min_ratio": 1.08566677334665,
+    "ppo": {
+      "net_log": 0.01730200522846561,
+      "gross": 0.0179377590992229,
+      "cost": 0.0004852071783936058
+    },
+    "equal_fixed": {
+      "net_log": 0.017628189365387816,
+      "gross": 0.0182559654849124,
+      "cost": 0.0004714825492026211
+    },
+    "sampled_conditional_cv_median": 0.5972894430160522,
+    "sampled_conditional_cv_p05_p95": [
+      0.3701317384839058,
+      0.8786183834075927
+    ],
+    "alpha_min_max_sum": [
+      2.1450352668762207,
+      2.328793525695801,
+      22.380390167236328
+    ],
+    "selection_score_weight_spearman": 0.24848484848484845,
+    "selection_score_realized_rank_ic": 0.11922025172975653,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.021351145897894865,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-04-24T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14734420423282946,
+    "weights": {
+      "SNDK": 0.07873396406246447,
+      "TSLA": 0.08583940271609247,
+      "LITE": 0.08151503975352892,
+      "RDDT": 0.08311168402678293,
+      "MSTR": 0.0862963963198835,
+      "SMCI": 0.09164420489462932,
+      "UAL": 0.08405471614590487,
+      "SZKMY": 0.08207423688681548,
+      "RBLX": 0.08966788670663761,
+      "AI": 0.08971826425443097,
+      "CASH": 0.14734420423282946
+    },
+    "equity_equal_portfolio_weight": 0.08526557957671706,
+    "eligible_count": 424,
+    "cv": 0.046069657694476324,
+    "max_relative_deviation": 0.0766031914246923,
+    "equity_tv": 0.0197480121423892,
+    "effective_names_fraction": 0.9978820817379289,
+    "max_min_ratio": 1.163972956092016,
+    "ppo": {
+      "net_log": 0.028550104353224894,
+      "gross": 0.02948243528746998,
+      "cost": 0.0005208702907935578
+    },
+    "equal_fixed": {
+      "net_log": 0.03133989218141125,
+      "gross": 0.03234516346373677,
+      "cost": 0.0005090061303973942
+    },
+    "sampled_conditional_cv_median": 0.5796645879745483,
+    "sampled_conditional_cv_p05_p95": [
+      0.3695946216583252,
+      0.8466014653444289
+    ],
+    "alpha_min_max_sum": [
+      2.100198745727539,
+      2.4445745944976807,
+      22.74427032470703
+    ],
+    "selection_score_weight_spearman": -0.5878787878787878,
+    "selection_score_realized_rank_ic": 0.05928290866728063,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.030466159028505215,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-05-01T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14717369416971737,
+    "weights": {
+      "CVNA": 0.08389522541537742,
+      "SMCI": 0.09540508079317778,
+      "SNDK": 0.07681273946061995,
+      "RBLX": 0.08850343113483539,
+      "MSTR": 0.08953609153165121,
+      "CHGCY": 0.08548440538427737,
+      "RDDT": 0.07994920713902898,
+      "LITE": 0.07986639479007684,
+      "RKT": 0.08520129428016388,
+      "ARM": 0.08817243590107382,
+      "CASH": 0.14717369416971737
+    },
+    "equity_equal_portfolio_weight": 0.08528263058302826,
+    "eligible_count": 424,
+    "cv": 0.061015741286347715,
+    "max_relative_deviation": 0.11869298755148794,
+    "equity_tv": 0.024258505733747077,
+    "effective_names_fraction": 0.9962908880448972,
+    "max_min_ratio": 1.2420476272961163,
+    "ppo": {
+      "net_log": 0.03391455483939793,
+      "gross": 0.03497552435723565,
+      "cost": 0.00047931410041696917
+    },
+    "equal_fixed": {
+      "net_log": 0.03311210371481489,
+      "gross": 0.03415916411423406,
+      "cost": 0.000492753523347666
+    },
+    "sampled_conditional_cv_median": 0.5928891897201538,
+    "sampled_conditional_cv_p05_p95": [
+      0.3754762768745422,
+      0.8632918387651444
+    ],
+    "alpha_min_max_sum": [
+      2.0588901042938232,
+      2.557239532470703,
+      22.859172821044922
+    ],
+    "selection_score_weight_spearman": 0.12727272727272726,
+    "selection_score_realized_rank_ic": 0.10611959918451523,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.021021061741085506,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-05-08T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14595720188096717,
+    "weights": {
+      "LITE": 0.08381599874210655,
+      "SNDK": 0.08075982672636972,
+      "RDDT": 0.0854091635021813,
+      "MSTR": 0.0879732567944399,
+      "ABX": 0.08630801703791036,
+      "SMCI": 0.08803236376381118,
+      "CHGCY": 0.08825881427796611,
+      "CVNA": 0.08514308351173783,
+      "RBLX": 0.08702411556585465,
+      "COHR": 0.08131815819665533,
+      "CASH": 0.14595720188096717
+    },
+    "equity_equal_portfolio_weight": 0.08540427981190328,
+    "eligible_count": 424,
+    "cv": 0.030070442799412633,
+    "max_relative_deviation": 0.054381971205221036,
+    "equity_tv": 0.012388198921699865,
+    "effective_names_fraction": 0.9990965853658441,
+    "max_min_ratio": 1.0928554190315989,
+    "ppo": {
+      "net_log": -0.02698711712197531,
+      "gross": -0.026207817587036643,
+      "cost": 0.0004184011137040538
+    },
+    "equal_fixed": {
+      "net_log": -0.026433325766566994,
+      "gross": -0.025697193475046457,
+      "cost": 0.00038982995296934255
+    },
+    "sampled_conditional_cv_median": 0.5976073741912842,
+    "sampled_conditional_cv_p05_p95": [
+      0.38780156075954436,
+      0.8508141696453094
+    ],
+    "alpha_min_max_sum": [
+      2.146350383758545,
+      2.3456506729125977,
+      22.697856903076172
+    ],
+    "selection_score_weight_spearman": -0.22424242424242422,
+    "selection_score_realized_rank_ic": -0.08540864760195527,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.010513973383237495,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-05-15T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14641880134926144,
+    "weights": {
+      "SNDK": 0.08294685714258065,
+      "MSTR": 0.08947128010201422,
+      "SMCI": 0.09356631971537022,
+      "CVNA": 0.08728266135343665,
+      "AI": 0.08623269799685529,
+      "RKT": 0.08550822919531242,
+      "LITE": 0.0779248630174012,
+      "INTC": 0.08446344897431568,
+      "CEG": 0.08203669217424603,
+      "AMS": 0.0841481489792062,
+      "CASH": 0.14641880134926144
+    },
+    "equity_equal_portfolio_weight": 0.08535811986507386,
+    "eligible_count": 424,
+    "cv": 0.04732010608016684,
+    "max_relative_deviation": 0.09616191011787878,
+    "equity_tv": 0.017890025063529796,
+    "effective_names_fraction": 0.9977658103411541,
+    "max_min_ratio": 1.200724853304858,
+    "ppo": {
+      "net_log": 0.04569435992908658,
+      "gross": 0.04749168676993905,
+      "cost": 0.0007372548085261437
+    },
+    "equal_fixed": {
+      "net_log": 0.04523714939060066,
+      "gross": 0.04700767378073728,
+      "cost": 0.0007317195859499628
+    },
+    "sampled_conditional_cv_median": 0.5848374962806702,
+    "sampled_conditional_cv_p05_p95": [
+      0.37872148156166074,
+      0.861585599184036
+    ],
+    "alpha_min_max_sum": [
+      2.0813207626342773,
+      2.499093532562256,
+      22.798580169677734
+    ],
+    "selection_score_weight_spearman": 0.5272727272727272,
+    "selection_score_realized_rank_ic": 0.19139207027652488,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.020200980567125392,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-05-22T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14652409077009398,
+    "weights": {
+      "MSTR": 0.09079781246035257,
+      "SNDK": 0.0849509646232649,
+      "LITE": 0.08306452324464697,
+      "RDDT": 0.08547162427512411,
+      "CVNA": 0.08607484777021224,
+      "VRT": 0.08311412259593975,
+      "COHR": 0.08073734711755431,
+      "TSLA": 0.08634504977471646,
+      "AVGO": 0.08656305800032182,
+      "GEV": 0.08635655936777287,
+      "CASH": 0.14652409077009398
+    },
+    "equity_equal_portfolio_weight": 0.0853475909229906,
+    "eligible_count": 424,
+    "cv": 0.029952838397805697,
+    "max_relative_deviation": 0.0638591139881115,
+    "equity_tv": 0.011158377181553332,
+    "effective_names_fraction": 0.9991036316689563,
+    "max_min_ratio": 1.1246073310800035,
+    "ppo": {
+      "net_log": 0.0024984774536100517,
+      "gross": 0.0032081656474968875,
+      "cost": 0.0007065643980577888
+    },
+    "equal_fixed": {
+      "net_log": 0.0020193532998985207,
+      "gross": 0.0027501419350822835,
+      "cost": 0.000728748368200066
+    },
+    "sampled_conditional_cv_median": 0.5886922478675842,
+    "sampled_conditional_cv_p05_p95": [
+      0.38377110213041304,
+      0.8664403170347211
+    ],
+    "alpha_min_max_sum": [
+      2.1344966888427734,
+      2.400470733642578,
+      22.56380271911621
+    ],
+    "selection_score_weight_spearman": -0.16363636363636364,
+    "selection_score_realized_rank_ic": 0.12579765587487504,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.004137249259219727,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-05-29T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14584436593601957,
+    "weights": {
+      "MSTR": 0.09330642180519921,
+      "LITE": 0.0883853788556549,
+      "HKD": 0.08988766049631813,
+      "ABX": 0.08526159323664373,
+      "COHR": 0.0880461100372334,
+      "SNDK": 0.08238997934447978,
+      "SZKMY": 0.08199185030393563,
+      "RDDT": 0.08180786199365475,
+      "CHGCY": 0.08388367600950852,
+      "VRT": 0.07919510198135227,
+      "CASH": 0.14584436593601957
+    },
+    "equity_equal_portfolio_weight": 0.08541556340639804,
+    "eligible_count": 424,
+    "cv": 0.04868968201726732,
+    "max_relative_deviation": 0.092381974479959,
+    "equity_tv": 0.021030497080896132,
+    "effective_names_fraction": 0.9976349217209763,
+    "max_min_ratio": 1.1781842496669768,
+    "ppo": {
+      "net_log": -0.019035190472810878,
+      "gross": -0.01822409133313884,
+      "cost": 0.0006310739822006502
+    },
+    "equal_fixed": {
+      "net_log": -0.018633135809334275,
+      "gross": -0.017822618577332937,
+      "cost": 0.0006379935710200688
+    },
+    "sampled_conditional_cv_median": 0.5913749933242798,
+    "sampled_conditional_cv_p05_p95": [
+      0.38482014536857606,
+      0.8721937954425811
+    ],
+    "alpha_min_max_sum": [
+      2.083817720413208,
+      2.4551212787628174,
+      22.474933624267578
+    ],
+    "selection_score_weight_spearman": 0.9030303030303028,
+    "selection_score_realized_rank_ic": -0.11899512755724528,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.013328140235651603,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-06-05T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14692096214447137,
+    "weights": {
+      "HKD": 0.08565099519017172,
+      "MSTR": 0.09363462654638743,
+      "SNDK": 0.0852360544020766,
+      "SZKMY": 0.0889310130098705,
+      "RDDT": 0.08971155982720413,
+      "CVNA": 0.08363448618039582,
+      "SMCI": 0.08370745865739049,
+      "LITE": 0.07674196528326216,
+      "CIEN": 0.08010720346456224,
+      "ABX": 0.08572367529420744,
+      "CASH": 0.14692096214447137
+    },
+    "equity_equal_portfolio_weight": 0.08530790378555286,
+    "eligible_count": 424,
+    "cv": 0.053453107440736336,
+    "max_relative_deviation": 0.10041201485648699,
+    "equity_tv": 0.02005951404349826,
+    "effective_names_fraction": 0.9971509058356249,
+    "max_min_ratio": 1.2201228649901368,
+    "ppo": {
+      "net_log": 0.023926960130149603,
+      "gross": 0.02463930155234092,
+      "cost": 0.0004237949610900291
+    },
+    "equal_fixed": {
+      "net_log": 0.023373517187194624,
+      "gross": 0.024045142535388732,
+      "cost": 0.0003963239591198254
+    },
+    "sampled_conditional_cv_median": 0.5933997631072998,
+    "sampled_conditional_cv_p05_p95": [
+      0.39098272323608396,
+      0.8704355925321577
+    ],
+    "alpha_min_max_sum": [
+      2.0286874771118164,
+      2.475247859954834,
+      22.551294326782227
+    ],
+    "selection_score_weight_spearman": 0.5151515151515151,
+    "selection_score_realized_rank_ic": 0.08887776387150603,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.006601625179631615,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-06-12T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1478636965792277,
+    "weights": {
+      "RDDT": 0.08668121018542718,
+      "SMCI": 0.08640062643932389,
+      "MSTR": 0.0895454449242955,
+      "ORCL": 0.08479118400248997,
+      "HKD": 0.08814078659233016,
+      "SNDK": 0.08053069688902248,
+      "LITE": 0.08311674142100733,
+      "CVNA": 0.0835797674562907,
+      "COHR": 0.08469842642158376,
+      "SZKMY": 0.08465141908900131,
+      "CASH": 0.1478636965792277
+    },
+    "equity_equal_portfolio_weight": 0.08521363034207723,
+    "eligible_count": 424,
+    "cv": 0.02890101919258323,
+    "max_relative_deviation": 0.05495521589980168,
+    "equity_tv": 0.011633757103495533,
+    "effective_names_fraction": 0.9991654281815235,
+    "max_min_ratio": 1.1119417611360802,
+    "ppo": {
+      "net_log": -0.019910244499049424,
+      "gross": -0.019372143000307943,
+      "cost": 0.0003412015216000738
+    },
+    "equal_fixed": {
+      "net_log": -0.019151838658766813,
+      "gross": -0.018602041442099145,
+      "cost": 0.0003675659635054969
+    },
+    "sampled_conditional_cv_median": 0.5919906497001648,
+    "sampled_conditional_cv_p05_p95": [
+      0.37289456725120546,
+      0.8643066704273223
+    ],
+    "alpha_min_max_sum": [
+      2.1260056495666504,
+      2.363994598388672,
+      22.496349334716797
+    ],
+    "selection_score_weight_spearman": 0.6363636363636362,
+    "selection_score_realized_rank_ic": -0.06039420344613156,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.005874217146558764,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-06-19T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14753839593437923,
+    "weights": {
+      "MSTR": 0.08942633520125587,
+      "LITE": 0.0861437753574168,
+      "SNDK": 0.07881840101480853,
+      "HKD": 0.08366551666835698,
+      "SMCI": 0.08273845058270768,
+      "AI": 0.0897231774887034,
+      "TEAM": 0.09247966270586572,
+      "RDDT": 0.08937990695123466,
+      "CVNA": 0.08332528841977471,
+      "COHR": 0.07676108967549644,
+      "CASH": 0.14753839593437923
+    },
+    "equity_equal_portfolio_weight": 0.08524616040656208,
+    "eligible_count": 424,
+    "cv": 0.0566879713253227,
+    "max_relative_deviation": 0.0995361045072064,
+    "equity_tv": 0.024543106190217948,
+    "effective_names_fraction": 0.9967967675779894,
+    "max_min_ratio": 1.2047726666833254,
+    "ppo": {
+      "net_log": -0.06518436448985561,
+      "gross": -0.06272965454553343,
+      "cost": 0.0003756281173018024
+    },
+    "equal_fixed": {
+      "net_log": -0.06450269736025246,
+      "gross": -0.06211425043340924,
+      "cost": 0.0003521641737802861
+    },
+    "sampled_conditional_cv_median": 0.5830029845237732,
+    "sampled_conditional_cv_p05_p95": [
+      0.39579459130764005,
+      0.8487830609083172
+    ],
+    "alpha_min_max_sum": [
+      2.0504605770111084,
+      2.470338821411133,
+      22.77115821838379
+    ],
+    "selection_score_weight_spearman": 0.18787878787878787,
+    "selection_score_realized_rank_ic": -0.004469108398076212,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0680488814498732,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-06-26T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1479448781029924,
+    "weights": {
+      "MSTR": 0.08980656471403148,
+      "SNDK": 0.08345202513007377,
+      "HKD": 0.08209297987837727,
+      "LITE": 0.08666203948206874,
+      "AI": 0.08478951153612957,
+      "RDDT": 0.08512602886491871,
+      "TEAM": 0.08866204775171549,
+      "MU": 0.08268012196189234,
+      "CVNA": 0.08532152493426659,
+      "INTC": 0.08346227764353364,
+      "CASH": 0.1479448781029924
+    },
+    "equity_equal_portfolio_weight": 0.08520551218970077,
+    "eligible_count": 424,
+    "cv": 0.028169799055238816,
+    "max_relative_deviation": 0.05399947029350605,
+    "equity_tv": 0.011302236059374714,
+    "effective_names_fraction": 0.9992070916237807,
+    "max_min_ratio": 1.0939615646439205,
+    "ppo": {
+      "net_log": -0.0016560561592210534,
+      "gross": -0.0013407105267402943,
+      "cost": 0.0003139751281279668
+    },
+    "equal_fixed": {
+      "net_log": -0.0027694124030428462,
+      "gross": -0.0024256676893814767,
+      "cost": 0.0003399134287510934
+    },
+    "sampled_conditional_cv_median": 0.5927927494049072,
+    "sampled_conditional_cv_p05_p95": [
+      0.3800670295953751,
+      0.8808763682842253
+    ],
+    "alpha_min_max_sum": [
+      2.1950831413269043,
+      2.401336669921875,
+      22.783092498779297
+    ],
+    "selection_score_weight_spearman": 0.10303030303030303,
+    "selection_score_realized_rank_ic": -0.12385009563841594,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.011179865152767903,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-07-03T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14748301051506507,
+    "weights": {
+      "SNDK": 0.08954056831156354,
+      "LITE": 0.08546290594781125,
+      "COHR": 0.08302716366407392,
+      "MSTR": 0.08748105266769501,
+      "MU": 0.08311888288138392,
+      "WDC": 0.08392838754684717,
+      "HKD": 0.08521065904496972,
+      "STX": 0.0847612285284044,
+      "CIEN": 0.0815775490565851,
+      "SMCI": 0.0884085918356009,
+      "CASH": 0.14748301051506507
+    },
+    "equity_equal_portfolio_weight": 0.08525169894849349,
+    "eligible_count": 424,
+    "cv": 0.028338318982925242,
+    "max_relative_deviation": 0.05030831544672498,
+    "equity_tv": 0.011596628677945496,
+    "effective_names_fraction": 0.9991975840656213,
+    "max_min_ratio": 1.0976128769136593,
+    "ppo": {
+      "net_log": -0.010412526722030467,
+      "gross": -0.0098162992066487,
+      "cost": 0.0005422048258324732
+    },
+    "equal_fixed": {
+      "net_log": -0.010402537993913313,
+      "gross": -0.009817346713517791,
+      "cost": 0.0005312720097559914
+    },
+    "sampled_conditional_cv_median": 0.5899089574813843,
+    "sampled_conditional_cv_p05_p95": [
+      0.3928344637155533,
+      0.8700509935617445
+    ],
+    "alpha_min_max_sum": [
+      2.156959056854248,
+      2.3675060272216797,
+      22.541057586669922
+    ],
+    "selection_score_weight_spearman": 0.24848484848484845,
+    "selection_score_realized_rank_ic": 0.047852583024377955,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.0065625256075537925,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-07-10T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14593030745814195,
+    "weights": {
+      "MSTR": 0.08825913605693869,
+      "SNDK": 0.09207521585433054,
+      "LITE": 0.07983867631631458,
+      "HKD": 0.08294313390943442,
+      "COHR": 0.08628318050095152,
+      "INTC": 0.08622352442607983,
+      "MU": 0.0864312484696117,
+      "MRVL": 0.08521131832754503,
+      "SZKMY": 0.08642046901458955,
+      "ABX": 0.08038378966606208,
+      "CASH": 0.14593030745814195
+    },
+    "equity_equal_portfolio_weight": 0.08540696925418581,
+    "eligible_count": 424,
+    "cv": 0.040298532830544326,
+    "max_relative_deviation": 0.07807614130761276,
+    "equity_tv": 0.01551507905397035,
+    "effective_names_fraction": 0.9983786612600137,
+    "max_min_ratio": 1.1532658117919659,
+    "ppo": {
+      "net_log": -0.04787198852557928,
+      "gross": -0.04627147578669365,
+      "cost": 0.0004727172645923767
+    },
+    "equal_fixed": {
+      "net_log": -0.0467131731830556,
+      "gross": -0.045192116997858814,
+      "cost": 0.00044678831047460755
+    },
+    "sampled_conditional_cv_median": 0.5899515151977539,
+    "sampled_conditional_cv_p05_p95": [
+      0.3798405945301056,
+      0.870908936858177
+    ],
+    "alpha_min_max_sum": [
+      2.108304977416992,
+      2.431436061859131,
+      22.553470611572266
+    ],
+    "selection_score_weight_spearman": 0.33333333333333326,
+    "selection_score_realized_rank_ic": -0.2338438771735109,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.039974186070181716,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-07-17T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14586063598756116,
+    "weights": {
+      "SNDK": 0.09147079412552372,
+      "LITE": 0.08931937919886812,
+      "COHR": 0.08678112590742126,
+      "MSTR": 0.08254113254898476,
+      "WDC": 0.08797552841674416,
+      "MU": 0.08377759999968115,
+      "STX": 0.08293761212197281,
+      "INTC": 0.08214803217174094,
+      "CIEN": 0.08034646264403633,
+      "SMCI": 0.08684169687746557,
+      "CASH": 0.14586063598756116
+    },
+    "equity_equal_portfolio_weight": 0.08541393640124388,
+    "eligible_count": 424,
+    "cv": 0.03984326563280017,
+    "max_relative_deviation": 0.07091182047654265,
+    "equity_tv": 0.01793482792765927,
+    "effective_names_fraction": 0.998415030300631,
+    "max_min_ratio": 1.138454526999803,
+    "ppo": {
+      "net_log": 0.035375533106843646,
+      "gross": 0.03666947400659144,
+      "cost": 0.0006607826868782956
+    },
+    "equal_fixed": {
+      "net_log": 0.03485720282868264,
+      "gross": 0.03611835656010233,
+      "cost": 0.0006465207672814966
+    },
+    "sampled_conditional_cv_median": 0.5869213342666626,
+    "sampled_conditional_cv_p05_p95": [
+      0.37152826189994814,
+      0.8622782826423644
+    ],
+    "alpha_min_max_sum": [
+      2.1385674476623535,
+      2.434661865234375,
+      22.734474182128906
+    ],
+    "selection_score_weight_spearman": 0.6242424242424242,
+    "selection_score_realized_rank_ic": -0.04747365023889925,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.03443945760536008,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-07-24T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14581927439839748,
+    "weights": {
+      "SNDK": 0.08630533202342994,
+      "MSTR": 0.09248080945620318,
+      "LITE": 0.08337420530616158,
+      "COHR": 0.08628669781437948,
+      "INTC": 0.08359957231807924,
+      "RDDT": 0.0873720450294323,
+      "WDC": 0.08552933304387056,
+      "CVNA": 0.08012151119992406,
+      "HKD": 0.08415058613426707,
+      "SZKMY": 0.08496063327585512,
+      "CASH": 0.14581927439839748
+    },
+    "equity_equal_portfolio_weight": 0.08541807256016025,
+    "eligible_count": 424,
+    "cv": 0.035626618468150864,
+    "max_relative_deviation": 0.0826843393248966,
+    "equity_tv": 0.012741863917438145,
+    "effective_names_fraction": 0.998732353024982,
+    "max_min_ratio": 1.1542569288969033,
+    "ppo": {
+      "net_log": -0.05564515633398839,
+      "gross": -0.05346575666985405,
+      "cost": 0.0006595293310508178
+    },
+    "equal_fixed": {
+      "net_log": -0.0549612852925555,
+      "gross": -0.05286691438282452,
+      "cost": 0.0006112940587693087
+    },
+    "sampled_conditional_cv_median": 0.5804873704910278,
+    "sampled_conditional_cv_p05_p95": [
+      0.3848521217703819,
+      0.8643023818731308
+    ],
+    "alpha_min_max_sum": [
+      2.131659984588623,
+      2.4604833126068115,
+      22.72576904296875
+    ],
+    "selection_score_weight_spearman": 0.43030303030303024,
+    "selection_score_realized_rank_ic": -0.05633535630229611,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.062026170794043434,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-07-31T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14613030633136193,
+    "weights": {
+      "SNDK": 0.09011442503321865,
+      "LITE": 0.09096846823930416,
+      "COHR": 0.08788937035429867,
+      "MU": 0.08413333611124085,
+      "MSTR": 0.08268315808727578,
+      "RDDT": 0.07787537420053314,
+      "STX": 0.08386718279774841,
+      "RBLX": 0.08468387572886704,
+      "INTC": 0.08424342749402092,
+      "CIEN": 0.08741107562213046,
+      "CASH": 0.14613030633136193
+    },
+    "equity_equal_portfolio_weight": 0.08538696936686381,
+    "eligible_count": 424,
+    "cv": 0.04275523435894793,
+    "max_relative_deviation": 0.08797121179060963,
+    "equity_tv": 0.01737438615224341,
+    "effective_names_fraction": 0.998175325458339,
+    "max_min_ratio": 1.1681288105923655,
+    "ppo": {
+      "net_log": 0.12370493820118791,
+      "gross": 0.13232070174647192,
+      "cost": 0.0006387961138438612
+    },
+    "equal_fixed": {
+      "net_log": 0.1217339622689731,
+      "gross": 0.13010371362346937,
+      "cost": 0.0006501290847715703
+    },
+    "sampled_conditional_cv_median": 0.586772620677948,
+    "sampled_conditional_cv_p05_p95": [
+      0.3797388568520546,
+      0.8709090203046794
+    ],
+    "alpha_min_max_sum": [
+      2.095614433288574,
+      2.4479475021362305,
+      22.977502822875977
+    ],
+    "selection_score_weight_spearman": 0.406060606060606,
+    "selection_score_realized_rank_ic": 0.25927944521847274,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.09824121055427534,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-08-07T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14575678776829926,
+    "weights": {
+      "SNDK": 0.09054838317248914,
+      "WDC": 0.08845247344107454,
+      "LITE": 0.0871742820891126,
+      "STX": 0.08951481550155105,
+      "MSTR": 0.08391841631528152,
+      "COHR": 0.08658463304713382,
+      "SZKMY": 0.07946651354033163,
+      "ABX": 0.08054850950810621,
+      "MU": 0.08171199154295894,
+      "TTD": 0.08632319407366129,
+      "CASH": 0.14575678776829926
+    },
+    "equity_equal_portfolio_weight": 0.08542432122317008,
+    "eligible_count": 424,
+    "cv": 0.04264242891490137,
+    "max_relative_deviation": 0.06974369357028587,
+    "equity_tv": 0.018790730504099303,
+    "effective_names_fraction": 0.9981849237486813,
+    "max_min_ratio": 1.1394533261677968,
+    "ppo": {
+      "net_log": 0.07215812180113212,
+      "gross": 0.07529457345576032,
+      "cost": 0.00046928951810184085
+    },
+    "equal_fixed": {
+      "net_log": 0.0691678492732392,
+      "gross": 0.07210887283165525,
+      "cost": 0.0004928088004479926
+    },
+    "sampled_conditional_cv_median": 0.5774902105331421,
+    "sampled_conditional_cv_p05_p95": [
+      0.36856886446475984,
+      0.853296199440956
+    ],
+    "alpha_min_max_sum": [
+      2.134949207305908,
+      2.4326748847961426,
+      22.950115203857422
+    ],
+    "selection_score_weight_spearman": 0.7696969696969697,
+    "selection_score_realized_rank_ic": 0.36301068159098243,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.0679320500408324,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-08-14T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.14547945992587463,
+    "weights": {
+      "SNDK": 0.08693719403673372,
+      "COHR": 0.0897653279124111,
+      "LITE": 0.08773264628202171,
+      "MSTR": 0.0884616622844765,
+      "WDC": 0.0832073162939092,
+      "INTC": 0.0842359097731511,
+      "MU": 0.08170749980776204,
+      "CIEN": 0.08342632351165902,
+      "HKD": 0.08308567462111849,
+      "STX": 0.0859609855508825,
+      "CASH": 0.14547945992587463
+    },
+    "equity_equal_portfolio_weight": 0.08545205400741254,
+    "eligible_count": 424,
+    "cv": 0.02996625102946841,
+    "max_relative_deviation": 0.050475953505159765,
+    "equity_tv": 0.01357199211204077,
+    "effective_names_fraction": 0.9991028294370525,
+    "max_min_ratio": 1.0986179741591309,
+    "ppo": {
+      "net_log": -0.07549397643366372,
+      "gross": -0.07211077505897501,
+      "cost": 0.0006039088592345378
+    },
+    "equal_fixed": {
+      "net_log": -0.07635192615990131,
+      "gross": -0.07290099168493797,
+      "cost": 0.0006089152368901803
+    },
+    "sampled_conditional_cv_median": 0.5859736204147339,
+    "sampled_conditional_cv_p05_p95": [
+      0.37472362220287325,
+      0.8571371346712112
+    ],
+    "alpha_min_max_sum": [
+      2.1736912727355957,
+      2.3880562782287598,
+      22.73308753967285
+    ],
+    "selection_score_weight_spearman": 0.6484848484848483,
+    "selection_score_realized_rank_ic": -0.26296637553885677,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": -0.07407225271546246,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-08-21T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1458343118429184,
+    "weights": {
+      "SNDK": 0.08947856516596608,
+      "LITE": 0.08998132355988264,
+      "COHR": 0.08831150383292818,
+      "WDC": 0.08654935475434156,
+      "STX": 0.08798964936439735,
+      "CIEN": 0.08168631918268365,
+      "MU": 0.07901825039050181,
+      "HKD": 0.08032716595898781,
+      "MSTR": 0.08101499035410809,
+      "SMCI": 0.08980856559328443,
+      "CASH": 0.1458343118429184
+    },
+    "equity_equal_portfolio_weight": 0.08541656881570817,
+    "eligible_count": 424,
+    "cv": 0.04870026974704234,
+    "max_relative_deviation": 0.07490722835063934,
+    "equity_tv": 0.022969254851341242,
+    "effective_names_fraction": 0.9976338954552189,
+    "max_min_ratio": 1.1387410264742919,
+    "ppo": {
+      "net_log": 0.015397183967392076,
+      "gross": 0.015877720819789713,
+      "cost": 0.00036138948947994534
+    },
+    "equal_fixed": {
+      "net_log": 0.01518052403132767,
+      "gross": 0.01563137796329801,
+      "cost": 0.0003350445031835295
+    },
+    "sampled_conditional_cv_median": 0.5735487937927246,
+    "sampled_conditional_cv_p05_p95": [
+      0.3714296117424965,
+      0.8287441492080688
+    ],
+    "alpha_min_max_sum": [
+      2.1437277793884277,
+      2.441150665283203,
+      23.173110961914062
+    ],
+    "selection_score_weight_spearman": 0.4787878787878787,
+    "selection_score_realized_rank_ic": 0.016260105005470673,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.020678737765426787,
+    "selection_evaluable_count": 424
+  },
+  {
+    "as_of": "2026-08-28T20:00:00+00:00",
+    "k": 10,
+    "cash": 0.1456378871963011,
+    "weights": {
+      "SNDK": 0.08873035773833138,
+      "LITE": 0.08423247490731356,
+      "COHR": 0.08286158959920087,
+      "MU": 0.08224599550007028,
+      "WDC": 0.08544926436035993,
+      "STX": 0.08868451345758999,
+      "MRVL": 0.08308871675570373,
+      "CIEN": 0.0843702941967237,
+      "MSTR": 0.08771399856405537,
+      "SMCI": 0.08698490772435008,
+      "CASH": 0.1456378871963011
+    },
+    "equity_equal_portfolio_weight": 0.08543621128036989,
+    "eligible_count": 424,
+    "cv": 0.027171874443023627,
+    "max_relative_deviation": 0.038556794696236185,
+    "equity_tv": 0.012151739042790037,
+    "effective_names_fraction": 0.9992622339398738,
+    "max_min_ratio": 1.0788410693898836,
+    "ppo": {
+      "net_log": 0.0418639469222185,
+      "gross": 0.0432076002483459,
+      "cost": 0.00045500084943794414
+    },
+    "equal_fixed": {
+      "net_log": 0.041165301488207254,
+      "gross": 0.042417338923017835,
+      "cost": 0.00039299943912866
+    },
+    "sampled_conditional_cv_median": 0.5873745679855347,
+    "sampled_conditional_cv_p05_p95": [
+      0.3743578985333443,
+      0.8774555683135986
+    ],
+    "alpha_min_max_sum": [
+      2.2124786376953125,
+      2.3869128227233887,
+      22.982975006103516
+    ],
+    "selection_score_weight_spearman": -0.1515151515151515,
+    "selection_score_realized_rank_ic": 0.2159119581832622,
+    "selection_outcome_missing": [],
+    "selection_gross_edge_vs_matched_cash_universe_mean": 0.04798402759515606,
+    "selection_evaluable_count": 424
+  }
+]

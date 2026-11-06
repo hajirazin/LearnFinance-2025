@@ -1,0 +1,4 @@
+# Local research inputs, checkpoints and provider session caches.
+*.pkl
+*.pt
+yfinance_cache/

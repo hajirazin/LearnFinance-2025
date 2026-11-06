@@ -1,0 +1,30 @@
+{
+  "news_adapter_matches": true,
+  "frames": {
+    "SPY": {
+      "old": "ef85a1ea57ab8cd6326194ee5de9376f2293eca79dd5e4340697d73bbb32e04b",
+      "fresh": "d140cc9bcc6c8eb367dadc8fcf93369c9349bc4898809f50ecb2e97a9a43d4f2",
+      "matches": false
+    },
+    "AAPL": {
+      "old": "28d442647fb2a068b8a441c8ce1fe76e534b4c6a7a51bcc92144c9f06e4b1e87",
+      "fresh": "32d819663b5a65ec2579b62e79f6d829db4e5d9a7f32a36bd542d624c75815c7",
+      "matches": false
+    },
+    "SMCI": {
+      "old": "f57c50a80a2ffb51b89c024c9b48febb94d4a43289fd3f5c7b022803a47d152c",
+      "fresh": "f62b3ac567910f8f4d20949007df1be09731c14e69d30abb59efe9588c24bca9",
+      "matches": false
+    },
+    "MSTR": {
+      "old": "831fec329f52ad5d4142b966abb74564b809d120b1d86c05f45439664ea3fe8f",
+      "fresh": "3ca99501d227cdf6b1ccc426ba76895bace3b51a2edb2e8d041044d4e784d3f6",
+      "matches": false
+    },
+    "TSLA": {
+      "old": "9b395239260df707c1a248ee7d785d0cd6996b490f9a411e2a3dc7d94d9373f8",
+      "fresh": "a3ccdd9d4f93188ef5b9a1fac6303bdbc417a2a3e71ba6357189271ea9808fd2",
+      "matches": false
+    }
+  }
+}

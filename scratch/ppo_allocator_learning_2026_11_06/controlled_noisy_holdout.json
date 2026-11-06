@@ -1,0 +1,110 @@
+[
+  {
+    "case": "head_signal",
+    "seed": 123,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.010691357898985922,
+    "ci95": [
+      0.010640914639088837,
+      0.010741801158883008
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "head_signal",
+    "seed": 2026,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.010675706048012117,
+    "ci95": [
+      0.010625333919693685,
+      0.010726078176330549
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "head_signal",
+    "seed": 42,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.010397362727728086,
+    "ci95": [
+      0.010348255735951047,
+      0.010446469719505126
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_hidden_signal",
+    "seed": 123,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": -1.4141821667286332e-10,
+    "ci95": [
+      -1.4225688802387698e-10,
+      -1.4057954532184965e-10
+    ],
+    "fraction_outcomes_beats_equal": 0.0004,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_hidden_signal",
+    "seed": 2026,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": -5.099775607582824e-10,
+    "ci95": [
+      -5.132722752514323e-10,
+      -5.066828462651324e-10
+    ],
+    "fraction_outcomes_beats_equal": 0.0015,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_hidden_signal",
+    "seed": 42,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": -1.4141821667286332e-10,
+    "ci95": [
+      -1.4225688802387698e-10,
+      -1.4057954532184965e-10
+    ],
+    "fraction_outcomes_beats_equal": 0.0004,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_signal",
+    "seed": 123,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.011971975132726525,
+    "ci95": [
+      0.011915715537339522,
+      0.012028234728113528
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_signal",
+    "seed": 2026,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.012102138840655079,
+    "ci95": [
+      0.012045288459082105,
+      0.012158989222228052
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  },
+  {
+    "case": "set_signal",
+    "seed": 42,
+    "future_outcomes": 10000,
+    "mean_paired_reward_advantage": 0.011968549061922297,
+    "ci95": [
+      0.011912305017648273,
+      0.012024793106196321
+    ],
+    "fraction_outcomes_beats_equal": 1.0,
+    "note": "Independent synthetic outcomes; this is not market-return evidence."
+  }
+]

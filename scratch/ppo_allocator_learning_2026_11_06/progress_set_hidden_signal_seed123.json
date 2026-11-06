@@ -1,0 +1,62 @@
+[
+  {
+    "decisions": 1024,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.7295153737068176,
+    "seconds": 1.268373966217041
+  },
+  {
+    "decisions": 2048,
+    "mean_winner_weight": 0.10000000894069672,
+    "allocation_gradient_norm": 0.012265974655747414,
+    "seconds": 2.6355252265930176
+  },
+  {
+    "decisions": 3072,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.06229275092482567,
+    "seconds": 3.932518243789673
+  },
+  {
+    "decisions": 4096,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.35603243112564087,
+    "seconds": 5.237454175949097
+  },
+  {
+    "decisions": 5120,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.8926413655281067,
+    "seconds": 6.52160906791687
+  },
+  {
+    "decisions": 6144,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.5151940584182739,
+    "seconds": 7.821802139282227
+  },
+  {
+    "decisions": 7168,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.8202394843101501,
+    "seconds": 9.127148151397705
+  },
+  {
+    "decisions": 8192,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.4857441484928131,
+    "seconds": 10.422170162200928
+  },
+  {
+    "decisions": 9216,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.32047924399375916,
+    "seconds": 11.714394092559814
+  },
+  {
+    "decisions": 10000,
+    "mean_winner_weight": 0.10000000149011612,
+    "allocation_gradient_norm": 0.284086674451828,
+    "seconds": 12.724453210830688
+  }
+]

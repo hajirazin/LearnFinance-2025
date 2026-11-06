@@ -1,0 +1,10 @@
+{
+  "microbatch": 4,
+  "full_policy_forward_backward_seconds": [
+    2.3903153749997728,
+    0.12471729100798257,
+    0.12156658399908338
+  ],
+  "median_seconds_per_state": 0.031179322751995642,
+  "mps_driver_allocated_gb": 2.619850752
+}

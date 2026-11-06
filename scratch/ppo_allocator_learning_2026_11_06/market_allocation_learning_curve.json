@@ -1,0 +1,250 @@
+[
+  {
+    "episode": 3,
+    "decisions": 936,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.012428957189809955,
+    "mean_deterministic_cash": 0.5678471623606854,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 4,
+    "decisions": 1248,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.0057295153185837056,
+    "mean_deterministic_cash": 0.5203653087364947,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 5,
+    "decisions": 1560,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.006855559230303017,
+    "mean_deterministic_cash": 0.5198021901952781,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 6,
+    "decisions": 1872,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.008150361004901572,
+    "mean_deterministic_cash": 0.4809885668551566,
+    "mean_deterministic_k": 6.0
+  },
+  {
+    "episode": 7,
+    "decisions": 2184,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.005015629821545413,
+    "mean_deterministic_cash": 0.5037120160073052,
+    "mean_deterministic_k": 6.0
+  },
+  {
+    "episode": 8,
+    "decisions": 2496,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.008246589041223792,
+    "mean_deterministic_cash": 0.4597010156944936,
+    "mean_deterministic_k": 6.0
+  },
+  {
+    "episode": 9,
+    "decisions": 2808,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.009340368630958686,
+    "mean_deterministic_cash": 0.5260999832171968,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 10,
+    "decisions": 3120,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.0105671981857356,
+    "mean_deterministic_cash": 0.5674491262539217,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 11,
+    "decisions": 3432,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.021864067764677256,
+    "mean_deterministic_cash": 0.568990111357666,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 12,
+    "decisions": 3744,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.01830388988220533,
+    "mean_deterministic_cash": 0.604930234834329,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 13,
+    "decisions": 4056,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.01913818914172671,
+    "mean_deterministic_cash": 0.5747470926557392,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 14,
+    "decisions": 4368,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.021506658956484872,
+    "mean_deterministic_cash": 0.6325280085607603,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 15,
+    "decisions": 4680,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.015382554716428359,
+    "mean_deterministic_cash": 0.6390995813203291,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 16,
+    "decisions": 4992,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.026512219370098285,
+    "mean_deterministic_cash": 0.6277677262333331,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 17,
+    "decisions": 5304,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.02999065498978859,
+    "mean_deterministic_cash": 0.6222539131412878,
+    "mean_deterministic_k": 6.0
+  },
+  {
+    "episode": 18,
+    "decisions": 5616,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.0342064038918149,
+    "mean_deterministic_cash": 0.6154380812981054,
+    "mean_deterministic_k": 10.666666666666666
+  },
+  {
+    "episode": 19,
+    "decisions": 5928,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.047476655814127966,
+    "mean_deterministic_cash": 0.6032159238005598,
+    "mean_deterministic_k": 11.0
+  },
+  {
+    "episode": 20,
+    "decisions": 6240,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.07872758604107637,
+    "mean_deterministic_cash": 0.5748260694526021,
+    "mean_deterministic_k": 11.0
+  },
+  {
+    "episode": 21,
+    "decisions": 6552,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.11287186524210747,
+    "mean_deterministic_cash": 0.5951554242582128,
+    "mean_deterministic_k": 8.5
+  },
+  {
+    "episode": 22,
+    "decisions": 6864,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.08910292774633825,
+    "mean_deterministic_cash": 0.5664079616994669,
+    "mean_deterministic_k": 6.333333333333333
+  },
+  {
+    "episode": 23,
+    "decisions": 7176,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1512876665986942,
+    "mean_deterministic_cash": 0.5597506120601727,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 24,
+    "decisions": 7488,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.15313844394468124,
+    "mean_deterministic_cash": 0.5672762837746791,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 25,
+    "decisions": 7800,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1492839448055646,
+    "mean_deterministic_cash": 0.5590535827201425,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 26,
+    "decisions": 8112,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1556991435984534,
+    "mean_deterministic_cash": 0.5268470177481612,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 27,
+    "decisions": 8424,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.06993042138379595,
+    "mean_deterministic_cash": 0.5425254772384704,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 28,
+    "decisions": 8736,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1647026020848574,
+    "mean_deterministic_cash": 0.5264273120205668,
+    "mean_deterministic_k": 12.0
+  },
+  {
+    "episode": 29,
+    "decisions": 9048,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.11552087572714835,
+    "mean_deterministic_cash": 0.5037490638730903,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 30,
+    "decisions": 9360,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.13066638316342513,
+    "mean_deterministic_cash": 0.47837099415712836,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 31,
+    "decisions": 9672,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1245987812365034,
+    "mean_deterministic_cash": 0.47284172851389245,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 32,
+    "decisions": 9984,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.1087972913737938,
+    "mean_deterministic_cash": 0.49123143220440024,
+    "mean_deterministic_k": 4.0
+  },
+  {
+    "episode": 33,
+    "decisions": 10296,
+    "training_contexts": 12,
+    "mean_deterministic_cv": 0.11456618608480167,
+    "mean_deterministic_cash": 0.49160372361688487,
+    "mean_deterministic_k": 4.25
+  }
+]

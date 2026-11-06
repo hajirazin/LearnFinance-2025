@@ -1,0 +1,188 @@
+{
+  "case": "set_signal",
+  "representation": "set",
+  "signal_visible": true,
+  "seed": 123,
+  "decisions": 10000,
+  "config": {
+    "max_assets": 512,
+    "min_eligible_assets": 10,
+    "max_selected": 15,
+    "cash_floor": 0.02,
+    "history_bars": 253,
+    "encoder_sessions": 250,
+    "encoder_channels": 4,
+    "patch_length": 5,
+    "patch_stride": 5,
+    "temporal_d_model": 64,
+    "temporal_heads": 4,
+    "temporal_layers": 2,
+    "temporal_ff": 128,
+    "set_d_model": 128,
+    "set_heads": 4,
+    "set_layers": 2,
+    "set_ff": 256,
+    "dropout": 0.1,
+    "gamma": 0.97,
+    "gae_lambda": 0.95,
+    "clip_epsilon": 0.2,
+    "value_loss_coef": 0.5,
+    "count_entropy_coef": 0.01,
+    "selection_entropy_coef": 0.01,
+    "actor_lr": 0.0003,
+    "encoder_finetune_lr": 1e-05,
+    "weight_decay": 0.0001,
+    "max_grad_norm": 1.0,
+    "rollout_length": 52,
+    "minibatch_size": 64,
+    "ppo_microbatch_size": 64,
+    "ppo_epochs": 5,
+    "freeze_encoder_updates": 1000000000,
+    "total_timesteps": 10000,
+    "pretrain_lr": 0.0003,
+    "pretrain_batch_size": 256,
+    "pretrain_max_epochs": 50,
+    "pretrain_patience": 8,
+    "pretrain_huber_beta": 0.01,
+    "hhi_penalty_scale": 0.4,
+    "reward_scale": 1.0,
+    "rebalance_weight_epsilon": 1e-09,
+    "broker_cost_model": "ibkr_sg_tiered",
+    "training_nav_usd": 10000.0,
+    "broker_cost_config": {
+      "commission_per_share": 0.0035,
+      "commission_min": 0.35,
+      "commission_max_pct": 0.01,
+      "clearing_per_share": 0.0002,
+      "cat_per_share": 3.3e-05,
+      "sec_fee_rate": 2.06e-05,
+      "finra_taf_per_share": 0.000195,
+      "finra_taf_cap": 9.27,
+      "nyse_pass_through_rate": 0.000175,
+      "finra_pass_through_rate": 0.000565,
+      "nav_usd": 10000.0
+    },
+    "seeds": [
+      42
+    ],
+    "universe": "halal_new",
+    "asset_feature_names": [
+      "momentum_1w_cs_rank",
+      "momentum_4w_cs_rank",
+      "momentum_12_1_cs_rank",
+      "realized_vol_20d_cs_rank",
+      "news_sentiment_cs_rank",
+      "raw_news_sentiment",
+      "log1p_article_count",
+      "news_recency",
+      "current_weight"
+    ],
+    "global_feature_names": [
+      "p_calm",
+      "p_stress",
+      "cash_weight",
+      "fraction_momentum_4w_positive",
+      "spy_return_20d",
+      "median_raw_news_sentiment",
+      "fraction_of_assets_with_news"
+    ]
+  },
+  "device": "mps",
+  "initial": {
+    "contexts": 1000,
+    "mean_winner_equity_weight": 0.10052378342300654,
+    "mean_cv": 0.001745957626379095,
+    "mean_reward": -0.00043833090442636996,
+    "mean_sampled_reward": -0.0008692939455467978,
+    "mean_equal_reward": -0.0004501012803852058,
+    "mean_paired_reward_advantage": 1.1770375958835667e-05,
+    "paired_reward_ci95": [
+      1.1770371176116609e-05,
+      1.1770380741554725e-05
+    ],
+    "fraction_feasible_gain": 0.0008250187090734716,
+    "mean_total_concentration": 14.445316314697266,
+    "passes": false,
+    "confidence_note": "Conditional iid synthetic contexts; across-seed replication is the main evidence."
+  },
+  "final": {
+    "contexts": 1000,
+    "mean_winner_equity_weight": 0.4054616689682007,
+    "mean_cv": 1.0182055335044862,
+    "mean_reward": 0.011497112566599818,
+    "mean_sampled_reward": 0.010719707290003442,
+    "mean_equal_reward": -0.0004501012803852058,
+    "mean_paired_reward_advantage": 0.011947213846985025,
+    "paired_reward_ci95": [
+      0.011947213837900601,
+      0.01194721385606945
+    ],
+    "fraction_feasible_gain": 0.8374137733183603,
+    "mean_total_concentration": 123.3161849975586,
+    "passes": true,
+    "confidence_note": "Conditional iid synthetic contexts; across-seed replication is the main evidence."
+  },
+  "history": [
+    {
+      "decisions": 1024,
+      "mean_winner_weight": 0.3043610453605652,
+      "allocation_gradient_norm": 0.49195995926856995,
+      "seconds": 1.4650158882141113
+    },
+    {
+      "decisions": 2048,
+      "mean_winner_weight": 0.40791717171669006,
+      "allocation_gradient_norm": 0.6861818432807922,
+      "seconds": 2.950263738632202
+    },
+    {
+      "decisions": 3072,
+      "mean_winner_weight": 0.423468679189682,
+      "allocation_gradient_norm": 0.8039485812187195,
+      "seconds": 4.423888921737671
+    },
+    {
+      "decisions": 4096,
+      "mean_winner_weight": 0.3878367841243744,
+      "allocation_gradient_norm": 0.8422973155975342,
+      "seconds": 5.936302900314331
+    },
+    {
+      "decisions": 5120,
+      "mean_winner_weight": 0.39226478338241577,
+      "allocation_gradient_norm": 0.7018507719039917,
+      "seconds": 7.410444021224976
+    },
+    {
+      "decisions": 6144,
+      "mean_winner_weight": 0.41126513481140137,
+      "allocation_gradient_norm": 0.2635720670223236,
+      "seconds": 8.869080781936646
+    },
+    {
+      "decisions": 7168,
+      "mean_winner_weight": 0.4239621162414551,
+      "allocation_gradient_norm": 0.8897758722305298,
+      "seconds": 10.343235969543457
+    },
+    {
+      "decisions": 8192,
+      "mean_winner_weight": 0.41341739892959595,
+      "allocation_gradient_norm": 0.7035976052284241,
+      "seconds": 11.809445858001709
+    },
+    {
+      "decisions": 9216,
+      "mean_winner_weight": 0.42110389471054077,
+      "allocation_gradient_norm": 0.8822813630104065,
+      "seconds": 13.263765096664429
+    },
+    {
+      "decisions": 10000,
+      "mean_winner_weight": 0.40546169877052307,
+      "allocation_gradient_norm": 0.9039938449859619,
+      "seconds": 14.393213033676147
+    }
+  ],
+  "elapsed_seconds": 15.066803932189941
+}

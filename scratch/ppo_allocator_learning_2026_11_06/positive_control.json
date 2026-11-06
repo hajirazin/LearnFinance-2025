@@ -1,0 +1,17 @@
+{
+  "contexts": 1000,
+  "mean_winner_equity_weight": 0.4634999632835388,
+  "mean_cv": 1.2116665959358215,
+  "mean_reward": 0.013816696370229144,
+  "mean_sampled_reward": 0.001490042261535428,
+  "mean_equal_reward": -0.0004501012803852058,
+  "mean_paired_reward_advantage": 0.014266797650614359,
+  "paired_reward_ci95": [
+    0.014266797650614359,
+    0.014266797650614359
+  ],
+  "fraction_feasible_gain": 0.9999999168664301,
+  "mean_total_concentration": 32.57640838623047,
+  "passes": true,
+  "confidence_note": "Conditional iid synthetic contexts; across-seed replication is the main evidence."
+}
