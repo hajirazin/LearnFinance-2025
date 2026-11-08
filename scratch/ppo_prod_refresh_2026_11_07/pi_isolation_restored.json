@@ -1,0 +1,53 @@
+{
+  "as_of": "2026-11-06T17:03:54.158925+00:00",
+  "schedules": [
+    {
+      "id": "us-ppo-discovery-training",
+      "paused": true
+    },
+    {
+      "id": "us-ppo-discovery-allocate",
+      "paused": true
+    },
+    {
+      "id": "us-weekly-allocate",
+      "paused": false
+    },
+    {
+      "id": "india-weekly-allocate",
+      "paused": false
+    },
+    {
+      "id": "india-monthly-training",
+      "paused": true
+    },
+    {
+      "id": "us-sac-halal-training",
+      "paused": true
+    },
+    {
+      "id": "us-sac-training",
+      "paused": true
+    },
+    {
+      "id": "us-forecasters-training",
+      "paused": true
+    },
+    {
+      "id": "us-sac-halal-allocate",
+      "paused": false
+    },
+    {
+      "id": "us-alpha-hrp",
+      "paused": false
+    },
+    {
+      "id": "us-double-hrp",
+      "paused": true
+    },
+    {
+      "id": "india-double-hrp",
+      "paused": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "source_folder": "/Users/razin/personal/LearnFinance-2025/scratch/ppo_allocator_learning_2026_11_06",
+  "files": {
+    "market_seed42_final.pt": "5b12f183891961b2d4ff29f0184652fe0d1c0341830278b22444b0eda73c9300",
+    "market_scalers.json": "c9533a897444610ffef80b237abb2d06bc7658d39a1f46dc66663f740e093e2a",
+    "market_hmm.json": "fb87848a7d38ca756a7e8aa07f66d7ff2cb85c6784635fb9001dddce9d0c68d8",
+    "market_training_manifest.json": "658946a8cc5c96919305c8fa5a28bff39dd1840e6bdd537a8a9191b75501eda2"
+  },
+  "outer_cutoff": "2025-12-31",
+  "last_training_outcome": "2025-12-29 00:00:00",
+  "hmm_cutoff": "2025-12-19",
+  "roster_count": 432,
+  "roster_retrieved_at": "2026-09-12T23:14:04.024067+00:00",
+  "no_retraining": true,
+  "production_current_before": "v2026-11-07-91ba085dd8c6",
+  "source_news_stat_before": {
+    "size": 15810703360,
+    "mtime_ns": 1793988442655758916
+  }
+}

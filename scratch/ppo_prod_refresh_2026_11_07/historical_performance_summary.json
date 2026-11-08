@@ -1,0 +1,38 @@
+{
+  "start": "2025-06-23",
+  "end": "2026-11-02",
+  "n_weeks": 71,
+  "starting_capital": 10000.0,
+  "metrics": {
+    "PPO": {
+      "cagr": 0.47969757958995085,
+      "vol": 0.2807728550956122,
+      "sharpe": 1.3955684164974398,
+      "max_drawdown": 0.28282788756322175,
+      "n_weeks": 71.0,
+      "total_return": 0.7074639621283829,
+      "ending_value": 17074.63962128383
+    },
+    "SPY": {
+      "cagr": 0.20751687905405422,
+      "vol": 0.10173842536591697,
+      "sharpe": 1.8534401754436565,
+      "max_drawdown": 0.07068665795379192,
+      "n_weeks": 71.0,
+      "total_return": 0.29364683189246277,
+      "ending_value": 12936.468318924628
+    },
+    "QQQ": {
+      "cagr": 0.23065269839659425,
+      "vol": 0.16050177716307581,
+      "sharpe": 1.2930989389103666,
+      "max_drawdown": 0.10436396919702884,
+      "n_weeks": 71.0,
+      "total_return": 0.32760731394285614,
+      "ending_value": 13276.073139428561
+    }
+  },
+  "ppo_minus_spy_pp": 41.38171302359201,
+  "survivorship_bias": true,
+  "costs": "Saved PPO after modeled costs; benchmarks adjusted buy-and-hold before trading costs"
+}

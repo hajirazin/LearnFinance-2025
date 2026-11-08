@@ -1,0 +1,11 @@
+{
+  "retrieved_at": "2026-11-07T05:12:57.726025+00:00",
+  "source": "Yahoo Finance via native adjusted OHLCV loader",
+  "requested_asset_symbols": 417,
+  "loaded_asset_symbols": 417,
+  "state_price_cutoff": "2026-10-30",
+  "decision": "2026-11-02T09:00:00-05:00",
+  "outcome_end": "2026-11-06",
+  "roster": "Same frozen 417-symbol roster resolved 7 November; not a recovered historical Monday roster",
+  "missing_assets": []
+}

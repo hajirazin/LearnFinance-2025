@@ -1,0 +1,10 @@
+{
+  "as_of": "2026-11-02T09:00:00-05:00",
+  "symbol": "BE",
+  "max_absolute_history_difference": {
+    "2026-10-30": 17.15641417535636,
+    "2026-11-02": 2.1760371282653068e-14
+  },
+  "monday_close_matches": true,
+  "friday_close_matches": false
+}

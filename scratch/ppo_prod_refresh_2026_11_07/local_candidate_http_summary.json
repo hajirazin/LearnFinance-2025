@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "model_version": "v2026-11-07-91ba085dd8c6",
+  "k": 14,
+  "weight_sum": 1.0,
+  "cash_weight": 0.21016160317849297,
+  "state_digest": "sha256:45ef4f613eb7cbb7454f1c82bbd092ee0a35aadfa3925c0c0ecaf39f8da15cf9",
+  "warnings": []
+}

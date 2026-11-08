@@ -1,0 +1,53 @@
+{
+  "workflow_id": "ppo-local-inference-20261107T043906Z",
+  "address": "127.0.0.1:17233",
+  "brain_api": "http://127.0.0.1:8001",
+  "task_queue": "ppo-local-diagnostic-20261107",
+  "run_date": "2026-11-02",
+  "registered_activities": [
+    "get_monday_decision_window",
+    "get_ppo_discovery_portfolio",
+    "build_ppo_discovery_state",
+    "infer_ppo_discovery"
+  ],
+  "success": false,
+  "errors": [
+    {
+      "type": "WorkflowFailureError",
+      "message": "Workflow execution failed"
+    },
+    {
+      "type": "ActivityError",
+      "message": "Activity task timed out"
+    },
+    {
+      "type": "TimeoutError",
+      "message": "activity Heartbeat timeout"
+    }
+  ],
+  "events": [
+    "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+    "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+    "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+    "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+    "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+    "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+    "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+    "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+    "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+    "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+    "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+    "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+    "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+    "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+    "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+    "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+    "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+    "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+    "EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT",
+    "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+    "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+    "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+    "EVENT_TYPE_WORKFLOW_EXECUTION_FAILED"
+  ]
+}

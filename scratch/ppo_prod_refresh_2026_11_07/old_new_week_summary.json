@@ -1,0 +1,601 @@
+{
+  "start": "2026-11-02 open",
+  "end": "2026-11-06 close",
+  "price_cutoff": "2026-10-30",
+  "starting_capital": 10000.0,
+  "price_cutoff_corrected": {
+    "Old PPO": {
+      "return": -0.11608404922485749,
+      "gross_return": -0.11569773344160816,
+      "ending_value": 8839.159507751425,
+      "entry_cost_usd": 3.8631578324946663,
+      "cash_weight": 0.1439845285413346,
+      "k": 10,
+      "percentage_weights": {
+        "BE": 0.08537671013353343,
+        "SNDK": 0.08713102303732623,
+        "LITE": 0.0830877005910724,
+        "COHR": 0.08574421242623642,
+        "INTC": 0.08623692392740745,
+        "RDDT": 0.08930246399029562,
+        "MSTR": 0.08572699871119693,
+        "SMCI": 0.08779586531107997,
+        "MRVL": 0.08287557455838868,
+        "ASM": 0.08273799877212829,
+        "CASH": 0.1439845285413346
+      },
+      "wealth": [
+        10000.0,
+        9439.698524073961,
+        9674.01611653073,
+        9503.826230968187,
+        8518.513954947332,
+        8839.159507751425
+      ],
+      "contributions": [
+        {
+          "symbol": "BE",
+          "weight": 0.08537671013353343,
+          "open": 206.02999877929688,
+          "friday_close": 173.24000549316406,
+          "stock_return": -0.15915154822312094,
+          "portfolio_contribution": -0.013587835599948464
+        },
+        {
+          "symbol": "SNDK",
+          "weight": 0.08713102303732623,
+          "open": 1157.97998046875,
+          "friday_close": 835.0599975585938,
+          "stock_return": -0.27886490989199864,
+          "portfolio_contribution": -0.024297784888101637
+        },
+        {
+          "symbol": "LITE",
+          "weight": 0.0830877005910724,
+          "open": 802.5499877929688,
+          "friday_close": 538.5900268554688,
+          "stock_return": -0.3289015823966256,
+          "portfolio_contribution": -0.027327676202100755
+        },
+        {
+          "symbol": "COHR",
+          "weight": 0.08574421242623642,
+          "open": 214.7100067138672,
+          "friday_close": 192.80999755859375,
+          "stock_return": -0.10199808332388738,
+          "portfolio_contribution": -0.008745745323592362
+        },
+        {
+          "symbol": "INTC",
+          "weight": 0.08623692392740745,
+          "open": 65.4000015258789,
+          "friday_close": 56.279998779296875,
+          "stock_return": -0.13944958002750552,
+          "portfolio_contribution": -0.01202570282454091
+        },
+        {
+          "symbol": "RDDT",
+          "weight": 0.08930246399029562,
+          "open": 92.20999908447266,
+          "friday_close": 95.0999984741211,
+          "stock_return": 0.031341496782804956,
+          "portfolio_contribution": 0.002798872887848406
+        },
+        {
+          "symbol": "MSTR",
+          "weight": 0.08572699871119693,
+          "open": 132.22000122070312,
+          "friday_close": 128.92999267578125,
+          "stock_return": -0.02488283553582904,
+          "portfolio_contribution": -0.0021331308099109413
+        },
+        {
+          "symbol": "SMCI",
+          "weight": 0.08779586531107997,
+          "open": 33.45000076293945,
+          "friday_close": 28.760000228881836,
+          "stock_return": -0.14020928033143276,
+          "portfolio_contribution": -0.012309795091341924
+        },
+        {
+          "symbol": "MRVL",
+          "weight": 0.08287557455838868,
+          "open": 191.55999755859375,
+          "friday_close": 141.1999969482422,
+          "stock_return": -0.2628941389234859,
+          "portfolio_contribution": -0.021787502811316747
+        },
+        {
+          "symbol": "ASM",
+          "weight": 0.08273799877212829,
+          "open": 4.449999809265137,
+          "friday_close": 4.650000095367432,
+          "stock_return": 0.04494388644374414,
+          "portfolio_contribution": 0.0037185672213971756
+        }
+      ],
+      "model_version": "v2026-09-12-13a430da1914-seed42",
+      "eligible_assets": 412,
+      "state_digest": "sha256:00f6c11bcb29bc30df7c7162bc2259d09b0d38119c4fb7d0ef6b1b653002411e",
+      "hmm_cutoff": "2024-03-15"
+    },
+    "New PPO": {
+      "return": -0.13804316369776604,
+      "gross_return": -0.13753689848545936,
+      "ending_value": 8619.56836302234,
+      "entry_cost_usd": 5.062652123067199,
+      "cash_weight": 0.20809673113135552,
+      "k": 14,
+      "percentage_weights": {
+        "BE": 0.054291254296752856,
+        "FROG": 0.052562690626084096,
+        "LITE": 0.056032119756865395,
+        "KXIAY": 0.05850387671382551,
+        "SNDK": 0.05637513612755751,
+        "SIMO": 0.057262487505685744,
+        "CIEN": 0.05686919605209173,
+        "EXPE": 0.05531632671526321,
+        "COHR": 0.05831117817990039,
+        "MRVL": 0.05733520081652754,
+        "ASM": 0.057556703828181455,
+        "SWKS": 0.05553173488351404,
+        "WDC": 0.05846514820259818,
+        "DELL": 0.05749021516379682,
+        "CASH": 0.20809673113135552
+      },
+      "wealth": [
+        10000.0,
+        9424.705795623806,
+        9609.440247938888,
+        9288.644031079692,
+        8264.870100869368,
+        8619.56836302234
+      ],
+      "contributions": [
+        {
+          "symbol": "BE",
+          "weight": 0.054291254296752856,
+          "open": 206.02999877929688,
+          "friday_close": 173.24000549316406,
+          "stock_return": -0.15915154822312094,
+          "portfolio_contribution": -0.008640537176303384
+        },
+        {
+          "symbol": "FROG",
+          "weight": 0.052562690626084096,
+          "open": 94.38999938964844,
+          "friday_close": 100.9800033569336,
+          "stock_return": 0.06981676035488849,
+          "portfolio_contribution": 0.0036697567750494566
+        },
+        {
+          "symbol": "LITE",
+          "weight": 0.056032119756865395,
+          "open": 802.5499877929688,
+          "friday_close": 538.5900268554688,
+          "stock_return": -0.3289015823966256,
+          "portfolio_contribution": -0.018429052853070258
+        },
+        {
+          "symbol": "KXIAY",
+          "weight": 0.05850387671382551,
+          "open": 7.190000057220459,
+          "friday_close": 5.460000038146973,
+          "stock_return": -0.24061196179493172,
+          "portfolio_contribution": -0.014076732548722378
+        },
+        {
+          "symbol": "SNDK",
+          "weight": 0.05637513612755751,
+          "open": 1157.97998046875,
+          "friday_close": 835.0599975585938,
+          "stock_return": -0.27886490989199864,
+          "portfolio_contribution": -0.015721047256360483
+        },
+        {
+          "symbol": "SIMO",
+          "weight": 0.057262487505685744,
+          "open": 208.66064546124426,
+          "friday_close": 162.75999450683594,
+          "stock_return": -0.21997751829505252,
+          "portfolio_contribution": -0.012596459892902203
+        },
+        {
+          "symbol": "CIEN",
+          "weight": 0.05686919605209173,
+          "open": 321.6700134277344,
+          "friday_close": 243.38999938964844,
+          "stock_return": -0.24335502462268566,
+          "portfolio_contribution": -0.013839404605529121
+        },
+        {
+          "symbol": "EXPE",
+          "weight": 0.05531632671526321,
+          "open": 292.2300109863281,
+          "friday_close": 259.239990234375,
+          "stock_return": -0.11289059819902125,
+          "portfolio_contribution": -0.006244693213058564
+        },
+        {
+          "symbol": "COHR",
+          "weight": 0.05831117817990039,
+          "open": 214.7100067138672,
+          "friday_close": 192.80999755859375,
+          "stock_return": -0.10199808332388738,
+          "portfolio_contribution": -0.0059476284107075235
+        },
+        {
+          "symbol": "MRVL",
+          "weight": 0.05733520081652754,
+          "open": 191.55999755859375,
+          "friday_close": 141.1999969482422,
+          "stock_return": -0.2628941389234859,
+          "portfolio_contribution": -0.015073088248666154
+        },
+        {
+          "symbol": "ASM",
+          "weight": 0.057556703828181455,
+          "open": 4.449999809265137,
+          "friday_close": 4.650000095367432,
+          "stock_return": 0.04494388644374414,
+          "portfolio_contribution": 0.002586821960930001
+        },
+        {
+          "symbol": "SWKS",
+          "weight": 0.05553173488351404,
+          "open": 88.37000274658203,
+          "friday_close": 82.19000244140625,
+          "stock_return": -0.06993323654066319,
+          "portfolio_contribution": -0.003883513951122185
+        },
+        {
+          "symbol": "WDC",
+          "weight": 0.05846514820259818,
+          "open": 367.510009765625,
+          "friday_close": 263.7799987792969,
+          "stock_return": -0.2822508455007271,
+          "portfolio_contribution": -0.016501837512508652
+        },
+        {
+          "symbol": "DELL",
+          "weight": 0.05749021516379682,
+          "open": 423.0,
+          "friday_close": 328.5299987792969,
+          "stock_return": -0.2233333362191563,
+          "portfolio_contribution": -0.012839481552487873
+        }
+      ],
+      "model_version": "v2026-11-07-91ba085dd8c6",
+      "eligible_assets": 412,
+      "state_digest": "sha256:58cffa24cf8ecf9ca6e1a56e16df22b04e484988a78a1ee95a58ddb8603cccd5",
+      "hmm_cutoff": "2024-04-19"
+    },
+    "SPY": {
+      "return": -0.03184787308065318,
+      "gross_return": -0.03181254037968373,
+      "ending_value": 9681.521269193468,
+      "entry_cost_usd": 0.35332700969457986,
+      "cash_weight": 0.0,
+      "k": 1,
+      "percentage_weights": {
+        "SPY": 1.0,
+        "CASH": 0.0
+      },
+      "wealth": [
+        10000.0,
+        9902.865627457975,
+        9932.492330517223,
+        10096.558717670821,
+        9651.368158514217,
+        9681.521269193468
+      ],
+      "contributions": [
+        {
+          "symbol": "SPY",
+          "weight": 1.0,
+          "open": 759.4500122070312,
+          "friday_close": 735.2899780273438,
+          "stock_return": -0.03181254037968373,
+          "portfolio_contribution": -0.03181254037968373
+        }
+      ]
+    },
+    "QQQ": {
+      "return": -0.056441089762898966,
+      "gross_return": -0.056405728765393404,
+      "ending_value": 9435.58910237101,
+      "entry_cost_usd": 0.35360997505530795,
+      "cash_weight": 0.0,
+      "k": 1,
+      "percentage_weights": {
+        "QQQ": 1.0,
+        "CASH": 0.0
+      },
+      "wealth": [
+        10000.0,
+        9794.99270080477,
+        9855.252759443534,
+        9951.179567818055,
+        9305.433379859938,
+        9435.58910237101
+      ],
+      "contributions": [
+        {
+          "symbol": "QQQ",
+          "weight": 1.0,
+          "open": 695.3200073242188,
+          "friday_close": 656.0999755859375,
+          "stock_return": -0.056405728765393404,
+          "portfolio_contribution": -0.056405728765393404
+        }
+      ]
+    }
+  },
+  "same_saved_state_diagnostic": {
+    "Old PPO": {
+      "return": -0.1769511404808234,
+      "gross_return": -0.17660002105259076,
+      "ending_value": 8230.488595191766,
+      "entry_cost_usd": 3.5111942823273012,
+      "cash_weight": 0.14504384983102503,
+      "k": 10,
+      "percentage_weights": {
+        "BE": 0.08525907376929287,
+        "LITE": 0.08616980034658372,
+        "SNDK": 0.08678534482941158,
+        "COHR": 0.08557409816466766,
+        "MSTR": 0.08812460140719669,
+        "STX": 0.08670633871120648,
+        "WDC": 0.08605823119715517,
+        "MU": 0.08288255852262405,
+        "INTC": 0.08617627218534019,
+        "CIEN": 0.08121983103549657,
+        "CASH": 0.14504384983102503
+      },
+      "wealth": [
+        10000.0,
+        9341.849727471481,
+        9616.709635532037,
+        9155.5513836288,
+        7965.245216926361,
+        8230.488595191766
+      ],
+      "contributions": [
+        {
+          "symbol": "BE",
+          "weight": 0.08525907376929287,
+          "open": 206.02999877929688,
+          "friday_close": 173.24000549316406,
+          "stock_return": -0.15915154822312094,
+          "portfolio_contribution": -0.01356911359045224
+        },
+        {
+          "symbol": "LITE",
+          "weight": 0.08616980034658372,
+          "open": 802.5499877929688,
+          "friday_close": 538.5900268554688,
+          "stock_return": -0.3289015823966256,
+          "portfolio_contribution": -0.028341383688792684
+        },
+        {
+          "symbol": "SNDK",
+          "weight": 0.08678534482941158,
+          "open": 1157.97998046875,
+          "friday_close": 835.0599975585938,
+          "stock_return": -0.27886490989199864,
+          "portfolio_contribution": -0.02420138736579989
+        },
+        {
+          "symbol": "COHR",
+          "weight": 0.08557409816466766,
+          "open": 214.7100067138672,
+          "friday_close": 192.80999755859375,
+          "stock_return": -0.10199808332388738,
+          "portfolio_contribution": -0.00872839399496629
+        },
+        {
+          "symbol": "MSTR",
+          "weight": 0.08812460140719669,
+          "open": 132.22000122070312,
+          "friday_close": 128.92999267578125,
+          "stock_return": -0.02488283553582904,
+          "portfolio_contribution": -0.0021927899634757637
+        },
+        {
+          "symbol": "STX",
+          "weight": 0.08670633871120648,
+          "open": 645.97998046875,
+          "friday_close": 460.989990234375,
+          "stock_return": -0.28637108862125815,
+          "portfolio_contribution": -0.024830188607091738
+        },
+        {
+          "symbol": "WDC",
+          "weight": 0.08605823119715517,
+          "open": 367.510009765625,
+          "friday_close": 263.7799987792969,
+          "stock_return": -0.2822508455007271,
+          "portfolio_contribution": -0.024290008517694094
+        },
+        {
+          "symbol": "MU",
+          "weight": 0.08288255852262405,
+          "open": 890.5399780273438,
+          "friday_close": 690.0,
+          "stock_return": -0.22518919192326958,
+          "portfolio_contribution": -0.01866425637824281
+        },
+        {
+          "symbol": "INTC",
+          "weight": 0.08617627218534019,
+          "open": 65.4000015258789,
+          "friday_close": 56.279998779296875,
+          "stock_return": -0.13944958002750552,
+          "portfolio_contribution": -0.012017244964581694
+        },
+        {
+          "symbol": "CIEN",
+          "weight": 0.08121983103549657,
+          "open": 321.6700134277344,
+          "friday_close": 243.38999938964844,
+          "stock_return": -0.24335502462268566,
+          "portfolio_contribution": -0.019765253981493636
+        }
+      ],
+      "model_version": "v2026-09-12-13a430da1914-seed42"
+    },
+    "New PPO": {
+      "return": -0.10018091940493234,
+      "gross_return": -0.09967312274675855,
+      "ending_value": 8998.190805950677,
+      "entry_cost_usd": 5.077966581736325,
+      "cash_weight": 0.21016160317849297,
+      "k": 14,
+      "percentage_weights": {
+        "BE": 0.05374265932597222,
+        "LITE": 0.0544582925195245,
+        "SIMO": 0.05454527507193796,
+        "SNDK": 0.05564695402835307,
+        "KXIAY": 0.05910248760251835,
+        "COHR": 0.056798982942041,
+        "CIEN": 0.056317045108846164,
+        "FROG": 0.05458167227690902,
+        "VRSN": 0.057600339350599494,
+        "ABX": 0.05825473579153595,
+        "SHECY": 0.057770073317128245,
+        "ASM": 0.05678456529415432,
+        "ZBRA": 0.05789903182153178,
+        "GLW": 0.05633628237045496,
+        "CASH": 0.21016160317849297
+      },
+      "wealth": [
+        10000.0,
+        9585.317715901736,
+        9723.743392671331,
+        9497.281660878434,
+        8650.439389643152,
+        8998.190805950677
+      ],
+      "contributions": [
+        {
+          "symbol": "BE",
+          "weight": 0.05374265932597222,
+          "open": 206.02999877929688,
+          "friday_close": 173.24000549316406,
+          "stock_return": -0.15915154822312094,
+          "portfolio_contribution": -0.008553227437356228
+        },
+        {
+          "symbol": "LITE",
+          "weight": 0.0544582925195245,
+          "open": 802.5499877929688,
+          "friday_close": 538.5900268554688,
+          "stock_return": -0.3289015823966256,
+          "portfolio_contribution": -0.017911418584289927
+        },
+        {
+          "symbol": "SIMO",
+          "weight": 0.05454527507193796,
+          "open": 208.66064546124426,
+          "friday_close": 162.75999450683594,
+          "stock_return": -0.21997751829505252,
+          "portfolio_contribution": -0.011998734245045904
+        },
+        {
+          "symbol": "SNDK",
+          "weight": 0.05564695402835307,
+          "open": 1157.97998046875,
+          "friday_close": 835.0599975585938,
+          "stock_return": -0.27886490989199864,
+          "portfolio_contribution": -0.015517982820880868
+        },
+        {
+          "symbol": "KXIAY",
+          "weight": 0.05910248760251835,
+          "open": 7.190000057220459,
+          "friday_close": 5.460000038146973,
+          "stock_return": -0.24061196179493172,
+          "portfolio_contribution": -0.014220765489002571
+        },
+        {
+          "symbol": "COHR",
+          "weight": 0.056798982942041,
+          "open": 214.7100067138672,
+          "friday_close": 192.80999755859375,
+          "stock_return": -0.10199808332388738,
+          "portfolio_contribution": -0.005793387394834356
+        },
+        {
+          "symbol": "CIEN",
+          "weight": 0.056317045108846164,
+          "open": 321.6700134277344,
+          "friday_close": 243.38999938964844,
+          "stock_return": -0.24335502462268566,
+          "portfolio_contribution": -0.013705035899140157
+        },
+        {
+          "symbol": "FROG",
+          "weight": 0.05458167227690902,
+          "open": 94.38999938964844,
+          "friday_close": 100.9800033569336,
+          "stock_return": 0.06981676035488849,
+          "portfolio_contribution": 0.003810715533126018
+        },
+        {
+          "symbol": "VRSN",
+          "weight": 0.057600339350599494,
+          "open": 308.2699890136719,
+          "friday_close": 308.6700134277344,
+          "stock_return": 0.0012976430671776118,
+          "portfolio_contribution": 7.474468102538321e-05
+        },
+        {
+          "symbol": "ABX",
+          "weight": 0.05825473579153595,
+          "open": 8.630000114440918,
+          "friday_close": 8.779999732971191,
+          "stock_return": 0.017381183840226466,
+          "portfolio_contribution": 0.001012536272356507
+        },
+        {
+          "symbol": "SHECY",
+          "weight": 0.057770073317128245,
+          "open": 18.399999618530273,
+          "friday_close": 16.940000534057617,
+          "stock_return": -0.07934777797507775,
+          "portfolio_contribution": -0.004583926951171455
+        },
+        {
+          "symbol": "ASM",
+          "weight": 0.05678456529415432,
+          "open": 4.449999809265137,
+          "friday_close": 4.650000095367432,
+          "stock_return": 0.04494388644374414,
+          "portfolio_contribution": 0.0025521190543378466
+        },
+        {
+          "symbol": "ZBRA",
+          "weight": 0.05789903182153178,
+          "open": 363.1199951171875,
+          "friday_close": 322.0199890136719,
+          "stock_return": -0.11318574205821874,
+          "portfolio_contribution": -0.006553344881172494
+        },
+        {
+          "symbol": "GLW",
+          "weight": 0.05633628237045496,
+          "open": 124.43000030517578,
+          "friday_close": 106.12999725341797,
+          "stock_return": -0.14707066629330068,
+          "portfolio_contribution": -0.008285414584710339
+        }
+      ],
+      "model_version": "v2026-11-07-91ba085dd8c6"
+    }
+  },
+  "same_saved_state_limitation": "Uses Monday close and the new artifact's preprocessing; not the fair comparison",
+  "roster_limitation": "Same 417-symbol current roster resolved 7 November, not recovered historical Monday roster",
+  "no_orders": true,
+  "pi_accessed": false,
+  "production_current_unchanged": "v2026-11-07-91ba085dd8c6"
+}

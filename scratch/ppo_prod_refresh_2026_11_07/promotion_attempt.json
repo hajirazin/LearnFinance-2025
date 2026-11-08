@@ -1,0 +1,13 @@
+{
+  "request": {
+    "version": "v2026-11-07-91ba085dd8c6",
+    "approved_by": "razin",
+    "expected_current_version": "v2026-09-12-13a430da1914-seed42"
+  },
+  "status_code": 422,
+  "response": {
+    "detail": "test CAGR is not strictly greater than the incumbent; test Sharpe is not strictly greater than the incumbent"
+  },
+  "current_before": "v2026-09-12-13a430da1914-seed42",
+  "current_after": "v2026-09-12-13a430da1914-seed42"
+}

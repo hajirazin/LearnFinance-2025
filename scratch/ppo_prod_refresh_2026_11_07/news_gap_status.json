@@ -1,0 +1,17 @@
+{
+  "job_id": "f1db0918ac22da2ab797fac458eaa4e52fbf9ea04eeffcede38353a406e359b8",
+  "status": "complete",
+  "requested_start": "2019-12-30T22:00:00+08:00",
+  "requested_end": "2026-11-02T22:00:00+08:00",
+  "symbols_hash": "70229c84cfd57ddd0ac9003dc0bdb5ed5e2983400d6a502959f636c5d3c1e7f8",
+  "schema_version": 1,
+  "sentiment_revision": "4556d13015211d73dccd3fdd39d39232506f3e43",
+  "last_completed_symbol": "ZBRA",
+  "last_completed_window_end": "2026-11-02T22:00:00+08:00",
+  "windows_done": 148869,
+  "windows_total": 148869,
+  "events_scored": 23179,
+  "error": null,
+  "created_at": "2026-11-07T00:56:11.652177+08:00",
+  "updated_at": "2026-11-07T02:07:19.850220+08:00"
+}

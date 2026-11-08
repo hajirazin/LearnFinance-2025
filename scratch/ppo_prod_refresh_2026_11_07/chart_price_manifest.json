@@ -1,0 +1,43 @@
+{
+  "retrieved_at": "2026-11-07T04:50:53.109105+00:00",
+  "provider": "Yahoo Finance via native yfinance loader",
+  "auto_adjust": true,
+  "symbols": [
+    "BE",
+    "LITE",
+    "SIMO",
+    "SNDK",
+    "KXIAY",
+    "COHR",
+    "CIEN",
+    "FROG",
+    "VRSN",
+    "ABX",
+    "SHECY",
+    "ASM",
+    "ZBRA",
+    "GLW",
+    "SPY",
+    "QQQ"
+  ],
+  "start": "2025-06-20",
+  "end": "2026-11-07",
+  "rows": {
+    "BE": 349,
+    "LITE": 349,
+    "SIMO": 349,
+    "SNDK": 349,
+    "KXIAY": 275,
+    "COHR": 349,
+    "CIEN": 349,
+    "FROG": 349,
+    "VRSN": 349,
+    "ABX": 349,
+    "SHECY": 349,
+    "ASM": 349,
+    "ZBRA": 349,
+    "GLW": 349,
+    "SPY": 349,
+    "QQQ": 349
+  }
+}

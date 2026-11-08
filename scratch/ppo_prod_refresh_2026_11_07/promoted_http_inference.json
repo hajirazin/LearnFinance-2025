@@ -1,0 +1,391 @@
+{
+  "model_type": "ppo_discovery",
+  "model_version": "v2026-11-07-91ba085dd8c6",
+  "universe": "halal_new",
+  "selected_symbols": [
+    "BE",
+    "LITE",
+    "SIMO",
+    "SNDK",
+    "KXIAY",
+    "COHR",
+    "CIEN",
+    "FROG",
+    "VRSN",
+    "ABX",
+    "SHECY",
+    "ASM",
+    "ZBRA",
+    "GLW"
+  ],
+  "selection_order": [
+    "BE",
+    "LITE",
+    "SIMO",
+    "SNDK",
+    "KXIAY",
+    "COHR",
+    "CIEN",
+    "FROG",
+    "VRSN",
+    "ABX",
+    "SHECY",
+    "ASM",
+    "ZBRA",
+    "GLW"
+  ],
+  "k": 14,
+  "percentage_weights": {
+    "BE": 0.05374265932597222,
+    "LITE": 0.0544582925195245,
+    "SIMO": 0.05454527507193796,
+    "SNDK": 0.05564695402835307,
+    "KXIAY": 0.05910248760251835,
+    "COHR": 0.056798982942041,
+    "CIEN": 0.056317045108846164,
+    "FROG": 0.05458167227690902,
+    "VRSN": 0.057600339350599494,
+    "ABX": 0.05825473579153595,
+    "SHECY": 0.057770073317128245,
+    "ASM": 0.05678456529415432,
+    "ZBRA": 0.05789903182153178,
+    "GLW": 0.05633628237045496,
+    "CASH": 0.21016160317849297
+  },
+  "state_digest": "sha256:45ef4f613eb7cbb7454f1c82bbd092ee0a35aadfa3925c0c0ecaf39f8da15cf9",
+  "evidence_manifest_sha256": "sha256:ae9dfbe2caa8c15626812a29e16b01c6b3efffa808d23423c0d5756a638d6340",
+  "explanations": {
+    "model_version": "v2026-11-07-91ba085dd8c6",
+    "broker_cost_model": "ibkr_sg_tiered",
+    "training_nav_usd": 10000.0,
+    "execution_broker": "alpaca",
+    "k": 14,
+    "cash_weight": 0.21016160317849297,
+    "globals": {
+      "p_calm": 0.8580121144957867,
+      "p_stress": 0.000459729694586135,
+      "cash_weight": 1.0,
+      "fraction_momentum_4w_positive": 0.5922330097087378,
+      "spy_return_20d": -0.02933552005287199,
+      "median_raw_news_sentiment": 0.14261646905917555,
+      "fraction_of_assets_with_news": 0.7839805825242718
+    },
+    "per_asset": [
+      {
+        "symbol": "BE",
+        "weight": 0.05374265932597222,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.5571776155717761,
+          "momentum_4w_cs_rank": -0.9416058394160584,
+          "momentum_12_1_cs_rank": 0.8929440389294403,
+          "realized_vol_20d_cs_rank": 0.9464720194647203,
+          "news_sentiment_cs_rank": 0.4841849148418491,
+          "raw_news_sentiment": 0.43742360255571366,
+          "log1p_article_count": 2.097706850792268,
+          "news_recency": 0.994318450077196,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.8576437916074481,
+          "sentiment_dispersion": 0.6605214479405489,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "LITE",
+        "weight": 0.0544582925195245,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.9367396593673966,
+          "momentum_4w_cs_rank": -0.975669099756691,
+          "momentum_12_1_cs_rank": 0.9951338199513382,
+          "realized_vol_20d_cs_rank": 0.9805352798053528,
+          "news_sentiment_cs_rank": -0.012165450121654486,
+          "raw_news_sentiment": 0.14072916590209064,
+          "log1p_article_count": 2.6829454891275244,
+          "news_recency": 0.999295882927485,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.8217421054840088,
+          "sentiment_dispersion": 0.6850100730548095,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "SIMO",
+        "weight": 0.05454527507193796,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.23600973236009737,
+          "momentum_4w_cs_rank": -0.9513381995133819,
+          "momentum_12_1_cs_rank": 0.9416058394160585,
+          "realized_vol_20d_cs_rank": 0.9659367396593674,
+          "news_sentiment_cs_rank": 0.5377128953771289,
+          "raw_news_sentiment": 0.4662878203612923,
+          "log1p_article_count": 0.9288046752417969,
+          "news_recency": 0.6544414113547494,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7832117974758148,
+          "sentiment_dispersion": 0.3369248011876357,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "SNDK",
+        "weight": 0.05564695402835307,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.902676399026764,
+          "momentum_4w_cs_rank": -0.9708029197080292,
+          "momentum_12_1_cs_rank": 1.0,
+          "realized_vol_20d_cs_rank": 0.8929440389294403,
+          "news_sentiment_cs_rank": -0.7128953771289538,
+          "raw_news_sentiment": -0.10448533773091605,
+          "log1p_article_count": 3.141290159949394,
+          "news_recency": 0.9854507929796642,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.8052859336901934,
+          "sentiment_dispersion": 0.6131502245436473,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "KXIAY",
+        "weight": 0.05910248760251835,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.9562043795620438,
+          "momentum_4w_cs_rank": -0.9951338199513382,
+          "momentum_12_1_cs_rank": 0.9902676399026764,
+          "realized_vol_20d_cs_rank": 0.9854014598540146,
+          "news_sentiment_cs_rank": -0.3917274939172749,
+          "raw_news_sentiment": 0.0,
+          "log1p_article_count": -0.7836060602492206,
+          "news_recency": 0.0,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.0,
+          "sentiment_dispersion": 0.0,
+          "unique_source_count": 0,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "COHR",
+        "weight": 0.056798982942041,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.8345498783454988,
+          "momentum_4w_cs_rank": -0.9854014598540146,
+          "momentum_12_1_cs_rank": 0.9172749391727495,
+          "realized_vol_20d_cs_rank": 0.9562043795620438,
+          "news_sentiment_cs_rank": -0.6155717761557178,
+          "raw_news_sentiment": -0.00994777335438347,
+          "log1p_article_count": 2.097706850792268,
+          "news_recency": 0.8591823135636965,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7007121699196952,
+          "sentiment_dispersion": 0.6118209535381496,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "CIEN",
+        "weight": 0.056317045108846164,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.9172749391727494,
+          "momentum_4w_cs_rank": -0.8880778588807786,
+          "momentum_12_1_cs_rank": 0.8686131386861313,
+          "realized_vol_20d_cs_rank": 0.975669099756691,
+          "news_sentiment_cs_rank": 0.35279805352798044,
+          "raw_news_sentiment": 0.36823109432478596,
+          "log1p_article_count": 0.6913842628891772,
+          "news_recency": 0.9891662551967301,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7362449765205383,
+          "sentiment_dispersion": 0.2194786541038818,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "FROG",
+        "weight": 0.05458167227690902,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.9124087591240876,
+          "momentum_4w_cs_rank": -0.6739659367396593,
+          "momentum_12_1_cs_rank": 0.8637469586374695,
+          "realized_vol_20d_cs_rank": 0.8832116788321167,
+          "news_sentiment_cs_rank": 0.9172749391727495,
+          "raw_news_sentiment": 0.7637193762233847,
+          "log1p_article_count": 1.2868046115757379,
+          "news_recency": 0.9891106488684228,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.9036680658658346,
+          "sentiment_dispersion": 0.31570247974866855,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "VRSN",
+        "weight": 0.057600339350599494,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.13381995133819946,
+          "momentum_4w_cs_rank": 0.0997566909975669,
+          "momentum_12_1_cs_rank": 0.2749391727493917,
+          "realized_vol_20d_cs_rank": -0.8880778588807786,
+          "news_sentiment_cs_rank": 0.9318734793187349,
+          "raw_news_sentiment": 0.7875165231650586,
+          "log1p_article_count": 0.3852961153012502,
+          "news_recency": 0.44244981174997006,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.8274874985218048,
+          "sentiment_dispersion": 0.09305126219987869,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "ABX",
+        "weight": 0.05825473579153595,
+        "model_inputs": {
+          "momentum_1w_cs_rank": 0.635036496350365,
+          "momentum_4w_cs_rank": 0.04622871046228716,
+          "momentum_12_1_cs_rank": 0.7518248175182483,
+          "realized_vol_20d_cs_rank": 0.26520681265206814,
+          "news_sentiment_cs_rank": -0.6447688564476886,
+          "raw_news_sentiment": -0.039031180185079915,
+          "log1p_article_count": 0.3852961153012502,
+          "news_recency": 0.9942888577065466,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7290258705615997,
+          "sentiment_dispersion": 0.3694359678775072,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "SHECY",
+        "weight": 0.057770073317128245,
+        "model_inputs": {
+          "momentum_1w_cs_rank": 0.13868613138686126,
+          "momentum_4w_cs_rank": -0.4209245742092458,
+          "momentum_12_1_cs_rank": 0.3965936739659368,
+          "realized_vol_20d_cs_rank": -0.45985401459854014,
+          "news_sentiment_cs_rank": 0.8783454987834549,
+          "raw_news_sentiment": 0.71373359083389,
+          "log1p_article_count": 0.3852961153012502,
+          "news_recency": 0.4121502159843817,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7596993744373322,
+          "sentiment_dispersion": 0.28250181674957275,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "ASM",
+        "weight": 0.05678456529415432,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.610705596107056,
+          "momentum_4w_cs_rank": -0.8394160583941606,
+          "momentum_12_1_cs_rank": 0.08515815085158152,
+          "realized_vol_20d_cs_rank": 0.7469586374695865,
+          "news_sentiment_cs_rank": 0.16788321167883202,
+          "raw_news_sentiment": 0.24087289614080576,
+          "log1p_article_count": 0.3852961153012502,
+          "news_recency": 0.6343200002799089,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7155009806156158,
+          "sentiment_dispersion": 0.011162732727825642,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "ZBRA",
+        "weight": 0.05789903182153178,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.6934306569343065,
+          "momentum_4w_cs_rank": -0.36739659367396593,
+          "momentum_12_1_cs_rank": 0.6155717761557178,
+          "realized_vol_20d_cs_rank": -0.36253041362530414,
+          "news_sentiment_cs_rank": 0.7420924574209247,
+          "raw_news_sentiment": 0.5975160116588274,
+          "log1p_article_count": 0.9288046752417969,
+          "news_recency": 0.5044295711285589,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.6381776332855225,
+          "sentiment_dispersion": 0.15758959975061643,
+          "unique_source_count": 1,
+          "label": "audit data, not a model input"
+        }
+      },
+      {
+        "symbol": "GLW",
+        "weight": 0.05633628237045496,
+        "model_inputs": {
+          "momentum_1w_cs_rank": -0.537712895377129,
+          "momentum_4w_cs_rank": -0.8540145985401459,
+          "momentum_12_1_cs_rank": 0.8199513381995134,
+          "realized_vol_20d_cs_rank": 0.7615571776155718,
+          "news_sentiment_cs_rank": 0.4793187347931873,
+          "raw_news_sentiment": 0.4345761092251111,
+          "log1p_article_count": 2.097706850792268,
+          "news_recency": 0.9891662551967301,
+          "current_weight": 0.0
+        },
+        "audit_only": {
+          "average_confidence": 0.7078113768781934,
+          "sentiment_dispersion": 0.3462189956796619,
+          "unique_source_count": 2,
+          "label": "audit data, not a model input"
+        }
+      }
+    ],
+    "exclusions": {
+      "EXPN": "EXPN has 57 sessions; need 253",
+      "FDXF": "FDXF has 111 sessions; need 253",
+      "MBGL": "MBGL has 90 sessions; need 253",
+      "MDLN": "MDLN has 220 sessions; need 253",
+      "VYLR": "VYLR has 23 sessions; need 253"
+    },
+    "held_symbols": [],
+    "survivorship_bias": "Historical training applies today's halal_new roster retrospectively.",
+    "news_contract": "News evidence is mandatory; incomplete queries abort the week.",
+    "portfolio_transition": {
+      "turnover": 0.789838396821507,
+      "transaction_cost_fraction": null,
+      "retained_count": 0,
+      "entered_count": 14,
+      "exited_count": 0,
+      "replacement_fraction": 1.0,
+      "stock_weight_cv": 0.027932690360427483,
+      "equal_weight_l1_distance": 0.009291017708755622
+    }
+  },
+  "warnings": []
+}

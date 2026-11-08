@@ -1,0 +1,75 @@
+{
+  "as_of": "2026-11-07",
+  "last_valuation_session": "2026-11-06",
+  "first_execution": "2026-01-05",
+  "initial_nav": 10000.0,
+  "weeks": 44,
+  "metrics": {
+    "PPO": {
+      "ending_nav": 12072.765135496853,
+      "total_return": 0.20727651354968524,
+      "weekly_max_drawdown": 0.11564294473629533,
+      "fees_usd": 136.06375628490335
+    },
+    "SPY": {
+      "ending_nav": 10793.353182934155,
+      "total_return": 0.07933531829341556,
+      "weekly_max_drawdown": 0.08392272582532156,
+      "fees_usd": 0.35367921701202915
+    },
+    "QQQ": {
+      "ending_nav": 10629.580733659544,
+      "total_return": 0.06295807336595449,
+      "weekly_max_drawdown": 0.1266788790596134,
+      "fees_usd": 0.3540338702988913
+    }
+  },
+  "holdings": [
+    {
+      "symbol": "BSX",
+      "shares": 37.74539984750865,
+      "close_price": 42.75,
+      "market_value": 1613.6158434809947,
+      "weight": 0.13365751966271366
+    },
+    {
+      "symbol": "INTC",
+      "shares": 26.060504778464416,
+      "close_price": 56.279998779296875,
+      "market_value": 1466.6851771198378,
+      "weight": 0.12148709600979715
+    },
+    {
+      "symbol": "NVDA",
+      "shares": 7.691086281352855,
+      "close_price": 186.63999938964844,
+      "market_value": 1435.4643388574304,
+      "weight": 0.11890104070995448
+    },
+    {
+      "symbol": "SNDK",
+      "shares": 1.5724483599937153,
+      "close_price": 835.0599975585938,
+      "market_value": 1313.0887236573667,
+      "weight": 0.10876453810871943
+    }
+  ],
+  "cash": 6243.911052381221,
+  "model_checkpoint_sha256": "5b12f183891961b2d4ff29f0184652fe0d1c0341830278b22444b0eda73c9300",
+  "model_training_cutoff": "2025-12-31",
+  "last_training_outcome": "2025-12-29 00:00:00",
+  "causality_check": {
+    "future_price_multiplier": 7,
+    "state_digest_unchanged": true,
+    "weights_unchanged": true
+  },
+  "cost_model": "Configured IBKR Singapore Tiered with actual rolling NAV per rebalance",
+  "book_convention": "Friday marks, positions held across weekend, net delta rebalances at next week's first XNYS open; fees deducted from cash",
+  "price_convention": "Adjusted OHLCV; fractional positions; dividend-reinvestment approximation; no slippage, tax or cash interest; no final liquidation",
+  "survivorship_bias": true,
+  "roster_retrieved_at": "2026-09-12T23:14:04.024067+00:00",
+  "production_current_unchanged": "v2026-11-07-91ba085dd8c6",
+  "production_news_unchanged": true,
+  "pi_accessed": false,
+  "orders_submitted": false
+}

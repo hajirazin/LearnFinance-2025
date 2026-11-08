@@ -1,0 +1,11 @@
+{
+  "http_status": 200,
+  "model_version": "v2026-11-07-91ba085dd8c6",
+  "storage_backend": "hf_first",
+  "k": 14,
+  "cash_weight": 0.21016160317849297,
+  "weights_identical_to_candidate_graph": true,
+  "state_digest": "sha256:45ef4f613eb7cbb7454f1c82bbd092ee0a35aadfa3925c0c0ecaf39f8da15cf9",
+  "orders_submitted": false,
+  "pi_accessed": false
+}

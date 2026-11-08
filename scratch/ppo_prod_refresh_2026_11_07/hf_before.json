@@ -1,0 +1,12 @@
+{
+  "repo": "hajirazin/learnfinance-models-ppo-discovery",
+  "main_sha": "caf4377eb4ab84779640d243c5e8d78a97f10f3d",
+  "version": "v2026-09-12-13a430da1914-seed42",
+  "metrics": {
+    "test_cagr": 0.5765871587272448,
+    "test_max_drawdown": 0.15236282891060116,
+    "test_sharpe": 1.6475881666850891,
+    "val_cagr_median": 0.0704030572884431
+  },
+  "public_read": true
+}

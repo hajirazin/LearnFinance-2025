@@ -1,0 +1,68 @@
+{
+  "as_of": "2026-11-06T16:54:31.053761+00:00",
+  "address": "razinpi.local:7233",
+  "schedules": [
+    {
+      "id": "us-ppo-discovery-training",
+      "paused": true,
+      "note": "Evy"
+    },
+    {
+      "id": "us-ppo-discovery-allocate",
+      "paused": true,
+      "note": "evy"
+    },
+    {
+      "id": "us-weekly-allocate",
+      "paused": false,
+      "note": "No Reason"
+    },
+    {
+      "id": "india-weekly-allocate",
+      "paused": false,
+      "note": null
+    },
+    {
+      "id": "india-monthly-training",
+      "paused": true,
+      "note": "Evy"
+    },
+    {
+      "id": "us-sac-halal-training",
+      "paused": true,
+      "note": "Evy"
+    },
+    {
+      "id": "us-sac-training",
+      "paused": true,
+      "note": "Evy"
+    },
+    {
+      "id": "us-forecasters-training",
+      "paused": true,
+      "note": "Evy"
+    },
+    {
+      "id": "us-sac-halal-allocate",
+      "paused": false,
+      "note": "evy"
+    },
+    {
+      "id": "us-alpha-hrp",
+      "paused": false,
+      "note": null
+    },
+    {
+      "id": "us-double-hrp",
+      "paused": true,
+      "note": "evy"
+    },
+    {
+      "id": "india-double-hrp",
+      "paused": false,
+      "note": "no r"
+    }
+  ],
+  "running_workflows": [],
+  "worker_running": true
+}

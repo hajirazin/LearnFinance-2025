@@ -1,0 +1,8 @@
+{
+  "activity": "build_ppo_discovery_state",
+  "payload_data_bytes": 9103285,
+  "protobuf_payload_bytes": 9103314,
+  "gzip_bytes_diagnostic_only": 3880088,
+  "eligible_assets": 412,
+  "state_digest": "sha256:45ef4f613eb7cbb7454f1c82bbd092ee0a35aadfa3925c0c0ecaf39f8da15cf9"
+}

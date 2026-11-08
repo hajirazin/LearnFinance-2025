@@ -1,0 +1,13 @@
+{
+  "job_id": "ppo_discovery:ppo-production-refresh-2026-11-07",
+  "model_type": "ppo_discovery",
+  "status": "failed",
+  "started_at": "2026-11-06T22:49:00.740736+00:00",
+  "completed_at": "2026-11-07T04:07:34.421143+00:00",
+  "progress": {
+    "stage": "write_candidate",
+    "device": "mps"
+  },
+  "error": "401 Client Error. (Request ID: Root=1-6aeea406-7da1881a4fb4354c3a757fbe;aefee96f-45e2-4afa-80f1-68b54888e9cd)\n\nRepository Not Found for url: https://huggingface.co/api/models/hajirazin/learnfinance-models-ppo-discovery/preupload/v2026-11-07-91ba085dd8c6.\nPlease make sure you specified the correct `repo_id` and `repo_type`.\nIf you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication\nInvalid username or password.\nNote: Creating a commit assumes that the repo already exists on the Huggingface Hub. Please use `create_repo` if it's not the case.",
+  "result": null
+}

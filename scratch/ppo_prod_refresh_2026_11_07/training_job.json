@@ -1,0 +1,13 @@
+{
+  "request": {
+    "universe": "halal_new",
+    "end_date": "2026-11-07",
+    "experiment_id": "ppo-production-refresh-2026-11-07",
+    "snapshot_sha256": "sha256:a53e9f88030417c93bd616f0121ea02087db0df12cd6b11ea7553ebcef143925"
+  },
+  "response": {
+    "job_id": "ppo_discovery:ppo-production-refresh-2026-11-07",
+    "status": "pending",
+    "message": "candidate training started; promotion is manual"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "primary_provider": "yfinance",
+  "fallback_provider": null,
+  "fallback_dates": [],
+  "source_url": null,
+  "retrieved_at": null
+}

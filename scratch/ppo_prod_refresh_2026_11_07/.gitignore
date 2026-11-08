@@ -1,0 +1,6 @@
+*.log
+*.pt
+*.pkl
+*.db
+__pycache__/
+yfinance_cache/

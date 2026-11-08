@@ -1,0 +1,30 @@
+{
+  "start": "2026-11-02 open",
+  "end": "2026-11-06 close",
+  "starting_capital": 10000.0,
+  "retrospective_not_live": true,
+  "lookahead_monday_close_in_input": true,
+  "cash_weight": 0.21016160317849297,
+  "metrics": {
+    "PPO": {
+      "return": -0.10018091940493223,
+      "gross_return": -0.09967312274675855,
+      "entry_cost_usd": 5.077966581736325,
+      "ending_value": 8998.190805950677
+    },
+    "SPY": {
+      "return": -0.03184787308065318,
+      "entry_cost_usd": 0.35332700969457986,
+      "ending_value": 9681.521269193468
+    },
+    "QQQ": {
+      "return": -0.056441089762898966,
+      "entry_cost_usd": 0.35360997505530795,
+      "ending_value": 9435.58910237101
+    }
+  },
+  "ppo_minus_spy_pp": -6.833304632427906,
+  "ppo_minus_qqq_pp": -4.373982964203327,
+  "entry_cost_assumption": "Start entirely in cash; normal IBKR Singapore Tiered model; no exit trade",
+  "dividends": "Yahoo adjusted OHLC; fractional notional positions; no cash interest"
+}
