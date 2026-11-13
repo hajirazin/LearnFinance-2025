@@ -1,0 +1,189 @@
+# AlphaAllocationV2
+
+AlphaAllocationV2 is a research project for weekly US halal portfolios. It starts with the roughly 400 names in `halal_new` and asks two questions in order. Which signals help rank the universe and select 15 names? Given those same 15 names, which inputs and methods produce better portfolio weights under realistic trading costs and risk constraints?
+
+The current US Alpha-HRP strategy uses a PatchTST weekly return forecast, a 15/20 rank-band sticky selector, and HRP weights. It is the incumbent benchmark. This project will test the evidence for each decision, from the data and features through the models and portfolio rules. All AlphaAllocationV2 experiments belong in this scratch folder. [US Alpha-HRP workflow](../../temporal/workflows/us_alpha_hrp.py) · [Prior Alpha-HRP audit](../alpha_hrp_audit_2026_10_03/CORRECTION.md)
+
+## Historical datasets
+
+The dataset covers January 1, 2016 through December 31, 2025. It applies the August 2026 `halal_new` snapshot historically, so membership has survivorship bias. Both builds use the same 428-security research roster. The source snapshot has 430 entries. `JPY` and `HKD` are ETF cash holdings whose codes collide with U.S. listings. Cameco appears as Toronto-listed `CCO` in the holdings and uses its NYSE ticker `CCJ` here. [Frozen universe snapshot](../patchtst_full_universe_audit_2026_08_23/results/manifest.json) · [Cameco listing information](https://www.cameco.com/invest/stock-information)
+
+- **Daily OHLCV** lives in `data/daily_ohlcv_2016_2025.csv`, with one row per observed symbol and session. It uses production’s Yahoo Finance loader with `auto_adjust=True`. The companion `data/ohlcv_manifest.json` records the roster, coverage by symbol, missing symbols, source versions, and CSV checksum. The build can recover Kenvue’s 2025 bars from the prior Yahoo audit. Its 2023–2024 coverage is still missing when that archive is used. [Prior Yahoo OHLCV archive](../alpha_hrp_audit_2026_10_03/full_price_manifest.json)
+- **Weekly news sentiment** builds into `data/news/news_v1.duckdb`. Production uses Alpaca news and pinned FinBERT, with windows open at the previous Monday 09:00 and closed at the current Monday 09:00 in New York time. The 521 complete windows end between January 11, 2016 and December 29, 2025. The database preserves scored articles and verified coverage. Its `weekly_sentiment` table uses the production PPO news adapter for sentiment, article count, recency, and dispersion. Verified zero-news windows have a count of zero. The aggregate is published after coverage is complete. [Production news backfill](../../brain_api/brain_api/news_etl/backfill.py) · [Alpaca historical news](https://docs.alpaca.markets/us/docs/historical-news-data)
+
+Run from the repository root. News needs `ALPACA_API_KEY` and `ALPACA_API_SECRET` in the process environment or the local `brain_api/.env`. The production backfill resumes from verified windows in the scratch database.
+
+```bash
+PYTHONPATH=brain_api uv run --project brain_api --locked python scratch/AlphaAllocationV2/build_dataset.py prices --recover-kvue-from-audit
+PYTHONPATH=brain_api uv run --project brain_api --locked python scratch/AlphaAllocationV2/build_dataset.py news
+```
+
+## Data quality and EDA
+
+The coverage audit uses all ten years and all 428 roster securities. The price CSV has 1,009,024 distinct daily bars for 425 securities. No bar failed the OHLCV validity checks or landed outside the XNYS calendar. The 425 histories had no missing XNYS dates between their first and last observed bars. Strict consecutive-Friday pairs produced 197,020 raw return observations over 491 weeks, with a median of 405 securities per week. [Coverage, zero-volume bars, and news availability](data/eda/data_coverage.png)
+
+- **Price checks.** The file has 7,762 zero-volume daily bars across 43 securities. In 2,053 Friday pairs, at least one endpoint reported zero volume. Validate thin or stale closes and reconcile splits, spinoffs, and ADR ratio changes before using affected returns.
+  - `SXYAY` showed a 200% gain from June 22 to June 29, 2018, with zero volume at both closes. The stored price tripled on June 27, the effective date of Citi’s ADR ratio change. The action distributed two additional depositary shares per existing share. The exact 3× price break and zero volume point to an adjustment or stale-price problem. The affected closes require independent verification. [Citi’s Sika ADR notice](https://depositaryreceipts.citi.com/adr/common/file.aspx?idf=4562)
+  - `DHR` showed a 62% gain from July 1 to July 8, 2016. Danaher spun off Fortive on July 2 and distributed one Fortive share per two Danaher shares. The stored series jumped 61% on July 5, Fortive’s first regular trading session. Verify the endpoint prices and account for the distributed shares when reconstructing the week’s return. [Danaher’s Fortive separation](https://investors.danaher.com/2016-07-02-Danaher-Corporation-Completes-Separation-of-Fortive-Corporation)
+- **News checks.** All 222,988 Monday symbol-windows are accounted for, including 122,949 verified empty windows. Joining the following Monday’s aggregate to a Friday decision would include 50,076 article–symbol records unavailable at Friday’s close. Build Friday features from article-level records and their creation and revision timestamps. Check coverage and mark records whose available revision cannot be reconstructed.
+- **Outlier checks.** The 2016–2024 charts use 176,696 observed returns across all 420 tickers with at least 30 weekly returns and nonzero variance. Three sigma flagged 2,374 returns, and the 1.5-IQR rule flagged 7,362, including all the three-sigma flags. The histogram, normal Q–Q plot, and six example box plots draw on `../NW_MSDS/MSDS_401/practice/normality_eda` and the Big Sales Mart EDA notebook in `../Machine-Learning-Projects`. Use flags to prioritize validation. Keep verified market moves, and leave any unresolved return label unfilled. [Return and outlier plots](data/eda/return_outliers.png)
+
+Run `python scratch/AlphaAllocationV2/audit_data.py` from the repository root with DuckDB, pandas, NumPy, exchange-calendars, and Matplotlib installed. The return plots reserve 2025 for later evaluation. The coverage checks span the full archive.
+
+Run the same command with `--full-period-boxplot` for a descriptive chart of all 197,020 Friday-to-Friday returns, including 2025. The calendar has 521 intervals between consecutive Fridays, and 491 have an XNYS session at both ends. The pooled box spans −2.06% to +2.62%. It has 98,510 points outside the box and 10,858 beyond the 1.5-IQR whiskers. The command also prints distinct ticker counts, repeat crossings, and pooled and per-ticker three-sigma counts. These counts include the raw prices flagged above. [Full-period Friday return box plot](data/eda/friday_return_boxplot_2016_2025.png)
+
+Run `python scratch/AlphaAllocationV2/audit_data.py --weekly-universe` to plot the available universe at each trading Friday’s close. A usable price is a finite, positive adjusted close with positive reported volume. This checks price availability and volume, with corporate-action reconciliation still pending. News coverage requires a complete seven-day window ending at that Friday’s scheduled close and an article revision available by the cutoff for each known article. A verified window with zero articles is usable and has neutral sentiment. The median Friday has 404 securities with usable prices. January 8, 2016 was the minimum at 356 out of the 425 tickers with price history. That Friday had 54 tickers with no bar and 15 with zero reported volume. It also had only partial news coverage at the archive boundary. The CSV lists each excluded trading Friday, reason, and any observed close and volume for those 69 tickers. [Weekly universe chart](data/eda/usable_universe_by_week.png) · [Friday price exclusions](data/eda/friday_price_exclusions.csv)
+
+The downloaded `DELL` series starts in August 2016. Dell reports December 28, 2018 as the first regular trading day of its Class C shares under `DELL`. Verify which security the earlier rows represent before using them for modeling. [Dell’s listing announcement](https://investors.delltechnologies.com/news-releases/news-release-details/dell-technologies-completes-class-v-transaction)
+
+Run `python scratch/AlphaAllocationV2/audit_data.py --first-friday-cohort` to regenerate the coverage and return plots for the 356 securities with usable prices on January 8, 2016. A return requires usable prices at both Friday closes. The full period has 174,573 returns across 491 weeks. The separate histogram, normal Q–Q plot, and per-ticker diagnostics use the 2016–2024 development period. Corporate-action reconciliation is pending for flagged returns such as Danaher’s July 2016 week. [Pooled box plot](data/eda/first_friday_cohort/friday_return_boxplot_2016_2025.png) · [Return diagnostics](data/eda/first_friday_cohort/return_outliers.png) · [Data coverage](data/eda/first_friday_cohort/data_coverage.png) · [Summary counts](data/eda/first_friday_cohort/summary.json)
+
+Add `--exclude-top-whisker-tickers` to redraw the plots for 346 securities after removing `MSTR`, `IMPUY`, `SMCI`, `TSLA`, `VIPS`, `AMD`, `GFI`, `COHR`, `EDU`, and `MMYT`. Those ten had 976 crossings of the original whiskers. After recalculating the thresholds, 8,541 of 169,663 returns cross the new whiskers, compared with 9,187 of 174,573 in the 356-stock cohort. The ten were selected using the full 2016–2025 period, so this comparison is descriptive. [Pooled box plot](data/eda/first_friday_cohort/without_top_10/friday_return_boxplot_2016_2025.png) · [Return diagnostics](data/eda/first_friday_cohort/without_top_10/return_outliers.png) · [Data coverage](data/eda/first_friday_cohort/without_top_10/data_coverage.png) · [Weekly universe](data/eda/first_friday_cohort/without_top_10/usable_universe_by_week.png) · [Summary counts](data/eda/first_friday_cohort/without_top_10/summary.json)
+
+## Stage 1 · Screen roughly 400 names down to 15
+
+The [training history research note](TRAINING_HISTORY_RESEARCH.md) reviews how much history to fit on and how to evaluate stocks the model has never seen.
+
+### Friday dataset and feature correlations
+
+The [Friday dataset](data/friday/friday_dataset.parquet) contains one row per trading Friday and symbol for the 356-stock cohort. The panel includes missing observations, the exact exchange cutoff in UTC, data-quality statuses, the source return, and the audited forward return. Use `forward_return` as the decimal label, or `forward_return_pct` for the same value in percent. `realized_return_rank` ranks all usable labels within each Friday, with 1 for the highest return and average ranks for ties. Rows with missing labels have missing ranks. `realized_rank_universe_size` records the number of usable labels that Friday. These fields, `next_friday`, `raw_yahoo_forward_return`, and `label_status` describe the outcome and should stay out of the model inputs. Annualized volatility uses decimal units.
+
+| Feature | Calculation at the Friday close |
+|---|---|
+| `momentum_5d`, `momentum_20d` | Compounded simple return over the last 5 or 20 exchange sessions |
+| `momentum_12_1` | Adjusted close 21 sessions ago divided by adjusted close 252 sessions ago, minus one |
+| `volatility_20d`, `volatility_252d` | Sample standard deviation of the last 20 or 252 daily log returns, multiplied by `sqrt(252)` |
+| `relative_volume_20d` | Friday’s reported volume divided by the median of the prior 20 sessions |
+| `news_sentiment`, `news_article_count` | Distinct articles from the previous seven days. Use the latest article revision available at the cutoff and weight FinBERT sentiment by confidence and exponential recency with a 168-hour time constant. |
+
+Price features require usable observations throughout their input windows. Known unresolved price breaks invalidate features that cross them. The news fields are both zero when coverage is complete and there are zero articles. They are missing when the archive has incomplete coverage or a known article lacks a cutoff-eligible revision. The news source is a historical backfill and Yahoo adjusted prices are retrospectively adjusted.
+
+The [weekly audit](data/friday/flagged_weekly_returns.csv) checks the union of pooled IQR, pooled three-sigma, and per-stock three-sigma flags against Alpaca’s adjusted SIP returns. It accepts agreement within one percentage point and leaves unresolved labels missing. The [daily audit](data/friday/flagged_daily_returns.csv) checks moves of 40% or larger. Alpaca OTC access returned HTTP 403, so SIP misses include OTC securities without independent prices. `observed_yahoo` labels are based on the original bars and the endpoint checks. The audit verifies the flagged subset.
+
+Danaher’s July 1–8, 2016 shareholder return is `($80.86 + 0.5 × $50.20) / $102.32 − 1 = 3.56%`, using raw SIP closes and the Fortive distribution ratio. Daily features use a continuity adjustment at the first post-spinoff session. Kao’s May 2018 and Hitachi’s February 2025 ADR changes are recorded as unresolved because a comparable independent price series was unavailable. [Alpaca historical bars](https://docs.alpaca.markets/us/reference/stockbars) · [Danaher distribution](https://investors.danaher.com/2016-07-02-Danaher-Corporation-Completes-Separation-of-Fortive-Corporation) · [Kao ADR filing](https://www.sec.gov/Archives/edgar/data/1734407/000119380518000612/e617967_f6ef-kao.htm) · [Hitachi ADR milestones](https://depositaryreceipts.citi.com/adr/guides/pgm_d.aspx?cusip=433578507&pageId=16&subpageID=104&typeDisplay=A)
+
+The [heatmap](data/friday/feature_spearman_heatmap.png) averages each pair’s cross-sectional Spearman correlation across 2016–2024 Fridays. A pair uses the stocks with both features available that Friday and requires at least 30 stocks and nonconstant ranks. [Pairwise counts and correlations](data/friday/feature_spearman.csv) · [Dataset counts](data/friday/summary.json)
+
+Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_friday_dataset.py --ohlcv-heatmap` to add Friday’s Yahoo adjusted open, high, low, and close and reported share volume to the heatmap. The command joins the daily bars to the saved Friday panel and uses the same 2016–2024 Spearman calculation. [13-feature heatmap](data/friday/feature_spearman_with_ohlcv_heatmap.png) · [Exact correlations](data/friday/feature_spearman_with_ohlcv.csv)
+
+The realized-rank chart applies the same weekly calculation to each feature and the reverse of the realized rank, so a positive value means higher feature values tend to precede better returns. Both Fridays must fall within 2016–2024. This is an exploratory, univariate measure across the universe. [Feature versus realized rank chart](data/friday/feature_vs_realized_rank.png) · [Mean correlations](data/friday/feature_rank_ic.csv) · [Weekly correlations](data/friday/weekly_feature_rank_ic.csv)
+
+Regenerate from the repository root with `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_friday_dataset.py` in an environment with the audit dependencies and `requests`. Add `--fetch-verification` with Alpaca credentials and `python-dotenv` to refresh the independent price evidence.
+
+### Five versus eight features
+
+Test whether the five features retained at the 0.20 Spearman cutoff can match the gross weekly return of the eight-feature screen. Compare pooled ridge regressions with the same fixed penalty and the same rows, using five years of history and refitting monthly. Fit on completed labels only. Evaluate on 2025 decision Fridays with a trading session on the following Friday inside the archive. The feature sets came from 2016–2024 exploration. Earlier research has used 2025, so this is a historical walk-forward comparison.
+
+Both models score the same stocks with all eight inputs available at the decision. Select each equal-weight top 15 before inspecting forward labels. Omit a week from the paired return comparison if either basket has a missing return and record the omission. Use the mean difference in paired weekly basket returns as the primary metric, with a 95% interval from a moving-block bootstrap of four consecutive evaluated weeks. Compare both models with the same equal-weight benchmark over scorable stocks with observed returns. Track mean weekly Spearman rank correlation and how many names each basket replaces between consecutive evaluated decisions.
+
+Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/compare_feature_sets.py` from the repository root with scikit-learn and the audit dependencies installed. [Comparison summary](data/friday/feature_comparison/summary.json) · [Weekly results](data/friday/feature_comparison/weekly_results.csv) · [Ranked picks](data/friday/feature_comparison/top_15_picks.csv)
+
+The comparison scored 47 weeks and evaluated 38 paired weeks with complete returns for both top-15 baskets. Mean gross weekly returns were 1.12% for five features and 1.36% for eight features. The paired difference for eight minus five was +0.24 percentage points per week, with a 95% interval of −0.36 to +0.79 points. The five-feature basket replaced 43% of its names on average between evaluated decisions, versus 58% for eight features. The return difference is inconclusive on these weeks.
+
+### Seven versus eight features
+
+The seven features retained at the 0.25 Spearman cutoff add Friday adjusted close and reported volume to the five-feature set. Run the same comparison command with `--seven-vs-eight`. Both models use the same candidate stocks, five-year rolling training windows, monthly refits, and 38 paired weeks as the earlier comparison. The seven-feature model earned 1.34% gross per week and replaced 40% of its names on average, versus 1.36% and 58% for the original eight. Seven minus eight averaged −0.023 percentage points per week, with a 95% interval of −0.54 to +0.59 points. The 2025 period has already informed research comparisons, so this result is exploratory. [Summary](data/friday/feature_comparison/seven_vs_eight/summary.json) · [Weekly results](data/friday/feature_comparison/seven_vs_eight/weekly_results.csv) · [Ranked picks](data/friday/feature_comparison/seven_vs_eight/top_15_picks.csv)
+
+At 0.20, Friday volume and 20-day relative volume cross the cutoff at +0.233. The six-feature arm keeps relative volume to compare trading activity with each stock’s own history. Run the comparison with `--six-seven-eight` to evaluate all three arms on the same 38 weeks. Mean gross weekly top-15 returns were 1.20%, 1.34%, and 1.36% for six, seven, and eight features. The 95% intervals for all paired return differences include zero. [Summary](data/friday/feature_comparison/six_seven_eight/summary.json) · [Weekly results](data/friday/feature_comparison/six_seven_eight/weekly_results.csv) · [Ranked picks](data/friday/feature_comparison/six_seven_eight/top_15_picks.csv)
+
+The same run saves each stock’s Friday-to-Friday prediction, actual return, rank, and signed error (prediction minus actual) for all 47 scored Fridays. The weekly results include the arithmetic mean of the 15 selected stock forecasts and the realized return of those same names at equal weights. A basket’s realized return and error are blank when any pick lacks an observed outcome. Return columns use decimal units (`0.01` is 1%). [Stock forecasts](data/friday/feature_comparison/six_seven_eight/stock_forecasts.parquet) · [Weekly basket chart](data/friday/feature_comparison/six_seven_eight/basket_predicted_vs_actual.png)
+
+On the 38 matched Fridays, each model has 13,316 stock forecasts with observed outcomes. Stock mean absolute errors range from 3.17 to 3.18 percentage points. Basket mean absolute errors are 2.62, 2.59, and 2.71 points for six, seven, and eight features, respectively. The seven-feature basket forecast averaged 0.85% versus a realized 1.34%. These are descriptive forecast errors on the same 2025 comparison period. [Forecast accuracy summary](data/friday/feature_comparison/six_seven_eight/summary.json)
+
+### Ridge and PatchTST on matched 2025 Fridays
+
+Compare three screens on identical eligible stocks each Friday. Use the same 356-stock research cohort and audited forward returns as the prior Ridge experiment.
+
+| Screen | Input ending at the decision Friday | Objective |
+|---|---|---|
+| Seven-feature Ridge | Latest values of 20-day momentum, 12–1 momentum, 20-day volatility, 20-day relative volume, FinBERT sentiment, adjusted close, and reported volume | Squared error on the next Friday's simple return and an L2 penalty with `alpha=1.0` |
+| Seven-feature PatchTST | The same channels over the last 12 trading Fridays, with four-Friday patches and a two-Friday stride | MSE on the next Friday's simple return, using one regression output that combines the channels |
+| Close-only PatchTST | Daily adjusted-close log returns in the trailing 365 calendar days, with the current 10-session patches and five-session stride | MSE on the five next daily log returns, compounded into a simple return for ranking |
+
+The close-only model uses every session in `(Friday − 365 calendar days, Friday]`, including the decision Friday. It needs the preceding close to compute the first return. The context is left-padded to a common width that preserves whole patches. Padding is excluded from input normalization and appears as normalized zeros in the partial first patch. Missing or unresolved returns during actual sessions make the row ineligible. The weekly PatchTST uses train-only channel scaling and one train-only return scale. The daily model uses the incumbent's per-window input normalization and computes its MSE on daily log returns in their original units. [Production config](../../brain_api/brain_api/core/patchtst/config.py) · [PatchTST regression head](https://huggingface.co/docs/transformers/v4.57.3/model_doc/patchtst#patchtstforregression)
+
+Both Friday endpoints must be sessions with exactly five exchange sessions between them, counting the end Friday and excluding the start Friday. This makes the forecast horizons identical. Training rolls five years and refits at the first comparable Friday of each month. Training labels must end strictly before the refit. Ridge fits all eligible labeled rows. Each neural fit holds back the last 20% of eligible dates for validation and excludes training outcomes ending on or after that validation start. It uses one seed, a 12-epoch cap, batch size 512, and the production rank-IC checkpoint rule with validation MSE as the tie-break. Daily and weekly targets are verified to agree after compounding wherever both are available.
+
+The primary measure is paired mean gross realized return of the equal-weight top 15. Each model selects its basket before using its actual returns. Basket returns remain missing when a pick has an unresolved outcome. The three-way summary requires a complete basket for each model and uses four-observation moving blocks for paired intervals. This replay uses a historical roster and price snapshot and reuses 2025 for exploration. It estimates the screens' close-to-close performance before trading costs. The close-only arm is a historical refit with the requested context, so its weights are specific to this replay.
+
+Run `PYTHONPATH=brain_api python -u scratch/AlphaAllocationV2/compare_patchtst.py --device mps --epochs 12 --batch-size 512` from the repository root with the audit dependencies and the repo-pinned PyTorch 2.9.1, Transformers 4.57.3, and yfinance 1.0 installed. Each completed monthly refit saves its forecasts and checkpoints. Repeating the command resumes completed months with matching code, inputs, and settings. [Runner](compare_patchtst.py) · [Coverage](data/friday/patchtst_comparison/coverage.csv) · [Result summary](data/friday/patchtst_comparison/summary.json)
+
+The 2025 run scored 39 Fridays with a median of 344 eligible stocks. The trailing 365-day windows contained 250 or 251 trading sessions during evaluation. The basket comparison uses the 24 Fridays on which all 45 picks across the three baskets had observed outcomes, counting overlapping picks in each basket. Mean gross returns were 0.56% for Ridge, 1.09% for seven-feature PatchTST, and 0.56% for close-only PatchTST. The seven-feature PatchTST led both by about 0.53 percentage points per week. Its 95% paired intervals were −0.28 to +1.50 points against Ridge and −0.11 to +1.21 points against close-only PatchTST. Its basket mean absolute error was 2.18 points, compared with 2.81 for Ridge and 2.78 for close-only PatchTST. [Weekly baskets](data/friday/patchtst_comparison/weekly_results.csv) · [Stock forecasts](data/friday/patchtst_comparison/stock_forecasts.parquet) · [Forecast chart](data/friday/patchtst_comparison/basket_predicted_vs_actual.png)
+
+### Sticky-rank replay
+
+Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/compare_sticky_rank.py` to reuse the saved forecasts and apply the production 15/20 rule. Start with the top 15, retain prior picks with current ranks at or above the top-20 cutoff, and fill open slots by current rank. Carry the selected names through all 39 scored Fridays, including decisions whose actual returns are missing. Across calendar gaps, carry the last scored selection forward. Return and hit-rate comparisons use the 23 Fridays with complete outcomes for all six baskets. Report replacement rates across all 38 scored transitions. [Production selector](../../brain_api/brain_api/core/sticky_selection.py) · [Weekly results](data/friday/patchtst_comparison/sticky_rank/weekly_results.csv) · [Picks and ranks](data/friday/patchtst_comparison/sticky_rank/top_15_picks.csv)
+
+Sticky mean gross returns were 0.53% for Ridge, 1.21% for seven-feature PatchTST, and 0.46% for close-only PatchTST. Stickiness added 0.08, 0.09, and 0.12 percentage points per week, respectively. Each paired interval for the sticky rule's effect includes zero. Replacement rates fell from 40.7% to 32.5%, 64.4% to 56.0%, and 32.3% to 24.7%. These are changes in selected names at equal weights before trading costs. The forecasts and their full-universe ranks are fixed throughout this replay. [Sticky summary](data/friday/patchtst_comparison/sticky_rank/summary.json)
+
+### V1 holdout with HRP and trading costs
+
+See the [frozen protocol](V1_HOLDOUT_PROTOCOL.md) for the October 5 to November 9, 2026 comparison of the current 60-session close-only setup and the seven-feature challenger. Fit the models on the prior archive and save the checkpoints before scoring the holdout. Run these commands from the repository root with the PatchTST replay dependencies installed. The news command uses historical Alpaca credentials and the pinned local FinBERT cache.
+
+```sh
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/train_v1_holdout.py --device mps
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py prices
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py news
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_holdout.py
+```
+
+[Summary](data/v1_holdout/summary.json) · [Weekly returns and costs](data/v1_holdout/weekly_results.csv) · [Daily NAV](data/v1_holdout/nav.csv) · [HRP weights](data/v1_holdout/weights.csv) · [Simulated trades](data/v1_holdout/trades.csv)
+
+### Five V1 hypotheses
+
+The [protocol](V1_HYPOTHESES.md) compares the current specification with each single change, all three changes together, and seven features plus the smaller training universe with the 60-session context. It keeps the daily prediction target, loss, sticky selector, HRP and simulated cost model fixed. Each test uses a common inference universe within its pair. The tests use paired weekly net returns and Holm correction at 5%. The portfolio leaderboard uses the intersection of eligible stocks across all six models.
+
+```sh
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py news --news-start 2025-12-22 --news-end 2026-11-09
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/train_v1_hypotheses.py --device mps
+PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_hypotheses.py
+```
+
+[Hypothesis results](data/v1_hypotheses/summary.json) · [Weekly net returns](data/v1_hypotheses/weekly_results.csv) · [Daily NAV](data/v1_hypotheses/nav.csv)
+
+The January 12–November 9, 2026 replay had 40 paired holding periods. On the common set of 403–418 eligible names per decision, compounded net returns were +39.82% for the V1 reference, −10.21% for H1, −5.59% for H2, +17.08% for H3, +6.28% for H4, and +2.77% for H5. H3 was the strongest challenger by net return. H5 had the smallest drawdown at 14.74% and the highest 2025 validation rank correlation at +0.0340. All one-sided Holm-adjusted p-values were 1.00. Keep the current V1 specification based on this comparison. The fixed 2021–2024 fitting and 2025 validation dates are specific to the research replay. [Summary and pair-specific results](data/v1_hypotheses/summary.json)
+
+Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_hypotheses.py --equal-weight` to replay the saved forecasts at 1/15 per holding. The replay carries NAV forward from $10,000 and applies the same costs. The pair-specific sticky picks match the HRP run. On the common candidate set, net returns were +46.13% for V1, −7.03% for H1, −6.65% for H2, +28.67% for H3, +12.51% for H4, and +3.30% for H5. All Holm-adjusted p-values for improvement over V1 were 1.00. [Equal-weight summary](data/v1_hypotheses/equal_weight/summary.json) · [Weekly results](data/v1_hypotheses/equal_weight/weekly_results.csv)
+
+### Top-15 ranking and market hypotheses
+
+Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/compare_v1_rank_market.py` with the saved equal-weight replay and Yahoo's dividend-adjusted SPY opens in `data/v1_hypotheses/diagnostics/spy_adjusted_prices.csv`. H11–H15 test whether the sticky portfolio finds more of the realized top 15 per Friday than V1. Rank actual adjusted-close returns from Friday to the next trading Friday exactly seven days later, using the eligible candidate set common to each pair. The output includes strict and sticky hit counts, actual winners, and weekly Spearman correlations. The tests use 37 matched Fridays.
+
+H16–H20 test whether each challenger earns positive weekly net excess return over SPY. Compare the net portfolio NAV returns with dividend-adjusted SPY open-to-open returns for the same 40 holding periods. SPUS is a secondary halal benchmark. Both ETFs use buy-and-hold returns before benchmark trading costs. Report the number of periods ahead and the mean excess in market-down periods. Use the existing four-observation circular bootstrap for one-sided p-values and Holm correction across all ten tests at 5%. [Summary](data/v1_hypotheses/diagnostics/summary.json) · [Actual top 15 and model hits](data/v1_hypotheses/diagnostics/ranking_weekly.csv) · [Weekly market comparison](data/v1_hypotheses/diagnostics/market_weekly.csv)
+
+| Rank and market tests | Mean top-15 hits, challenger vs. V1 | Cumulative lead vs. SPY | Periods ahead of SPY | Mean excess when SPY fell |
+|---|---:|---:|---:|---:|
+| H11 / H16 · Seven features | 0.81 vs. 1.65 | −14.62 pp | 18/40 | −0.76 pp |
+| H12 / H17 · One-year input | 1.51 vs. 1.70 | −16.00 pp | 23/40 | −2.70 pp |
+| H13 / H18 · 356-stock training cohort | 1.84 vs. 1.70 | +33.33 pp | 25/40 | −0.56 pp |
+| H14 / H19 · All three changes | 1.97 vs. 1.65 | +4.25 pp | 26/40 | −2.66 pp |
+| H15 / H20 · Seven features and 356-stock training | 0.81 vs. 1.65 | −5.06 pp | 18/40 | −0.39 pp |
+
+All ten Holm-adjusted p-values were 1.00. H3 was the strongest challenger by cumulative excess return. H4 found the most actual top-15 winners. V1 beat SPY by 42.51 percentage points in the H3 matched comparison. The 2026 results favor keeping the current V1 filter.
+
+### Screening research sequence
+
+1. **Define the prediction problem.** Rank the eligible universe by expected adjusted-close return from this Friday to the next Friday. The screen’s gross return is the arithmetic mean of the selected 15 securities’ simple returns, with `1/15` invested in each at the start of the week. Use the scheduled exchange close, including early closes, as the latest research cutoff. The first audit uses strict Friday pairs and skips intervals with a Friday holiday. Record which securities and data were available at selection, and specify the actual order cutoff separately for execution tests.
+2. **Explore a broad set of candidate features.** Start with timestamped news coverage, sentiment and event types, OHLCV (open, high, low, close and volume), momentum and reversal, volatility, liquidity, and sector or market context. Include `p12`, `p12-1`, `p1`, `p3`, Golden Cross, and the black line in the feature inventory. Source their exact definitions before computing them. Use plots to understand distributions, missingness, extremes, correlations, and how signals behave across weeks and sectors.
+3. **Test which features relate to future ranks.** Use weekly Spearman rank correlations for monotonic relationships and compare subsequent returns across feature buckets. Consider ANOVA or a suitable alternative when the question concerns differences between groups. Report effect sizes, uncertainty, and stability across time. Check whether a feature adds predictive value after accounting for related features and whether it improves the top-15 picks out of sample.
+4. **Refine the data and feature set.** Revisit EDA on the shortlisted signals. Investigate extreme values and distinguish bad observations from genuine market moves. Compare keeping, excluding, capping, or transforming values where the evidence supports it. For eligible missing features, compare approaches such as training-set mean or median imputation. Evaluate PCA if correlated inputs warrant it and compare the results with the original features.
+5. **Compare screening methods.** Start with simple momentum and linear baselines, then test approaches such as an LP formulation where appropriate, XGBoost regression or learning-to-rank, LSTM, and PatchTST. Compare weekly rank correlation and the realized returns of the top 15 under a common equal-weight rule, alongside turnover and net results. Test the value of sticky selection with the scoring model held fixed. Select and document the screening rule before starting allocator comparisons.
+
+## Stage 2 · Allocate weights across the selected 15
+
+1. **Fix the screen and define success.** Use the same dated selection lists for every allocator. Specify the portfolio objective, risk and weight constraints, rebalance timing, cash treatment, and transaction-cost assumptions before comparing methods.
+2. **Repeat the feature research for allocation.** Use EDA, plots, hypothesis tests, and ANOVA where appropriate to study inputs such as expected returns, covariance and correlation, volatility, liquidity, market regime, prior weights, and turnover. Test relationships against allocation outcomes such as future portfolio risk, drawdown, and net returns. Revisit cleaning, outlier treatment, and PCA based on the allocator’s inputs. Measure incremental value with controlled comparisons.
+3. **Compare allocation methods.** Start with equal weight, inverse volatility, and HRP. Evaluate constrained optimization and learned policies such as PPO when the data and objective support them. Use the same holdings eligibility, execution assumptions, and cost model. Compare net return, risk-adjusted return, drawdown, turnover, and concentration, with uncertainty around differences.
+4. **Evaluate the full strategy.** Freeze the selected screen and allocator, then evaluate the combination on a chronological holdout alongside Alpha-HRP. Use the same execution and cost assumptions for the comparison. Report where results are sensitive to the sample, costs, or market conditions. A stage can conclude that the evidence favors its baseline or that the available data are inconclusive.
+
+## Learning resources
+
+Look for relevant coursework, notebooks, and implementations in the directories next to `LearnFinance-2025`. These are starting points. Paths are relative to the repository root.
+
+- **`../NW_MSDS`** contains the MSDS coursework. For screening and allocation studies, start with `MSDS_401/materials/exploratory_data_analysis`, `MSDS_401/materials/hypothesis_testing`, and `MSDS_401/materials/linear_regression`.
+- **`../Machine-Learning-Projects`** has worked examples for ANOVA, outlier analysis, PCA, regularized regression, and forecasting. Start with `Anova with Calculations and Dataset.ipynb` and `Big Sales Mart - EDA & Outlier Removal - GBM RMSE 1105.ipynb`.
+- **`../GenerativeAI`** has sentiment and attention notebooks for news features and sequence models. Start with `Word_Embedding_&_Sentiment_Analysis_using_BERT.ipynb` and `Attention.ipynb`.
+- **`../ai-engineering-from-scratch`** has lessons on model evaluation, time series, transformers, and reinforcement learning. See `phases/02-ml-fundamentals/15-time-series` for forecasting and `phases/09-reinforcement-learning/08-ppo` for learned allocators.
+- **`../ai-system-design-guide`** has material on evaluation and observability for tracking model behavior and diagnosing failed runs. See `14-evaluation-and-observability`.
+
+Revisit the sibling directories as new coursework and projects are added. Record the specific material each experiment uses, why it applies, and how it was adapted to weekly financial data. Keep the experiment reproducible with documented inputs and dependencies. [Research and reproducibility rules](AGENTS.md)

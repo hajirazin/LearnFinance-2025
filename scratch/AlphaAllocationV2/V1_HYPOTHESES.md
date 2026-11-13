@@ -1,0 +1,20 @@
+# Five V1 filter hypotheses
+
+Each one-sided null says the change has zero or negative expected paired weekly net portfolio return relative to current V1. The alternative says the difference is positive. HRP and execution are shared.
+
+| Arm | Daily input | Context | Training roster |
+|---|---|---|---|
+| V1 reference | Close log return | 60 sessions | Frozen 428-symbol roster |
+| H1 | Seven features | 60 sessions | Frozen 428-symbol roster |
+| H2 | Close log return | Trailing 365 calendar days | Frozen 428-symbol roster |
+| H3 | Close log return | 60 sessions | Existing 356-stock first-Friday cohort |
+| H4 | Seven features | Trailing 365 calendar days | Existing 356-stock first-Friday cohort |
+| H5 | Seven features | 60 sessions | Existing 356-stock first-Friday cohort |
+
+Use the seven established feature formulas at each exchange-session close. Sentiment uses the trailing seven calendar days, and verified empty windows are neutral. Missing input values use an observation mask and mean padding before per-window normalization. Require a valid decision value for every channel, at least 80% coverage per channel, and a complete close-return context. Use the production 10-session patches, five-session stride, encoder, and five-day close-log-return MSE. The multichannel forecast head mixes the seven encoder channels into the same five daily outputs. Retain the production inverse normalization using the input context's daily close returns, which serve as output scale and offset. Keep the same seed, date folds and checkpoint rule across arms.
+
+Fit on 2021–2024, validate on 2025, and freeze all six checkpoints before evaluating 2026. Use identical validation rows where the seven-feature, one-year inputs and daily targets are available. Fit each arm on its own training roster and feature coverage. Use Friday decisions and next-session open execution from January 12 to November 9, 2026. Each comparison uses the same eligible inference names within the pair from the 428-name roster. H3 uses the full set of eligible 60-session inference names, including symbols outside the 356-stock training cohort. Use a cold start, maintain holdings across rebalance gaps, and apply 15/20 sticky selection and the production 252-session HRP. Reuse the published V1 simulation fees and $10,000 starting value, with 10 bps per traded dollar as the primary cost assumption. Report compounded net return and daily maximum drawdown alongside weekly effects. H5 joined the test family before opening the paired portfolio results and uses the same chronological research splits as H1–H4 and the reference arm. The reference is a controlled V1-spec refit. The production route resolves its own training dates from configuration.
+
+Test the mean paired portfolio return difference using the null-centered circular block bootstrap, 20,000 replicates, a four-observation block and seed 42. Normalize multiweek holiday holding intervals to equivalent weekly returns before testing. Report raw one-sided p-values and Holm-adjusted p-values at familywise alpha 0.05. This historical sample has already been used in related V1 and V2 comparisons, so the p-values describe an exploratory replay. A prospective test requires a later untouched period.
+
+Validation uses 20,938 stock-weeks across 51 decision weeks from January 3 through December 19, 2025. At each epoch, compound the five daily outputs and compute Spearman correlation against actual returns within each week. Average the correlations across weeks. Restore the checkpoint with the highest mean validation rank correlation, breaking ties with lower daily validation MSE. The 2026 evaluation has 40 portfolio holding periods. Its sample size for the hypothesis tests is 40 paired returns. Rank the six portfolios by net compounded return on the common candidate set, and report the p-values from each pair's matched candidate set. The common set gives every model access to the same names, and the pair-specific sets preserve the broader eligible universe for H3.
