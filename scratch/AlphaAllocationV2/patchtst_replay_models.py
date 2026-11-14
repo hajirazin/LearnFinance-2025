@@ -61,6 +61,12 @@ def fit_patchtst(
     epochs,
     batch_size,
     model_factory=build_model,
+    objective=None,
+    grouped=False,
+    benchmark=None,
+    sequential=False,
+    output_fn=model_output,
+    return_fn=simple_returns,
 ):
     """Train from scratch and restore the best validation weekly rank-IC checkpoint."""
     started = perf_counter()
@@ -97,13 +103,49 @@ def fit_patchtst(
     actual_rank = val_actual.groupby(level="friday").rank().to_numpy()
     groups = val_labels.index.get_level_values("friday").factorize(sort=True)[0]
     week_rows = [np.flatnonzero(groups == week) for week in np.unique(groups)]
+    if grouped:
+        training_dates = labels.iloc[indices[train]].index.get_level_values("friday")
+        training_groups = training_dates.factorize(sort=True)[0]
+        train_batches = [
+            train_rows[np.flatnonzero(training_groups == week)]
+            for week in np.unique(training_groups)
+        ]
+        val_batches = [torch.as_tensor(rows, device=device) for rows in week_rows]
+        if sequential:
+            train_benchmark = range(len(train_batches))
+            val_benchmark = range(len(val_batches))
+        elif benchmark is not None:
+            train_benchmark = torch.as_tensor(
+                benchmark.reindex(training_dates.unique().sort_values()).to_numpy(
+                    copy=True
+                ),
+                dtype=torch.float32,
+                device=device,
+            )
+            val_benchmark = torch.as_tensor(
+                benchmark.reindex(
+                    val_labels.index.unique("friday").sort_values()
+                ).to_numpy(copy=True),
+                dtype=torch.float32,
+                device=device,
+            )
+            if (
+                not torch.isfinite(train_benchmark).all()
+                or not torch.isfinite(val_benchmark).all()
+            ):
+                raise ValueError(
+                    "Missing SPY returns for grouped training or validation"
+                )
+        else:
+            train_benchmark = [None] * len(train_batches)
+            val_benchmark = [None] * len(val_batches)
 
     def predictions(rows):
         model.eval()
         with torch.inference_mode():
             return torch.cat(
                 [
-                    model_output(model, x[ids], observed[ids], daily=daily)
+                    output_fn(model, x[ids], observed[ids], daily=daily)
                     for ids in rows.split(batch_size)
                 ]
             )
@@ -115,21 +157,51 @@ def fit_patchtst(
     for epoch in range(1, epochs + 1):
         epoch_start = perf_counter()
         model.train()
-        order = torch.randperm(len(train_rows), generator=generator).to(device)
+        if grouped:
+            order = (
+                range(len(train_batches))
+                if sequential
+                else torch.randperm(len(train_batches), generator=generator).tolist()
+            )
+            if sequential:
+                objective.reset(training=True)
+            batches = [(train_batches[i], train_benchmark[i]) for i in order]
+        else:
+            order = torch.randperm(len(train_rows), generator=generator).to(device)
+            batches = [(rows, None) for rows in train_rows[order].split(batch_size)]
         running_loss = torch.zeros((), device=device)
-        for rows in train_rows[order].split(batch_size):
+        for rows, market in batches:
             optimizer.zero_grad(set_to_none=True)
-            output = model_output(model, x[rows], observed[rows], daily=daily)
-            loss = F.mse_loss(output, target[rows])
+            output = output_fn(model, x[rows], observed[rows], daily=daily)
+            loss = (
+                F.mse_loss(output, target[rows])
+                if objective is None
+                else objective(output, target[rows], market)
+            )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), DEFAULT_CONFIG.max_grad_norm
             )
             optimizer.step()
-            running_loss += loss.detach() * len(rows)
+            running_loss += loss.detach() * (1 if grouped else len(rows))
         val_output = predictions(val_rows)
         val_mse = float(F.mse_loss(val_output, target[val_rows])) * target_scale**2
-        val_pred = simple_returns(val_output * target_scale, daily=daily).cpu().numpy()
+        if grouped:
+            if sequential:
+                objective.reset(training=False)
+            val_objective = float(
+                torch.stack(
+                    [
+                        objective(val_output[rows], target[val_rows[rows]], market)
+                        for rows, market in zip(val_batches, val_benchmark, strict=True)
+                    ]
+                ).mean()
+            )
+        elif objective is not None:
+            val_objective = float(objective(val_output, target[val_rows], None))
+        else:
+            val_objective = val_mse
+        val_pred = return_fn(val_output * target_scale, daily=daily).cpu().numpy()
         pred_rank = val_actual.copy()
         pred_rank.iloc[:] = val_pred
         pred_rank = pred_rank.groupby(level="friday").rank().to_numpy()
@@ -141,18 +213,27 @@ def fit_patchtst(
             and np.ptp(actual_rank[rows]) > 0
         ]
         val_ic = float(np.mean(correlations)) if correlations else np.nan
-        train_mse = float(running_loss) * target_scale**2 / len(train_rows)
-        if not np.isfinite([val_ic, val_mse, train_mse]).all():
+        train_loss = (
+            float(running_loss)
+            * target_scale**2
+            / (len(batches) if grouped else len(train_rows))
+        )
+        if not np.isfinite([val_ic, val_mse, train_loss, val_objective]).all():
             raise FloatingPointError(
                 f"Non-finite {model_name} PatchTST validation or loss"
             )
-        scheduler.step(val_mse)
+        scheduler.step(val_objective)
         history.append(
             {
                 "epoch": epoch,
-                "train_mse": train_mse,
+                "train_mse" if objective is None else "train_objective": train_loss,
                 "validation_mse": val_mse,
                 "validation_rank_ic": val_ic,
+                **(
+                    {"validation_objective": val_objective}
+                    if objective is not None
+                    else {}
+                ),
             }
         )
         if checkpoint_is_better(val_ic, val_mse, best_ic, best_mse):
@@ -170,9 +251,7 @@ def fit_patchtst(
 
     model.load_state_dict(best_state)
     predicted = (
-        simple_returns(predictions(score_rows) * target_scale, daily=daily)
-        .cpu()
-        .numpy()
+        return_fn(predictions(score_rows) * target_scale, daily=daily).cpu().numpy()
     )
     if not np.isfinite(predicted).all():
         raise FloatingPointError(f"Non-finite {model_name} PatchTST forecasts")

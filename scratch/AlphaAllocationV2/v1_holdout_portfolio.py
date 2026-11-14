@@ -16,12 +16,12 @@ TAF_CAP = 9.79
 CAT_RATE = 0.000003
 
 
-def allocation_path(scores, closes, *, equal_weight=False):
+def allocation_path(scores, closes, *, equal_weight=False, sticky=True):
     previous = None
     allocations = []
     for friday, week in scores.groupby(level="friday", sort=True):
         selection = select_with_rank_band(
-            week.droplevel("friday").to_dict(), previous, 15, 20
+            week.droplevel("friday").to_dict(), previous if sticky else None, 15, 20
         )
         if equal_weight:
             if len(selection.selected) != 15:
@@ -66,7 +66,7 @@ def transaction_fees(delta, raw_open, bps):
     return float(delta.abs().sum()) * bps / 10_000, sec + taf + cat
 
 
-def rebalance(current, weights, raw_open, cash, bps):
+def rebalance(current, weights, raw_open, cash, bps, *, fee_model=transaction_fees):
     """Solve the cash budget after fees while preserving target proportions."""
     symbols = current.index.union(weights.index).sort_values()
     current = current.reindex(symbols, fill_value=0)
@@ -75,7 +75,7 @@ def rebalance(current, weights, raw_open, cash, bps):
 
     def trades(invested):
         delta = invested * weights - current
-        friction, regulatory = transaction_fees(delta, raw_open, bps)
+        friction, regulatory = fee_model(delta, raw_open, bps)
         return delta, friction, regulatory
 
     low, high = 0.0, nav
@@ -99,7 +99,9 @@ def rebalance(current, weights, raw_open, cash, bps):
     )
 
 
-def simulate(allocations, opens, raw_opens, closes, terminal, bps):
+def simulate(
+    allocations, opens, raw_opens, closes, terminal, bps, *, fee_model=transaction_fees
+):
     units = pd.Series(dtype=float)
     cash = INITIAL_NAV
     ledger, daily, orders = [], [], []
@@ -125,7 +127,7 @@ def simulate(allocations, opens, raw_opens, closes, terminal, bps):
         current = units * execution_prices.reindex(units.index)
         start_nav = float(current.sum()) + cash
         invested, delta, friction, regulatory, cash = rebalance(
-            current, weights, raw, cash, bps
+            current, weights, raw, cash, bps, fee_model=fee_model
         )
         units = invested / execution_prices[invested.index]
         marks = closes.loc[(closes.index >= fill) & (closes.index < end), units.index]

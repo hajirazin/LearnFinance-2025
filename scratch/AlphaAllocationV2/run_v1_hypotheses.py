@@ -54,9 +54,9 @@ def holm(pvalues):
     return adjusted
 
 
-def scores_for(name, x, mask, device="cpu"):
-    metadata = json.loads((OUTPUT / f"{name}.json").read_text())
-    weights = OUTPUT / f"{name}.pt"
+def scores_for(name, x, mask, device="cpu", *, checkpoint_dir=OUTPUT):
+    metadata = json.loads((checkpoint_dir / f"{name}.json").read_text())
+    weights = checkpoint_dir / f"{name}.pt"
     if sha256(weights) != metadata["weights_sha256"]:
         raise ValueError(f"Mismatched weights for {name}")
     model = model_factory(x, daily=True).eval()

@@ -57,22 +57,39 @@ def model_factory(x, *, daily):
     return build_model(x, daily=daily)
 
 
-def train(device, arms=ARMS):
-    calendar, _prices, close, volume, logs, smaller = session_data()
+def train(
+    device,
+    arms=ARMS,
+    *,
+    output=OUTPUT,
+    objectives=None,
+    spy_close=None,
+    sequence_factory=None,
+    rank_fitter=None,
+):
+    calendar, prices, close, volume, logs, smaller = session_data()
     features = daily_features(calendar, close, volume, logs, evaluation=False)
     dates = decision_dates(close.index, evaluation=False)
     last_session = close.index.get_loc(pd.Timestamp("2025-12-31"))
     dates = dates[close.index.get_indexer(dates) + 5 <= last_session]
+    benchmark = None
+    if spy_close is not None:
+        target_dates = close.index[close.index.get_indexer(dates) + 5]
+        benchmark = pd.Series(
+            spy_close.reindex(target_dates).to_numpy()
+            / spy_close.reindex(dates).to_numpy()
+            - 1,
+            index=dates,
+        )
     validation_dates = dates[dates >= VALIDATION]
     val_index, val_x, val_mask, val_y = windows(
         logs, features, validation_dates, use_features=True, year=True
     )
     validation_keys = val_index[np.isfinite(val_y).all(axis=1)]
     del val_x, val_mask, val_y
-    for name in arms:
-        seven, year, restricted = ARMS[name]
-        weights = OUTPUT / f"{name}.pt"
-        metadata_path = OUTPUT / f"{name}.json"
+    for name, (seven, year, restricted) in arms.items():
+        weights = output / f"{name}.pt"
+        metadata_path = output / f"{name}.json"
         if (
             metadata_path.is_file()
             and weights.is_file()
@@ -122,20 +139,34 @@ def train(device, arms=ARMS):
             f"{name}: {is_train.sum():,} fitting rows, {(~is_train).sum():,} validation rows",
             flush=True,
         )
-        _, state, metadata = fit_patchtst(
-            x,
-            y,
-            mask,
-            is_train,
-            ~is_train,
-            ~is_train,
-            labels,
-            daily=True,
-            device=device,
-            epochs=60,
-            batch_size=256,
-            model_factory=model_factory,
+        objective, grouped, use_spy = (
+            (None, False, False) if objectives is None else objectives[name]
         )
+        if sequence_factory is not None:
+            objective = sequence_factory(index, is_train, prices["close"], device)
+        if rank_fitter is not None:
+            state, metadata = rank_fitter(
+                x, mask, labels, is_train, prices["close"], device
+            )
+        else:
+            _, state, metadata = fit_patchtst(
+                x,
+                y,
+                mask,
+                is_train,
+                ~is_train,
+                ~is_train,
+                labels,
+                daily=True,
+                device=device,
+                epochs=60,
+                batch_size=256,
+                model_factory=model_factory,
+                objective=objective,
+                grouped=grouped,
+                benchmark=benchmark if use_spy else None,
+                sequential=sequence_factory is not None,
+            )
         torch.save(state, weights)
         write_json(
             metadata_path,
@@ -147,6 +178,15 @@ def train(device, arms=ARMS):
                 "validation_rows": len(validation_keys),
                 "context_sessions_padded": x.shape[1],
                 "features": seven,
+                **(
+                    {
+                        "objective": getattr(
+                            objective, "__name__", type(objective).__name__
+                        )
+                    }
+                    if objective is not None
+                    else {}
+                ),
             },
         )
         del x, mask, y
@@ -161,7 +201,10 @@ def main():
     args = parser.parse_args()
     torch.set_num_threads(4)
     OUTPUT.mkdir(exist_ok=True)
-    train(torch.device(args.device), ARMS if args.arm is None else (args.arm,))
+    train(
+        torch.device(args.device),
+        ARMS if args.arm is None else {args.arm: ARMS[args.arm]},
+    )
 
 
 if __name__ == "__main__":

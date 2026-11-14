@@ -161,6 +161,48 @@ H16–H20 test whether each challenger earns positive weekly net excess return o
 
 All ten Holm-adjusted p-values were 1.00. H3 was the strongest challenger by cumulative excess return. H4 found the most actual top-15 winners. V1 beat SPY by 42.51 percentage points in the H3 matched comparison. The 2026 results favor keeping the current V1 filter.
 
+### Weekly return, ranking, and SPY-relative losses
+
+The [H21–H23 protocol](V1_LOSS_COMPARISON.md) keeps H5's inputs and compares five-session return MSE, within-week pairwise ranking, and a SPY-relative basket objective with a double shortfall penalty. It includes the run commands and the matched validation and evaluation design. [Summary](data/v1_hypotheses/loss_comparison/summary.json) · [Stock scores and actual ranks](data/v1_hypotheses/loss_comparison/stock_scores.csv) · [Basket forecasts](data/v1_hypotheses/loss_comparison/basket_forecasts.csv) · [Weekly portfolios and SPY](data/v1_hypotheses/loss_comparison/portfolio_weekly.csv)
+
+H24 adds an IBKR fee penalty to H21's weekly MSE. It uses SAC's IBKR Singapore Tiered schedule and a $10,000 training NAV. Compare it with the saved H21 and a weekly-MSE control trained in the same chronological order. All portfolios in this replay use the same per-leg IBKR fees. [Protocol](V1_LOSS_COMPARISON.md#h24--weekly-mse-with-sacs-ibkr-fees) · [Results](data/v1_hypotheses/loss_comparison/h24_ibkr/summary.json)
+
+H25 uses a single ranking score, the prior top-15 membership flag, and a pairwise loss with IBKR fees. It averaged 0.46 realized top-15 hits per Friday versus 1.65 for V1 and replaced 0.31 names per rebalance versus 4.31. V1 earned the higher net return under both weightings. [Protocol and results](V1_H25_RANK_IBKR.md) · [Equal-weight graph](data/v1_hypotheses/loss_comparison/h25_rank_ibkr/equal_weight.png) · [HRP graph](data/v1_hypotheses/loss_comparison/h25_rank_ibkr/hrp.png)
+
+H26 and H27 supervise all seven forecast channels and use the close return to rank stocks. H26 predicts five daily steps and H27 predicts one Friday-to-Friday step. H27 earned +17.98% with equal weights and +12.56% with HRP, compared with +42.94% and +27.95% for V1. [Protocol and results](V1_MULTITARGET.md) · [Portfolio comparison](data/v1_hypotheses/loss_comparison/multitarget/portfolio_comparison.png)
+
+### Actual V1 paper performance since the close-only switch
+
+The one-input PatchTST migration landed August 23, 2026 in `4e91cd1`. The August 24 production rebalance first used checkpoint `v2026-08-21-0af698826abd`. Normalize the curves at the August 21 pre-switch close. Use Alpaca's reported HRP paper-account equity through November 13, with the regular-session 16:00 intraday mark for the final date while the daily series ends November 12. The activity export contains 751 fills across 216 orders, 21 fees, two dividends, and zero external cash transfers. [October production audit](../alpha_hrp_audit_2026_10_03/AUDIT.md)
+
+V1 fell 9.90% from $99,715.76 to $89,843.29. Dividend-adjusted SPY fell 1.24%. The hindsight reference earned 299.65% gross by buying the 15 future winners at equal weights each Friday and holding through the next Friday close. The benchmark uses Yahoo adjusted prices from the frozen August universe, with 426 candidates with complete prices each week. It assumes perfect foresight and zero trading costs. The snapshot is a proxy for the changing production roster. This period measures the account's realized paper performance following the switch. The October audit documents other model changes made at the same time.
+
+Run `python scratch/AlphaAllocationV2/fetch_v1_production_comparison.py` to read Alpaca and refresh adjusted prices through the latest completed US session, followed by `python scratch/AlphaAllocationV2/plot_v1_production_comparison.py`. The raw Alpaca evidence and the fill export are stored in the ignored scratch data directory. [Chart](data/v1_production_comparison/comparison.png) · [Weekly comparison](data/v1_production_comparison/weekly_comparison.csv) · [Hindsight picks](data/v1_production_comparison/hindsight_picks.csv)
+
+#### Before and after the August 24 rebalance
+
+Compare actual Alpaca equity with dividend-adjusted SPY from the January 16 close, before the first recorded fills on January 20. The initial $100,000 cash journal reconciles to that baseline. Alpaca returned no later external funding activity. The January–April account includes an older HRP strategy. The May 1 close precedes the first archived Alpha-HRP report on May 4. Use the last exchange close of each week and split at the August 21 close, before the first close-only trades.
+
+| Period | Alpaca | SPY | Cumulative excess | Mean weekly excess | Weeks ahead | Ahead in SPY down weeks |
+|---|---:|---:|---:|---:|---:|---:|
+| Jan 16–Aug 21 · full HRP account | −0.28% | +11.30% | −11.58 pp | −0.28 pp | 14/31 | 7/13 |
+| May 1–Aug 21 · Alpha-HRP before the switch | +3.72% | +6.53% | −2.80 pp | −0.07 pp | 6/16 | 1/5 |
+| Aug 21–Nov 13 · close-only Alpha-HRP | −9.90% | −1.24% | −8.66 pp | −0.73 pp | 5/12 | 3/7 |
+
+Before the switch, Alpha-HRP had a smaller average weekly shortfall. The close-only period had a slightly higher hit rate and a smaller mean shortfall in SPY down weeks. Both periods lagged SPY on average. Market conditions, checkpoints, and portfolio rules varied across the periods. The comparison describes account performance and cannot isolate the effect of dropping the four input channels.
+
+Run `python scratch/AlphaAllocationV2/compare_v1_switch.py` with the saved data, or add `--refresh-through 2026-11-13` to read the broker and benchmark again. [Relative performance chart](data/v1_production_comparison/before_after_spy.png) · [Weekly excess returns](data/v1_production_comparison/before_after_weekly.csv)
+
+#### Research replay versus the deployed model
+
+The V1 baseline in the hypothesis comparisons is a close-only research refit trained on 2021–2024 and selected on 2025 validation. The production checkpoint used at the August switch was `v2026-08-21-0af698826abd`. The January–November comparisons reuse a research window that starts before the August launch. They compare challenger specifications and provide no direct evidence of deployed V1's performance.
+
+From the August 21 close through the November 6 close, the last daily close in the saved research NAV, the H25/H26/H27 V1 HRP refit lost 10.01%, Alpaca lost 10.75%, and SPY lost 3.74%. The refit had already gained 41.99% from its January start through August 21. Its equal-weight counterpart lost 13.49% on the matched window. The headline January–November gain is sensitive to the pre-launch portion.
+
+The six archived production reports from August 24 through September 28 share an average of 6.67 names out of 15 with the research replay. Repricing each week's target weights at the same Friday closes gives a gross return of −1.75% for the deployed targets and −6.71% for the refit targets. Actual Alpaca NAV returned −5.00% in those six weeks. The remaining difference mixes execution timing, sizing, previous holdings, cash, and broker marks. The aggregate closeness of the matched NAV curves does not establish weekly trade parity. Use historical checkpoint versions and timestamped production inputs, targets, and fills for a production replication before using replay results to judge deployment.
+
+Run `python scratch/AlphaAllocationV2/reconcile_v1_replay.py` with the saved research and Alpaca exports. [Matched chart](data/v1_production_comparison/matched_replay.png) · [Weekly target comparison](data/v1_production_comparison/matched_replay_targets.csv)
+
 ### Screening research sequence
 
 1. **Define the prediction problem.** Rank the eligible universe by expected adjusted-close return from this Friday to the next Friday. The screen’s gross return is the arithmetic mean of the selected 15 securities’ simple returns, with `1/15` invested in each at the start of the week. Use the scheduled exchange close, including early closes, as the latest research cutoff. The first audit uses strict Friday pairs and skips intervals with a Friday holiday. Record which securities and data were available at selection, and specify the actual order cutoff separately for execution tests.
