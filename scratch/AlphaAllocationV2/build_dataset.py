@@ -14,7 +14,9 @@ EXPERIMENT = Path(__file__).resolve().parent
 REPO = EXPERIMENT.parents[1]
 DATA = EXPERIMENT / "data"
 ROSTER = REPO / "scratch/patchtst_full_universe_audit_2026_08_23/results/manifest.json"
-PRICE_ARCHIVE = REPO / "scratch/alpha_hrp_audit_2026_10_03/all_adjusted_ohlcv.csv"
+PRICE_ARCHIVE = (
+    REPO / "scratch/AlphaAllocationV1/alpha_hrp_audit_2026_10_03/all_adjusted_ohlcv.csv"
+)
 CASH_ENTRIES = {("JPY", "JAPANESE YEN"), ("HKD", "HONG KONG DOLLAR")}
 START = date(2016, 1, 1)
 END = date(2025, 12, 31)

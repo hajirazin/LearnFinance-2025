@@ -2,13 +2,13 @@
 
 AlphaAllocationV2 is a research project for weekly US halal portfolios. It starts with the roughly 400 names in `halal_new` and asks two questions in order. Which signals help rank the universe and select 15 names? Given those same 15 names, which inputs and methods produce better portfolio weights under realistic trading costs and risk constraints?
 
-The current US Alpha-HRP strategy uses a PatchTST weekly return forecast, a 15/20 rank-band sticky selector, and HRP weights. It is the incumbent benchmark. This project will test the evidence for each decision, from the data and features through the models and portfolio rules. All AlphaAllocationV2 experiments belong in this scratch folder. [US Alpha-HRP workflow](../../temporal/workflows/us_alpha_hrp.py) · [Prior Alpha-HRP audit](../alpha_hrp_audit_2026_10_03/CORRECTION.md)
+The current US Alpha-HRP strategy uses a PatchTST weekly return forecast, a 15/20 rank-band sticky selector, and HRP weights. It is the incumbent benchmark. This project will test the evidence for each decision, from the data and features through the models and portfolio rules. All AlphaAllocationV2 experiments belong in this scratch folder. [US Alpha-HRP workflow](../../temporal/workflows/us_alpha_hrp.py) · [Prior Alpha-HRP audit](../AlphaAllocationV1/alpha_hrp_audit_2026_10_03/CORRECTION.md)
 
 ## Historical datasets
 
 The dataset covers January 1, 2016 through December 31, 2025. It applies the August 2026 `halal_new` snapshot historically, so membership has survivorship bias. Both builds use the same 428-security research roster. The source snapshot has 430 entries. `JPY` and `HKD` are ETF cash holdings whose codes collide with U.S. listings. Cameco appears as Toronto-listed `CCO` in the holdings and uses its NYSE ticker `CCJ` here. [Frozen universe snapshot](../patchtst_full_universe_audit_2026_08_23/results/manifest.json) · [Cameco listing information](https://www.cameco.com/invest/stock-information)
 
-- **Daily OHLCV** lives in `data/daily_ohlcv_2016_2025.csv`, with one row per observed symbol and session. It uses production’s Yahoo Finance loader with `auto_adjust=True`. The companion `data/ohlcv_manifest.json` records the roster, coverage by symbol, missing symbols, source versions, and CSV checksum. The build can recover Kenvue’s 2025 bars from the prior Yahoo audit. Its 2023–2024 coverage is still missing when that archive is used. [Prior Yahoo OHLCV archive](../alpha_hrp_audit_2026_10_03/full_price_manifest.json)
+- **Daily OHLCV** lives in `data/daily_ohlcv_2016_2025.csv`, with one row per observed symbol and session. It uses production’s Yahoo Finance loader with `auto_adjust=True`. The companion `data/ohlcv_manifest.json` records the roster, coverage by symbol, missing symbols, source versions, and CSV checksum. The build can recover Kenvue’s 2025 bars from the prior Yahoo audit. Its 2023–2024 coverage is still missing when that archive is used. [Prior Yahoo OHLCV archive](../AlphaAllocationV1/alpha_hrp_audit_2026_10_03/full_price_manifest.json)
 - **Weekly news sentiment** builds into `data/news/news_v1.duckdb`. Production uses Alpaca news and pinned FinBERT, with windows open at the previous Monday 09:00 and closed at the current Monday 09:00 in New York time. The 521 complete windows end between January 11, 2016 and December 29, 2025. The database preserves scored articles and verified coverage. Its `weekly_sentiment` table uses the production PPO news adapter for sentiment, article count, recency, and dispersion. Verified zero-news windows have a count of zero. The aggregate is published after coverage is complete. [Production news backfill](../../brain_api/brain_api/news_etl/backfill.py) · [Alpaca historical news](https://docs.alpaca.markets/us/docs/historical-news-data)
 
 Run from the repository root. News needs `ALPACA_API_KEY` and `ALPACA_API_SECRET` in the process environment or the local `brain_api/.env`. The production backfill resumes from verified windows in the scratch database.
@@ -116,92 +116,9 @@ Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/compare_sticky_rank.p
 
 Sticky mean gross returns were 0.53% for Ridge, 1.21% for seven-feature PatchTST, and 0.46% for close-only PatchTST. Stickiness added 0.08, 0.09, and 0.12 percentage points per week, respectively. Each paired interval for the sticky rule's effect includes zero. Replacement rates fell from 40.7% to 32.5%, 64.4% to 56.0%, and 32.3% to 24.7%. These are changes in selected names at equal weights before trading costs. The forecasts and their full-universe ranks are fixed throughout this replay. [Sticky summary](data/friday/patchtst_comparison/sticky_rank/summary.json)
 
-### V1 holdout with HRP and trading costs
+### V1 comparison history
 
-See the [frozen protocol](V1_HOLDOUT_PROTOCOL.md) for the October 5 to November 9, 2026 comparison of the current 60-session close-only setup and the seven-feature challenger. Fit the models on the prior archive and save the checkpoints before scoring the holdout. Run these commands from the repository root with the PatchTST replay dependencies installed. The news command uses historical Alpaca credentials and the pinned local FinBERT cache.
-
-```sh
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/train_v1_holdout.py --device mps
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py prices
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py news
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_holdout.py
-```
-
-[Summary](data/v1_holdout/summary.json) · [Weekly returns and costs](data/v1_holdout/weekly_results.csv) · [Daily NAV](data/v1_holdout/nav.csv) · [HRP weights](data/v1_holdout/weights.csv) · [Simulated trades](data/v1_holdout/trades.csv)
-
-### Five V1 hypotheses
-
-The [protocol](V1_HYPOTHESES.md) compares the current specification with each single change, all three changes together, and seven features plus the smaller training universe with the 60-session context. It keeps the daily prediction target, loss, sticky selector, HRP and simulated cost model fixed. Each test uses a common inference universe within its pair. The tests use paired weekly net returns and Holm correction at 5%. The portfolio leaderboard uses the intersection of eligible stocks across all six models.
-
-```sh
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/build_v1_holdout_data.py news --news-start 2025-12-22 --news-end 2026-11-09
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/train_v1_hypotheses.py --device mps
-PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_hypotheses.py
-```
-
-[Hypothesis results](data/v1_hypotheses/summary.json) · [Weekly net returns](data/v1_hypotheses/weekly_results.csv) · [Daily NAV](data/v1_hypotheses/nav.csv)
-
-The January 12–November 9, 2026 replay had 40 paired holding periods. On the common set of 403–418 eligible names per decision, compounded net returns were +39.82% for the V1 reference, −10.21% for H1, −5.59% for H2, +17.08% for H3, +6.28% for H4, and +2.77% for H5. H3 was the strongest challenger by net return. H5 had the smallest drawdown at 14.74% and the highest 2025 validation rank correlation at +0.0340. All one-sided Holm-adjusted p-values were 1.00. Keep the current V1 specification based on this comparison. The fixed 2021–2024 fitting and 2025 validation dates are specific to the research replay. [Summary and pair-specific results](data/v1_hypotheses/summary.json)
-
-Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/run_v1_hypotheses.py --equal-weight` to replay the saved forecasts at 1/15 per holding. The replay carries NAV forward from $10,000 and applies the same costs. The pair-specific sticky picks match the HRP run. On the common candidate set, net returns were +46.13% for V1, −7.03% for H1, −6.65% for H2, +28.67% for H3, +12.51% for H4, and +3.30% for H5. All Holm-adjusted p-values for improvement over V1 were 1.00. [Equal-weight summary](data/v1_hypotheses/equal_weight/summary.json) · [Weekly results](data/v1_hypotheses/equal_weight/weekly_results.csv)
-
-### Top-15 ranking and market hypotheses
-
-Run `PYTHONPATH=brain_api python scratch/AlphaAllocationV2/compare_v1_rank_market.py` with the saved equal-weight replay and Yahoo's dividend-adjusted SPY opens in `data/v1_hypotheses/diagnostics/spy_adjusted_prices.csv`. H11–H15 test whether the sticky portfolio finds more of the realized top 15 per Friday than V1. Rank actual adjusted-close returns from Friday to the next trading Friday exactly seven days later, using the eligible candidate set common to each pair. The output includes strict and sticky hit counts, actual winners, and weekly Spearman correlations. The tests use 37 matched Fridays.
-
-H16–H20 test whether each challenger earns positive weekly net excess return over SPY. Compare the net portfolio NAV returns with dividend-adjusted SPY open-to-open returns for the same 40 holding periods. SPUS is a secondary halal benchmark. Both ETFs use buy-and-hold returns before benchmark trading costs. Report the number of periods ahead and the mean excess in market-down periods. Use the existing four-observation circular bootstrap for one-sided p-values and Holm correction across all ten tests at 5%. [Summary](data/v1_hypotheses/diagnostics/summary.json) · [Actual top 15 and model hits](data/v1_hypotheses/diagnostics/ranking_weekly.csv) · [Weekly market comparison](data/v1_hypotheses/diagnostics/market_weekly.csv)
-
-| Rank and market tests | Mean top-15 hits, challenger vs. V1 | Cumulative lead vs. SPY | Periods ahead of SPY | Mean excess when SPY fell |
-|---|---:|---:|---:|---:|
-| H11 / H16 · Seven features | 0.81 vs. 1.65 | −14.62 pp | 18/40 | −0.76 pp |
-| H12 / H17 · One-year input | 1.51 vs. 1.70 | −16.00 pp | 23/40 | −2.70 pp |
-| H13 / H18 · 356-stock training cohort | 1.84 vs. 1.70 | +33.33 pp | 25/40 | −0.56 pp |
-| H14 / H19 · All three changes | 1.97 vs. 1.65 | +4.25 pp | 26/40 | −2.66 pp |
-| H15 / H20 · Seven features and 356-stock training | 0.81 vs. 1.65 | −5.06 pp | 18/40 | −0.39 pp |
-
-All ten Holm-adjusted p-values were 1.00. H3 was the strongest challenger by cumulative excess return. H4 found the most actual top-15 winners. V1 beat SPY by 42.51 percentage points in the H3 matched comparison. The 2026 results favor keeping the current V1 filter.
-
-### Weekly return, ranking, and SPY-relative losses
-
-The [H21–H23 protocol](V1_LOSS_COMPARISON.md) keeps H5's inputs and compares five-session return MSE, within-week pairwise ranking, and a SPY-relative basket objective with a double shortfall penalty. It includes the run commands and the matched validation and evaluation design. [Summary](data/v1_hypotheses/loss_comparison/summary.json) · [Stock scores and actual ranks](data/v1_hypotheses/loss_comparison/stock_scores.csv) · [Basket forecasts](data/v1_hypotheses/loss_comparison/basket_forecasts.csv) · [Weekly portfolios and SPY](data/v1_hypotheses/loss_comparison/portfolio_weekly.csv)
-
-H24 adds an IBKR fee penalty to H21's weekly MSE. It uses SAC's IBKR Singapore Tiered schedule and a $10,000 training NAV. Compare it with the saved H21 and a weekly-MSE control trained in the same chronological order. All portfolios in this replay use the same per-leg IBKR fees. [Protocol](V1_LOSS_COMPARISON.md#h24--weekly-mse-with-sacs-ibkr-fees) · [Results](data/v1_hypotheses/loss_comparison/h24_ibkr/summary.json)
-
-H25 uses a single ranking score, the prior top-15 membership flag, and a pairwise loss with IBKR fees. It averaged 0.46 realized top-15 hits per Friday versus 1.65 for V1 and replaced 0.31 names per rebalance versus 4.31. V1 earned the higher net return under both weightings. [Protocol and results](V1_H25_RANK_IBKR.md) · [Equal-weight graph](data/v1_hypotheses/loss_comparison/h25_rank_ibkr/equal_weight.png) · [HRP graph](data/v1_hypotheses/loss_comparison/h25_rank_ibkr/hrp.png)
-
-H26 and H27 supervise all seven forecast channels and use the close return to rank stocks. H26 predicts five daily steps and H27 predicts one Friday-to-Friday step. H27 earned +17.98% with equal weights and +12.56% with HRP, compared with +42.94% and +27.95% for V1. [Protocol and results](V1_MULTITARGET.md) · [Portfolio comparison](data/v1_hypotheses/loss_comparison/multitarget/portfolio_comparison.png)
-
-### Actual V1 paper performance since the close-only switch
-
-The one-input PatchTST migration landed August 23, 2026 in `4e91cd1`. The August 24 production rebalance first used checkpoint `v2026-08-21-0af698826abd`. Normalize the curves at the August 21 pre-switch close. Use Alpaca's reported HRP paper-account equity through November 13, with the regular-session 16:00 intraday mark for the final date while the daily series ends November 12. The activity export contains 751 fills across 216 orders, 21 fees, two dividends, and zero external cash transfers. [October production audit](../alpha_hrp_audit_2026_10_03/AUDIT.md)
-
-V1 fell 9.90% from $99,715.76 to $89,843.29. Dividend-adjusted SPY fell 1.24%. The hindsight reference earned 299.65% gross by buying the 15 future winners at equal weights each Friday and holding through the next Friday close. The benchmark uses Yahoo adjusted prices from the frozen August universe, with 426 candidates with complete prices each week. It assumes perfect foresight and zero trading costs. The snapshot is a proxy for the changing production roster. This period measures the account's realized paper performance following the switch. The October audit documents other model changes made at the same time.
-
-Run `python scratch/AlphaAllocationV2/fetch_v1_production_comparison.py` to read Alpaca and refresh adjusted prices through the latest completed US session, followed by `python scratch/AlphaAllocationV2/plot_v1_production_comparison.py`. The raw Alpaca evidence and the fill export are stored in the ignored scratch data directory. [Chart](data/v1_production_comparison/comparison.png) · [Weekly comparison](data/v1_production_comparison/weekly_comparison.csv) · [Hindsight picks](data/v1_production_comparison/hindsight_picks.csv)
-
-#### Before and after the August 24 rebalance
-
-Compare actual Alpaca equity with dividend-adjusted SPY from the January 16 close, before the first recorded fills on January 20. The initial $100,000 cash journal reconciles to that baseline. Alpaca returned no later external funding activity. The January–April account includes an older HRP strategy. The May 1 close precedes the first archived Alpha-HRP report on May 4. Use the last exchange close of each week and split at the August 21 close, before the first close-only trades.
-
-| Period | Alpaca | SPY | Cumulative excess | Mean weekly excess | Weeks ahead | Ahead in SPY down weeks |
-|---|---:|---:|---:|---:|---:|---:|
-| Jan 16–Aug 21 · full HRP account | −0.28% | +11.30% | −11.58 pp | −0.28 pp | 14/31 | 7/13 |
-| May 1–Aug 21 · Alpha-HRP before the switch | +3.72% | +6.53% | −2.80 pp | −0.07 pp | 6/16 | 1/5 |
-| Aug 21–Nov 13 · close-only Alpha-HRP | −9.90% | −1.24% | −8.66 pp | −0.73 pp | 5/12 | 3/7 |
-
-Before the switch, Alpha-HRP had a smaller average weekly shortfall. The close-only period had a slightly higher hit rate and a smaller mean shortfall in SPY down weeks. Both periods lagged SPY on average. Market conditions, checkpoints, and portfolio rules varied across the periods. The comparison describes account performance and cannot isolate the effect of dropping the four input channels.
-
-Run `python scratch/AlphaAllocationV2/compare_v1_switch.py` with the saved data, or add `--refresh-through 2026-11-13` to read the broker and benchmark again. [Relative performance chart](data/v1_production_comparison/before_after_spy.png) · [Weekly excess returns](data/v1_production_comparison/before_after_weekly.csv)
-
-#### Research replay versus the deployed model
-
-The V1 baseline in the hypothesis comparisons is a close-only research refit trained on 2021–2024 and selected on 2025 validation. The production checkpoint used at the August switch was `v2026-08-21-0af698826abd`. The January–November comparisons reuse a research window that starts before the August launch. They compare challenger specifications and provide no direct evidence of deployed V1's performance.
-
-From the August 21 close through the November 6 close, the last daily close in the saved research NAV, the H25/H26/H27 V1 HRP refit lost 10.01%, Alpaca lost 10.75%, and SPY lost 3.74%. The refit had already gained 41.99% from its January start through August 21. Its equal-weight counterpart lost 13.49% on the matched window. The headline January–November gain is sensitive to the pre-launch portion.
-
-The six archived production reports from August 24 through September 28 share an average of 6.67 names out of 15 with the research replay. Repricing each week's target weights at the same Friday closes gives a gross return of −1.75% for the deployed targets and −6.71% for the refit targets. Actual Alpaca NAV returned −5.00% in those six weeks. The remaining difference mixes execution timing, sizing, previous holdings, cash, and broker marks. The aggregate closeness of the matched NAV curves does not establish weekly trade parity. Use historical checkpoint versions and timestamped production inputs, targets, and fills for a production replication before using replay results to judge deployment.
-
-Run `python scratch/AlphaAllocationV2/reconcile_v1_replay.py` with the saved research and Alpaca exports. [Matched chart](data/v1_production_comparison/matched_replay.png) · [Weekly target comparison](data/v1_production_comparison/matched_replay_targets.csv)
+The [V1 experiment archive](../AlphaAllocationV1/README.md#archived-v1-experiments) contains the V1 holdout, hypotheses, and production reconciliation. V1 also reads the shared historical price and Friday feature datasets documented here.
 
 ### Screening research sequence
 
