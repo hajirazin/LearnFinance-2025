@@ -261,12 +261,10 @@ def friday_news(fridays, calendar, symbols, *, db_path=DATA / "news/news_v1.duck
             np.nan
         )
     news["cutoff_utc"] = pd.to_datetime(news.pop("cutoff_epoch"), unit="s", utc=True)
+    revision_epochs = news.pop("latest_news_revision_epoch")
+    complete_revisions = revision_epochs[news["news_status"].eq("complete")].dropna()
     news["latest_news_revision_utc"] = pd.to_datetime(
-        news.pop("latest_news_revision_epoch").where(
-            news["news_status"].eq("complete")
-        ),
-        unit="s",
-        utc=True,
+        complete_revisions, unit="s", utc=True
     )
     return news.set_index(["friday", "symbol"]).sort_index()
 

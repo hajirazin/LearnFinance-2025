@@ -120,6 +120,14 @@ On 33 matched Fridays, the return input reduced basket MAE from 3.80 to 3.75 pp 
 
 ![H28 forecast comparison with adjusted close and daily log return inputs](figures/h28/close_input_comparison.png)
 
+### Fresh lookback shadow comparison
+
+The [lookback shadow report](V1_LOOKBACK_SHADOW.md) records the first comparison after the H1–H27 forecast sample. It includes the completed November 6–13 replay, the forecasts frozen for November 20, and commands to record the next outcome.
+
+### One-year ridge comparison
+
+The [ridge report and chart](V1_RIDGE_LOOKBACK.md) compare one and seven input channels on identical training examples and 33 archived 2026 Fridays. The fixed-basket MAE was 3.783 pp with one channel and 3.781 pp with seven (paired one-sided p = 0.470). Forecasting zero gave the lowest individual-stock MAE.
+
 ### Actual V1 paper performance since the close-only switch
 
 The one-input PatchTST migration landed August 23, 2026 in `4e91cd1`. The August 24 production rebalance first used checkpoint `v2026-08-21-0af698826abd`. Normalize the curves at the August 21 pre-switch close. Use Alpaca's reported HRP paper-account equity through November 13, with the regular-session 16:00 intraday mark for the final date while the daily series ends November 12. The activity export contains 751 fills across 216 orders, 21 fees, two dividends, and zero external cash transfers. [October production audit](alpha_hrp_audit_2026_10_03/AUDIT.md)
