@@ -41,6 +41,24 @@ For each comparison, test the one-sided null that the mean weekly difference is 
 
 Before confirmation, agree on a minimum economically worthwhile improvement, drawdown and turnover tolerances, and an evaluation horizon informed by the variability of weekly differences. Evidence for promotion should support both positive SPY excess and improvement on the incumbent, with an effect large enough to matter and acceptable risk. If the evidence is too imprecise to meet the prespecified decision rule, report the result as inconclusive. Review performance across market periods, concentration in a few weeks or names, and sensitivity to costs before interpreting any apparent win.
 
+## Feature relationships with future returns
+
+The [seven-feature relationship study](V1_FEATURE_RELATIONSHIPS.md) compares each input with next-session and next-Friday close returns, plots percentile groups and yearly stability, and fits monthly 2025 Ridge models with each feature removed in turn. It uses the audited 356-stock cohort, calendar-week block bootstrap intervals, and Holm adjustment at 5%. Complete seven-feature observations start in 2017 after the momentum warmup. Both the development and 2025 periods have informed earlier research, so the findings are exploratory.
+
+Every feature's 2025 weekly information-coefficient interval includes zero. None of the 84 relationship tests or 28 incremental-value tests passes the primary multiplicity-adjusted threshold. These results leave the contribution of the seven inputs uncertain. The report preserves the full list of estimates, group-return shapes, coverage, and a proportional-cost sensitivity check. Regenerate it with `PYTHONPATH=brain_api:scratch/AlphaAllocationV2 python scratch/AlphaAllocationV1/analyze_feature_relationships.py`.
+
+![Seven features versus subsequent daily and weekly returns](figures/feature_relationships/information_coefficients.png)
+
+The [OHLCV extension](V1_FEATURE_RELATIONSHIPS_OHLCV.md) adds Friday open, high, and low for ten distinct inputs. Close and volume already belong to the seven. All three added prices have mean 2025 cross-sectional Spearman correlation above 0.9998 with close. On 44 paired weeks, adding them changes mean gross top-15 return by +0.0139 pp, with a 95% interval of −0.2620 to +0.2916 pp. The illustrative 10-bp turnover-cost diagnostic reduces the mean difference to +0.0032 pp. Stock MAE is slightly higher with ten inputs. None of 120 relationship tests or 44 incremental-value tests passes Holm at 5%. These results support retaining the seven-input challenger as the smaller research candidate while its production comparison remains pending.
+
+Run `PYTHONPATH=brain_api:scratch/AlphaAllocationV2 python scratch/AlphaAllocationV1/analyze_ohlcv_relationships.py` to regenerate the extension, including all ten features, yearly stability, group returns, ten leave-one-out arms, and the direct seven-versus-ten comparison.
+
+### News distribution and negative-sentiment conditions
+
+The [news study](V1_NEWS_SENTIMENT.md) audits unique articles, sentiment units, winning FinBERT classes, Friday coverage, and returns conditional on negative weekly sentiment. Of 382,984 unique articles, 32.53% have scores below zero and 32.27% have scores below −0.001, the literal −0.1% cutoff. Negative is the winning class for 19.61%. Among valid stock-weeks including verified no-news neutral zeros, the corresponding signed-score fractions are 15.72% and 15.63%.
+
+Scores below −0.10 are associated with a 1.240 pp shortfall during the news week. The 2025 subsequent weekly difference is approximately zero, with a wide interval. None of the 24 forward comparisons passes Holm at 5%. The association during the same week leaves causal direction unresolved. Technical probability checks pass, while 43.08% of unique articles have blank source metadata and human sentiment accuracy remains unmeasured. Run `PYTHONPATH=brain_api:scratch/AlphaAllocationV2 python scratch/AlphaAllocationV1/analyze_news_sentiment.py` to regenerate all three figures and the report.
+
 ## Archived V1 experiments
 
 The [H1–H27 forecast accuracy report and chart gallery](V1_FORECAST_ACCURACY.md) compares the archived forecasts with realized stock and basket returns on the same five-session Friday pairs. It contains all 27 individual charts, realized SPY, and simple forecast baselines. Regenerate the analysis from the repository root with `PYTHONPATH=brain_api python scratch/AlphaAllocationV1/compare_v1_forecast_accuracy.py`.
