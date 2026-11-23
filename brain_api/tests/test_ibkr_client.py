@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from brain_api.core.ibkr_client import (
@@ -125,6 +126,61 @@ class TestIBKRClientPortfolio:
 
 
 class TestIBKRClientOrders:
+    @pytest.mark.parametrize("after_reply", [False, True])
+    @patch("httpx.Client.post")
+    def test_explicit_order_rejection(self, mock_post, config, after_reply):
+        message = "Fractional quantity is not supported for this order."
+        rejection = {"error": message, "action": "order_submit_issue"}
+        responses = [[{"conid": 76792991}]]
+        if after_reply:
+            responses.append([{"id": "reply-1", "message": ["Continue?"]}])
+        responses.append(rejection)
+        mock_post.side_effect = [
+            httpx.Response(
+                200, json=body, request=httpx.Request("POST", config.base_url)
+            )
+            for body in responses
+        ]
+
+        result = submit_order(
+            config,
+            IBKROrderSpec("TSLA", 3.1622, "sell", "market", "day", None, "sell", "USD"),
+        )
+
+        assert (result.status, result.perm_id, result.error) == (
+            "rejected",
+            None,
+            message,
+        )
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.ReadTimeout("timed out"),
+            {"status": "unrecognized"},
+            {"order_id": "123", "error": "uncertain outcome"},
+        ],
+    )
+    @patch("httpx.Client.post")
+    def test_ambiguous_order_outcome_remains_error(self, mock_post, config, failure):
+        request = httpx.Request("POST", config.base_url)
+        search_result = httpx.Response(200, json=[{"conid": 76792991}], request=request)
+        outcome = (
+            failure
+            if isinstance(failure, Exception)
+            else httpx.Response(200, json=failure, request=request)
+        )
+        mock_post.side_effect = [search_result, outcome]
+
+        result = submit_order(
+            config,
+            IBKROrderSpec("TSLA", 3.1622, "sell", "market", "day", None, "sell", "USD"),
+        )
+
+        assert result.status == "error"
+        assert result.perm_id is None
+        assert result.error
+
     @patch("httpx.Client.post")
     @patch("httpx.Client.get")
     def test_submit_order_direct_success(self, mock_get, mock_post, config):

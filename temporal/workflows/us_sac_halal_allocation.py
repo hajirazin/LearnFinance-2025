@@ -304,6 +304,7 @@ class USSACHalalAllocationWorkflow:
                 sac_sell_orders,
                 submit_orders_ibkr_sac_halal,
                 check_status_activity=check_order_statuses_ibkr,
+                skip_rejected_sells=workflow.patched("ibkr-sell-submit-rejections-v1"),
             )
             buy_portfolio = sac_portfolio
             if run_sac:

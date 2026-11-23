@@ -289,6 +289,16 @@ def submit_order(config: IBKRConnectionConfig, spec: IBKROrderSpec) -> IBKRSubmi
                 status = data[0].get("order_status", "Submitted")
                 return IBKRSubmitResult(spec.client_order_id, perm_id, status)
 
+            # The Web API returns an HTTP 200 rejection object for orders
+            # it definitively refused, including after a warning reply.
+            if resp.status_code == 200 and isinstance(data, dict):
+                message = data.get("error")
+                has_order_id = data.get("order_id") or data.get("orderId")
+                if not has_order_id and isinstance(message, str) and message.strip():
+                    return IBKRSubmitResult(
+                        spec.client_order_id, None, "rejected", message
+                    )
+
             return IBKRSubmitResult(
                 spec.client_order_id, None, "error", f"Unexpected response: {data}"
             )

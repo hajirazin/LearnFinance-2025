@@ -482,6 +482,9 @@ def check_order_statuses_ibkr(account: str, client_order_ids: list[str]) -> list
     all_orders = response.json()
     id_set = set(client_order_ids)
     matched = [o for o in all_orders if o.get("client_order_id") in id_set]
+    for order in matched:
+        if order.get("status", "").lower() in {"cancelled", "apicancelled"}:
+            order["status"] = "canceled"
     logger.info(
         f"Got {len(matched)}/{len(client_order_ids)} IBKR order statuses "
         f"for {account.upper()}"

@@ -147,6 +147,8 @@ async def submit_sells_and_wait(
     sells: GenerateOrdersResponse | SkippedOrdersResponse,
     submit_activity,
     check_status_activity=check_order_statuses,
+    *,
+    skip_rejected_sells: bool = False,
 ):
     """Submit sells and durably wait until they are terminal or time out."""
     sell_submit = await workflow.execute_activity(
@@ -175,6 +177,16 @@ async def submit_sells_and_wait(
                     f"({next_open.isoformat()})"
                 )
                 await workflow.sleep(wait)
+
+        if skip_rejected_sells:
+            rejected_ids = {
+                result.client_order_id
+                for result in sell_submit.results
+                if result.status == "rejected" and result.id is None
+            }
+            sell_order_ids = [oid for oid in sell_order_ids if oid not in rejected_ids]
+            if not sell_order_ids:
+                return sell_submit
 
         deadline = workflow.now() + SELL_DEADLINE
         while workflow.now() < deadline:

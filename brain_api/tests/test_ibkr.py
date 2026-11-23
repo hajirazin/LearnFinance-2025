@@ -27,6 +27,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -266,6 +267,47 @@ class TestIBKRSubmitOrders:
 
         mock_submit.assert_not_called()
         assert response.json()["results"][0]["status"] == "deduped"
+
+    def test_broker_rejection_is_reported_and_recorded(self, client):
+        order_ref = "paper:halal:2026-05-04:attempt-1:TSLA:SELL"
+        message = "Fractional quantity is not supported for this order."
+        order = _order("TSLA", "sell", order_ref)
+        order.update(qty=3.1622, type="market", limit_price=None)
+
+        def broker_response(request):
+            if request.url.path.endswith("/secdef/search"):
+                return httpx.Response(200, json=[{"conid": 76792991}])
+            assert request.url.path.endswith("/iserver/account/DU1234567/orders")
+            return httpx.Response(200, json={"error": message})
+
+        with (
+            patch("brain_api.routes.ibkr.get_session_status", return_value=True),
+            patch("brain_api.routes.ibkr.list_open_order_refs", return_value=set()),
+            patch(
+                "brain_api.core.ibkr_client._get_client",
+                return_value=httpx.Client(
+                    transport=httpx.MockTransport(broker_response)
+                ),
+            ),
+        ):
+            submission = client.post(
+                "/ibkr/submit-orders",
+                json={"account": "sac_halal", "orders": [order]},
+            )
+
+        assert submission.status_code == 200
+        result = submission.json()
+        assert result["orders_failed"] == 1
+        assert result["orders_submitted"] == 0
+        assert result["results"][0]["status"] == "rejected"
+        assert result["results"][0]["error"] == message
+        assert result["results"][0]["id"] is None
+        history = client.get(
+            "/ibkr/order-history",
+            params={"account": "sac_halal", "after": "2026-05-04"},
+        )
+        assert history.status_code == 200
+        assert history.json()[0]["status"] == "rejected"
 
     def test_submit_partial_failure_keeps_loop_alive(self, client, temp_ledger):
         """One bad order does not stop the others from being submitted."""
