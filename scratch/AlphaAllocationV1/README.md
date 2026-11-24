@@ -146,6 +146,10 @@ The [lookback shadow report](V1_LOOKBACK_SHADOW.md) records the first comparison
 
 The [ridge report and chart](V1_RIDGE_LOOKBACK.md) compare one and seven input channels on identical training examples and 33 archived 2026 Fridays. The fixed-basket MAE was 3.783 pp with one channel and 3.781 pp with seven (paired one-sided p = 0.470). Forecasting zero gave the lowest individual-stock MAE.
 
+The [R² follow-up](V1_RIDGE_LOOKBACK.md#r-squared-adjusted-r-squared-and-anova) records negative test R² for both models, explains adjusted R² and ANOVA assumptions, and compares paired weekly squared errors. Seven channels give a small individual-stock error reduction, while the basket difference remains inconclusive.
+
+The [SPY regression](V1_RIDGE_LOOKBACK.md#r-squared-against-spy) gives market R² of 0.0014 and 0.0224 for the two basket forecasts, compared with 0.3531 for their shared actual basket. Adjusted R² is reported for the separate one-predictor OLS regressions, with direct SPY tracking scores alongside them.
+
 ### Actual V1 paper performance since the close-only switch
 
 The one-input PatchTST migration landed August 23, 2026 in `4e91cd1`. The August 24 production rebalance first used checkpoint `v2026-08-21-0af698826abd`. Normalize the curves at the August 21 pre-switch close. Use Alpaca's reported HRP paper-account equity through November 13, with the regular-session 16:00 intraday mark for the final date while the daily series ends November 12. The activity export contains 751 fills across 216 orders, 21 fees, two dividends, and zero external cash transfers. [October production audit](alpha_hrp_audit_2026_10_03/AUDIT.md)
