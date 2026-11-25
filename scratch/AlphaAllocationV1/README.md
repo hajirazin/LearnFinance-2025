@@ -150,6 +150,26 @@ The [R² follow-up](V1_RIDGE_LOOKBACK.md#r-squared-adjusted-r-squared-and-anova)
 
 The [SPY regression](V1_RIDGE_LOOKBACK.md#r-squared-against-spy) gives market R² of 0.0014 and 0.0224 for the two basket forecasts, compared with 0.3531 for their shared actual basket. Adjusted R² is reported for the separate one-predictor OLS regressions, with direct SPY tracking scores alongside them.
 
+### Matched XGBoost comparison
+
+The [XGBoost, ridge, and PatchTST experiment](V1_XGBOOST_COMPARISON.md) compares the same seven normalized feature histories, one-year context, training examples, and direct weekly squared-error target. Seed 42 is primary, with seeds 43 and 44 as sensitivity fits. The report preserves the forecasts, paired weekly tests, charts, and gross selected-basket comparisons with SPY.
+
+Across the 33 reused 2026 Fridays, primary stock RMSE was 5.8734 pp for XGBoost, 5.8731 for ridge, and 5.8732 for PatchTST. Zero-return forecasts had the lowest point estimate at 5.8691 pp. Both primary XGBoost improvement tests had Holm p = 1.00. Its own sticky basket averaged +0.60 pp gross weekly excess over SPY, with a descriptive 95% interval of −0.60 to +1.80 pp. These historical results leave its forecast improvement and net market outperformance unestablished.
+
+### News contribution in the matched PatchTST
+
+The [six-versus-seven informative-feature ablation](V1_PATCHTST_NEWS_ABLATION.md) disables the normalized sentiment input during fitting and inference. It retains the same seven-slot network, initialization method, shared examples, weekly target, training policy, and equal-weight sticky selection. The comparison uses the original seven-feature checkpoints for the same three seeds.
+
+In primary seed 42, keeping news improved mean gross weekly basket return by 0.733 percentage points (95% block interval 0.364 to 1.120 pp, two-sided p = 0.0003). The other seeds showed news benefits of +0.125 pp and −0.019 pp, with both intervals crossing zero. Six informative features gave slightly lower stock forecast RMSE in all three seeds. The selection-return advantage is therefore sensitive to training seed; these reused historical gross results do not establish a reliable production improvement.
+
+### Candidate for a paper-production trial — November 25, 2026
+
+The discussion concluded that the evidence is sufficient to try the candidate in a reversible paper deployment. Further exploratory model comparisons need not block that trial. Outperformance remains unproven, and rollout is a separate implementation task; this research commit does not deploy or promote a model.
+
+Use PatchTST with seven inputs: 20-day momentum, 12–1 momentum, 20-day volatility, 20-day relative volume, adjusted close, reported volume, and news sentiment. Supply the trailing 365 calendar days consistently during training and inference. Predict one next-week simple return, train with weekly-return MSE, select checkpoints by validation MSE with early stopping, and report RMSE. The input context length is distinct from the multi-year training sample.
+
+Retain the existing eligible universe, 15/20 rank-band stickiness, and HRP allocation for the trial; do not add a permanent 356-stock training restriction. Preserve the incumbent checkpoint for rollback and record the deployed recipe and checkpoint. Monitor forecast error, actual net performance versus SPY, drawdown, and turnover through the execution pipeline. Preserve the historical preprocessing specification when reproducing this candidate; any correction is an explicit follow-up change.
+
 ### Actual V1 paper performance since the close-only switch
 
 The one-input PatchTST migration landed August 23, 2026 in `4e91cd1`. The August 24 production rebalance first used checkpoint `v2026-08-21-0af698826abd`. Normalize the curves at the August 21 pre-switch close. Use Alpaca's reported HRP paper-account equity through November 13, with the regular-session 16:00 intraday mark for the final date while the daily series ends November 12. The activity export contains 751 fills across 216 orders, 21 fees, two dividends, and zero external cash transfers. [October production audit](alpha_hrp_audit_2026_10_03/AUDIT.md)
