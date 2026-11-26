@@ -68,6 +68,9 @@ class PatchTSTInferenceResponse(BaseModel):
 
     predictions: list[PatchTSTSymbolPrediction]
     model_version: str
+    forecast_anchor_date: str | None = None
+    forecast_end_date: str | None = None
+    forecast_recipe: str | None = None
     as_of_date: str  # YYYY-MM-DD
     target_week_start: str  # YYYY-MM-DD (first trading day of target week)
     target_week_end: str  # YYYY-MM-DD (last trading day of target week)
@@ -132,6 +135,9 @@ class PatchTSTScoreBatchResponse(BaseModel):
         ),
     )
     model_version: str
+    forecast_anchor_date: str | None = None
+    forecast_end_date: str | None = None
+    forecast_recipe: str | None = None
     as_of_date: str
     target_week_start: str | None = None
     target_week_end: str | None = None

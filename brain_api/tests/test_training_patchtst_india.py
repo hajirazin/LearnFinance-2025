@@ -12,14 +12,24 @@ from transformers import PatchTSTForPrediction
 
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
+from brain_api.core.patchtst.config import DEFAULT_CONFIG
 from brain_api.main import app
 from brain_api.routes.training.dependencies import (
+    get_india_patchtst_config,
     get_patchtst_dataset_builder,
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
+
+
+@pytest.fixture(autouse=True)
+def legacy_mock_artifact_config(monkeypatch):
+    # The existing promotion and persistence fixtures produce five-output artifacts.
+    monkeypatch.setitem(
+        app.dependency_overrides, get_india_patchtst_config, lambda: DEFAULT_CONFIG
+    )
 
 
 def _mock_india_symbols() -> list[str]:
@@ -200,6 +210,7 @@ def client_india(temp_india_storage, monkeypatch):
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         _mock_dataset_builder
     )
+    app.dependency_overrides[get_india_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -226,6 +237,7 @@ def client_india_with_backfill_mocks(temp_india_storage, monkeypatch):
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         _mock_dataset_builder
     )
+    app.dependency_overrides[get_india_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
     _patch_india_patchtst_backfill_internals(monkeypatch)
 
@@ -277,6 +289,7 @@ def test_train_patchtst_india_rejects_missing_ns_suffix(
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         _mock_dataset_builder
     )
+    app.dependency_overrides[get_india_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -356,6 +369,7 @@ def test_train_patchtst_india_promotes_even_when_worse_than_prior(monkeypatch):
         app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
             _mock_dataset_builder
         )
+        app.dependency_overrides[get_india_patchtst_config] = lambda: DEFAULT_CONFIG
         app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -372,6 +386,7 @@ def test_train_patchtst_india_promotes_even_when_worse_than_prior(monkeypatch):
             first_version = r1b.json()["version"]
             assert storage.read_current_version() == first_version
 
+            app.dependency_overrides[get_india_patchtst_config] = lambda: DEFAULT_CONFIG
             app.dependency_overrides[get_patchtst_trainer] = lambda: _mock_trainer_worse
             os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
 

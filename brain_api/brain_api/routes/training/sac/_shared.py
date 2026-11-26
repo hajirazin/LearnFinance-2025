@@ -59,7 +59,13 @@ class SACTrainRequest(BaseModel):
     )
 
 
-def sac_current_is_reusable(metadata: dict | None, symbols: list[str]) -> bool:
+def sac_current_is_reusable(
+    metadata: dict | None,
+    symbols: list[str],
+    *,
+    forecast_recipe: str | None = None,
+    start_date: str | None = None,
+) -> bool:
     """True when the promoted artifact can still serve live SAC inference."""
     if metadata is None:
         return False
@@ -69,4 +75,12 @@ def sac_current_is_reusable(metadata: dict | None, symbols: list[str]) -> bool:
         and metadata.get("news_schema_version") == NEWS_SCHEMA_VERSION
         and metadata.get("finbert_revision") == NEWS_SENTIMENT_REVISION
         and set(metadata.get("symbols", [])) == set(symbols)
+        and (
+            forecast_recipe is None
+            or metadata.get("patchtst_recipe") == forecast_recipe
+        )
+        and (
+            start_date is None
+            or metadata.get("data_window", {}).get("start") == start_date
+        )
     )

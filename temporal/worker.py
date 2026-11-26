@@ -41,6 +41,7 @@ from activities.inference import (
     select_rank_band_top_n,
     select_sticky_top_n,
 )
+from activities.patchtst_news import refresh_patchtst_news
 from activities.portfolio import (
     check_order_statuses,
     check_order_statuses_ibkr,
@@ -122,6 +123,7 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_patchtst_news import USPatchTSTNewsWorkflow
 from workflows.us_ppo_discovery_allocation import USPPODiscoveryAllocationWorkflow
 from workflows.us_ppo_discovery_training import USPPODiscoveryTrainingWorkflow
 from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
@@ -136,6 +138,7 @@ MAX_CONCURRENT_ACTIVITIES = int(
 )
 
 ALL_WORKFLOWS = [
+    USPatchTSTNewsWorkflow,
     IndiaDoubleHRPWorkflow,
     IndiaWeeklyAllocationWorkflow,
     IndiaWeeklyTrainingWorkflow,
@@ -151,6 +154,7 @@ ALL_WORKFLOWS = [
 ]
 
 ALL_ACTIVITIES = [
+    refresh_patchtst_news,
     # Inference / signals / allocators
     get_monday_decision_window,
     materialize_news_window,

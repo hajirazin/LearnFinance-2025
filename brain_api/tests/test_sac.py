@@ -546,19 +546,9 @@ _TINY_SAC_BASE_CONFIG = SACConfig(
 )
 
 
-def _mock_patchtst_forecasts(
-    weekly_prices,
-    weekly_dates,
-    symbols,
-    shutdown_event=None,
-    target_dates=None,
-):
-    """Stand-in for :func:`build_patchtst_forecast_features` used by the
-    SAC full-training tests so they don't run real walk-forward
-    PatchTST fits on top of mock prices.
-    """
-    n = len(weekly_dates)
-    return {s: np.zeros(n) for s in symbols if s in weekly_prices}
+def _mock_patchtst_forecasts(symbols, weekly_dates, decision_sessions, **kwargs):
+    """Use finite synthetic forecasts for the mocked SAC training job."""
+    return {symbol: np.zeros(len(weekly_dates)) for symbol in symbols}
 
 
 _RL_SIGNAL_KEYS: tuple[str, ...] = (
@@ -618,16 +608,20 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
       (``make_sac_config_for_n_stocks`` ``replace(...)``\\s from
       whatever base is bound on the route module, so this is the
       cheapest seam)
-    * ``build_patchtst_forecast_features`` -> :func:`_mock_patchtst_forecasts`
+    * ``score_sac_forecasts`` -> :func:`_mock_patchtst_forecasts`
     * ``train_sac`` -> returns :func:`create_mock_training_result`
       with the *resolved* (per-bucket) config so the actor/critic
       shapes match downstream metadata writes.
 
     Per AGENTS.md rule: side effects mocked, never skipped.
     """
+    from brain_api.core.config import resolve_training_window
     from brain_api.core.sac.readiness import SACTrainingReadiness
     from brain_api.routes.training.sac import full as sac_full_route
 
+    monkeypatch.setattr(
+        sac_full_route, "resolve_sac_training_window", resolve_training_window
+    )
     monkeypatch.setattr(sac_full_route, "load_prices_yfinance", mock_price_loader)
     monkeypatch.setattr(
         sac_full_route,
@@ -640,9 +634,7 @@ def _patch_sac_full_training_internals(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     monkeypatch.setattr(sac_full_route, "DEFAULT_SAC_CONFIG", _TINY_SAC_BASE_CONFIG)
-    monkeypatch.setattr(
-        sac_full_route, "build_patchtst_forecast_features", _mock_patchtst_forecasts
-    )
+    monkeypatch.setattr(sac_full_route, "score_sac_forecasts", _mock_patchtst_forecasts)
     monkeypatch.setattr(
         sac_full_route, "build_rl_training_signals", _mock_rl_training_signals
     )
@@ -1016,7 +1008,7 @@ class TestSACFullTraining:
 
             monkeypatch.setattr(
                 sac_full_route,
-                "resolve_training_window",
+                "resolve_sac_training_window",
                 lambda: (dt_date(2015, 1, 2), dt_date(2025, 12, 26)),
             )
 
@@ -1061,7 +1053,7 @@ class TestSACFullTraining:
 
             monkeypatch.setattr(
                 sac_full_route,
-                "resolve_training_window",
+                "resolve_sac_training_window",
                 lambda: (dt_date(2015, 1, 2), dt_date(2025, 12, 26)),
             )
 

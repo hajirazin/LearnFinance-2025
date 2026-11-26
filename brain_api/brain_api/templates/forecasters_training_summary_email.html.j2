@@ -173,5 +173,8 @@
     <p style="margin: 4px 0 0 0;">This is an automated training summary. Not financial advice.</p>
   </div>
 
+{% if patchtst.metrics.weekly_rmse_pp is defined %}
+<p>PatchTST validation weekly-return RMSE: {{ "%.4f"|format(patchtst.metrics.weekly_rmse_pp) }} pp.</p>
+{% endif %}
 </body>
 </html>

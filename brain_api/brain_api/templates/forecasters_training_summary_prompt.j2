@@ -56,3 +56,8 @@ Respond with JSON only, using this exact structure:
     "para_3_patchtst": "2-3 sentences about PatchTST model training and its OHLCV approach",
     "para_4_recommendations": "2-3 sentences with recommendations or concerns for the downstream SAC workflow"
 }
+
+
+{% if patchtst.metrics.weekly_rmse_pp is defined %}
+PatchTST validation weekly-return RMSE: {{ patchtst.metrics.weekly_rmse_pp }} percentage points.
+{% endif %}

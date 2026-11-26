@@ -85,10 +85,9 @@ class PatchTSTHalalNewHuggingFaceModelStorage(
         return replace(config, hf_config=model.config.to_dict()).to_dict()
 
     def _create_model(self, config: "PatchTSTConfig") -> "PatchTSTForPrediction":
-        from transformers import PatchTSTForPrediction
+        from brain_api.core.patchtst.config import create_patchtst_model
 
-        hf_config = config.to_hf_config()
-        return PatchTSTForPrediction(hf_config)
+        return create_patchtst_model(config)
 
     def _create_artifacts(
         self,
@@ -97,6 +96,10 @@ class PatchTSTHalalNewHuggingFaceModelStorage(
         model: "PatchTSTForPrediction",
         version: str,
     ) -> PatchTSTArtifacts:
+        if config.weekly_regression:
+            from brain_api.core.patchtst.weekly_training import require_target_scale
+
+            require_target_scale(feature_scaler)
         return PatchTSTArtifacts(
             config=config,
             feature_scaler=feature_scaler,
@@ -105,6 +108,15 @@ class PatchTSTHalalNewHuggingFaceModelStorage(
         )
 
     def _generate_readme(self, version: str, metadata: dict[str, Any]) -> str:
+        config = metadata.get("config", {})
+        features = ", ".join(config.get("feature_names", ["close_ret"]))
+        weekly = config.get("context_calendar_days") is not None
+        output = (
+            "One simple return over the next five exchange sessions."
+            if weekly
+            else "Five daily log-return forecasts, compounded into a weekly return."
+        )
+        rmse = metadata.get("metrics", {}).get("weekly_rmse_pp", "N/A")
         return f"""---
 tags:
 - patchtst
@@ -117,7 +129,7 @@ tags:
 
 # LearnFinance PatchTST Model - {version}
 
-Close-only PatchTST transformer for predicting weekly stock returns.
+{output}
 
 ## Model Details
 
@@ -128,12 +140,13 @@ Close-only PatchTST transformer for predicting weekly stock returns.
 
 ## Input Channels
 
-- Close log return (1): ``close_ret``
+- {features}
 
 ## Metrics
 
 - Train Loss: {metadata.get("metrics", {}).get("train_loss", "N/A")}
 - Validation Loss: {metadata.get("metrics", {}).get("val_loss", "N/A")}
+- Weekly-return RMSE (percentage points): {rmse}
 - Baseline Loss: {metadata.get("metrics", {}).get("baseline_loss", "N/A")}
 - Best Epoch: {metadata.get("metrics", {}).get("best_epoch", "N/A")}
 - Stopped Epoch: {metadata.get("metrics", {}).get("stopped_epoch", "N/A")}

@@ -26,8 +26,8 @@ def strict_preflight_dependencies(monkeypatch):
     )
     monkeypatch.setattr(
         preflight_module,
-        "resolve_training_window",
-        lambda: (date(2024, 1, 1), date(2024, 2, 1)),
+        "resolve_sac_training_window",
+        lambda: (date(2019, 1, 1), date(2024, 2, 1)),
     )
     monkeypatch.setattr(
         preflight_module,
@@ -36,11 +36,11 @@ def strict_preflight_dependencies(monkeypatch):
     )
     monkeypatch.setattr(
         preflight_module,
-        "ensure_snapshot_for_bucket",
-        lambda **kwargs: True,
+        "ready_weekly_snapshots",
+        lambda *args: {},
     )
 
-    price_index = pd.date_range("2023-12-20", "2024-02-01", freq="D")
+    price_index = pd.date_range("2018-12-20", "2024-02-01", freq="D")
     prices = {
         "AAA": pd.DataFrame(
             {
@@ -199,7 +199,7 @@ def test_sac_preflight_reports_news_missing_per_symbol(
             symbols_resolver=lambda: symbols,
         ),
     )
-    price_index = pd.date_range("2023-12-20", "2024-02-01", freq="D")
+    price_index = pd.date_range("2018-12-20", "2024-02-01", freq="D")
     prices = {
         symbol: pd.DataFrame({"open": 100.0, "close": 100.0}, index=price_index)
         for symbol in symbols
@@ -272,10 +272,12 @@ def test_sac_full_rejects_unready_inputs_before_creating_job(
     )
     monkeypatch.setattr(
         full_module,
-        "resolve_training_window",
-        lambda: (date(2024, 1, 1), date(2024, 2, 1)),
+        "resolve_sac_training_window",
+        lambda: (date(2019, 1, 1), date(2024, 2, 1)),
     )
-    monkeypatch.setattr(full_module, "sac_compute_version", lambda *args: "v-test")
+    monkeypatch.setattr(
+        full_module, "sac_compute_version", lambda *args, **kwargs: "v-test"
+    )
     monkeypatch.setattr(
         full_module, "try_load_existing_train_metadata", lambda **kwargs: None
     )

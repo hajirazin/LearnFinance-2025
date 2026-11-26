@@ -12,18 +12,28 @@ from transformers import PatchTSTForPrediction
 
 from brain_api.core.model_buckets import ModelType, get_bucket
 from brain_api.core.patchtst import DatasetResult, TrainingResult
+from brain_api.core.patchtst.config import DEFAULT_CONFIG
 from brain_api.main import app
 from brain_api.routes.training import (
     get_patchtst_dataset_builder,
     get_patchtst_price_loader,
     get_patchtst_trainer,
 )
+from brain_api.routes.training.dependencies import get_patchtst_config
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import PatchTSTHalalNewModelStorage
 
 # ============================================================================
 # Test fixtures and mocks
 # ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def legacy_mock_artifact_config(monkeypatch):
+    # The existing promotion and persistence fixtures produce five-output artifacts.
+    monkeypatch.setitem(
+        app.dependency_overrides, get_patchtst_config, lambda: DEFAULT_CONFIG
+    )
 
 
 def mock_symbols() -> list[str]:
@@ -233,6 +243,7 @@ def client_with_mocks(temp_storage, monkeypatch):
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         mock_dataset_builder
     )
+    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -261,6 +272,7 @@ def client_with_backfill_mocks(temp_storage, monkeypatch):
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         mock_dataset_builder
     )
+    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
     _patch_us_patchtst_backfill_internals(monkeypatch)
 
@@ -440,6 +452,7 @@ def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
         app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
             mock_dataset_builder
         )
+        app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
         app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
         os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -456,6 +469,7 @@ def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
             first_version = response1b.json()["version"]
             assert fresh_storage.read_current_version() == first_version
 
+            app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
             app.dependency_overrides[get_patchtst_trainer] = lambda: (
                 mock_trainer_worse_than_baseline
             )
@@ -492,6 +506,7 @@ def test_train_patchtst_not_promoted_when_val_loss_is_nan(temp_storage, monkeypa
     app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
         mock_dataset_builder
     )
+    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
 
     os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
@@ -507,6 +522,7 @@ def test_train_patchtst_not_promoted_when_val_loss_is_nan(temp_storage, monkeypa
     healthy_version = response1b.json()["version"]
     assert temp_storage.read_current_version() == healthy_version
 
+    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
     app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer_nan_val_loss
     os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
 

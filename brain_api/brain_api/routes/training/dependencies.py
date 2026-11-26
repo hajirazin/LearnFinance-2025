@@ -22,9 +22,6 @@ from brain_api.core.lstm import (
     train_model_pytorch,
 )
 from brain_api.core.patchtst import (
-    DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG,
-)
-from brain_api.core.patchtst import (
     DatasetResult as PatchTSTDatasetResult,
 )
 from brain_api.core.patchtst import PatchTSTConfig
@@ -40,6 +37,7 @@ from brain_api.core.patchtst import (
 from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
+from brain_api.core.patchtst.config import INDIA_WEEKLY_CONFIG, US_WEEKLY_CONFIG
 from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
@@ -125,7 +123,11 @@ def get_patchtst_storage() -> PatchTSTHalalNewModelStorage:
 
 def get_patchtst_config() -> PatchTSTConfig:
     """Get PatchTST training configuration."""
-    return PATCHTST_DEFAULT_CONFIG
+    return US_WEEKLY_CONFIG
+
+
+def get_india_patchtst_config() -> PatchTSTConfig:
+    return INDIA_WEEKLY_CONFIG
 
 
 def get_patchtst_price_loader() -> PatchTSTPriceLoader:

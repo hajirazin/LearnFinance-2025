@@ -2,12 +2,11 @@
 
 import logging
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 
-from brain_api.core.config import resolve_training_window
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import (
     BucketConfig,
@@ -16,7 +15,7 @@ from brain_api.core.model_buckets import (
     get_bucket,
 )
 from brain_api.core.portfolio_rl.data_loading import build_rl_training_signals
-from brain_api.core.portfolio_rl.walkforward import build_patchtst_forecast_features
+from brain_api.core.portfolio_rl.weekly_patchtst import score_sac_forecasts
 from brain_api.core.sac import (
     DEFAULT_SAC_CONFIG,
     SAC_EXPERIMENT_SEEDS,
@@ -38,6 +37,7 @@ from brain_api.core.sac.trade_clock import (
     extract_session_open_prices,
 )
 from brain_api.core.training_utils import TrainingCancelledError
+from brain_api.news.sync import NewsSyncError, sync_news
 from brain_api.storage.policy import (
     StoragePolicyError,
     build_common_train_response_kwargs,
@@ -64,9 +64,11 @@ from ._market_history import (
     repair_and_extract_sac_market_history,
 )
 from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
+from .forecast_dependency import SAC_PATCHTST_RECIPE, resolve_sac_training_window
 from .preflight import assess_sac_training_readiness
 
 router = APIRouter()
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,18 +77,7 @@ def train_sac_endpoint(
     background_tasks: BackgroundTasks,
     request: SACTrainRequest = SACTrainRequest(),
 ) -> SACTrainResponse | JSONResponse:
-    """Train the SAC portfolio allocator using PatchTST forecast features.
-
-    Resolves the universe-specific config + storage via the bucket
-    registry, so two parallel A/B workflows
-    (``halal_filtered`` and ``halal``) can hit this endpoint with
-    different ``universe`` values and write to independent
-    ``current`` pointers without sharing process-wide state.
-
-    Returns 200 with cached result if version already exists (idempotent).
-    Returns 202 with job_id if training is started in the background.
-    Poll GET /train/status/{job_id} for progress and final result.
-    """
+    """Queue a full SAC fit or return the already-completed result."""
     allowed = sac_us_allowed_universes()
     if request.universe not in allowed:
         raise HTTPException(
@@ -101,23 +92,21 @@ def train_sac_endpoint(
     except UnknownBucketError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    # SAC v3 owns one canonical ticker-to-slot map per bucket. Eligibility
-    # changes only the mask and never reshuffles these lexicographic slots.
-    symbols = sorted(bucket.symbols_resolver())
+    try:
+        news_commit = sync_news()
+        symbols = sorted(bucket.symbols_resolver())
+    except NewsSyncError as exc:
+        raise HTTPException(503, str(exc)) from exc
     if bucket.symbol_validator is not None:
         try:
             bucket.symbol_validator(symbols)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
-    # Symbol-equality short-circuit: if the bucket's current promoted
-    # model was trained on the exact same symbol set, skip retraining
-    # and return the current model's metadata. Sits before the
-    # version-equality short-circuit (lines below) because it is the
-    # broader gate -- it fires even when the data window has moved
-    # forward, as long as the slate is unchanged. Per AGENTS.md rule
-    # #1, an HF outage under hf_first surfaces as 503 rather than a
-    # silent retrain so the operator notices HF is down.
+    try:
+        start_date, end_date = resolve_sac_training_window()
+    except (ValueError, StoragePolicyError) as exc:
+        raise HTTPException(503, str(exc)) from exc
     try:
         prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
     except StoragePolicyError as exc:
@@ -130,7 +119,12 @@ def train_sac_endpoint(
             ),
         ) from exc
 
-    if not request.force and sac_current_is_reusable(prior_metadata, symbols):
+    if not request.force and sac_current_is_reusable(
+        prior_metadata,
+        symbols,
+        forecast_recipe=SAC_PATCHTST_RECIPE,
+        start_date=start_date.isoformat(),
+    ):
         assert prior_metadata is not None
         logger.info(
             f"[SAC] Reusable-current short-circuit: bucket={bucket.bucket_name} "
@@ -155,13 +149,14 @@ def train_sac_endpoint(
 
     storage = bucket.local_storage_class()
 
-    start_date, end_date = resolve_training_window()
     logger.info(
         f"[SAC] Starting training for {len(symbols)} symbols "
         f"(bucket={bucket.bucket_name}, n_stocks={config.n_stocks}, "
         f"target_entropy={config.target_entropy})"
     )
-    version = sac_compute_version(start_date, end_date, symbols, config)
+    version = sac_compute_version(
+        start_date, end_date, symbols, config, patchtst_recipe=SAC_PATCHTST_RECIPE
+    )
 
     # HF-aware idempotency skip: under hf_first the helper consults
     # the bucket's HF repo for ``revision=version`` so a wiped local
@@ -212,6 +207,8 @@ def train_sac_endpoint(
         config=config,
         storage=storage,
         bucket=bucket,
+        news_commit=news_commit,
+        train_window=(start_date, end_date),
     )
     logger.info(f"[SAC] Background training started: {job.job_id}")
 
@@ -232,16 +229,10 @@ def _run_sac_full_training(
     config: SACConfig,
     storage: SACHalalFilteredModelStorage | SACHalalModelStorage,
     bucket: BucketConfig,
+    news_commit: str | None = None,
+    train_window: tuple[date, date] | None = None,
 ) -> None:
-    """Background task that runs the full SAC training pipeline.
-
-    ``bucket`` carries the bucket-specific HF repo getter and storage
-    class. ``bucket.bucket_name`` is threaded through to
-    ``create_sac_metadata`` so each parallel A/B bucket's metadata
-    identifies its own bucket on disk and on HF (vital for telling
-    the two ``current`` artifacts apart when they share the SAC
-    HuggingFace storage class).
-    """
+    """Train and persist one SAC policy on the accepted input window."""
     bucket_name = bucket.bucket_name
     hf_repo_getter = bucket.hf_repo_getter
     hf_storage_class = bucket.hf_storage_class
@@ -249,8 +240,10 @@ def _run_sac_full_training(
     from brain_api.main import shutdown_event
 
     try:
-        start_date, end_date = resolve_training_window()
-        version = sac_compute_version(start_date, end_date, symbols, config)
+        start_date, end_date = train_window or resolve_sac_training_window()
+        version = sac_compute_version(
+            start_date, end_date, symbols, config, patchtst_recipe=SAC_PATCHTST_RECIPE
+        )
 
         update_progress(job_id, {"phase": "loading_prices"})
         # Fetch extra calendar history before start_date so the earliest
@@ -336,12 +329,18 @@ def _run_sac_full_training(
 
         logger.info("[SAC] Generating PatchTST walk-forward forecasts")
         update_progress(job_id, {"phase": "walk_forward_forecasts"})
-        patchtst_predictions = build_patchtst_forecast_features(
-            weekly_prices=weekly_prices,
-            weekly_dates=weekly_dates,
-            symbols=available_symbols,
+        forecast_evidence = {
+            "patchtst_recipe": SAC_PATCHTST_RECIPE,
+            "news_commit": news_commit,
+        }
+        patchtst_predictions = score_sac_forecasts(
+            available_symbols,
+            weekly_dates,
+            trade_clock.transition_start_sessions,
+            start=start_date,
+            end=end_date,
+            evidence=forecast_evidence,
             shutdown_event=shutdown_event,
-            target_dates=trade_clock.transition_start_sessions,
         )
 
         for symbol in available_symbols:
@@ -435,6 +434,7 @@ def _run_sac_full_training(
                 },
                 audit_metadata=dict(candidate_result.audit_metadata),
             )
+            candidate_metadata.update(forecast_evidence)
             candidate_paths[candidate.seed] = storage.write_candidate_artifacts(
                 version,
                 candidate.seed,
@@ -503,6 +503,7 @@ def _run_sac_full_training(
             training_seed=selected_candidate.seed,
             experiment_seeds=list(SAC_EXPERIMENT_SEEDS),
         )
+        metadata.update(forecast_evidence)
         if promoted:
             storage.promote_candidate(version, selected_candidate.seed)
             storage.write_artifacts(

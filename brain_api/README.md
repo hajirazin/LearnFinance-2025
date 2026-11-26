@@ -57,6 +57,8 @@ Copy `.env.example` to `.env` and fill in your values. The `.env` file is auto-l
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `HF_NEWS_SENTIMENT_REPO` | Private HF dataset for news events, coverage, and the FinBERT score cache | None |
+| `NSE_CASH_CALENDAR_PATH` | Verified NSE cash-session calendar for India PatchTST | None |
 | `HF_TOKEN` | HuggingFace API token | None |
 | `HF_LSTM_MODEL_REPO` | HuggingFace LSTM forecaster model repository | None |
 | `HF_PATCHTST_MODEL_REPO` | HuggingFace PatchTST forecaster model repository | None |

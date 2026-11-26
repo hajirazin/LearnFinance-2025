@@ -70,6 +70,30 @@ def generate_walkforward_forecasts(
     grouping_dates = target_dates if target_dates is not None else weekly_dates
     if len(grouping_dates) != len(weekly_dates):
         raise ValueError("target_dates must align one-to-one with weekly_dates")
+    if forecaster_type == "patchtst":
+        from brain_api.core.inference_utils import compute_week_from_cutoff
+        from brain_api.core.portfolio_rl.weekly_patchtst import score_sac_forecasts
+
+        decisions = (
+            target_dates
+            if target_dates is not None
+            else pd.DatetimeIndex(
+                [
+                    compute_week_from_cutoff(day.date()).target_week_start
+                    for day in weekly_dates
+                ]
+            )
+        )
+        return score_sac_forecasts(
+            [symbol for symbol in symbols if symbol in weekly_prices],
+            weekly_dates,
+            decisions,
+            start=decisions[0].date(),
+            end=decisions[-1].date(),
+            evidence={},
+            shutdown_event=shutdown_event,
+        )
+
     start_year = grouping_dates[0].year
     end_year = grouping_dates[-1].year
 

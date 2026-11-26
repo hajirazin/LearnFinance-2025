@@ -118,7 +118,6 @@ from brain_api.core.prices import (
 from brain_api.core.screening_orchestration import select_rank_band_for_screening
 from brain_api.core.sticky_selection import iso_year_week_of_month_anchor
 from brain_api.core.strategy_partitions import HALAL_INDIA_FILTERED_ALPHA_PARTITION
-from brain_api.storage.patchtst.local import PatchTSTIndiaModelStorage
 from brain_api.storage.screening_history import ScreeningHistoryRepository
 from brain_api.universe.cache import load_cached_universe, save_universe_cache
 from brain_api.universe.nifty_shariah_500 import get_nifty_shariah_500_universe
@@ -218,11 +217,9 @@ def get_halal_india_universe(
         f"running India PatchTST inference"
     )
 
-    storage = PatchTSTIndiaModelStorage()
     batch_result = run_batch_inference(
         qualifying_symbols,
         cutoff_date,
-        storage=storage,
         exchange="XBOM",
     )
 

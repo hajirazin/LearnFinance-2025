@@ -160,6 +160,9 @@ def build_sac_feature_bundle(
     patchtst_provenance = {
         "as_of_date": getattr(forecasts_source, "as_of_date", resolved_date),
         "model_version": getattr(forecasts_source, "model_version", None),
+        "forecast_recipe": getattr(forecasts_source, "forecast_recipe", None),
+        "forecast_anchor_date": getattr(forecasts_source, "forecast_anchor_date", None),
+        "forecast_end_date": getattr(forecasts_source, "forecast_end_date", None),
     }
 
     return {

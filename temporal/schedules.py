@@ -51,6 +51,7 @@ from workflows.india_weekly_training import IndiaWeeklyTrainingWorkflow
 from workflows.us_alpha_hrp import USAlphaHRPWorkflow
 from workflows.us_double_hrp import USDoubleHRPWorkflow
 from workflows.us_forecasters_training import USForecastersTrainingWorkflow
+from workflows.us_patchtst_news import USPatchTSTNewsWorkflow
 from workflows.us_ppo_discovery_allocation import USPPODiscoveryAllocationWorkflow
 from workflows.us_ppo_discovery_training import USPPODiscoveryTrainingWorkflow
 from workflows.us_sac_halal_allocation import USSACHalalAllocationWorkflow
@@ -234,6 +235,19 @@ SCHEDULES = [
             "US PPO discovery training second Sunday of month 00:01 UTC "
             "(candidate only; no auto-promote)"
         ),
+    },
+    {
+        "id": "us-patchtst-news",
+        "workflow": USPatchTSTNewsWorkflow,
+        "workflow_id": "us-patchtst-news",
+        "calendar": ScheduleCalendarSpec(
+            day_of_week=(ScheduleRange(1, 5),),
+            hour=(ScheduleRange(18),),
+            minute=(ScheduleRange(0),),
+        ),
+        "time_zone_name": "America/New_York",
+        "task_queue": QUEUE_INFERENCE,
+        "description": "Prepare US PatchTST news weekdays at 18:00 New York",
     },
 ]
 

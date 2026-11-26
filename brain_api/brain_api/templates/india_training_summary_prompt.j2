@@ -41,3 +41,8 @@ Respond with JSON only, using this exact structure:
     "para_2_patchtst": "2-3 sentences about India PatchTST model training, performance metrics, and how it compares to baseline",
     "para_3_recommendations": "2-3 sentences with recommendations or concerns for the India pipeline"
 }
+
+
+{% if patchtst.metrics.weekly_rmse_pp is defined %}
+PatchTST validation weekly-return RMSE: {{ patchtst.metrics.weekly_rmse_pp }} percentage points.
+{% endif %}

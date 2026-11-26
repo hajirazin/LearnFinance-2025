@@ -111,5 +111,8 @@
     <p>LearnFinance India Training Pipeline &middot; NiftyShariah500 Universe &middot; NSE India</p>
   </div>
 
+{% if patchtst.metrics.weekly_rmse_pp is defined %}
+<p>PatchTST validation weekly-return RMSE: {{ "%.4f"|format(patchtst.metrics.weekly_rmse_pp) }} pp.</p>
+{% endif %}
 </body>
 </html>

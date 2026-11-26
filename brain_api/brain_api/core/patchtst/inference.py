@@ -1,12 +1,4 @@
-"""PatchTST inference helpers.
-
-Close-only direct 5-day inference.
-
-Single forward pass produces (batch, 5, 1) output -- 5 days x 1 close channel.
-RevIN automatically denormalizes output to original log-return scale.
-Compound the five close log returns for the weekly return. NO inverse-transform
-needed.
-"""
+"""PatchTST inference and the per-symbol API result contract."""
 
 from __future__ import annotations
 
@@ -298,6 +290,10 @@ class BatchInferenceResult:
 
     predictions: list[SymbolPrediction]
     model_version: str
+    week_boundaries: WeekBoundaries | None = None
+    forecast_anchor: date | None = None
+    forecast_end: date | None = None
+    forecast_recipe: str | None = None
 
 
 def run_batch_inference(
@@ -337,18 +333,31 @@ def run_batch_inference(
             when ``artifacts`` is not supplied).
     """
     from brain_api.core.prices import load_close_prices_yfinance, load_prices_yfinance
-    from brain_api.storage.local import PatchTSTModelStorage as _DefaultStorage
 
     if artifacts is None:
         if storage is None:
-            storage = _DefaultStorage()
+            from brain_api.core.model_buckets import ModelType, get_bucket
+            from brain_api.storage.policy import load_current_artifacts_for_bucket
 
-        version = storage.read_current_version()
-        if not version:
-            raise ValueError("No current PatchTST model version available")
-
-        artifacts = storage.load_current_artifacts()
+            universe = "nifty_shariah_500" if exchange == "XBOM" else "halal_new"
+            bucket = get_bucket(ModelType.PATCHTST, universe)
+            storage = bucket.local_storage_class()
+            artifacts = load_current_artifacts_for_bucket(
+                bucket=bucket,
+                model_label=bucket.model_label,
+            )
+        else:
+            artifacts = storage.load_current_artifacts()
     config = artifacts.config
+    if config.weekly_regression:
+        from brain_api.core.patchtst.weekly_inference import run_weekly_batch
+
+        return run_weekly_batch(
+            symbols,
+            cutoff_date,
+            artifacts,
+            base_path=getattr(storage, "base_path", None),
+        )
 
     week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
     logger.info(

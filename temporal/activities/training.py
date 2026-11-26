@@ -276,18 +276,9 @@ def train_sac(universe: str, force: bool = False) -> TrainingResponse:
 
 @activity.defn
 def train_india_patchtst(universe: str) -> TrainingResponse:
-    """Train the India PatchTST OHLCV forecaster on the given universe.
-
-    Snapshots are skipped: India PatchTST has no SAC consumer that
-    needs walk-forward snapshots, so producing them only wastes time
-    and disk. (US PatchTST keeps snapshots for SAC training.)
-    """
+    """Fit the India weekly forecaster and its annual snapshots."""
     logger.info(f"Starting India PatchTST training on universe={universe}...")
-    return _poll_training_job(
-        "/train/patchtst/india",
-        json_body={"universe": universe},
-        params={"skip_snapshot": "true"},
-    )
+    return _poll_training_job("/train/patchtst/india", json_body={"universe": universe})
 
 
 def _lstm_payload(lstm: TrainingResponse) -> dict:

@@ -55,6 +55,7 @@ def news_job_id(
     schema_version: int = NEWS_SCHEMA_VERSION,
     sentiment_model: str = NEWS_SENTIMENT_MODEL,
     sentiment_model_revision: str = NEWS_SENTIMENT_REVISION,
+    purpose: str = "monday",
 ) -> str:
     return canonical_json_hash(
         {
@@ -64,6 +65,7 @@ def news_job_id(
             "schema_version": schema_version,
             "sentiment_model": sentiment_model,
             "sentiment_model_revision": sentiment_model_revision,
+            **({"purpose": purpose} if purpose != "monday" else {}),
         }
     )
 

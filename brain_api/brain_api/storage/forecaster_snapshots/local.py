@@ -391,13 +391,14 @@ class SnapshotLocalStorage(SnapshotHFMixin):
                 model=model,
                 cutoff_date=cutoff_date,
             )
-        from transformers import PatchTSTForPrediction
-
-        from brain_api.core.patchtst import PatchTSTConfig
+        from brain_api.core.patchtst.config import PatchTSTConfig, create_patchtst_model
 
         config = PatchTSTConfig(**config_dict)
-        hf_config = config.to_hf_config()
-        model = PatchTSTForPrediction(hf_config)
+        if config.weekly_regression:
+            from brain_api.core.patchtst.weekly_training import require_target_scale
+
+            require_target_scale(feature_scaler)
+        model = create_patchtst_model(config)
         model.load_state_dict(
             torch.load(weights_path, weights_only=True, map_location="cpu")
         )

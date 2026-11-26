@@ -110,6 +110,15 @@ def infer_sac(
             ),
         )
 
+    provenance = request.feature_bundle.provenance.get("patchtst", {})
+    forecast_recipe = (
+        provenance.get("forecast_recipe") if isinstance(provenance, dict) else None
+    )
+    if forecast_recipe != metadata.get("patchtst_recipe"):
+        raise HTTPException(
+            503, "SAC policy and PatchTST forecast recipes do not match"
+        )
+
     try:
         cutoff = require_monday_decision_cutoff(request.as_of)
     except MondayCutoffError as exc:

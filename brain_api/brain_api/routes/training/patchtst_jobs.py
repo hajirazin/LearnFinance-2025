@@ -14,6 +14,7 @@ from brain_api.core.forecaster_snapshot_identity import (
 )
 from brain_api.core.model_buckets import BucketConfig
 from brain_api.core.patchtst import PatchTSTConfig
+from brain_api.core.patchtst.training_evidence import validate_label_evidence
 from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
@@ -39,6 +40,7 @@ def handle_patchtst_existing_metadata(
     bucket: BucketConfig,
     symbols: list[str],
     config: PatchTSTConfig,
+    price_loader: PatchTSTPriceLoader,
     train_window: tuple[date, date],
     version: str,
     existing_metadata: dict,
@@ -51,8 +53,28 @@ def handle_patchtst_existing_metadata(
     cached_response_kwargs = build_common_train_response_kwargs(
         version, existing_metadata
     )
+    if config.weekly_regression:
+        try:
+            validate_label_evidence(
+                existing_metadata.get("training_evidence", {}),
+                config.market,
+                date.fromisoformat(existing_metadata["data_window"]["end"]),
+                len(symbols),
+            )
+        except ValueError as exc:
+            raise HTTPException(503, str(exc)) from exc
+    local = bucket.local_storage_class()
+    needs_upload = (
+        config.weekly_regression
+        and local.version_exists(version)
+        and bool(bucket.hf_repo_getter())
+        and (
+            existing_metadata.get("publication_pending")
+            or existing_metadata.get("hf_repo") != bucket.hf_repo_getter()
+        )
+    )
 
-    if skip_snapshot:
+    if skip_snapshot and not needs_upload:
         logger.info(
             f"{log_prefix} Version {version} already exists (idempotent, "
             "skip_snapshot=true)"
@@ -60,16 +82,35 @@ def handle_patchtst_existing_metadata(
         return PatchTSTTrainResponse(
             **cached_response_kwargs,
             num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
+            signals_used=config.feature_names
+            if config.weekly_regression
+            else ["ohlcv"],
         )
 
     snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
+    if config.weekly_regression and bucket.universe == "halal_new":
+        from datetime import timedelta
+
+        from .weekly_patchtst_snapshots import EARLIEST_US_SNAPSHOT
+
+        first = existing_metadata.get("training_evidence", {}).get(
+            "first_snapshot_cutoff"
+        )
+        cutoff = date.fromisoformat(first) if first else EARLIEST_US_SNAPSHOT
+        train_window = (
+            max(train_window[0], cutoff + timedelta(days=1)),
+            train_window[1],
+        )
     try:
-        inventory: MissingSnapshotInventory = count_missing_snapshots(
-            forecaster_type=bucket.bucket_name,
-            train_window=train_window,
-            config_dict=config.to_dict(),
-            snapshot_storage=snapshot_storage,
+        inventory: MissingSnapshotInventory = (
+            MissingSnapshotInventory(())
+            if skip_snapshot
+            else count_missing_snapshots(
+                forecaster_type=bucket.bucket_name,
+                train_window=train_window,
+                config_dict=config.to_dict(),
+                snapshot_storage=snapshot_storage,
+            )
         )
     except StoragePolicyError as exc:
         logger.error(
@@ -77,7 +118,11 @@ def handle_patchtst_existing_metadata(
         )
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    if inventory.is_empty:
+    if (
+        inventory.is_empty
+        and not needs_upload
+        and not existing_metadata.get("snapshots_pending")
+    ):
         logger.info(
             f"{log_prefix} Version {version} already exists and all "
             "snapshots present (idempotent)"
@@ -85,7 +130,9 @@ def handle_patchtst_existing_metadata(
         return PatchTSTTrainResponse(
             **cached_response_kwargs,
             num_input_channels=config.num_input_channels,
-            signals_used=["ohlcv"],
+            signals_used=config.feature_names
+            if config.weekly_regression
+            else ["ohlcv"],
         )
 
     snapshots_job_key = f"{bucket.bucket_name}_snapshots"
@@ -112,10 +159,12 @@ def handle_patchtst_existing_metadata(
         job_id=job.job_id,
         symbols=symbols,
         config=config,
+        price_loader=price_loader,
         bucket=bucket,
         train_window=train_window,
         version=version,
         existing_metadata=existing_metadata,
+        skip_snapshot=skip_snapshot,
         log_prefix=f"{log_prefix} Snapshots-only",
     )
     logger.info(

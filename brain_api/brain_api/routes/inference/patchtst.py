@@ -96,7 +96,6 @@ def _run_patchtst_inference(
     exchange = (
         DEFAULT_INDIA_EXCHANGE if _is_india_bucket(bucket) else DEFAULT_US_EXCHANGE
     )
-    week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
 
     try:
         batch_result = run_batch_inference(
@@ -106,8 +105,11 @@ def _run_patchtst_inference(
             artifacts=artifacts,
             exchange=exchange,
         )
-    except ValueError as e:
+    except (ValueError, FloatingPointError) as e:
         raise HTTPException(503, str(e)) from e
+    week_boundaries = batch_result.week_boundaries or compute_week_from_cutoff(
+        cutoff_date, exchange=exchange
+    )
 
     predictions = batch_result.predictions
     valid_predictions = [
@@ -131,9 +133,18 @@ def _run_patchtst_inference(
         predictions=predictions,
         model_version=batch_result.model_version,
         as_of_date=cutoff_date.isoformat(),
+        forecast_anchor_date=batch_result.forecast_anchor.isoformat()
+        if batch_result.forecast_anchor
+        else None,
+        forecast_end_date=batch_result.forecast_end.isoformat()
+        if batch_result.forecast_end
+        else None,
+        forecast_recipe=batch_result.forecast_recipe,
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
-        signals_used=["ohlcv"],
+        signals_used=artifacts.config.feature_names
+        if batch_result.forecast_recipe
+        else ["ohlcv"],
     )
 
 
@@ -302,7 +313,6 @@ def patchtst_score_batch(
     exchange = (
         DEFAULT_INDIA_EXCHANGE if request.market == "india" else DEFAULT_US_EXCHANGE
     )
-    week_boundaries = compute_week_from_cutoff(cutoff_date, exchange=exchange)
 
     symbols = list(request.symbols)
     logger.info(
@@ -338,8 +348,11 @@ def patchtst_score_batch(
             artifacts=artifacts,
             exchange=exchange,
         )
-    except ValueError as e:
+    except (ValueError, FloatingPointError) as e:
         raise HTTPException(503, str(e)) from e
+    week_boundaries = batch_result.week_boundaries or compute_week_from_cutoff(
+        cutoff_date, exchange=exchange
+    )
 
     try:
         scores, excluded = validate_and_collect_finite_scores(
@@ -369,6 +382,13 @@ def patchtst_score_batch(
         scores=scores,
         model_version=batch_result.model_version,
         as_of_date=cutoff_date.isoformat(),
+        forecast_anchor_date=batch_result.forecast_anchor.isoformat()
+        if batch_result.forecast_anchor
+        else None,
+        forecast_end_date=batch_result.forecast_end.isoformat()
+        if batch_result.forecast_end
+        else None,
+        forecast_recipe=batch_result.forecast_recipe,
         target_week_start=week_boundaries.target_week_start.isoformat(),
         target_week_end=week_boundaries.target_week_end.isoformat(),
         requested_count=len(request.symbols),

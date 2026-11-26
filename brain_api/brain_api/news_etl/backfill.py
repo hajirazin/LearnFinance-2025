@@ -6,11 +6,16 @@ import logging
 from collections.abc import Sequence
 from datetime import datetime
 
-from brain_api.core.weekly_decision import canonical_monday_windows_contained_in
 from brain_api.news.models import NewsWindow
 from brain_api.news.service import NewsService
 from brain_api.news.store import NewsStore, coverage_key
+from brain_api.news.sync import sync_news
 from brain_api.news_etl.jobs import get_or_create_job, job_windows_total, mark_job
+from brain_api.news_etl.windows import (
+    NewsPurpose,
+    missing_session_windows,
+    requested_windows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +27,37 @@ def run_backfill(
     end: datetime,
     store: NewsStore,
     service: NewsService | None = None,
+    shared: bool = False,
+    purpose: NewsPurpose = "monday",
 ) -> str:
     """Materialize every fully contained Monday window. Returns ``job_id``."""
     service = service or NewsService(store)
     ordered_symbols = sorted(set(symbols))
-    windows = [
-        NewsWindow(start_exclusive=start_exclusive, end_inclusive=end_inclusive)
-        for start_exclusive, end_inclusive in canonical_monday_windows_contained_in(
-            start, end
-        )
-    ]
-    windows_total = job_windows_total(ordered_symbols, start=start, end=end)
+    windows = requested_windows(start, end, purpose)
+    windows_total = job_windows_total(
+        ordered_symbols, start=start, end=end, purpose=purpose
+    )
     job = get_or_create_job(
         store,
         start=start,
         end=end,
         symbols=ordered_symbols,
         windows_total=windows_total,
+        purpose=purpose,
     )
-    if job.status == "complete":
+    if shared:
+        try:
+            sync_news(store)
+        except Exception as exc:
+            mark_job(store, job, status="failed", error=str(exc))
+            raise
+    if job.status == "complete" and purpose == "monday":
+        if shared:
+            try:
+                sync_news(store, publish=True)
+            except Exception as exc:
+                mark_job(store, job, status="failed", error=str(exc))
+                raise
         logger.info("news backfill already complete job_id=%s", job.job_id)
         return job.job_id
     logger.info(
@@ -51,13 +68,22 @@ def run_backfill(
     )
     job = mark_job(store, job, status="running", error=None)
     existing = store.coverage_keys(ordered_symbols)
+    session_gaps = (
+        set(missing_session_windows(store, ordered_symbols, windows))
+        if purpose == "patchtst"
+        else set()
+    )
     pending_by_window: list[tuple[NewsWindow, list[str]]] = []
     for window in windows:
         pending = [
             symbol
             for symbol in ordered_symbols
-            if coverage_key(symbol, window.start_exclusive, window.end_inclusive)
-            not in existing
+            if (
+                (symbol, window) in session_gaps
+                if purpose == "patchtst"
+                else coverage_key(symbol, window.start_exclusive, window.end_inclusive)
+                not in existing
+            )
         ]
         if pending:
             pending_by_window.append((window, pending))
@@ -73,6 +99,8 @@ def run_backfill(
             windows_total,
         )
         if not pending_by_window:
+            if shared:
+                sync_news(store, publish=True)
             mark_job(store, job, status="complete")
             logger.info(
                 "news backfill end job_id=%s events_scored=%s",
@@ -100,6 +128,19 @@ def run_backfill(
                 done,
                 windows_total,
             )
+        if shared:
+            sync_news(store, publish=True)
+        if purpose == "patchtst":
+            unresolved = missing_session_windows(store, ordered_symbols, windows)
+            if unresolved:
+                examples = ", ".join(
+                    f"{symbol}@{window.end_inclusive.isoformat()}"
+                    for symbol, window in unresolved[:5]
+                )
+                raise ValueError(
+                    f"{len(unresolved)} PatchTST session news inputs remain unusable "
+                    f"after fetching. Historical revisions may be unavailable. Examples: {examples}"
+                )
         mark_job(store, job, status="complete")
         logger.info(
             "news backfill end job_id=%s events_scored=%s", job.job_id, events_scored

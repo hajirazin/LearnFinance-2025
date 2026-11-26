@@ -111,3 +111,47 @@ def test_legacy_signals_news_is_gone() -> None:
     client = TestClient(app)
     response = client.post("/signals/news", json={"symbols": ["AAPL"]})
     assert response.status_code == 404
+
+
+def test_patchtst_gap_endpoint_checks_session_inputs(tmp_path, monkeypatch):
+    from brain_api.news_etl.gaps import run_gap_fill
+    from brain_api.routes import news_etl
+
+    store = NewsStore(tmp_path)
+    calls = []
+
+    class EmptyProvider:
+        def fetch_window(self, symbol, window):
+            calls.append((symbol, window))
+            return [], 1
+
+    service = NewsService(store, provider=EmptyProvider(), scorer=_Scorer())
+
+    def fill(**kwargs):
+        kwargs.update(service=service, shared=False)
+        return run_gap_fill(**kwargs)
+
+    monkeypatch.setattr(news_etl, "get_news_store", lambda: store)
+    monkeypatch.setattr(news_etl, "sync_news", lambda store: None)
+    monkeypatch.setattr(news_etl, "run_gap_fill", fill)
+    client = TestClient(app)
+    body = {
+        "symbols": ["AAPL"],
+        "start": (START - timedelta(days=7)).isoformat(),
+        "end": END.isoformat(),
+        "purpose": "patchtst",
+    }
+    response = client.post("/etl/news/gaps", json=body)
+    assert response.status_code == 202, response.text
+    assert response.json()["missing_windows"] == len(calls) == 5
+    job_id = response.json()["job_id"]
+    status = client.get(f"/etl/news/gaps/{job_id}").json()
+    assert status["status"] == "complete"
+    assert status["windows_done"] == status["windows_total"] == 5
+    again = client.post("/etl/news/gaps", json=body)
+    assert again.status_code == 202
+    assert again.json()["missing_windows"] == 0
+    assert len(calls) == 5
+    invalid = client.post("/etl/news/gaps", json={**body, "purpose": "invalid"})
+    assert invalid.status_code == 422
+    assert len(calls) == 5

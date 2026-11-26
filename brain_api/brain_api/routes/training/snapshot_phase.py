@@ -51,6 +51,7 @@ from brain_api.core.patchtst import (
     train_model_pytorch as patchtst_train_model,
 )
 from brain_api.core.version import compute_snapshot_identity_hash
+from brain_api.routes.training.dependencies import PatchTSTPriceLoader
 from brain_api.routes.training.snapshot_persist import persist_forecaster_snapshot
 from brain_api.routes.training.snapshot_phase_filters import (
     _filter_prices_by_cutoff as _filter_prices_by_cutoff,
@@ -285,12 +286,25 @@ def _run_patchtst_snapshot_phase(
     symbols: list[str],
     config: PatchTSTConfig,
     snapshot_storage: SnapshotLocalStorage,
+    price_loader: PatchTSTPriceLoader = patchtst_load_prices,
     policy: StoragePolicy | None = None,
     log_prefix: str = "[PatchTST]",
-) -> None:
+) -> date | None:
     """Backfill December 31 PatchTST snapshots. Mirror of the LSTM phase."""
     del policy
     start_date, end_date = train_window
+    if config.weekly_regression:
+        from .weekly_patchtst_snapshots import backfill_weekly_patchtst_snapshots
+
+        return backfill_weekly_patchtst_snapshots(
+            snapshot_storage,
+            symbols,
+            config,
+            start_date,
+            end_date,
+            price_loader,
+            log_prefix=log_prefix,
+        )
     logger.info(f"{log_prefix} Backfilling annual snapshots...")
     _backfill_patchtst_snapshots(
         symbols,
@@ -300,6 +314,7 @@ def _run_patchtst_snapshot_phase(
         snapshot_storage,
         log_prefix=log_prefix,
     )
+    return None
 
 
 def _backfill_patchtst_snapshots(

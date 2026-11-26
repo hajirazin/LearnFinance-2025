@@ -127,6 +127,9 @@ class PatchTSTInferenceResponse(BaseModel):
 
     predictions: list[PatchTSTPrediction]
     model_version: str
+    forecast_anchor_date: str | None = None
+    forecast_end_date: str | None = None
+    forecast_recipe: str | None = None
     as_of_date: str
     signals_used: list[str] = []
     target_week_start: str | None = None

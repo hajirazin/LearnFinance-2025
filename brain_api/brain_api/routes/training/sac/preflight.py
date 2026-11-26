@@ -9,7 +9,6 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from brain_api.core.config import resolve_training_window
 from brain_api.core.lstm import load_prices_yfinance
 from brain_api.core.model_buckets import ModelType, UnknownBucketError, get_bucket
 from brain_api.core.portfolio_rl.data_loading import (
@@ -17,6 +16,7 @@ from brain_api.core.portfolio_rl.data_loading import (
     missing_weekly_news_coverage,
     news_backfill_bounds,
 )
+from brain_api.core.portfolio_rl.weekly_patchtst import ready_weekly_snapshots
 from brain_api.core.sac.momentum_signals import MOM_12_1_CALENDAR_BUFFER_DAYS
 from brain_api.core.sac.readiness import SACReadinessIssue, SACTrainingReadiness
 from brain_api.core.sac.trade_clock import (
@@ -24,14 +24,15 @@ from brain_api.core.sac.trade_clock import (
     extract_session_open_prices,
 )
 from brain_api.news.errors import NewsCoverageMissing
+from brain_api.news.sync import NewsSyncError, sync_news
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.policy import (
     StoragePolicyError,
-    ensure_snapshot_for_bucket,
     get_prior_metadata_for_bucket,
 )
 
 from ._shared import SACTrainRequest, sac_current_is_reusable, sac_us_allowed_universes
+from .forecast_dependency import SAC_PATCHTST_RECIPE, resolve_sac_training_window
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -90,21 +91,56 @@ def assess_sac_training_readiness(
 ) -> SACTrainingReadiness:
     """Validate the same strict price and signal inputs consumed by training."""
     bucket = get_bucket(ModelType.SAC, universe)
+    try:
+        sync_news()
+    except NewsSyncError as exc:
+        return SACTrainingReadiness.from_issues(
+            universe=universe,
+            symbols=[],
+            missing=[],
+            errors=[SACReadinessIssue("news_sync", str(exc), retryable=True)],
+        )
     symbols = bucket.symbols_resolver()
+    try:
+        start_date, end_date = resolve_sac_training_window()
+    except (ValueError, StoragePolicyError) as exc:
+        return SACTrainingReadiness.from_issues(
+            universe=universe,
+            symbols=symbols,
+            missing=[],
+            errors=[SACReadinessIssue("patchtst_snapshot", str(exc), retryable=False)],
+        )
     if not force:
         prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
-        if sac_current_is_reusable(prior_metadata, symbols):
+        if sac_current_is_reusable(
+            prior_metadata,
+            symbols,
+            forecast_recipe=SAC_PATCHTST_RECIPE,
+            start_date=start_date.isoformat(),
+        ):
             return SACTrainingReadiness.from_issues(
                 universe=universe,
                 symbols=symbols,
                 missing=[],
                 errors=[],
             )
-    start_date, end_date = resolve_training_window()
     missing: list[SACReadinessIssue] = []
     errors: list[SACReadinessIssue] = []
     trade_clock = build_sac_weekly_trade_clock(start_date, end_date)
     weekly_cutoffs = trade_clock.transition_actor_cutoffs
+    if trade_clock.transition_count < 208:
+        return SACTrainingReadiness.from_issues(
+            universe=universe,
+            symbols=symbols,
+            missing=[
+                SACReadinessIssue(
+                    "patchtst_snapshot",
+                    "SAC needs at least 208 weekly transitions",
+                    retryable=False,
+                )
+            ],
+            errors=[],
+        )
 
     try:
         # Fetch extra calendar history before start_date so the earliest
@@ -190,34 +226,16 @@ def assess_sac_training_readiness(
         except ValueError as exc:
             missing.append(SACReadinessIssue("prices", str(exc), retryable=True))
 
-    for forecaster_type in ("patchtst",):
-        storage = SnapshotLocalStorage(forecaster_type)
-        for cutoff in _required_snapshot_cutoffs(start_date, end_date):
-            logger.info(
-                "[SAC preflight] ensuring %s snapshot for %s",
-                forecaster_type,
-                cutoff.isoformat(),
-            )
-            try:
-                available = ensure_snapshot_for_bucket(
-                    snapshot_storage=storage, cutoff_date=cutoff
-                )
-                if not available:
-                    missing.append(
-                        SACReadinessIssue(
-                            f"{forecaster_type}_snapshot",
-                            f"Missing walk-forward snapshot for {cutoff.isoformat()}",
-                            retryable=False,
-                        )
-                    )
-            except StoragePolicyError as exc:
-                errors.append(
-                    SACReadinessIssue(
-                        f"{forecaster_type}_snapshot",
-                        str(exc),
-                        retryable=True,
-                    )
-                )
+    try:
+        ready_weekly_snapshots(
+            SnapshotLocalStorage("patchtst_halal_new"), start_date, end_date
+        )
+    except ValueError as exc:
+        missing.append(
+            SACReadinessIssue("patchtst_snapshot", str(exc), retryable=False)
+        )
+    except StoragePolicyError as exc:
+        errors.append(SACReadinessIssue("patchtst_snapshot", str(exc), retryable=True))
 
     backfill_start, backfill_end = news_backfill_bounds(weekly_cutoffs)
     return SACTrainingReadiness.from_issues(

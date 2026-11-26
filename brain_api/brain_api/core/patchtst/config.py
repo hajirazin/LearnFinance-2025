@@ -1,6 +1,8 @@
 """PatchTST model configuration."""
 
-from dataclasses import dataclass, field
+import hashlib
+import json
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -9,17 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class PatchTSTConfig:
-    """PatchTST model hyperparameters and training config.
-
-    Locked research contract: one close-return channel, 10/5 geometry
-    (11 unpadded patches), mean pooling, channel attention off.
-
-    Training optimizes denormalized close_ret MSE so the objective matches
-    Alpha-HRP / score-batch ranking on compounded close returns. RevIN
-    (scaling="std") handles per-sample input normalization internally.
-
-    Input channel: adjusted-close log return (``close_ret``).
-    """
+    """PatchTST artifact configuration shared by daily and weekly checkpoints."""
 
     # Model architecture
     num_input_channels: int = 1  # close_ret only
@@ -59,6 +51,14 @@ class PatchTSTConfig:
     # This is artifact lineage, not a new training hyperparameter.
     hf_config: dict[str, Any] | None = None
 
+    context_calendar_days: int | None = None
+    market: str = "us"
+    session_policy: str | None = None
+
+    @property
+    def weekly_regression(self) -> bool:
+        return self.context_calendar_days is not None
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
@@ -83,8 +83,14 @@ class PatchTSTConfig:
             "min_week_days": self.min_week_days,
             "feature_names": self.feature_names,
         }
+        if self.weekly_regression:
+            result.update(
+                context_calendar_days=self.context_calendar_days, market=self.market
+            )
         if self.hf_config is not None:
             result["hf_config"] = self.hf_config
+        if self.session_policy is not None:
+            result["session_policy"] = self.session_policy
         return result
 
     def to_hf_config(self) -> "HFPatchTSTConfig":
@@ -129,7 +135,8 @@ class PatchTSTConfig:
             use_cls_token=False,
             init_std=0.02,
             share_projection=True,
-            scaling="std",
+            scaling=None if self.weekly_regression else "std",
+            num_targets=1,
             do_mask_input=False,
             pooling_type="mean",
             head_dropout=0.0,
@@ -138,3 +145,57 @@ class PatchTSTConfig:
 
 
 DEFAULT_CONFIG = PatchTSTConfig()
+
+
+PRICE_FEATURES = (
+    "momentum_20d",
+    "momentum_12_1",
+    "volatility_20d",
+    "relative_volume_20d",
+)
+US_WEEKLY_CONFIG = PatchTSTConfig(
+    context_length=255,
+    context_calendar_days=365,
+    prediction_length=1,
+    num_input_channels=7,
+    feature_names=[*PRICE_FEATURES, "news_sentiment", "close", "volume"],
+)
+INDIA_WEEKLY_CONFIG = PatchTSTConfig(
+    context_length=255,
+    context_calendar_days=365,
+    prediction_length=1,
+    market="india",
+    session_policy="nse_weekdays_minus_holidays",
+    num_input_channels=6,
+    feature_names=[*PRICE_FEATURES, "close", "volume"],
+)
+
+
+def create_patchtst_model(config: PatchTSTConfig):
+    from transformers import PatchTSTForPrediction, PatchTSTForRegression
+
+    if config.weekly_regression:
+        hf = config.to_hf_config()
+        expected_features = {
+            "us": US_WEEKLY_CONFIG.feature_names,
+            "india": INDIA_WEEKLY_CONFIG.feature_names,
+        }
+        if (
+            config.feature_names != expected_features.get(config.market)
+            or hf.num_input_channels != len(config.feature_names)
+            or hf.num_input_channels != config.num_input_channels
+            or config.context_calendar_days != 365
+            or hf.context_length != config.context_length
+            or hf.context_length != 255
+            or hf.num_targets != 1
+            or hf.scaling is not None
+        ):
+            raise ValueError("Incompatible weekly PatchTST configuration")
+        return PatchTSTForRegression(hf)
+    return PatchTSTForPrediction(config.to_hf_config())
+
+
+def patchtst_recipe(config: PatchTSTConfig) -> str:
+    """Stable identity for a forecast recipe, independent of artifact weights."""
+    encoded = json.dumps(replace(config, hf_config=None).to_dict(), sort_keys=True)
+    return hashlib.sha256(encoded.encode()).hexdigest()

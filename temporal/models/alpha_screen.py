@@ -24,6 +24,9 @@ class PatchTSTBatchScores(BaseModel):
 
     scores: dict[str, float]
     model_version: str
+    forecast_anchor_date: str | None = None
+    forecast_end_date: str | None = None
+    forecast_recipe: str | None = None
     as_of_date: str
     target_week_start: str | None = None
     target_week_end: str | None = None

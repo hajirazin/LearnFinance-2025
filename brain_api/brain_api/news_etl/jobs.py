@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from brain_api.core.weekly_decision import canonical_monday_windows_contained_in
 from brain_api.news.hashing import news_job_id, symbols_hash
 from brain_api.news.models import (
     NEWS_SCHEMA_VERSION,
@@ -13,12 +12,19 @@ from brain_api.news.models import (
     NewsJob,
 )
 from brain_api.news.store import NewsStore, utcnow
+from brain_api.news_etl.windows import NewsPurpose, requested_windows
 
 __all__ = ["get_or_create_job", "job_windows_total", "mark_job", "news_job_id"]
 
 
-def job_windows_total(symbols: Sequence[str], *, start: datetime, end: datetime) -> int:
-    windows = canonical_monday_windows_contained_in(start, end)
+def job_windows_total(
+    symbols: Sequence[str],
+    *,
+    start: datetime,
+    end: datetime,
+    purpose: NewsPurpose = "monday",
+) -> int:
+    windows = requested_windows(start, end, purpose)
     return len(sorted(set(symbols))) * len(windows)
 
 
@@ -29,8 +35,9 @@ def get_or_create_job(
     end: datetime,
     symbols: Sequence[str],
     windows_total: int,
+    purpose: NewsPurpose = "monday",
 ) -> NewsJob:
-    job_id = news_job_id(start=start, end=end, symbols=symbols)
+    job_id = news_job_id(start=start, end=end, symbols=symbols, purpose=purpose)
     existing = store.get_job(job_id)
     if existing is not None:
         return existing

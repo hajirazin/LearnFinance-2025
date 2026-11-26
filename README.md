@@ -36,7 +36,7 @@ Training schedules (US Forecasters training Saturday 11:00 UTC, US SAC training 
 
 This repo compares multiple approaches at each stage:
 
-### Price Forecasters (direct 5-day daily returns)
+### Price Forecasters
 
 | Model | Input | Output | Status |
 |-------|-------|--------|--------|
@@ -85,7 +85,7 @@ fallbacks.
 
 **Key distinction:**
 - **LSTM** = pure price forecaster (close log returns only, direct 5-day prediction)
-- **PatchTST** = close-only forecaster (1-channel close log returns, direct 5-day prediction)
+- **PatchTST** = one predicted five-session simple return, using 365 calendar days of daily inputs. US uses seven channels including news sentiment. India uses six price and volume channels. See the [paper cutover and rollback runbook](WEEKLY_PATCHTST_CUTOVER.md).
 - **SAC** = RL allocator (receives five news/momentum signals + PatchTST return forecast)
 
 ## Prerequisites
@@ -481,8 +481,8 @@ We store three kinds of data:
 | Endpoint | Purpose |
 |----------|---------|
 | `POST /inference/lstm` | LSTM 5-day return predictions (US, pure price OHLCV-close) |
-| `POST /inference/patchtst` | PatchTST 5-day return predictions (US, close-only) |
-| `POST /inference/patchtst/india` | PatchTST 5-day return predictions (India, close-only, `PatchTSTIndiaModelStorage`) |
+| `POST /inference/patchtst` | One five-session simple return per US symbol |
+| `POST /inference/patchtst/india` | One five-session simple return per India symbol |
 | `POST /inference/patchtst/score-batch` | Batch PatchTST alpha screen (US or India via `market` param) -> `{symbol -> predicted_weekly_return_pct}` |
 | ~~`POST /inference/ppo`~~ | ~~PPO allocation (dual LSTM + PatchTST forecasts)~~ (Retired) |
 | `POST /inference/sac` | SAC allocation (PatchTST forecasts on the chosen stock slate) |

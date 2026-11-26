@@ -21,9 +21,11 @@ from brain_api.news.models import (
     NEWS_SENTIMENT_REVISION,
     NewsCoverage,
     NewsEvent,
-    NewsJob,
     NewsWindow,
 )
+from brain_api.news.store_jobs import NewsJobs
+from brain_api.news.store_schema import NEWS_STORE_SCHEMA
+from brain_api.news.sync_partitions import mark_dirty
 
 logger = logging.getLogger(__name__)
 
@@ -44,81 +46,7 @@ def news_lock_path(base_path: Path | None = None) -> Path:
     return news_db_path(base_path).with_suffix(".lock")
 
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS news_events (
-    provider VARCHAR NOT NULL,
-    provider_article_id VARCHAR NOT NULL,
-    symbol VARCHAR NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    source VARCHAR NOT NULL,
-    sentiment_score DOUBLE NOT NULL,
-    p_positive DOUBLE NOT NULL,
-    p_negative DOUBLE NOT NULL,
-    p_neutral DOUBLE NOT NULL,
-    confidence DOUBLE NOT NULL,
-    scored_text_sha256 VARCHAR NOT NULL,
-    sentiment_model VARCHAR NOT NULL,
-    sentiment_model_revision VARCHAR NOT NULL,
-    schema_version INTEGER NOT NULL,
-    ingested_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (provider, provider_article_id, symbol, updated_at)
-);
-CREATE TABLE IF NOT EXISTS news_coverage (
-    provider VARCHAR NOT NULL,
-    symbol VARCHAR NOT NULL,
-    window_start_exclusive TIMESTAMPTZ NOT NULL,
-    window_end_inclusive TIMESTAMPTZ NOT NULL,
-    schema_version INTEGER NOT NULL,
-    sentiment_model VARCHAR NOT NULL,
-    sentiment_model_revision VARCHAR NOT NULL,
-    status VARCHAR NOT NULL,
-    page_count INTEGER NOT NULL,
-    event_count INTEGER NOT NULL,
-    future_revision_excluded_count INTEGER NOT NULL,
-    fetched_at TIMESTAMPTZ NOT NULL,
-    request_manifest_hash VARCHAR NOT NULL,
-    PRIMARY KEY (
-        provider, symbol, window_start_exclusive, window_end_inclusive,
-        schema_version, sentiment_model, sentiment_model_revision
-    )
-);
-CREATE TABLE IF NOT EXISTS news_jobs (
-    job_id VARCHAR PRIMARY KEY,
-    requested_start TIMESTAMPTZ NOT NULL,
-    requested_end TIMESTAMPTZ NOT NULL,
-    symbols_hash VARCHAR NOT NULL,
-    schema_version INTEGER NOT NULL,
-    sentiment_revision VARCHAR NOT NULL,
-    status VARCHAR NOT NULL,
-    last_completed_symbol VARCHAR,
-    last_completed_window_end TIMESTAMPTZ,
-    windows_done INTEGER NOT NULL,
-    windows_total INTEGER NOT NULL,
-    events_scored INTEGER NOT NULL,
-    error VARCHAR,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
-);
-CREATE TABLE IF NOT EXISTS news_score_cache (
-    scored_text_sha256 VARCHAR NOT NULL,
-    sentiment_model VARCHAR NOT NULL,
-    sentiment_model_revision VARCHAR NOT NULL,
-    scoring_schema_version INTEGER NOT NULL,
-    sentiment_score DOUBLE NOT NULL,
-    p_positive DOUBLE NOT NULL,
-    p_negative DOUBLE NOT NULL,
-    p_neutral DOUBLE NOT NULL,
-    confidence DOUBLE NOT NULL,
-    PRIMARY KEY (
-        scored_text_sha256, sentiment_model,
-        sentiment_model_revision, scoring_schema_version
-    )
-);
-"""
-
-
-class NewsStore:
+class NewsStore(NewsJobs):
     """Device-local DuckDB. Writes are flock + threading.Lock serialized."""
 
     def __init__(self, base_path: Path | None = None) -> None:
@@ -133,7 +61,7 @@ class NewsStore:
 
     def _ensure_schema(self) -> None:
         with self._connect() as con:
-            con.execute(_SCHEMA)
+            con.execute(NEWS_STORE_SCHEMA)
 
     def _with_write_lock(self, fn):
         last_error: Exception | None = None
@@ -247,7 +175,18 @@ class NewsStore:
             return
 
         def _write(con: duckdb.DuckDBPyConnection) -> None:
+            partitions = set()
             for events, coverage, cache_rows in items:
+                partitions.add(
+                    f"news_coverage/{coverage.window_end_inclusive.astimezone(UTC):%Y-%m}"
+                )
+                partitions.update(
+                    f"news_events/{event.created_at.astimezone(UTC):%Y-%m}"
+                    for event in events
+                )
+                partitions.update(
+                    f"news_score_cache/{row[0][:2]}" for row in cache_rows
+                )
                 for event in events:
                     con.execute(
                         """
@@ -305,6 +244,8 @@ class NewsStore:
                         """,
                         list(row),
                     )
+
+            mark_dirty(con, partitions)
 
         self._with_write_lock(_write)
 
@@ -645,60 +586,6 @@ class NewsStore:
                 f"{window.start_exclusive.isoformat()}->{window.end_inclusive.isoformat()}"
             )
         return rows
-
-    def upsert_job(self, job: NewsJob) -> None:
-        def _write(con: duckdb.DuckDBPyConnection) -> None:
-            con.execute(
-                """
-                INSERT OR REPLACE INTO news_jobs VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-                """,
-                [
-                    job.job_id,
-                    job.requested_start,
-                    job.requested_end,
-                    job.symbols_hash,
-                    job.schema_version,
-                    job.sentiment_revision,
-                    job.status,
-                    job.last_completed_symbol,
-                    job.last_completed_window_end,
-                    job.windows_done,
-                    job.windows_total,
-                    job.events_scored,
-                    job.error,
-                    job.created_at,
-                    job.updated_at,
-                ],
-            )
-
-        self._with_write_lock(_write)
-
-    def get_job(self, job_id: str) -> NewsJob | None:
-        with self._connect() as con:
-            row = con.execute(
-                "SELECT * FROM news_jobs WHERE job_id = ?", [job_id]
-            ).fetchone()
-        if row is None:
-            return None
-        return NewsJob(
-            job_id=row[0],
-            requested_start=row[1],
-            requested_end=row[2],
-            symbols_hash=row[3],
-            schema_version=int(row[4]),
-            sentiment_revision=row[5],
-            status=row[6],
-            last_completed_symbol=row[7],
-            last_completed_window_end=row[8],
-            windows_done=int(row[9]),
-            windows_total=int(row[10]),
-            events_scored=int(row[11]),
-            error=row[12],
-            created_at=row[13],
-            updated_at=row[14],
-        )
 
 
 def coverage_key(

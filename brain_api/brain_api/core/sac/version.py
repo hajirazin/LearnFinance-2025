@@ -17,6 +17,8 @@ def compute_version(
     data_window_end: date,
     symbols: list[str],
     config: "SACConfig",
+    *,
+    patchtst_recipe: str | None = None,
 ) -> str:
     """Compute deterministic version string for SAC model.
 
@@ -50,6 +52,7 @@ def compute_version(
             "data_window_end": data_window_end.isoformat(),
             "symbols": sorted(symbols),
             "config": config.to_dict(),
+            **({"patchtst_recipe": patchtst_recipe} if patchtst_recipe else {}),
         },
         sort_keys=True,
         separators=(",", ":"),

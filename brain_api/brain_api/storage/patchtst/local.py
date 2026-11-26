@@ -80,10 +80,9 @@ class PatchTSTHalalNewModelStorage(
         )
 
     def _create_model(self, config: "PatchTSTConfig") -> "PatchTSTForPrediction":
-        from transformers import PatchTSTForPrediction
+        from brain_api.core.patchtst.config import create_patchtst_model
 
-        hf_config = config.to_hf_config()
-        return PatchTSTForPrediction(hf_config)
+        return create_patchtst_model(config)
 
     def _create_artifacts(
         self,
@@ -92,6 +91,10 @@ class PatchTSTHalalNewModelStorage(
         model: "PatchTSTForPrediction",
         version: str,
     ) -> PatchTSTArtifacts:
+        if config.weekly_regression:
+            from brain_api.core.patchtst.weekly_training import require_target_scale
+
+            require_target_scale(feature_scaler)
         return PatchTSTArtifacts(
             config=config,
             feature_scaler=feature_scaler,

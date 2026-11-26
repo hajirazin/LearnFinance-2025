@@ -413,9 +413,6 @@ class TestCountMissingSnapshots:
 def test_walkforward_expectation_bundles_do_not_resolve_symbols(monkeypatch):
     from brain_api.core import forecaster_snapshot_identity as identity
     from brain_api.core.lstm.config import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
-    from brain_api.core.patchtst.config import (
-        DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG,
-    )
     from brain_api.universe import halal_new
 
     def fail_if_called(*_args, **_kwargs):
@@ -435,9 +432,11 @@ def test_walkforward_expectation_bundles_do_not_resolve_symbols(monkeypatch):
         "lstm_halal_new",
         LSTM_DEFAULT_CONFIG.to_dict(),
     )
+    from brain_api.core.patchtst.config import US_WEEKLY_CONFIG
+
     assert identity.patchtst_walkforward_expectation_bundle() == (
         "patchtst_halal_new",
-        PATCHTST_DEFAULT_CONFIG.to_dict(),
+        US_WEEKLY_CONFIG.to_dict(),
     )
 
 

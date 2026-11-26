@@ -188,8 +188,7 @@ def test_patchtst_india_endpoint_hf_cold_start_short_circuits_via_helper(monkeyp
     """PatchTST India route: same contract as the US route; uses an
     independent bucket / HF repo so the test must not touch the US one."""
     from brain_api.core import model_buckets
-    from brain_api.core.patchtst import PatchTSTConfig
-    from brain_api.routes.training.dependencies import get_patchtst_config
+    from brain_api.core.patchtst.config import INDIA_WEEKLY_CONFIG
     from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -206,12 +205,16 @@ def test_patchtst_india_endpoint_hf_cold_start_short_circuits_via_helper(monkeyp
             patched,
         )
 
-        app.dependency_overrides[get_patchtst_config] = lambda: PatchTSTConfig()
-
         try:
             with patch(
                 "brain_api.routes.training.patchtst_india.try_load_existing_train_metadata",
-                return_value=_FAKE_METADATA,
+                return_value={
+                    **_FAKE_METADATA,
+                    "training_evidence": {
+                        "latest_label_end": "2026-04-24",
+                        "latest_label_symbols": 2,
+                    },
+                },
             ):
                 client = TestClient(app)
                 response = client.post(
@@ -222,8 +225,8 @@ def test_patchtst_india_endpoint_hf_cold_start_short_circuits_via_helper(monkeyp
             assert response.status_code == 200, response.text
             data = response.json()
             assert data["promoted"] is True
-            assert data["num_input_channels"] == 1
-            assert data["signals_used"] == ["ohlcv"]
+            assert data["num_input_channels"] == 6
+            assert data["signals_used"] == INDIA_WEEKLY_CONFIG.feature_names
         finally:
             app.dependency_overrides.clear()
 
@@ -244,10 +247,19 @@ def test_sac_full_endpoint_hf_cold_start_short_circuits_via_helper(
     short-circuit independently -- a regression that wired the helper
     only to one bucket would silently retrain the other.
     """
+    from datetime import date
+
     from brain_api.core import model_buckets
+    from brain_api.routes.training.sac import full as full_route
     from brain_api.storage.sac import (
         SACHalalFilteredModelStorage,
         SACHalalModelStorage,
+    )
+
+    monkeypatch.setattr(
+        full_route,
+        "resolve_sac_training_window",
+        lambda: (date(2018, 1, 1), date(2026, 4, 30)),
     )
 
     storage_cls = (
@@ -306,13 +318,20 @@ def test_sac_full_endpoint_force_true_bypasses_hf_helper(monkeypatch, universe: 
     this test pins -- force bypasses the HF helper and enqueues a job
     -- does not depend on the actual training run.
     """
-    from datetime import datetime
+    from datetime import date, datetime
 
     from brain_api.core import model_buckets
     from brain_api.routes.training.job_registry import TrainingJob
+    from brain_api.routes.training.sac import full as full_route
     from brain_api.storage.sac import (
         SACHalalFilteredModelStorage,
         SACHalalModelStorage,
+    )
+
+    monkeypatch.setattr(
+        full_route,
+        "resolve_sac_training_window",
+        lambda: (date(2018, 1, 1), date(2026, 4, 30)),
     )
 
     storage_cls = (
@@ -568,6 +587,9 @@ def test_patchtst_us_hf_main_present_with_missing_snapshots_returns_202(monkeypa
             body = response.json()
             assert body["job_id"].startswith("patchtst_halal_new_snapshots:")
             assert snapshot_phase_spy.call_count == 1
+            assert (
+                snapshot_phase_spy.call_args.kwargs["price_loader"] is _fail_if_called
+            )
             # US route's log_prefix is "[PatchTST]" -> snapshots-only
             # variant becomes "[PatchTST] Snapshots-only" (the route
             # appends, the runner forwards verbatim).

@@ -10,6 +10,11 @@ from brain_api.news.models import NewsWindow
 from brain_api.news.service import NewsService
 from brain_api.news.store import NewsStore, coverage_key
 from brain_api.news_etl.backfill import run_backfill
+from brain_api.news_etl.windows import (
+    NewsPurpose,
+    missing_session_windows,
+    requested_windows,
+)
 
 
 def missing_windows(
@@ -18,8 +23,13 @@ def missing_windows(
     symbols: Sequence[str],
     start: datetime,
     end: datetime,
+    purpose: NewsPurpose = "monday",
 ) -> list[tuple[str, NewsWindow]]:
     ordered_symbols = sorted(set(symbols))
+    if purpose == "patchtst":
+        return missing_session_windows(
+            store, ordered_symbols, requested_windows(start, end, purpose)
+        )
     windows = [
         NewsWindow(start_exclusive=start_exclusive, end_inclusive=end_inclusive)
         for start_exclusive, end_inclusive in canonical_monday_windows_contained_in(
@@ -45,8 +55,16 @@ def run_gap_fill(
     end: datetime,
     store: NewsStore,
     service: NewsService | None = None,
+    shared: bool = False,
+    purpose: NewsPurpose = "monday",
 ) -> str:
     """Same worker as backfill: skip existing coverage, fill the rest."""
     return run_backfill(
-        symbols=symbols, start=start, end=end, store=store, service=service
+        symbols=symbols,
+        start=start,
+        end=end,
+        store=store,
+        service=service,
+        shared=shared,
+        purpose=purpose,
     )

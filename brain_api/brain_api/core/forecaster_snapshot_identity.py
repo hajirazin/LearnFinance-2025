@@ -20,7 +20,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any, Literal
 
 from brain_api.core.lstm.config import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
-from brain_api.core.patchtst.config import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
+from brain_api.core.patchtst.config import US_WEEKLY_CONFIG
 from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.storage.policy import (
     StoragePolicy,
@@ -48,7 +48,7 @@ def lstm_walkforward_expectation_bundle() -> tuple[str, dict[str, Any]]:
 
 def patchtst_walkforward_expectation_bundle() -> tuple[str, dict[str, Any]]:
     """Return the identity inputs for PatchTST walk-forward snapshots."""
-    return "patchtst_halal_new", PATCHTST_DEFAULT_CONFIG.to_dict()
+    return "patchtst_halal_new", US_WEEKLY_CONFIG.to_dict()
 
 
 SnapshotParity = Literal["ready", "upload", "download", "train"]

@@ -25,6 +25,7 @@ from brain_api.core.model_buckets import (
 )
 from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import compute_version as patchtst_compute_version
+from brain_api.core.patchtst.training_evidence import can_reuse_weekly_fit
 from brain_api.storage.patchtst.local import PatchTSTNiftyShariah500ModelStorage
 from brain_api.storage.policy import (
     try_load_existing_train_metadata,
@@ -34,7 +35,7 @@ from .dependencies import (
     PatchTSTDatasetBuilder,
     PatchTSTPriceLoader,
     PatchTSTTrainer,
-    get_patchtst_config,
+    get_india_patchtst_config,
     get_patchtst_dataset_builder,
     get_patchtst_price_loader,
     get_patchtst_trainer,
@@ -72,7 +73,7 @@ def train_patchtst_india(
         False,
         description="Skip saving snapshot (by default saves snapshot for current + all historical years)",
     ),
-    config: PatchTSTConfig = Depends(get_patchtst_config),
+    config: PatchTSTConfig = Depends(get_india_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
     dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
     trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
@@ -120,12 +121,15 @@ def train_patchtst_india(
     existing_metadata = try_load_existing_train_metadata(
         bucket=bucket, version=version, local_storage=storage
     )
-    if existing_metadata:
+    if existing_metadata and can_reuse_weekly_fit(
+        existing_metadata, config, len(symbols)
+    ):
         return handle_patchtst_existing_metadata(
             background_tasks=background_tasks,
             bucket=bucket,
             symbols=symbols,
             config=config,
+            price_loader=price_loader,
             train_window=(start_date, end_date),
             version=version,
             existing_metadata=existing_metadata,
