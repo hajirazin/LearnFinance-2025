@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
 from fastapi.testclient import TestClient
 
 from brain_api.main import app
@@ -155,3 +156,31 @@ def test_patchtst_gap_endpoint_checks_session_inputs(tmp_path, monkeypatch):
     invalid = client.post("/etl/news/gaps", json={**body, "purpose": "invalid"})
     assert invalid.status_code == 422
     assert len(calls) == 5
+
+
+@pytest.mark.parametrize("operation", ["gaps", "backfill"])
+def test_retry_response_does_not_report_previous_failure(
+    tmp_path, monkeypatch, operation
+):
+    from unittest.mock import Mock
+
+    from brain_api.news_etl.jobs import get_or_create_job, mark_job
+    from brain_api.routes import news_etl
+
+    store = NewsStore(tmp_path)
+    monkeypatch.setattr(news_etl, "get_news_store", lambda: store)
+    monkeypatch.setattr(news_etl, "sync_news", lambda store: None)
+    previous = get_or_create_job(
+        store, symbols=["AAPL"], start=START, end=END, windows_total=1
+    )
+    mark_job(store, previous, status="failed", error="previous transport failure")
+    worker = Mock()
+    monkeypatch.setattr(news_etl, f"_run_{operation}", worker)
+    response = TestClient(app).post(
+        f"/etl/news/{operation}",
+        json={"symbols": ["AAPL"], "start": START.isoformat(), "end": END.isoformat()},
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    assert store.get_job(previous.job_id).error is None
+    worker.assert_called_once()

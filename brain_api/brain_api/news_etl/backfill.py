@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import logging
 from collections.abc import Sequence
 from datetime import datetime
@@ -10,7 +11,12 @@ from brain_api.news.models import NewsWindow
 from brain_api.news.service import NewsService
 from brain_api.news.store import NewsStore, coverage_key
 from brain_api.news.sync import sync_news
-from brain_api.news_etl.jobs import get_or_create_job, job_windows_total, mark_job
+from brain_api.news_etl.jobs import (
+    get_or_create_job,
+    job_windows_total,
+    mark_job,
+    news_job_id,
+)
 from brain_api.news_etl.windows import (
     NewsPurpose,
     missing_session_windows,
@@ -30,7 +36,42 @@ def run_backfill(
     shared: bool = False,
     purpose: NewsPurpose = "monday",
 ) -> str:
-    """Materialize every fully contained Monday window. Returns ``job_id``."""
+    """Run one worker per job, including across API requests and processes."""
+    job_id = news_job_id(start=start, end=end, symbols=symbols, purpose=purpose)
+    lock_path = store.db_path.parent / f"backfill-{job_id}.lock"
+    with lock_path.open("a") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logger.info(
+                "news backfill already running job_id=%s; duplicate skipped", job_id
+            )
+            return job_id
+        try:
+            return _run_backfill(
+                symbols=symbols,
+                start=start,
+                end=end,
+                store=store,
+                service=service,
+                shared=shared,
+                purpose=purpose,
+            )
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _run_backfill(
+    *,
+    symbols: Sequence[str],
+    start: datetime,
+    end: datetime,
+    store: NewsStore,
+    service: NewsService | None,
+    shared: bool,
+    purpose: NewsPurpose,
+) -> str:
+    """Materialize uncovered Monday or PatchTST session windows."""
     service = service or NewsService(store)
     ordered_symbols = sorted(set(symbols))
     windows = requested_windows(start, end, purpose)

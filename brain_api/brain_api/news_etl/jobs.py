@@ -36,10 +36,13 @@ def get_or_create_job(
     symbols: Sequence[str],
     windows_total: int,
     purpose: NewsPurpose = "monday",
+    requeue: bool = False,
 ) -> NewsJob:
     job_id = news_job_id(start=start, end=end, symbols=symbols, purpose=purpose)
     existing = store.get_job(job_id)
     if existing is not None:
+        if requeue and existing.status in ("failed", "complete"):
+            return mark_job(store, existing, status="pending", error=None)
         return existing
     now = utcnow()
     job = NewsJob(

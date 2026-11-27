@@ -1,5 +1,6 @@
 """The shared news data restores coverage and scores on a fresh machine."""
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -66,6 +67,117 @@ def test_empty_seed_restores_without_manual_ingestion(shared_hub, tmp_path):
     seed_commit = sync.sync_news(NewsStore(tmp_path / "empty-seed"), seed=True)
     assert seed_commit != "initial"
     assert sync.sync_news(NewsStore(tmp_path / "empty-restore")) == seed_commit
+
+
+@pytest.fixture
+def seeded_store(shared_hub, tmp_path):
+    store = NewsStore(tmp_path / "publisher")
+    end = datetime(2026, 11, 23, 14, tzinfo=UTC)
+    coverage = NewsCoverage(
+        NEWS_PROVIDER,
+        "AAA",
+        end - timedelta(days=7),
+        end,
+        NEWS_SCHEMA_VERSION,
+        NEWS_SENTIMENT_MODEL,
+        NEWS_SENTIMENT_REVISION,
+        "verified_empty",
+        1,
+        0,
+        0,
+        end,
+        "proof",
+    )
+    store.commit_window(events=[], coverage=coverage, cache_rows=[])
+    sync.sync_news(store, seed=True)
+    return store, coverage
+
+
+def test_publish_records_exact_local_checksums(seeded_store, shared_hub):
+    store, _ = seeded_store
+    manifest = json.loads(shared_hub.tree["news_v1/manifest.json"])
+    with store._connect() as con:
+        imports = dict(
+            con.execute(
+                "SELECT partition, checksum FROM news_sync_imports WHERE repo = ?",
+                ["test/shared-news"],
+            ).fetchall()
+        )
+    assert imports == {
+        partition: entry["sha256"]
+        for partition, entry in manifest["partitions"].items()
+    }
+
+
+@pytest.mark.parametrize("legacy_bookkeeping", [False, True])
+def test_publisher_reuses_local_evidence_without_downloading(
+    seeded_store, monkeypatch, legacy_bookkeeping
+):
+    store, _ = seeded_store
+    if legacy_bookkeeping:
+        store._with_write_lock(lambda con: con.execute("DELETE FROM news_sync_imports"))
+    download = sync._download
+
+    def manifest_only(repo, revision, name, token):
+        assert name.endswith("manifest.json"), "publisher downloaded its own evidence"
+        return download(repo, revision, name, token)
+
+    monkeypatch.setattr(sync, "_download", manifest_only)
+    sync.sync_news(store, publish=True)
+    with store._connect() as con:
+        assert con.execute("SELECT count(*) FROM news_sync_imports").fetchone() == (1,)
+
+
+def test_restore_downloads_when_local_rows_differ(seeded_store, monkeypatch):
+    store, coverage = seeded_store
+    store.commit_window(
+        events=[],
+        coverage=replace(coverage, future_revision_excluded_count=1),
+        cache_rows=[],
+    )
+    store._with_write_lock(lambda con: con.execute("DELETE FROM news_sync_imports"))
+    download = sync._download
+    requested = []
+
+    def record_download(repo, revision, name, token):
+        requested.append(name)
+        return download(repo, revision, name, token)
+
+    monkeypatch.setattr(sync, "_download", record_download)
+    sync.sync_news(store)
+    assert any(name.endswith(".parquet") for name in requested)
+    window = NewsWindow(coverage.window_start_exclusive, coverage.window_end_inclusive)
+    assert store.get_coverage("AAA", window) == coverage
+
+
+def test_publish_preserves_writes_made_during_upload(
+    seeded_store, shared_hub, monkeypatch
+):
+    store, coverage = seeded_store
+    with store._connect() as con:
+        previous_imports = con.execute("SELECT * FROM news_sync_imports").fetchall()
+    store.commit_window(
+        events=[], coverage=replace(coverage, symbol="BBB"), cache_rows=[]
+    )
+    create_commit = shared_hub.create_commit
+
+    def write_during_commit(*args, **kwargs):
+        result = create_commit(*args, **kwargs)
+        store.commit_window(
+            events=[], coverage=replace(coverage, symbol="CCC"), cache_rows=[]
+        )
+        return result
+
+    monkeypatch.setattr(shared_hub, "create_commit", write_during_commit)
+    sync.sync_news(store, publish=True)
+    with store._connect() as con:
+        assert (
+            con.execute("SELECT * FROM news_sync_imports").fetchall()
+            == previous_imports
+        )
+        assert con.execute("SELECT count(*) FROM news_sync_dirty").fetchone() == (1,)
+    window = NewsWindow(coverage.window_start_exclusive, coverage.window_end_inclusive)
+    assert store.get_coverage("CCC", window) is not None
 
 
 def test_cold_store_skips_published_window(shared_hub, tmp_path):

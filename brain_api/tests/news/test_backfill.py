@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from threading import Event
 from zoneinfo import ZoneInfo
 
 from brain_api.news.models import (
@@ -151,3 +153,52 @@ def test_missing_windows_returns_only_uncovered_pairs(tmp_path) -> None:
     assert [(symbol, window.end_inclusive) for symbol, window in gaps] == [
         ("MSFT", WINDOW_TWO.end_inclusive)
     ]
+
+
+def test_concurrent_backfill_fetches_and_publishes_once(tmp_path, monkeypatch) -> None:
+    store = NewsStore(tmp_path)
+    entered, release = Event(), Event()
+    calls, sync_calls = [], []
+
+    class BlockingService:
+        def materialize(self, symbols, window):
+            calls.append(list(symbols))
+            assert len(calls) == 1, "duplicate backfill started"
+            entered.set()
+            assert release.wait(timeout=10)
+            return [], []
+
+    def synchronize(store, *, publish=False):
+        sync_calls.append(publish)
+
+    monkeypatch.setattr("brain_api.news_etl.backfill.sync_news", synchronize)
+    kwargs = {
+        "symbols": ["AAPL"],
+        "start": START,
+        "end": END,
+        "store": store,
+        "service": BlockingService(),
+        "shared": True,
+    }
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(run_backfill, **kwargs)
+        assert entered.wait(timeout=10)
+        try:
+            duplicate = run_backfill(**kwargs)
+        finally:
+            release.set()
+        assert first.result(timeout=10) == duplicate
+    assert calls == [["AAPL"]]
+    assert sync_calls == [False, True]
+    assert store.get_job(duplicate).status == "complete"
+
+
+def test_backfill_releases_job_lock_after_failure(tmp_path) -> None:
+    import pytest
+
+    store = NewsStore(tmp_path)
+    kwargs = {"symbols": ["AAPL"], "start": START, "end": END, "store": store}
+    with pytest.raises(AssertionError, match="unexpected materialize"):
+        run_backfill(**kwargs, service=_MustNotMaterialize())
+    job_id = run_backfill(**kwargs, service=_RecordingService())
+    assert store.get_job(job_id).status == "complete"

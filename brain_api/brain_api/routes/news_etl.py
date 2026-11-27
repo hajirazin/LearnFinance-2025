@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime
 from typing import Annotated
 
@@ -84,6 +85,7 @@ def start_news_backfill(
     store = get_news_store()
     job = get_or_create_job(
         store,
+        requeue=True,
         start=request.start,
         end=request.end,
         symbols=request.symbols,
@@ -117,6 +119,13 @@ def get_news_backfill(job_id: str) -> dict:
 
 @router.post("/news/gaps", status_code=202)
 def start_news_gaps(request: NewsETLRequest, background_tasks: BackgroundTasks) -> dict:
+    logger.info(
+        "news gaps start purpose=%s symbols=%s start=%s end=%s; restoring shared evidence",
+        request.purpose,
+        len(request.symbols),
+        request.start.isoformat(),
+        request.end.isoformat(),
+    )
     store = get_news_store()
     try:
         sync_news(store)
@@ -132,6 +141,7 @@ def start_news_gaps(request: NewsETLRequest, background_tasks: BackgroundTasks) 
     logger.info("news gaps requested count=%s", len(gaps))
     job = get_or_create_job(
         store,
+        requeue=True,
         start=request.start,
         end=request.end,
         symbols=request.symbols,
@@ -165,6 +175,8 @@ class NewsSyncRequest(BaseModel):
 
 
 def _run_news_operation(job_id: str, operation, **kwargs) -> None:
+    started = time.monotonic()
+    logger.info("news operation started job_id=%s", job_id)
     update_progress(job_id, {"phase": "syncing_news"})
     try:
         result = operation(get_news_store(), **kwargs)
@@ -173,12 +185,24 @@ def _run_news_operation(job_id: str, operation, **kwargs) -> None:
         logger.exception("News operation %s failed", job_id)
     else:
         complete_job(job_id, {"news_commit": result})
+        logger.info(
+            "news operation completed job_id=%s news_commit=%s elapsed_s=%.1f",
+            job_id,
+            result,
+            time.monotonic() - started,
+        )
 
 
 def _queue_news_operation(background_tasks, kind, key, operation, **kwargs):
     job, created = get_operation_job(kind, key)
     if created:
         background_tasks.add_task(_run_news_operation, job.job_id, operation, **kwargs)
+    logger.info(
+        "news operation accepted job_id=%s status=%s queued=%s",
+        job.job_id,
+        job.status,
+        created,
+    )
     return {"job_id": job.job_id, "status": job.status}
 
 
