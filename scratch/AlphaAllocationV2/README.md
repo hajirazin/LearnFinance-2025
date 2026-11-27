@@ -124,6 +124,14 @@ Sticky mean gross returns were 0.53% for Ridge, 1.21% for seven-feature PatchTST
 
 The [V1 experiment archive](../AlphaAllocationV1/README.md#archived-v1-experiments) contains the V1 holdout, hypotheses, and production reconciliation. V1 also reads the shared historical price and Friday feature datasets documented here.
 
+### Rolling-MAD price-input experiment
+
+The [rolling-MAD experiment](ROLLING_MAD_EXPERIMENT.md) compares matched raw-price and clipped-price seven-feature PatchTST fits, with SPY, QQQ, and archived V1 research references. Starting from 428 securities, its conservative listing-history audit retains 364, excluding 48 later-starting series, 13 ticker identity collisions, and three symbols without prices. Later price availability is a listing-age proxy rather than a certified company IPO date; a verified 2014 ADR record keeps LGRDY despite its shorter Yahoo history. The report preserves each exclusion and its evidence.
+
+The fixed causal rule clips daily adjusted-close log returns against the preceding 252 sessions' median plus or minus six scaled MADs. It changes model-only close, momentum, and volatility inputs while preserving volume, news, observed labels, and stock-week eligibility. The matched fits use 2021–2024 training and 2025 validation, followed by the reused 2026 Friday sample. Artifacts remain under ignored `data/rolling_mad/`; graphs are archived in `figures/rolling_mad/`.
+
+The rule changed 5,553 of 990,217 finite daily input returns (0.56%). On the original 33 exact-five-session periods, MAD exceeded the raw control by 0.070 pp per week, with a 95% interval of −0.905 to +1.097 pp and Holm p = 1.00. Across all 37 observed Friday-to-Friday pairs, including four-session holiday weeks, its sampled gross compounded return was −9.20%, compared with −0.23% for raw, −2.36% for SPY, and −3.94% for QQQ. The V1-style research refit on the same selection cohort returned +23.13%; that is not deployed account performance. The experiment does not support adopting this MAD rule. The report retains the unfavorable results, single-seed limitation, exclusion audit, and all three charts.
+
 ### Screening research sequence
 
 1. **Define the prediction problem.** Rank the eligible universe by expected adjusted-close return from this Friday to the next Friday. The screen’s gross return is the arithmetic mean of the selected 15 securities’ simple returns, with `1/15` invested in each at the start of the week. Use the scheduled exchange close, including early closes, as the latest research cutoff. The first audit uses strict Friday pairs and skips intervals with a Friday holiday. Record which securities and data were available at selection, and specify the actual order cutoff separately for execution tests.
