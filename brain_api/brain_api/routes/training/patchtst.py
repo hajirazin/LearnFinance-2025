@@ -1,9 +1,6 @@
 """PatchTST training endpoint."""
 
-import gc
 import logging
-import threading
-import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -13,45 +10,29 @@ from brain_api.core.config import (
     resolve_training_window,
 )
 from brain_api.core.model_buckets import (
-    BucketConfig,
     ModelType,
     UnknownBucketError,
     get_bucket,
 )
-from brain_api.core.patchtst import PatchTSTConfig, align_multivariate_data
+from brain_api.core.patchtst import PatchTSTConfig
 from brain_api.core.patchtst import (
     compute_version as patchtst_compute_version,
 )
 from brain_api.core.patchtst.training_evidence import can_reuse_weekly_fit
-from brain_api.core.patchtst.weekly_data import load_weekly_training_inputs
-from brain_api.core.patchtst.weekly_training import fit_weekly_patchtst
-from brain_api.core.training_utils import evaluate_forecaster_artifact_health
-from brain_api.news.store import NewsStore
-from brain_api.news.sync import sync_news
-from brain_api.storage.forecaster_snapshots import (
-    SnapshotLocalStorage,
-)
-from brain_api.storage.metadata import create_training_metadata
 from brain_api.storage.patchtst.local import PatchTSTHalalNewModelStorage
 from brain_api.storage.policy import (
-    StoragePolicyError,
-    build_common_train_response_kwargs,
-    get_prior_metadata_for_bucket,
     try_load_existing_train_metadata,
 )
 
 from .dependencies import (
-    PatchTSTDatasetBuilder,
     PatchTSTPriceLoader,
-    PatchTSTTrainer,
+    WeeklyPatchTSTTrainer,
     get_patchtst_config,
-    get_patchtst_dataset_builder,
     get_patchtst_price_loader,
-    get_patchtst_trainer,
+    get_weekly_patchtst_trainer,
 )
 from .job_registry import (
     get_or_create_job,
-    update_progress,
 )
 from .models import PatchTSTTrainResponse, TrainingJobResponse
 from .patchtst_jobs import (
@@ -61,7 +42,6 @@ from .patchtst_jobs import (
 from .patchtst_recovery import (
     _run_patchtst_snapshots_only as _run_patchtst_snapshots_only,
 )
-from .snapshot_phase import _run_patchtst_snapshot_phase
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -85,373 +65,6 @@ class PatchTSTTrainRequest(BaseModel):
     )
 
 
-def _train_patchtst_core(
-    symbols: list[str],
-    storage: PatchTSTHalalNewModelStorage,
-    bucket: BucketConfig,
-    skip_snapshot: bool,
-    config: PatchTSTConfig,
-    price_loader: PatchTSTPriceLoader,
-    dataset_builder: PatchTSTDatasetBuilder,
-    trainer: PatchTSTTrainer,
-    log_prefix: str = "[PatchTST]",
-    shutdown_event: threading.Event | None = None,
-    job_id: str | None = None,
-) -> PatchTSTTrainResponse:
-    hf_storage_class = bucket.hf_storage_class
-    hf_model_repo_getter = bucket.hf_repo_getter
-    snapshot_forecaster_type = bucket.bucket_name
-    """Core PatchTST training logic shared by US and India endpoints.
-
-    Handles: version check -> load prices -> align -> build dataset -> train ->
-    evaluate promotion -> write artifacts -> HF upload -> snapshot backfill.
-
-    Args:
-        symbols: Stock symbols to train on.
-        storage: Local model storage instance for the bucket.
-        hf_storage_class: HuggingFace storage class for this bucket.
-        hf_model_repo_getter: Callable returning HF repo ID.
-        snapshot_forecaster_type: Bucket name (e.g.
-            ``"patchtst_halal_new"``) used as the snapshot subdirectory
-            and HF dispatch key.
-        skip_snapshot: Skip saving snapshots.
-        config: PatchTST training configuration.
-        price_loader: Function to load price data.
-        dataset_builder: Function to build datasets.
-        trainer: Function to train the model.
-        log_prefix: Logging prefix string.
-
-    Returns:
-        PatchTSTTrainResponse with training results.
-    """
-    start_date, end_date = resolve_training_window()
-    logger.info(f"{log_prefix} Starting training for {len(symbols)} symbols")
-    logger.info(f"{log_prefix} Data window: {start_date} to {end_date}")
-    logger.info(f"{log_prefix} Symbols: {symbols}")
-    logger.info(
-        f"{log_prefix} Config: {config.num_input_channels} channels, {config.epochs} epochs"
-    )
-
-    version = patchtst_compute_version(start_date, end_date, symbols, config)
-    logger.info(f"{log_prefix} Computed version: {version}")
-
-    # HF-aware idempotency skip: under hf_first the helper consults
-    # the bucket's HF repo for ``revision=version`` so a wiped local
-    # cache does not silently retrain work that already exists on HF.
-    existing_metadata = try_load_existing_train_metadata(
-        bucket=bucket, version=version, local_storage=storage
-    )
-    if existing_metadata and can_reuse_weekly_fit(
-        existing_metadata, config, len(symbols)
-    ):
-        logger.info(
-            f"{log_prefix} Version {version} already exists (idempotent), returning cached result"
-        )
-        return PatchTSTTrainResponse(
-            **build_common_train_response_kwargs(version, existing_metadata),
-            num_input_channels=config.num_input_channels,
-            signals_used=config.feature_names
-            if config.weekly_regression
-            else ["ohlcv"],
-        )
-
-    evidence = {}
-    if config.weekly_regression:
-        store = NewsStore(storage.base_path) if config.market == "us" else None
-        if store is not None:
-            evidence["news_commit"] = sync_news(store)
-        if job_id:
-            update_progress(job_id, {"phase": "building_weekly_dataset"})
-        inputs = load_weekly_training_inputs(
-            symbols,
-            start_date,
-            end_date,
-            config,
-            price_loader,
-            store=store,
-        )
-        dataset = inputs.labeled(start_date, end_date)
-        del inputs
-        if job_id:
-            update_progress(job_id, {"phase": "training_weekly_regression"})
-        result = fit_weekly_patchtst(dataset, config, shutdown_event=shutdown_event)
-        evidence.update(result.evidence)
-        del dataset
-    else:
-        if job_id:
-            update_progress(job_id, {"phase": "loading_prices"})
-        logger.info(f"{log_prefix} Loading price data for {len(symbols)} symbols...")
-        t0 = time.time()
-        prices = price_loader(symbols, start_date, end_date)
-        t_prices = time.time() - t0
-        logger.info(
-            f"{log_prefix} Loaded prices for {len(prices)}/{len(symbols)} symbols in {t_prices:.1f}s"
-        )
-
-        if len(prices) == 0:
-            logger.error(f"{log_prefix} No price data loaded - cannot train model")
-            raise ValueError("No price data available for training")
-
-        logger.info(f"{log_prefix} Aligning multivariate data (OHLCV only)...")
-        t0 = time.time()
-        aligned_features = align_multivariate_data(prices, config)
-        t_align = time.time() - t0
-        logger.info(
-            f"{log_prefix} Aligned data for {len(aligned_features)}/{len(prices)} symbols in {t_align:.1f}s"
-        )
-
-        if len(aligned_features) == 0:
-            logger.error(f"{log_prefix} No aligned features - cannot train model")
-            raise ValueError("No aligned features could be built from available data")
-
-        if job_id:
-            update_progress(job_id, {"phase": "building_dataset"})
-        logger.info(f"{log_prefix} Building dataset...")
-        t0 = time.time()
-        dataset = dataset_builder(aligned_features, prices, config)
-        t_dataset = time.time() - t0
-        logger.info(
-            f"{log_prefix} Dataset built in {t_dataset:.1f}s: {len(dataset.X)} samples"
-        )
-
-        del aligned_features, prices
-
-        if len(dataset.X) == 0:
-            logger.error(f"{log_prefix} Dataset is empty - cannot train model")
-            raise ValueError("No training samples could be built from aligned features")
-
-        X, y, feature_scaler = dataset.X, dataset.y, dataset.feature_scaler
-        anchor_dates = dataset.anchor_dates
-        sample_symbols = dataset.symbols
-        del dataset
-        gc.collect()
-
-        if job_id:
-            update_progress(job_id, {"phase": "training"})
-        logger.info(f"{log_prefix} Starting model training...")
-        t0 = time.time()
-        result = trainer(
-            X,
-            y,
-            feature_scaler,
-            config,
-            shutdown_event=shutdown_event,
-            anchor_dates=anchor_dates,
-            sample_symbols=sample_symbols,
-        )
-        t_train = time.time() - t0
-        logger.info(f"{log_prefix} Training complete in {t_train:.1f}s")
-        logger.info(
-            f"{log_prefix} Metrics: train_loss={result.train_loss:.6f}, val_loss={result.val_loss:.6f}, baseline={result.baseline_loss:.6f}"
-        )
-
-    hf_model_repo = hf_model_repo_getter()
-    # prior_version is kept purely for audit lineage on metadata. The
-    # promotion decision is the artifact health check below; prior
-    # metrics are NEVER consulted (universe-drift made them an
-    # apples-to-oranges baseline).
-    try:
-        prior_metadata = get_prior_metadata_for_bucket(bucket=bucket)
-    except StoragePolicyError as exc:
-        logger.warning(
-            f"{log_prefix} hf_first prior fetch failed for bucket "
-            f"{bucket.bucket_name}: {exc}; treating as inaugural"
-        )
-        prior_metadata = None
-    prior_version: str | None = (
-        prior_metadata.get("version") if prior_metadata is not None else None
-    )
-
-    # Two-write ordering: write artifacts first so the file-existence
-    # guardrails inside the health check can observe them, then
-    # re-write metadata.json with the populated promoted +
-    # failure_reasons.
-    provisional_metadata = create_training_metadata(
-        model_type=bucket.bucket_name,
-        version=version,
-        data_window_start=start_date.isoformat(),
-        data_window_end=end_date.isoformat(),
-        symbols=symbols,
-        config_dict=config.to_dict(),
-        train_loss=result.train_loss,
-        val_loss=result.val_loss,
-        baseline_loss=result.baseline_loss,
-        best_epoch=result.best_epoch,
-        stopped_epoch=result.stopped_epoch,
-        promoted=False,  # placeholder
-        prior_version=prior_version,
-        failure_reasons=[],  # placeholder
-        val_rank_ic=result.val_rank_ic,
-    )
-
-    logger.info(f"{log_prefix} Writing artifacts for version {version}...")
-    version_dir = storage.write_artifacts(
-        version=version,
-        model=result.model,
-        feature_scaler=result.feature_scaler,
-        config=config,
-        metadata=provisional_metadata,
-    )
-    logger.info(f"{log_prefix} Artifacts written successfully")
-
-    health = evaluate_forecaster_artifact_health(
-        train_loss=result.train_loss,
-        val_loss=result.val_loss,
-        baseline_loss=result.baseline_loss,
-        artifact_dir=version_dir,
-    )
-    promoted = health.is_healthy
-    logger.info(
-        f"{log_prefix} Promotion decision: {'PROMOTED' if promoted else 'NOT promoted'}"
-        + ("" if promoted else f" (failures: {health.failure_reasons})")
-    )
-
-    # Final metadata write with the real promoted + failure_reasons.
-    metadata = create_training_metadata(
-        model_type=bucket.bucket_name,
-        version=version,
-        data_window_start=start_date.isoformat(),
-        data_window_end=end_date.isoformat(),
-        symbols=symbols,
-        config_dict=config.to_dict(),
-        train_loss=result.train_loss,
-        val_loss=result.val_loss,
-        baseline_loss=result.baseline_loss,
-        best_epoch=result.best_epoch,
-        stopped_epoch=result.stopped_epoch,
-        promoted=promoted,
-        prior_version=prior_version,
-        failure_reasons=health.failure_reasons,
-        val_rank_ic=result.val_rank_ic,
-    )
-    if config.weekly_regression:
-        metadata["publication_pending"] = bool(hf_model_repo)
-        metadata["snapshots_pending"] = bool(promoted and not skip_snapshot)
-    if evidence:
-        metadata["training_evidence"] = evidence
-        metadata["metrics"]["weekly_rmse_pp"] = evidence["weekly_rmse_pp"]
-    storage.write_artifacts(
-        version=version,
-        model=result.model,
-        feature_scaler=result.feature_scaler,
-        config=config,
-        metadata=metadata,
-    )
-
-    if config.weekly_regression and promoted and not skip_snapshot:
-        if job_id:
-            update_progress(
-                job_id,
-                {
-                    "phase": "training_annual_snapshots",
-                    "main_fit": {
-                        "best_epoch": result.best_epoch,
-                        "stopped_epoch": result.stopped_epoch,
-                        "weekly_rmse_pp": evidence["weekly_rmse_pp"],
-                        "latest_label_end": evidence["latest_label_end"],
-                    },
-                },
-            )
-        snapshot_storage = SnapshotLocalStorage(
-            bucket.bucket_name, base_path=storage.base_path
-        )
-        supported_first = _run_patchtst_snapshot_phase(
-            train_window=(start_date, end_date),
-            symbols=symbols,
-            config=config,
-            snapshot_storage=snapshot_storage,
-            price_loader=price_loader,
-            log_prefix=log_prefix,
-        )
-        if supported_first:
-            evidence["first_snapshot_cutoff"] = supported_first.isoformat()
-            metadata["training_evidence"] = evidence
-            metadata["snapshots_pending"] = False
-            storage.write_artifacts(
-                version, result.model, result.feature_scaler, config, metadata
-            )
-
-    if promoted and not config.weekly_regression:
-        storage.promote_version(version)
-        logger.info(f"{log_prefix} Version {version} promoted to current")
-
-    hf_repo = None
-    hf_url = None
-
-    # Writes ignore the read policy: upload whenever the bucket has an
-    # HF repo configured. Closes audit Bug 6.
-    if hf_model_repo:
-        try:
-            hf_storage = hf_storage_class(repo_id=hf_model_repo, local_cache=storage)
-            # make_current = promoted (no cold-start fallback). An
-            # unhealthy inaugural leaves HF main empty and forces the
-            # operator to investigate -- per AGENTS.md rule #1.
-            logger.info(
-                f"{log_prefix} HF upload: promoted={promoted} "
-                f"-> make_current={promoted}"
-            )
-
-            metadata["publication_pending"] = False
-            metadata["hf_repo"] = hf_model_repo
-            hf_info = hf_storage.upload_model(
-                version=version,
-                model=result.model,
-                feature_scaler=result.feature_scaler,
-                config=config,
-                metadata=metadata,
-                make_current=promoted,
-            )
-            hf_repo = hf_info.repo_id
-            hf_url = f"https://huggingface.co/{hf_info.repo_id}/tree/{version}"
-            storage.write_artifacts(
-                version, result.model, result.feature_scaler, config, metadata
-            )
-            logger.info(f"{log_prefix} Model uploaded to HuggingFace: {hf_url}")
-        except Exception as e:
-            logger.error(f"{log_prefix} Failed to upload model to HuggingFace: {e}")
-            if config.weekly_regression:
-                metadata["publication_pending"] = True
-                storage.write_artifacts(
-                    version, result.model, result.feature_scaler, config, metadata
-                )
-                raise
-
-    if promoted and config.weekly_regression:
-        storage.promote_version(version)
-
-    if not skip_snapshot and not config.weekly_regression:
-        snapshot_storage = SnapshotLocalStorage(snapshot_forecaster_type)
-        _run_patchtst_snapshot_phase(
-            train_window=(start_date, end_date),
-            symbols=symbols,
-            config=config,
-            snapshot_storage=snapshot_storage,
-            log_prefix=log_prefix,
-        )
-
-    return PatchTSTTrainResponse(
-        version=version,
-        data_window_start=start_date.isoformat(),
-        data_window_end=end_date.isoformat(),
-        metrics={
-            "train_loss": result.train_loss,
-            "val_loss": result.val_loss,
-            "baseline_loss": result.baseline_loss,
-            "best_epoch": result.best_epoch,
-            "stopped_epoch": result.stopped_epoch,
-            "val_rank_ic": result.val_rank_ic,
-            **({"weekly_rmse_pp": evidence["weekly_rmse_pp"]} if evidence else {}),
-        },
-        promoted=promoted,
-        prior_version=prior_version,
-        failure_reasons=health.failure_reasons,
-        hf_repo=hf_repo,
-        hf_url=hf_url,
-        num_input_channels=config.num_input_channels,
-        signals_used=config.feature_names if config.weekly_regression else ["ohlcv"],
-    )
-
-
 @router.post("/patchtst", response_model=PatchTSTTrainResponse)
 def train_patchtst(
     background_tasks: BackgroundTasks,
@@ -462,10 +75,9 @@ def train_patchtst(
     ),
     config: PatchTSTConfig = Depends(get_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
-    dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
-    trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
+    trainer: WeeklyPatchTSTTrainer = Depends(get_weekly_patchtst_trainer),
 ) -> PatchTSTTrainResponse | JSONResponse:
-    """Train the OHLCV PatchTST model for weekly return prediction.
+    """Train the US seven-feature PatchTST weekly return regressor.
 
     Returns 200 with cached result if version already exists (idempotent).
     Returns 202 with job_id if training is started in the background.
@@ -497,11 +109,8 @@ def train_patchtst(
     version = patchtst_compute_version(start_date, end_date, symbols, config)
     logger.info(f"[PatchTST] Computed version: {version} (bucket={bucket.bucket_name})")
 
-    # HF-aware idempotency skip (see ``_train_patchtst_core`` for the
-    # broader rationale). Duplicated here because the route handler
-    # short-circuits BEFORE enqueueing the background task -- so the
-    # cached response is returned synchronously rather than via the
-    # 202 -> poll cycle.
+    # Consult the bucket's configured storage before queueing a fit; completed
+    # artifacts can return synchronously or resume missing publication work.
     existing_metadata = try_load_existing_train_metadata(
         bucket=bucket, version=version, local_storage=storage
     )
@@ -542,7 +151,7 @@ def train_patchtst(
         skip_snapshot=skip_snapshot,
         config=config,
         price_loader=price_loader,
-        dataset_builder=dataset_builder,
+        training_window=(start_date, end_date),
         trainer=trainer,
         log_prefix="[PatchTST]",
     )

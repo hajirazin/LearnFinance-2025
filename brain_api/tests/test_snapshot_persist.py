@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import torch
 from sklearn.preprocessing import StandardScaler
 
-from brain_api.routes.training.snapshot_persist import persist_forecaster_snapshot
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
+from brain_api.storage.forecaster_snapshots.persist import persist_forecaster_snapshot
 
 
 def _dummy_model_config():

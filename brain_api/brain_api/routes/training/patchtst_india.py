@@ -32,13 +32,11 @@ from brain_api.storage.policy import (
 )
 
 from .dependencies import (
-    PatchTSTDatasetBuilder,
     PatchTSTPriceLoader,
-    PatchTSTTrainer,
+    WeeklyPatchTSTTrainer,
     get_india_patchtst_config,
-    get_patchtst_dataset_builder,
     get_patchtst_price_loader,
-    get_patchtst_trainer,
+    get_weekly_patchtst_trainer,
 )
 from .job_registry import get_or_create_job
 from .models import PatchTSTTrainResponse, TrainingJobResponse
@@ -75,10 +73,9 @@ def train_patchtst_india(
     ),
     config: PatchTSTConfig = Depends(get_india_patchtst_config),
     price_loader: PatchTSTPriceLoader = Depends(get_patchtst_price_loader),
-    dataset_builder: PatchTSTDatasetBuilder = Depends(get_patchtst_dataset_builder),
-    trainer: PatchTSTTrainer = Depends(get_patchtst_trainer),
+    trainer: WeeklyPatchTSTTrainer = Depends(get_weekly_patchtst_trainer),
 ) -> PatchTSTTrainResponse | JSONResponse:
-    """Train the India OHLCV PatchTST model for weekly return prediction.
+    """Train the India six-feature PatchTST weekly return regressor.
 
     Returns 200 with cached result if version already exists (idempotent).
     Returns 202 with job_id if training is started in the background.
@@ -158,7 +155,7 @@ def train_patchtst_india(
         skip_snapshot=skip_snapshot,
         config=config,
         price_loader=price_loader,
-        dataset_builder=dataset_builder,
+        training_window=(start_date, end_date),
         trainer=trainer,
         log_prefix="[PatchTST India]",
     )

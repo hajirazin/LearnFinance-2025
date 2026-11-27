@@ -24,11 +24,16 @@ from brain_api.storage.policy import (
 )
 
 from .dependencies import (
-    PatchTSTDatasetBuilder,
     PatchTSTPriceLoader,
-    PatchTSTTrainer,
+    WeeklyPatchTSTTrainer,
 )
-from .job_registry import cancel_job, complete_job, fail_job, get_or_create_job
+from .job_registry import (
+    cancel_job,
+    complete_job,
+    fail_job,
+    get_or_create_job,
+    update_progress,
+)
 from .models import PatchTSTTrainResponse, TrainingJobResponse
 
 logger = logging.getLogger(__name__)
@@ -53,20 +58,18 @@ def handle_patchtst_existing_metadata(
     cached_response_kwargs = build_common_train_response_kwargs(
         version, existing_metadata
     )
-    if config.weekly_regression:
-        try:
-            validate_label_evidence(
-                existing_metadata.get("training_evidence", {}),
-                config.market,
-                date.fromisoformat(existing_metadata["data_window"]["end"]),
-                len(symbols),
-            )
-        except ValueError as exc:
-            raise HTTPException(503, str(exc)) from exc
+    try:
+        validate_label_evidence(
+            existing_metadata.get("training_evidence", {}),
+            config.market,
+            date.fromisoformat(existing_metadata["data_window"]["end"]),
+            len(symbols),
+        )
+    except ValueError as exc:
+        raise HTTPException(503, str(exc)) from exc
     local = bucket.local_storage_class()
     needs_upload = (
-        config.weekly_regression
-        and local.version_exists(version)
+        local.version_exists(version)
         and bool(bucket.hf_repo_getter())
         and (
             existing_metadata.get("publication_pending")
@@ -82,16 +85,16 @@ def handle_patchtst_existing_metadata(
         return PatchTSTTrainResponse(
             **cached_response_kwargs,
             num_input_channels=config.num_input_channels,
-            signals_used=config.feature_names
-            if config.weekly_regression
-            else ["ohlcv"],
+            signals_used=config.feature_names,
         )
 
-    snapshot_storage = SnapshotLocalStorage(bucket.bucket_name)
-    if config.weekly_regression and bucket.universe == "halal_new":
+    snapshot_storage = SnapshotLocalStorage(
+        bucket.bucket_name, base_path=local.base_path
+    )
+    if bucket.universe == "halal_new":
         from datetime import timedelta
 
-        from .weekly_patchtst_snapshots import EARLIEST_US_SNAPSHOT
+        from brain_api.services.patchtst_snapshots import EARLIEST_US_SNAPSHOT
 
         first = existing_metadata.get("training_evidence", {}).get(
             "first_snapshot_cutoff"
@@ -130,9 +133,7 @@ def handle_patchtst_existing_metadata(
         return PatchTSTTrainResponse(
             **cached_response_kwargs,
             num_input_channels=config.num_input_channels,
-            signals_used=config.feature_names
-            if config.weekly_regression
-            else ["ohlcv"],
+            signals_used=config.feature_names,
         )
 
     snapshots_job_key = f"{bucket.bucket_name}_snapshots"
@@ -194,30 +195,29 @@ def _run_patchtst_training(
     skip_snapshot: bool,
     config: PatchTSTConfig,
     price_loader: PatchTSTPriceLoader,
-    dataset_builder: PatchTSTDatasetBuilder,
-    trainer: PatchTSTTrainer,
+    trainer: WeeklyPatchTSTTrainer,
+    training_window: tuple[date, date],
     log_prefix: str = "[PatchTST]",
 ) -> None:
     """Run the full PatchTST training pipeline as a background job."""
     from brain_api.main import shutdown_event
-
-    from .patchtst import _train_patchtst_core
+    from brain_api.services.patchtst_training import train_patchtst
 
     try:
-        response = _train_patchtst_core(
+        response = train_patchtst(
             symbols=symbols,
             storage=storage,
             bucket=bucket,
             skip_snapshot=skip_snapshot,
             config=config,
             price_loader=price_loader,
-            dataset_builder=dataset_builder,
             trainer=trainer,
             log_prefix=log_prefix,
             shutdown_event=shutdown_event,
-            job_id=job_id,
+            on_progress=lambda details: update_progress(job_id, details),
+            training_window=training_window,
         )
-        complete_job(job_id, response.model_dump())
+        complete_job(job_id, PatchTSTTrainResponse(**response).model_dump())
         logger.info(f"{log_prefix} Job {job_id} completed successfully")
     except TrainingCancelledError:
         cancel_job(job_id)

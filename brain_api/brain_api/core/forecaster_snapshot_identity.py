@@ -164,7 +164,7 @@ def count_missing_snapshots(
     policy: StoragePolicy | None = None,
 ) -> MissingSnapshotInventory:
     """Read-side mirror of ``_backfill_lstm_snapshots`` /
-    ``_backfill_patchtst_snapshots`` -- returns *which* snapshots are
+    ``backfill_weekly_patchtst_snapshots`` -- returns *which* snapshots are
     missing without training anything.
 
     Used by the training routes' synchronous "any backfill needed?"

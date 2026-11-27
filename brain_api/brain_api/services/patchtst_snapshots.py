@@ -1,11 +1,17 @@
 """Build the annual inventory for the weekly PatchTST regressor."""
 
 import logging
+import threading
 from datetime import date
 
 from brain_api.core.forecaster_snapshot_identity import (
     annual_snapshot_cutoffs,
     annual_snapshot_parity,
+)
+from brain_api.core.patchtst.progress import (
+    ProgressCallback,
+    check_cancelled,
+    report_progress,
 )
 from brain_api.core.patchtst.training_evidence import validate_label_evidence
 from brain_api.core.patchtst.weekly_data import (
@@ -16,8 +22,8 @@ from brain_api.core.patchtst.weekly_training import fit_weekly_patchtst
 from brain_api.core.version import compute_snapshot_identity_hash
 from brain_api.news.store import NewsStore
 from brain_api.news.sync import sync_news
-from brain_api.routes.training.snapshot_persist import persist_forecaster_snapshot
 from brain_api.storage.forecaster_snapshots import create_snapshot_metadata
+from brain_api.storage.forecaster_snapshots.persist import persist_forecaster_snapshot
 
 logger = logging.getLogger(__name__)
 EARLIEST_US_SNAPSHOT = date(2017, 12, 31)
@@ -32,7 +38,13 @@ def backfill_weekly_patchtst_snapshots(
     price_loader,
     *,
     log_prefix,
+    shutdown_event: threading.Event | None = None,
+    on_progress: ProgressCallback | None = None,
+    trainer=fit_weekly_patchtst,
 ) -> date:
+    check_cancelled(shutdown_event)
+    if not config.weekly_regression:
+        raise ValueError("PatchTST training requires the weekly regression recipe")
     cutoffs = annual_snapshot_cutoffs(start_date, end_date)
     if config.market == "us":
         cutoffs = [cutoff for cutoff in cutoffs if cutoff >= EARLIEST_US_SNAPSHOT]
@@ -46,7 +58,32 @@ def backfill_weekly_patchtst_snapshots(
     inputs = None
     first = None
     hf_repo = storage._get_hf_repo()
-    for cutoff in cutoffs:
+    for snapshot_index, cutoff in enumerate(cutoffs, start=1):
+        check_cancelled(shutdown_event)
+
+        def notify(details, cutoff=cutoff, snapshot_index=snapshot_index):
+            details = dict(details)
+            snapshot_phase = details.pop("phase", "preparing_snapshot")
+            report_progress(
+                on_progress,
+                phase="training_annual_snapshots",
+                snapshot_cutoff=cutoff.isoformat(),
+                snapshot_index=snapshot_index,
+                snapshot_total=len(cutoffs),
+                snapshot_phase=snapshot_phase,
+                **details,
+            )
+
+        logger.info(
+            "%s Snapshot %s/%s cutoff=%s",
+            log_prefix,
+            snapshot_index,
+            len(cutoffs),
+            cutoff,
+        )
+        notify(
+            {"phase": "preparing_snapshot", "epoch": 0, "total_epochs": config.epochs}
+        )
         digest = compute_snapshot_identity_hash(
             storage.forecaster_type, cutoff, config.to_dict()
         )
@@ -81,10 +118,20 @@ def backfill_weekly_patchtst_snapshots(
                     config,
                     price_loader,
                     store=store,
+                    shutdown_event=shutdown_event,
+                    on_progress=notify,
                 )
             try:
-                dataset = inputs.labeled(history_start, cutoff)
-                result = fit_weekly_patchtst(dataset, config)
+                dataset = inputs.labeled(
+                    history_start,
+                    cutoff,
+                    shutdown_event=shutdown_event,
+                    on_progress=notify,
+                )
+                result = trainer(
+                    dataset, config, shutdown_event=shutdown_event, on_progress=notify
+                )
+                check_cancelled(shutdown_event)
             except InsufficientWeeklyHistory:
                 if first is not None or config.market != "us":
                     raise
@@ -127,6 +174,8 @@ def backfill_weekly_patchtst_snapshots(
             ):
                 raise ValueError(f"Weekly PatchTST snapshot is not ready for {cutoff}")
             del result
+        notify({"phase": "snapshot_completed"})
+        logger.info("%s Snapshot completed cutoff=%s", log_prefix, cutoff)
         first = first or cutoff
     if first is None:
         raise InsufficientWeeklyHistory(

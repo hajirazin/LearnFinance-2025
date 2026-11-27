@@ -21,23 +21,15 @@ from brain_api.core.lstm import (
     load_prices_yfinance,
     train_model_pytorch,
 )
-from brain_api.core.patchtst import (
-    DatasetResult as PatchTSTDatasetResult,
+from brain_api.core.patchtst.config import (
+    INDIA_WEEKLY_CONFIG,
+    US_WEEKLY_CONFIG,
+    PatchTSTConfig,
 )
-from brain_api.core.patchtst import PatchTSTConfig
-from brain_api.core.patchtst import (
-    TrainingResult as PatchTSTTrainingResult,
+from brain_api.core.patchtst.weekly_training import (
+    WeeklyPatchTSTResult,
+    fit_weekly_patchtst,
 )
-from brain_api.core.patchtst import (
-    build_dataset as patchtst_build_dataset,
-)
-from brain_api.core.patchtst import (
-    load_prices_yfinance as patchtst_load_prices,
-)
-from brain_api.core.patchtst import (
-    train_model_pytorch as patchtst_train_model,
-)
-from brain_api.core.patchtst.config import INDIA_WEEKLY_CONFIG, US_WEEKLY_CONFIG
 from brain_api.core.sac import DEFAULT_SAC_CONFIG, SACConfig
 from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
 from brain_api.storage.local import (
@@ -58,8 +50,7 @@ Trainer = Callable[[Any, Any, Any, LSTMConfig], TrainingResult]
 
 # PatchTST types
 PatchTSTPriceLoader = Callable[[list[str], Any, Any], dict]
-PatchTSTDatasetBuilder = Callable[[dict, dict, PatchTSTConfig], PatchTSTDatasetResult]
-PatchTSTTrainer = Callable[[Any, Any, Any, PatchTSTConfig], PatchTSTTrainingResult]
+WeeklyPatchTSTTrainer = Callable[..., WeeklyPatchTSTResult]
 
 
 def snapshots_available(forecaster_type: str) -> bool:
@@ -132,17 +123,19 @@ def get_india_patchtst_config() -> PatchTSTConfig:
 
 def get_patchtst_price_loader() -> PatchTSTPriceLoader:
     """Get the price loading function for PatchTST."""
-    return patchtst_load_prices
+    from brain_api.core.prices import load_prices_yfinance
+
+    def load(symbols, start, end):
+        return load_prices_yfinance(
+            symbols, start, end, required_columns=("close", "volume")
+        )
+
+    return load
 
 
-def get_patchtst_dataset_builder() -> PatchTSTDatasetBuilder:
-    """Get the dataset building function."""
-    return patchtst_build_dataset
-
-
-def get_patchtst_trainer() -> PatchTSTTrainer:
-    """Get the training function."""
-    return patchtst_train_model
+def get_weekly_patchtst_trainer() -> WeeklyPatchTSTTrainer:
+    """Get the weekly fitter used by main and annual training."""
+    return fit_weekly_patchtst
 
 
 # ============================================================================

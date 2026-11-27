@@ -105,81 +105,6 @@ class TestBackfillSnapshotRange:
             for cutoff in expected
         ]
 
-    def test_patchtst_backfill_creates_snapshots_for_full_rl_range(self):
-        """Verify _backfill_patchtst_snapshots covers start_year-1 .. end_year-1."""
-        from brain_api.routes.training.snapshot_phase import (
-            _backfill_patchtst_snapshots,
-        )
-
-        mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists.return_value = False
-        mock_storage._get_hf_repo.return_value = None
-        mock_storage.forecaster_type = "patchtst_halal_new"
-
-        mock_prices = {"AAPL": MagicMock(), "MSFT": MagicMock()}
-        mock_dataset = MagicMock()
-        mock_dataset.X = [1]
-        mock_result = MagicMock()
-        mock_result.train_loss = 0.01
-        mock_result.val_loss = 0.02
-        mock_result.best_epoch = 1
-        mock_result.stopped_epoch = 1
-        config = MagicMock()
-        config.to_dict.return_value = {"d_model": 32}
-
-        with (
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_load_prices",
-                return_value=mock_prices,
-            ) as mock_load,
-            patch(
-                "brain_api.routes.training.snapshot_phase._filter_prices_by_cutoff",
-                return_value=mock_prices,
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.align_multivariate_data",
-                return_value={"AAPL": MagicMock()},
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_build_dataset",
-                return_value=mock_dataset,
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_train_model",
-                return_value=mock_result,
-            ),
-        ):
-            _backfill_patchtst_snapshots(
-                symbols=["AAPL", "MSFT"],
-                config=config,
-                start_date=date(2016, 1, 1),
-                end_date=date(2025, 12, 26),
-                snapshot_storage=mock_storage,
-            )
-
-        # Price data should start from 2011-01-01
-        load_call_args = mock_load.call_args
-        assert load_call_args[0][1] == date(2011, 1, 1)
-
-        # Should write snapshots for 2015-12-31 through 2024-12-31
-        write_calls = mock_storage.write_snapshot.call_args_list
-        written_cutoffs = [c.kwargs["cutoff_date"] for c in write_calls]
-        expected = [date(y, 12, 31) for y in range(2015, 2025)]
-        assert written_cutoffs == expected
-        observed_identities = [
-            (call.args[0], call.args[1])
-            for call in mock_storage.snapshot_exists.call_args_list
-        ]
-        assert observed_identities == [
-            (
-                cutoff,
-                compute_snapshot_identity_hash(
-                    "patchtst_halal_new", cutoff, config.to_dict()
-                ),
-            )
-            for cutoff in expected
-        ]
-
     def test_lstm_backfill_skips_existing_snapshots(self):
         """Verify backfill skips snapshots that already exist."""
         from brain_api.routes.training.snapshot_phase import (
@@ -374,7 +299,7 @@ class TestFilterByCutoffTzHandling:
 
     def test_filter_signals_by_cutoff_handles_tz_aware_index(self):
         """Same tz-aware regression for the signals helper. The signals
-        path is currently unused by ``_backfill_patchtst_snapshots``
+        path is currently unused by the PatchTST snapshot service
         but the helper signature still accepts arbitrary indexes; this
         pins the localize fix so a future caller cannot regress it.
         """
@@ -453,58 +378,6 @@ class TestBackfillLoopsRespectPolicy:
 
         with self._common_patches(mock_storage):
             _backfill_lstm_snapshots(
-                symbols=["AAPL"],
-                config=MagicMock(to_dict=dict),
-                start_date=date(2020, 1, 1),
-                end_date=date(2020, 6, 1),
-                snapshot_storage=mock_storage,
-                policy=StoragePolicy.HF_FIRST,
-            )
-
-        assert mock_storage.write_snapshot.call_count == 1
-
-    def test_patchtst_hf_first_without_repo_trains_the_missing_local_copy(self):
-        from brain_api.routes.training.snapshot_phase import (
-            _backfill_patchtst_snapshots,
-        )
-        from brain_api.storage.policy import StoragePolicy
-
-        mock_storage = MagicMock(spec=SnapshotLocalStorage)
-        mock_storage.snapshot_exists.return_value = False
-        mock_storage._get_hf_repo.return_value = None
-        mock_storage.forecaster_type = "patchtst_halal_new"
-        mock_prices = {"AAPL": MagicMock()}
-        mock_dataset = MagicMock()
-        mock_dataset.X = [1]
-        mock_result = MagicMock()
-        mock_result.train_loss = 0.01
-        mock_result.val_loss = 0.02
-        mock_result.best_epoch = 1
-        mock_result.stopped_epoch = 1
-
-        with (
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_load_prices",
-                return_value=mock_prices,
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase._filter_prices_by_cutoff",
-                return_value=mock_prices,
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.align_multivariate_data",
-                return_value={"AAPL": MagicMock()},
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_build_dataset",
-                return_value=mock_dataset,
-            ),
-            patch(
-                "brain_api.routes.training.snapshot_phase.patchtst_train_model",
-                return_value=mock_result,
-            ),
-        ):
-            _backfill_patchtst_snapshots(
                 symbols=["AAPL"],
                 config=MagicMock(to_dict=dict),
                 start_date=date(2020, 1, 1),

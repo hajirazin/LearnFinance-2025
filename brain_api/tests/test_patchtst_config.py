@@ -3,11 +3,13 @@
 import pytest
 
 from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
-from brain_api.core.patchtst.training import _create_patchtst_model
+from brain_api.core.patchtst.config import (
+    create_patchtst_model as _create_patchtst_model,
+)
 
 
-def test_default_config_is_locked_close_only_mean_10_5() -> None:
-    """Production defaults must match the locked research contract."""
+def test_legacy_checkpoint_geometry_is_close_only_mean_10_5() -> None:
+    """Legacy readers must reconstruct existing checkpoint geometry."""
     assert DEFAULT_CONFIG.num_input_channels == 1
     assert DEFAULT_CONFIG.feature_names == ["close_ret"]
     assert DEFAULT_CONFIG.context_length == 60
@@ -15,7 +17,7 @@ def test_default_config_is_locked_close_only_mean_10_5() -> None:
     assert DEFAULT_CONFIG.patch_length == 10
     assert DEFAULT_CONFIG.stride == 5
     assert DEFAULT_CONFIG.epochs == 60
-    assert DEFAULT_CONFIG.early_stopping_patience == 8
+    assert DEFAULT_CONFIG.early_stopping_patience == 15
     assert DEFAULT_CONFIG.weight_decay == 0.0
     assert DEFAULT_CONFIG.batch_size == 256
     assert DEFAULT_CONFIG.learning_rate == 0.0003

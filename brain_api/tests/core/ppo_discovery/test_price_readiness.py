@@ -58,6 +58,7 @@ def test_price_readiness_false_when_index_or_history_missing(monkeypatch) -> Non
         start_date=COMPLETE_START,
         end_date=COMPLETE_END,
         prices=prices,
+        cboe_history=_frame(HISTORY_BARS),
     )
     assert result["ready"] is False
     assert any("SPY" in issue for issue in result["issues"])

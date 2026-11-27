@@ -32,7 +32,7 @@ class PatchTSTConfig:
     learning_rate: float = 0.0003
     epochs: int = 60
     validation_split: float = 0.2
-    early_stopping_patience: int = 8  # Stop if rank-IC checkpoint does not improve
+    early_stopping_patience: int = 15  # Epochs without validation improvement
     # E8: after Phase A close-only MSE, loss/grad ~100x smaller; wd=1e-4
     # dominated Adam updates (wd||theta|| / ||g|| ~ 40). Default 0 lets the model train.
     weight_decay: float = 0.0

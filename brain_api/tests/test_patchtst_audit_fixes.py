@@ -15,7 +15,8 @@ from brain_api.core.inference_utils import (
 from brain_api.core.patchtst.config import DEFAULT_CONFIG, PatchTSTConfig
 from brain_api.core.patchtst.data_loaders import align_multivariate_data
 from brain_api.core.patchtst.dataset import _week_end_anchors, build_dataset
-from brain_api.core.patchtst.training import _chrono_train_val_split
+from brain_api.core.patchtst.weekly_data import WeeklyPatchTSTData
+from brain_api.core.patchtst.weekly_training import weekly_fold_indices
 
 
 def test_patchtst_default_weight_decay_is_zero():
@@ -181,33 +182,19 @@ def test_align_multivariate_data_zero_volume_no_inf_warning(capsys):
 
 
 def test_chrono_split_val_after_train():
-    """Phase D: chronological split keeps val after train with purge."""
-    n = 20
-    X = np.zeros((n, 4, 1), dtype=np.float32)
-    y = np.zeros((n, 5, 1), dtype=np.float32)
-    anchors = np.array(
-        [date(2024, 1, 5) + dt.timedelta(days=7 * i) for i in range(n)],
-        dtype=object,
-    )
-    symbols = np.array([f"S{i % 4}" for i in range(n)], dtype=object)
-    split = _chrono_train_val_split(
-        X,
-        y,
+    anchors = np.array([date(2020, 1, 3) + dt.timedelta(weeks=i) for i in range(80)])
+    targets = np.array([day + dt.timedelta(days=7) for day in anchors])
+    data = WeeklyPatchTSTData(
+        np.zeros((80, 255, 7), dtype=np.float32),
+        np.ones(80),
         anchors,
-        validation_split=0.2,
-        horizon_purge_calendar_days=7,
-        sample_symbols=symbols,
+        targets,
+        np.array(["AAA"] * 80),
     )
-    split_idx = int(n * 0.8)
-    min_val = anchors[split_idx]
-    purge_before = min_val - dt.timedelta(days=7)
-    assert len(split.X_val) == n - split_idx
-    assert len(split.X_train) == sum(1 for a in anchors[:split_idx] if a < purge_before)
-    assert split.val_symbols is not None
-    assert len(split.val_symbols) == len(split.X_val)
-    assert list(split.val_symbols) == list(symbols[split_idx:])
-    assert split.val_dates is not None
-    assert list(split.val_dates) == list(anchors[split_idx:])
+    train, validation = weekly_fold_indices(data, 0.2)
+    assert len(train) >= 52
+    assert len(validation) >= 13
+    assert max(targets[train]) < min(anchors[validation])
 
 
 def test_india_mlk_week_start_includes_monday_on_xbom():

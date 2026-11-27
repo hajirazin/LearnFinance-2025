@@ -7,6 +7,20 @@ import os
 
 import pytest
 
+pytest_plugins = ["tests.offline"]
+
+
+@pytest.fixture(autouse=True)
+def isolate_training_jobs(monkeypatch):
+    from brain_api.main import shutdown_event
+    from brain_api.routes.training import job_registry
+
+    monkeypatch.setattr(job_registry, "_training_jobs", {})
+    shutdown_event.clear()
+    yield
+    shutdown_event.clear()
+
+
 # HuggingFace-related environment variables that should not affect tests.
 # Includes both the legacy unbucketed names (kept for backwards compat
 # with tests that still reference them) and the bucket-keyed names that

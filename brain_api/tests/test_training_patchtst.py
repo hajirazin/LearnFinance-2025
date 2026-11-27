@@ -1,764 +1,210 @@
-"""API-level tests for PatchTST training endpoint."""
+"""Production weekly HTTP paths with synthetic data and temporary artifacts."""
 
-import os
-import tempfile
-from dataclasses import replace
-
-import numpy as np
 import pytest
-from fastapi.testclient import TestClient
-from sklearn.preprocessing import StandardScaler
-from transformers import PatchTSTForPrediction
 
-from brain_api.core.model_buckets import ModelType, get_bucket
-from brain_api.core.patchtst import DatasetResult, TrainingResult
-from brain_api.core.patchtst.config import DEFAULT_CONFIG
+from brain_api.core.patchtst.config import INDIA_WEEKLY_CONFIG, US_WEEKLY_CONFIG
+from brain_api.core.training_utils import TrainingCancelledError
 from brain_api.main import app
-from brain_api.routes.training import (
-    get_patchtst_dataset_builder,
-    get_patchtst_price_loader,
-    get_patchtst_trainer,
-)
-from brain_api.routes.training.dependencies import get_patchtst_config
-from brain_api.storage.forecaster_snapshots import SnapshotLocalStorage
-from brain_api.storage.local import PatchTSTHalalNewModelStorage
-
-# ============================================================================
-# Test fixtures and mocks
-# ============================================================================
+from brain_api.routes.training.dependencies import get_weekly_patchtst_trainer
+from tests.patchtst_cases import make_training_case, submit
 
 
-@pytest.fixture(autouse=True)
-def legacy_mock_artifact_config(monkeypatch):
-    # The existing promotion and persistence fixtures produce five-output artifacts.
-    monkeypatch.setitem(
-        app.dependency_overrides, get_patchtst_config, lambda: DEFAULT_CONFIG
+@pytest.fixture(params=["us", "india"])
+def training_case(request, monkeypatch, tmp_path):
+    return make_training_case(monkeypatch, tmp_path, request.param)
+
+
+def test_default_weekly_endpoint_persists_and_promotes(training_case):
+    case = training_case
+    _, status = submit(case)
+    assert status["status"] == "completed", status
+    result = status["result"]
+    config = US_WEEKLY_CONFIG if case.market == "us" else INDIA_WEEKLY_CONFIG
+    assert result["num_input_channels"] == config.num_input_channels
+    assert result["signals_used"] == config.feature_names
+    assert case.fit_calls[0][1] == config
+    assert case.storage.read_current_version() == result["version"]
+    assert status["progress"]["phase"] == "completed"
+    metadata = case.storage.read_metadata(result["version"])
+    assert metadata["metrics"]["best_epoch"] == 1
+    assert metadata["training_evidence"]["latest_label_end"] == (
+        "2024-11-22" if case.market == "us" else "2024-11-29"
     )
+    assert not metadata["snapshots_pending"]
+    assert not metadata["publication_pending"]
 
 
-def mock_symbols() -> list[str]:
-    """Return a small fixed list of symbols for testing."""
-    return ["AAPL", "MSFT"]
-
-
-def mock_price_loader(symbols, start_date, end_date):
-    """Return mock price data for testing."""
-    import pandas as pd
-
-    dates = pd.date_range(start=start_date, end=end_date, freq="B")[:100]
-    prices = {}
-    for symbol in symbols:
-        prices[symbol] = pd.DataFrame(
-            {
-                "open": [100.0] * len(dates),
-                "high": [101.0] * len(dates),
-                "low": [99.0] * len(dates),
-                "close": [100.5] * len(dates),
-                "volume": [1000000] * len(dates),
-            },
-            index=dates,
-        )
-    return prices
-
-
-def mock_dataset_builder(aligned_features, prices, config) -> DatasetResult:
-    """Return a mock dataset result for close-only PatchTST."""
-    from datetime import date, timedelta
-
-    n_samples = 10
-    n_channels = config.num_input_channels
-    anchors = np.array(
-        [date(2024, 1, 5) + timedelta(days=7 * i) for i in range(n_samples)],
-        dtype=object,
+def test_weekly_endpoint_is_idempotent(training_case):
+    case = training_case
+    _, first = submit(case)
+    calls = len(case.fit_calls)
+    again = case.client.post(
+        case.endpoint + "?skip_snapshot=true", json={"universe": case.universe}
     )
-    symbols = np.array(
-        ["AAPL" if i % 2 == 0 else "MSFT" for i in range(n_samples)],
-        dtype=object,
-    )
-    return DatasetResult(
-        X=np.random.randn(n_samples, config.context_length, n_channels),
-        y=np.random.randn(n_samples, config.prediction_length, n_channels),
-        feature_scaler=StandardScaler(),
-        anchor_dates=anchors,
-        symbols=symbols,
-    )
+    assert again.status_code == 200, again.text
+    assert again.json()["version"] == first["result"]["version"]
+    assert len(case.fit_calls) == calls
 
 
-def mock_trainer(
-    X,
-    y,
-    feature_scaler,
-    config,
-    shutdown_event=None,
-    anchor_dates=None,
-    sample_symbols=None,
-) -> TrainingResult:
-    """Return a mock training result with controllable metrics."""
-    hf_config = config.to_hf_config()
-    model = PatchTSTForPrediction(hf_config)
-    return TrainingResult(
-        model=model,
-        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
-        config=config,
-        train_loss=0.01,
-        val_loss=0.02,
-        baseline_loss=0.05,
-        best_epoch=1,
-        stopped_epoch=1,
-        val_rank_ic=0.15,
-    )
+def test_weekly_endpoint_defaults_to_its_market_universe(training_case):
+    _, status = submit(training_case, body={})
+    assert status["status"] == "completed", status
 
 
-def mock_trainer_worse_than_baseline(
-    X,
-    y,
-    feature_scaler,
-    config,
-    shutdown_event=None,
-    anchor_dates=None,
-    sample_symbols=None,
-) -> TrainingResult:
-    """Mock trainer worse than baseline.
-
-    Under the always-promote-with-guardrails policy this still passes
-    every guardrail (all metrics finite + positive, all artifact files
-    written). Tests that used to assert the prior-comparison gate
-    rejected this run have been rewritten to assert the new behavior:
-    a healthy model promotes regardless of how its val_loss compares
-    to a prior model trained on a different universe.
-    """
-    hf_config = config.to_hf_config()
-    model = PatchTSTForPrediction(hf_config)
-    return TrainingResult(
-        model=model,
-        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
-        config=config,
-        train_loss=0.10,
-        val_loss=0.10,
-        baseline_loss=0.05,
-        best_epoch=1,
-        stopped_epoch=1,
-        val_rank_ic=0.05,
-    )
-
-
-def mock_trainer_nan_val_loss(
-    X,
-    y,
-    feature_scaler,
-    config,
-    shutdown_event=None,
-    anchor_dates=None,
-    sample_symbols=None,
-) -> TrainingResult:
-    """Mock trainer that returns NaN val_loss to trip the guardrail."""
-    hf_config = config.to_hf_config()
-    model = PatchTSTForPrediction(hf_config)
-    return TrainingResult(
-        model=model,
-        feature_scaler=feature_scaler if feature_scaler else StandardScaler(),
-        config=config,
-        train_loss=0.01,
-        val_loss=float("nan"),
-        baseline_loss=0.05,
-        best_epoch=1,
-        stopped_epoch=1,
-        val_rank_ic=0.15,
-    )
-
-
-@pytest.fixture
-def temp_storage():
-    """Create a temporary storage directory for tests."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield PatchTSTHalalNewModelStorage(base_path=tmpdir)
-
-
-def _override_us_patchtst_bucket(monkeypatch, temp_storage, symbols_fn=mock_symbols):
-    """Swap the ``(PATCHTST, halal_new)`` registry entry for tests.
-
-    Symbol resolution and storage are now driven by the bucket registry
-    rather than ``Depends`` overrides; tests therefore monkey-patch the
-    bucket entry itself so the production registry stays untouched
-    between tests.
-    """
-    from brain_api.core import model_buckets
-
-    original = get_bucket(ModelType.PATCHTST, "halal_new")
-    patched = replace(
-        original,
-        local_storage_class=lambda: temp_storage,
-        symbols_resolver=symbols_fn,
-    )
-    monkeypatch.setitem(
-        model_buckets._BUCKETS,
-        (ModelType.PATCHTST, "halal_new"),
-        patched,
-    )
-
-
-def _patch_us_patchtst_backfill_internals(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace the heavy compute helpers used by ``_backfill_patchtst_snapshots``.
-
-    Backfill mechanics now live in
-    :mod:`brain_api.routes.training.snapshot_phase` (extracted to keep
-    the per-family route files under the AGENTS.md 600-line file
-    ceiling). Patches go on that module so both the US backfill and
-    the India backfill (which share the same code path) are covered.
-    """
-    from brain_api.routes.training import snapshot_phase
-
-    monkeypatch.setattr(snapshot_phase, "patchtst_load_prices", mock_price_loader)
-    monkeypatch.setattr(
-        snapshot_phase, "align_multivariate_data", lambda prices, config: prices
-    )
-    monkeypatch.setattr(
-        snapshot_phase,
-        "patchtst_build_dataset",
-        lambda aligned_features, prices, config: mock_dataset_builder(
-            aligned_features, prices, config
-        ),
-    )
-
-    def _train(
-        X,
-        y,
-        feature_scaler,
-        config,
-        shutdown_event=None,
-        anchor_dates=None,
-        sample_symbols=None,
-    ):
-        del anchor_dates, sample_symbols
-        return mock_trainer(X, y, feature_scaler, config, shutdown_event=shutdown_event)
-
-    monkeypatch.setattr(snapshot_phase, "patchtst_train_model", _train)
-
-
-@pytest.fixture
-def client_with_mocks(temp_storage, monkeypatch):
-    """Create test client with mocked dependencies for the *main* training path."""
-    _override_us_patchtst_bucket(monkeypatch, temp_storage)
-    app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
-        mock_dataset_builder
-    )
-    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
-
-    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-    client = TestClient(app)
-    yield client
-
-    app.dependency_overrides.clear()
-    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
-
-
-@pytest.fixture
-def client_with_backfill_mocks(temp_storage, monkeypatch):
-    """Test client with ALL training paths mocked, including snapshot backfill.
-
-    Mirrors :func:`client_with_mocks` but also patches the route's
-    module-level heavy compute helpers so the ``skip_snapshot=False``
-    branch runs in milliseconds while still exercising the real
-    backfill control flow (existence checks, on-disk
-    ``SnapshotLocalStorage`` writes, HF upload gating).
-    """
-    _override_us_patchtst_bucket(monkeypatch, temp_storage)
-    app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
-        mock_dataset_builder
-    )
-    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
-    _patch_us_patchtst_backfill_internals(monkeypatch)
-
-    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-    client = TestClient(app)
-    yield client
-
-    app.dependency_overrides.clear()
-    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
-
-
-# ============================================================================
-# Scenario 1: Empty-body success + resolved window
-# ============================================================================
-
-
-TRAIN_URL = "/train/patchtst?skip_snapshot=true"
-
-
-def test_train_patchtst_empty_body_returns_202(client_with_mocks):
-    """POST /train/patchtst with empty body returns 202 (training runs in background)."""
-    response = client_with_mocks.post(TRAIN_URL, json={})
-    assert response.status_code == 202
-
-
-def test_train_patchtst_no_body_returns_202(client_with_mocks):
-    """POST /train/patchtst with no body returns 202 (training runs in background)."""
-    response = client_with_mocks.post(TRAIN_URL)
-    assert response.status_code == 202
-
-
-def test_train_patchtst_explicit_universe_returns_202(client_with_mocks):
-    """POST /train/patchtst with the registered US universe returns 202."""
-    response = client_with_mocks.post(TRAIN_URL, json={"universe": "halal_new"})
-    assert response.status_code == 202
-
-
-def test_train_patchtst_unknown_universe_returns_422(client_with_mocks):
-    """Unknown universe in the request body must be rejected with 422."""
-    response = client_with_mocks.post(TRAIN_URL, json={"universe": "halal_filtered"})
+def test_unknown_universe_has_no_training_side_effects(training_case):
+    case = training_case
+    response = case.client.post(case.endpoint, json={"universe": "unknown"})
     assert response.status_code == 422
-    assert "halal_filtered" in response.text
+    assert not case.fit_calls
+    assert not case.price_calls
+    assert case.storage.read_current_version() is None
 
 
-def test_train_patchtst_us_endpoint_rejects_india_universe(client_with_mocks):
-    """The US endpoint must reject the India universe even though it is
-    registered for the PatchTST family. Each market gets its own route.
-    """
-    response = client_with_mocks.post(TRAIN_URL, json={"universe": "nifty_shariah_500"})
-    assert response.status_code == 422
-    assert "nifty_shariah_500" in response.text
+def test_unhealthy_fit_does_not_replace_current(training_case):
+    case = training_case
+    case.loss = float("nan")
+    _, status = submit(case)
+    assert status["status"] == "completed", status
+    assert status["result"]["promoted"] is False
+    assert status["result"]["failure_reasons"]
+    assert case.storage.read_current_version() is None
 
 
-def test_train_patchtst_returns_resolved_window(client_with_mocks):
-    """POST /train/patchtst returns Friday-anchored data_window_end from config."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
-    response = client_with_mocks.post(TRAIN_URL, json={})
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "data_window_start" in data
-    assert "data_window_end" in data
-
-    assert data["data_window_end"] == "2024-12-27"
-    assert data["data_window_start"] == "2014-01-01"
-
-
-def test_train_patchtst_returns_required_fields(client_with_mocks, temp_storage):
-    """POST /train/patchtst returns all required response fields."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
-    response = client_with_mocks.post(TRAIN_URL, json={})
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "version" in data
-    assert "data_window_start" in data
-    assert "data_window_end" in data
-    assert "metrics" in data
-    assert "promoted" in data
-    assert "num_input_channels" in data
-    assert "signals_used" in data
-
-    assert isinstance(data["metrics"], dict)
-    assert data["metrics"]["best_epoch"] == 1
-    assert data["metrics"]["stopped_epoch"] == 1
-    on_disk = temp_storage.read_metadata(data["version"])
-    assert on_disk is not None
-    assert on_disk["metrics"]["best_epoch"] == 1
-    assert on_disk["metrics"]["stopped_epoch"] == 1
-    assert on_disk["metrics"]["val_rank_ic"] == pytest.approx(0.15)
-
-    assert data["num_input_channels"] == 1
-    assert data["signals_used"] == ["ohlcv"]
-    assert data["metrics"]["val_rank_ic"] == pytest.approx(0.15)
+def test_publication_failure_preserves_fit_for_retry(training_case):
+    case = training_case
+    case.repo = "test/model"
+    case.upload.side_effect = ConnectionError("Hub unavailable")
+    _, failed = submit(case)
+    assert failed["status"] == "failed"
+    assert case.storage.read_current_version() is None
+    # The versioned fit is available even though publication failed.
+    version = next(
+        path.name for path in case.artifact_root.iterdir() if path.name.startswith("v")
+    )
+    assert case.storage.read_metadata(version)["publication_pending"]
+    fit_count = len(case.fit_calls)
+    case.upload.side_effect = None
+    _, retried = submit(case)
+    assert retried["status"] == "completed", retried
+    assert len(case.fit_calls) == fit_count
+    assert case.storage.read_current_version() == version
+    assert not case.storage.read_metadata(version)["publication_pending"]
+    assert case.upload.call_args.kwargs["make_current"] is True
 
 
-# ============================================================================
-# Scenario 2: Idempotency on rerun
-# ============================================================================
+def test_unhealthy_inaugural_upload_never_sets_hf_current(training_case):
+    case = training_case
+    case.repo, case.loss = "test/model", float("nan")
+    _, status = submit(case)
+    assert status["status"] == "completed", status
+    assert case.upload.call_args.kwargs["make_current"] is False
+    assert case.storage.read_current_version() is None
 
 
-def test_train_patchtst_idempotent_version(client_with_mocks):
-    """Calling POST /train/patchtst twice returns the same version."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
+def test_shutdown_during_successful_publication_finishes_local_promotion(training_case):
+    from brain_api.main import shutdown_event
 
-    response2 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response2.status_code == 200
-    version2 = response2.json()["version"]
+    case = training_case
+    case.repo = "test/model"
+    published = case.upload.return_value
 
-    response3 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response3.status_code == 200
-    version3 = response3.json()["version"]
+    def publish(**kwargs):
+        shutdown_event.set()
+        return published
 
-    assert version2 == version3, "Version should be identical on rerun with same config"
+    case.upload.side_effect = publish
+    _, status = submit(case)
+    assert status["status"] == "completed", status
+    assert case.storage.read_current_version() == status["result"]["version"]
 
 
-def test_train_patchtst_idempotent_does_not_change_current(
-    client_with_mocks, temp_storage
+def test_default_snapshot_path_uses_weekly_fits_and_year_progress(
+    training_case, monkeypatch
 ):
-    """Rerunning training does not change 'current' pointer if already promoted."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
+    from brain_api.routes.training.job_registry import update_progress
 
-    response2 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response2.status_code == 200
-    version2 = response2.json()["version"]
+    case = training_case
+    events = []
 
-    current_after_first = temp_storage.read_current_version()
+    def record(job_id, details):
+        events.append(details)
+        update_progress(job_id, details)
 
-    response3 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response3.status_code == 200
-    version3 = response3.json()["version"]
-
-    current_after_second = temp_storage.read_current_version()
-
-    assert version2 == version3
-    assert current_after_first == current_after_second
-
-
-# ============================================================================
-# Scenario 3: Promotion gate behavior
-# ============================================================================
-
-
-def test_train_patchtst_first_model_always_promoted(client_with_mocks):
-    """First model is always promoted (no prior model to compare against)."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
-    response = client_with_mocks.post(TRAIN_URL, json={})
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["promoted"] is True
-
-
-def test_train_patchtst_promotes_even_when_worse_than_prior(monkeypatch):
-    """Always-promote: a healthy model promotes regardless of prior val_loss.
-
-    Pre-refactor this test asserted ``promoted is False`` based on the
-    prior-comparison gate. The universe-drift critique invalidated that
-    comparison; the new policy promotes any model whose own metrics
-    are finite + positive and whose artifacts are on disk.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        fresh_storage = PatchTSTHalalNewModelStorage(base_path=tmpdir)
-
-        app.dependency_overrides.clear()
-
-        _override_us_patchtst_bucket(monkeypatch, fresh_storage)
-        app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-        app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
-            mock_dataset_builder
-        )
-        app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-        app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
-
-        os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-        os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-15"
-
-        client = TestClient(app)
-
-        try:
-            train_url = "/train/patchtst?skip_snapshot=true"
-            response1 = client.post(train_url, json={})
-            assert response1.status_code == 202
-            response1b = client.post(train_url, json={})
-            assert response1b.status_code == 200
-            first_version = response1b.json()["version"]
-            assert fresh_storage.read_current_version() == first_version
-
-            app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-            app.dependency_overrides[get_patchtst_trainer] = lambda: (
-                mock_trainer_worse_than_baseline
-            )
-            os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-06-23"
-
-            response2 = client.post(train_url, json={})
-            assert response2.status_code == 202
-            response2b = client.post(train_url, json={})
-            assert response2b.status_code == 200
-
-            data = response2b.json()
-            assert data["promoted"] is True
-
-            current = fresh_storage.read_current_version()
-            assert current == data["version"]
-            assert current != first_version
-        finally:
-            app.dependency_overrides.clear()
-            os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-            os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
-
-
-def test_train_patchtst_not_promoted_when_val_loss_is_nan(temp_storage, monkeypatch):
-    """The new guardrail rejects NaN val_loss and leaves ``current`` pinned.
-
-    A trainer that silently diverges to NaN must NOT ship; ``current``
-    stays on the prior healthy version. This is the canonical example
-    of the new guardrail-based policy in action.
-    """
-    app.dependency_overrides.clear()
-
-    _override_us_patchtst_bucket(monkeypatch, temp_storage)
-    app.dependency_overrides[get_patchtst_price_loader] = lambda: mock_price_loader
-    app.dependency_overrides[get_patchtst_dataset_builder] = lambda: (
-        mock_dataset_builder
+    monkeypatch.setattr(
+        "brain_api.routes.training.patchtst_jobs.update_progress", record
     )
-    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer
-
-    os.environ["LSTM_TRAIN_LOOKBACK_YEARS"] = "10"
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-01"
-
-    client = TestClient(app)
-
-    train_url = "/train/patchtst?skip_snapshot=true"
-    response1 = client.post(train_url, json={})
-    assert response1.status_code == 202
-    response1b = client.post(train_url, json={})
-    assert response1b.status_code == 200
-    healthy_version = response1b.json()["version"]
-    assert temp_storage.read_current_version() == healthy_version
-
-    app.dependency_overrides[get_patchtst_config] = lambda: DEFAULT_CONFIG
-    app.dependency_overrides[get_patchtst_trainer] = lambda: mock_trainer_nan_val_loss
-    os.environ["LSTM_TRAIN_WINDOW_END_DATE"] = "2025-01-13"
-
-    response2 = client.post(train_url, json={})
-    assert response2.status_code == 202
-    response2b = client.post(train_url, json={})
-    assert response2b.status_code == 200
-    data2 = response2b.json()
-
-    assert data2["promoted"] is False
-    # ``current`` must stay pinned to the prior healthy version.
-    assert temp_storage.read_current_version() == healthy_version
-
-    app.dependency_overrides.clear()
-    os.environ.pop("LSTM_TRAIN_LOOKBACK_YEARS", None)
-    os.environ.pop("LSTM_TRAIN_WINDOW_END_DATE", None)
+    _, status = submit(case, snapshots=True)
+    assert status["status"] == "completed", status
+    assert len(case.fit_calls) > 1
+    snapshots = list(case.artifact_root.glob("snapshot-*"))
+    assert snapshots
+    assert all(
+        data.X.shape[-1] == (7 if case.market == "us" else 6)
+        for data, _ in case.fit_calls
+    )
+    metadata = case.storage.read_metadata(status["result"]["version"])
+    assert metadata["training_evidence"]["first_snapshot_cutoff"]
+    assert metadata["snapshots_pending"] is False
+    assert any(event["phase"] == "loading_prices" for event in events)
+    assert any(event.get("epoch") == 1 for event in events)
+    fitting = [
+        event
+        for event in events
+        if event.get("snapshot_phase") == "training_weekly_regression"
+    ]
+    assert fitting
+    assert all(event["snapshot_cutoff"] and event["epoch"] == 1 for event in fitting)
+    assert all("main_fit" in event for event in fitting)
 
 
-# ============================================================================
-# Scenario 4: PatchTST-specific behavior
-# ============================================================================
+def test_training_cancellation_is_reported_as_cancelled(training_case, monkeypatch):
+    def cancelled(*args, **kwargs):
+        raise TrainingCancelledError("cancelled")
+
+    monkeypatch.setitem(
+        app.dependency_overrides, get_weekly_patchtst_trainer, lambda: cancelled
+    )
+    _, status = submit(training_case)
+    assert status["status"] == "cancelled"
+    assert training_case.storage.read_current_version() is None
 
 
-def test_train_patchtst_version_differs_from_lstm():
-    """PatchTST version hash differs from LSTM even with same window/symbols."""
+def test_snapshot_cancellation_does_not_promote_incomplete_run(
+    training_case, monkeypatch
+):
+    case = training_case
+    fit = case.fit
+    count = 0
+
+    def cancel_snapshot(*args, **kwargs):
+        nonlocal count
+        count += 1
+        if count > 1:
+            raise TrainingCancelledError("snapshot cancelled")
+        return fit(*args, **kwargs)
+
+    monkeypatch.setitem(
+        app.dependency_overrides, get_weekly_patchtst_trainer, lambda: cancel_snapshot
+    )
+    _, status = submit(case, snapshots=True)
+    assert status["status"] == "cancelled", status
+    assert case.storage.read_current_version() is None
+
+
+def test_duplicate_training_request_does_not_enqueue_again(training_case, monkeypatch):
     from datetime import date
 
-    from brain_api.core.lstm import DEFAULT_CONFIG as LSTM_DEFAULT_CONFIG
-    from brain_api.core.lstm import compute_version as lstm_compute_version
-    from brain_api.core.patchtst import DEFAULT_CONFIG as PATCHTST_DEFAULT_CONFIG
-    from brain_api.core.patchtst import compute_version as patchtst_compute_version
+    from brain_api.core.patchtst.version import compute_version
+    from brain_api.routes.training.job_registry import get_or_create_job
 
-    start = date(2015, 1, 1)
-    end = date(2025, 1, 1)
-    symbols = ["AAPL", "MSFT"]
-
-    lstm_version = lstm_compute_version(start, end, symbols, LSTM_DEFAULT_CONFIG)
-    patchtst_version = patchtst_compute_version(
-        start, end, symbols, PATCHTST_DEFAULT_CONFIG
+    case = training_case
+    config = US_WEEKLY_CONFIG if case.market == "us" else INDIA_WEEKLY_CONFIG
+    version = compute_version(
+        date(2023, 1, 1), date(2024, 11, 29), case.symbols, config
     )
-
-    assert lstm_version != patchtst_version, "PatchTST and LSTM versions should differ"
-
-
-# ============================================================================
-# Scenario 5: skip_snapshot branch coverage
-#
-# All other tests in this file pass ``?skip_snapshot=true`` for speed.
-# These two tests are the only place that exercises
-# ``_backfill_patchtst_snapshots``'s control flow; both branches are
-# asserted against on-disk state under the autouse
-# ``isolate_forecaster_snapshots`` tmp dir.
-# ============================================================================
-
-
-def _wait_for_terminal_response(
-    client: TestClient, url: str, max_attempts: int = 5
-) -> dict:
-    """Drive the route until the BackgroundTask completes (200 not 202)."""
-    last_response = None
-    for _ in range(max_attempts):
-        last_response = client.post(url, json={})
-        if last_response.status_code == 200:
-            return last_response.json()
-    raise AssertionError(
-        f"Training did not converge to 200 within {max_attempts} POSTs. "
-        f"Last status: {last_response.status_code if last_response else 'n/a'}"
-    )
-
-
-def test_train_patchtst_skip_snapshot_true_writes_no_snapshot(client_with_mocks):
-    """``?skip_snapshot=true`` must NOT create any snapshot on disk."""
-    _ = _wait_for_terminal_response(client_with_mocks, TRAIN_URL)
-
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    assert snapshot_storage.list_snapshots() == [], (
-        "skip_snapshot=true must not write any snapshots, but found: "
-        f"{snapshot_storage.list_snapshots()}"
-    )
-
-
-def test_train_patchtst_skip_snapshot_false_writes_snapshots(
-    client_with_backfill_mocks,
-):
-    """Default (``skip_snapshot=false``) writes the end-date snapshot AND backfills history.
-
-    Uses :func:`client_with_backfill_mocks` so the heavy compute inside
-    ``_backfill_patchtst_snapshots`` (yfinance download + per-year
-    PatchTST fit) is replaced by deterministic stubs while the real
-    on-disk write logic still runs. Asserts on the snapshot directory
-    the route created under the autouse tmp path.
-    """
-    _ = _wait_for_terminal_response(client_with_backfill_mocks, "/train/patchtst")
-
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    snapshots = snapshot_storage.list_snapshots()
-    assert snapshots, (
-        "skip_snapshot=false must write at least one snapshot, but on-disk "
-        "snapshot list was empty."
-    )
-    assert all(s.month == 12 and s.day == 31 for s in snapshots), (
-        f"Every snapshot must be December 31, got: {[s.isoformat() for s in snapshots]}"
-    )
-    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
-    assert len(snapshots) > 1
-
-
-# ============================================================================
-# Scenario 5: Snapshot-backfill-on-cached-main branching (the new contract)
-# ============================================================================
-
-
-def _wait_for_terminal_status(
-    client: TestClient, job_id: str, max_attempts: int = 5
-) -> dict:
-    for _ in range(max_attempts):
-        resp = client.get(f"/train/status/{job_id}")
-        if resp.status_code != 200:
-            continue
-        body = resp.json()
-        if body["status"] not in {"pending", "in_progress"}:
-            return body
-    raise AssertionError(
-        f"Job {job_id} did not reach a terminal status within {max_attempts} polls"
-    )
-
-
-def _seed_main_version(client: TestClient) -> str:
-    body = _wait_for_terminal_response(client, "/train/patchtst")
-    return body["version"]
-
-
-def test_train_patchtst_cached_main_all_snapshots_present_returns_200(
-    client_with_backfill_mocks,
-):
-    """Scenario A: cached main + all snapshots on disk -> 200 fast path."""
-    _seed_main_version(client_with_backfill_mocks)
-
-    response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 200, response.text
-    data = response.json()
-    assert "num_input_channels" in data
-    assert data["signals_used"] == ["ohlcv"]
-
-
-def test_train_patchtst_cached_main_one_historical_missing_returns_202(
-    client_with_backfill_mocks,
-):
-    """Scenario B: delete one historical snapshot -> 202 + snapshots-only job."""
-    _seed_main_version(client_with_backfill_mocks)
-
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    snapshots = sorted(snapshot_storage.list_snapshots())
-    earliest = snapshots[0]
-    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(earliest):
-        import shutil
-
-        shutil.rmtree(snap_dir)
-
-    response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
-    assert job_id.startswith("patchtst_halal_new_snapshots:")
-
-    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
-    assert final["status"] == "completed", final
-    snapshots_after = {
-        s.isoformat()
-        for s in SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
-    }
-    assert earliest.isoformat() in snapshots_after
-
-
-def test_train_patchtst_writes_only_december_31_snapshots(
-    client_with_backfill_mocks,
-):
-    """Annual snapshots only: the training window end is not a cutoff."""
-    _seed_main_version(client_with_backfill_mocks)
-
-    snapshots = SnapshotLocalStorage("patchtst_halal_new").list_snapshots()
-    assert snapshots
-    assert all(s.month == 12 and s.day == 31 for s in snapshots)
-    assert "2024-12-27" not in {s.isoformat() for s in snapshots}
-
-
-def test_train_patchtst_cached_main_skip_snapshot_returns_200_fast(
-    client_with_mocks,
-):
-    """Scenario G: ``?skip_snapshot=true`` bypasses the snapshot scan."""
-    response1 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response1.status_code == 202
-
-    response2 = client_with_mocks.post(TRAIN_URL, json={})
-    assert response2.status_code == 200, response2.text
-    data = response2.json()
-    assert data["signals_used"] == ["ohlcv"]
-
-
-def test_train_patchtst_cached_main_hf_first_no_repo_returns_202(
-    client_with_backfill_mocks, monkeypatch
-):
-    """``hf_first`` with no HF repo uses the local-only rule and backfills."""
-    _seed_main_version(client_with_backfill_mocks)
-
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    snapshots = sorted(snapshot_storage.list_snapshots())
-    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
-        import shutil
-
-        shutil.rmtree(snap_dir)
-
-    monkeypatch.setenv("STORAGE_BACKEND", "hf_first")
-
-    response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
-    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
-    assert final["status"] == "completed"
-
-
-def test_train_patchtst_cached_main_local_first_no_repo_with_missing_returns_202(
-    client_with_backfill_mocks,
-):
-    """Scenario K: ``local_first`` + no HF repo + missing -> 202."""
-    _seed_main_version(client_with_backfill_mocks)
-
-    snapshot_storage = SnapshotLocalStorage("patchtst_halal_new")
-    snapshots = sorted(snapshot_storage.list_snapshots())
-    for snap_dir in snapshot_storage.hashed_snapshot_dirs_for_cutoff(snapshots[0]):
-        import shutil
-
-        shutil.rmtree(snap_dir)
-
-    response = client_with_backfill_mocks.post("/train/patchtst", json={})
-    assert response.status_code == 202, response.text
-    job_id = response.json()["job_id"]
-    assert job_id.startswith("patchtst_halal_new_snapshots:")
-    final = _wait_for_terminal_status(client_with_backfill_mocks, job_id)
-    assert final["status"] == "completed"
+    kind = "patchtst" if case.market == "us" else "patchtst_india"
+    get_or_create_job(kind, version)
+    response = case.client.post(case.endpoint, json={"universe": case.universe})
+    assert response.status_code == 202
+    assert "already in progress" in response.json()["message"]
+    assert not case.fit_calls

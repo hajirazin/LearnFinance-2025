@@ -38,6 +38,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from brain_api.shutdown import relay_shutdown_signals
 from brain_api.storage.policy import get_storage_policy
 
 # Resolve the storage policy at boot. Any invalid `STORAGE_BACKEND`
@@ -76,12 +77,16 @@ shutdown_event = threading.Event()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Manage app lifecycle: signal background tasks on shutdown."""
-    yield
-    logger.info("Shutdown requested, signalling background tasks to stop...")
-    shutdown_event.set()
-    from brain_api.routes.training.job_registry import cancel_all_running_jobs
+    shutdown_event.clear()
+    with relay_shutdown_signals(shutdown_event):
+        try:
+            yield
+        finally:
+            logger.info("Shutdown requested, signalling background tasks to stop...")
+            shutdown_event.set()
+            from brain_api.routes.training.job_registry import cancel_all_running_jobs
 
-    cancel_all_running_jobs()
+            cancel_all_running_jobs()
 
 
 app = FastAPI(

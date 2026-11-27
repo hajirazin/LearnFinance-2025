@@ -127,12 +127,14 @@ class TestSnapshotIntegration:
         """Test that backfill helper functions exist."""
         from brain_api.routes.training import (
             _backfill_lstm_snapshots,
-            _backfill_patchtst_snapshots,
+        )
+        from brain_api.services.patchtst_snapshots import (
+            backfill_weekly_patchtst_snapshots,
         )
 
         # Just verify they can be imported
         assert callable(_backfill_lstm_snapshots)
-        assert callable(_backfill_patchtst_snapshots)
+        assert callable(backfill_weekly_patchtst_snapshots)
 
 
 class TestSnapshotInferenceHelpers:

@@ -72,7 +72,7 @@ def test_retry_failed_hf_publication_reuses_saved_weights(
         side_effect=AssertionError("Saved checkpoint must not be refit")
     )
     monkeypatch.setattr(
-        "brain_api.routes.training.patchtst.fit_weekly_patchtst", forbidden_fit
+        "brain_api.services.patchtst_training.fit_weekly_patchtst", forbidden_fit
     )
     monkeypatch.setitem(
         app.dependency_overrides, get_india_patchtst_config, lambda: config

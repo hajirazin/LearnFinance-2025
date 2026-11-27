@@ -1,5 +1,8 @@
 """Common causal input windows and five-session labels for PatchTST."""
 
+import logging
+import threading
+import time
 from dataclasses import dataclass
 from datetime import date
 from tempfile import TemporaryFile
@@ -19,8 +22,15 @@ from brain_api.core.patchtst.india_prices import (
     restore_nse_cash_bar_gaps,
 )
 from brain_api.core.patchtst.price_history import normalize_price_dates
+from brain_api.core.patchtst.progress import (
+    ProgressCallback,
+    check_cancelled,
+    report_progress,
+)
 from brain_api.news.patchtst import load_session_sentiment
 from brain_api.news.store import NewsStore
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,11 +55,26 @@ class WeeklyPatchTSTInputs:
         calendar: PatchTSTCalendar,
         prices: dict[str, pd.DataFrame],
         store: NewsStore | None = None,
+        *,
+        on_progress: ProgressCallback | None = None,
+        shutdown_event: threading.Event | None = None,
     ):
+        check_cancelled(shutdown_event)
         self.config = config
         self.calendar = calendar
         index = calendar.sessions
         if "news_sentiment" in config.feature_names:
+            logger.info(
+                "PatchTST loading session sentiment symbols=%s sessions=%s",
+                len(prices),
+                len(index),
+            )
+            report_progress(
+                on_progress,
+                phase="loading_session_sentiment",
+                symbols=len(prices),
+                sessions=len(index),
+            )
             if store is None:
                 store = NewsStore()
             sentiment = load_session_sentiment(store, list(prices), calendar.closes)
@@ -60,7 +85,20 @@ class WeeklyPatchTSTInputs:
         self.close = {}
         self.valid_returns = {}
         self.recovered_bars = {}
-        for symbol in self.symbols:
+        for position, symbol in enumerate(self.symbols, start=1):
+            check_cancelled(shutdown_event)
+            if position == 1 or position % 25 == 0 or position == len(self.symbols):
+                logger.info(
+                    "PatchTST building features symbols=%s/%s",
+                    position,
+                    len(self.symbols),
+                )
+                report_progress(
+                    on_progress,
+                    phase="building_features",
+                    symbols_done=position,
+                    symbols_total=len(self.symbols),
+                )
             try:
                 bars = normalize_price_dates(prices[symbol]).reindex(index)
             except ValueError:
@@ -126,7 +164,16 @@ class WeeklyPatchTSTInputs:
         recovered = self.recovered_bars.get(symbol)
         return recovered is not None and bool(recovered[position])
 
-    def labeled(self, start: date, end: date) -> WeeklyPatchTSTData:
+    def labeled(
+        self,
+        start: date,
+        end: date,
+        *,
+        on_progress: ProgressCallback | None = None,
+        shutdown_event: threading.Event | None = None,
+    ) -> WeeklyPatchTSTData:
+        check_cancelled(shutdown_event)
+        started = time.monotonic()
         sessions = self.calendar.sessions
         bounds = sessions.to_series().groupby(sessions.to_period("W-SUN")).last()
         anchors = bounds[
@@ -146,7 +193,25 @@ class WeeklyPatchTSTInputs:
         # Keep historical panels off heap. The trainer copies only the current batch.
         with TemporaryFile() as backing:
             matrix = np.memmap(backing, mode="w+", shape=shape, dtype=np.float32)
-            for stamp in anchors:
+            for position, stamp in enumerate(anchors, start=1):
+                check_cancelled(shutdown_event)
+                if position == 1 or position % 25 == 0 or position == len(anchors):
+                    logger.info(
+                        "PatchTST building dataset cutoff=%s weeks=%s/%s examples=%s elapsed_s=%.1f",
+                        end,
+                        position,
+                        len(anchors),
+                        len(labels),
+                        time.monotonic() - started,
+                    )
+                    report_progress(
+                        on_progress,
+                        phase="building_weekly_dataset",
+                        cutoff=end.isoformat(),
+                        weeks_done=position,
+                        weeks_total=len(anchors),
+                        examples=len(labels),
+                    )
                 anchor = stamp.date()
                 idx = sessions.get_loc(stamp)
                 ahead = idx + FORECAST_SESSIONS
@@ -195,9 +260,35 @@ def load_weekly_training_inputs(
     price_loader,
     *,
     store: NewsStore | None = None,
+    on_progress: ProgressCallback | None = None,
+    shutdown_event: threading.Event | None = None,
 ) -> WeeklyPatchTSTInputs:
+    check_cancelled(shutdown_event)
     calendar = training_calendar(config.market, start, end)
+    logger.info(
+        "PatchTST loading prices market=%s symbols=%s start=%s end=%s",
+        config.market,
+        len(symbols),
+        calendar.sessions[0].date(),
+        end,
+    )
+    report_progress(
+        on_progress,
+        phase="loading_prices",
+        symbols_total=len(symbols),
+        start=str(calendar.sessions[0].date()),
+        end=str(end),
+    )
     prices = price_loader(symbols, calendar.sessions[0].date(), end)
+    check_cancelled(shutdown_event)
+    logger.info("PatchTST prices loaded symbols=%s/%s", len(prices), len(symbols))
     if config.market == "india":
         prices = restore_nse_cash_bar_gaps(prices, calendar.sessions)
-    return WeeklyPatchTSTInputs(config, calendar, prices, store)
+    return WeeklyPatchTSTInputs(
+        config,
+        calendar,
+        prices,
+        store,
+        on_progress=on_progress,
+        shutdown_event=shutdown_event,
+    )

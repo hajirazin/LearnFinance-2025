@@ -14,15 +14,14 @@ from .dependencies import (
     get_config,
     get_dataset_builder,
     get_patchtst_config,
-    get_patchtst_dataset_builder,
     get_patchtst_price_loader,
     get_patchtst_storage,
-    get_patchtst_trainer,
     get_price_loader,
     get_sac_config,
     get_sac_storage,
     get_storage,
     get_trainer,
+    get_weekly_patchtst_trainer,
     snapshots_available,
 )
 from .job_registry import get_job
@@ -49,7 +48,6 @@ from .sac import router as sac_router
 # working without forcing every caller to learn the new module name.
 from .snapshot_phase import (
     _backfill_lstm_snapshots,
-    _backfill_patchtst_snapshots,
 )
 
 # Backward compat alias for _snapshots_available
@@ -103,21 +101,19 @@ __all__ = [
     "SACTrainResponse",
     "SnapshotLocalStorage",  # Re-exported for test patching compatibility
     "_backfill_lstm_snapshots",
-    "_backfill_patchtst_snapshots",
     "_snapshots_available",
     # Dependencies
     "get_config",
     "get_dataset_builder",
     "get_patchtst_config",
-    "get_patchtst_dataset_builder",
     "get_patchtst_price_loader",
     "get_patchtst_storage",
-    "get_patchtst_trainer",
     "get_price_loader",
     "get_sac_config",
     "get_sac_storage",
     "get_storage",
     "get_trainer",
+    "get_weekly_patchtst_trainer",
     "router",
     # Backward compat exports
     "snapshots_available",

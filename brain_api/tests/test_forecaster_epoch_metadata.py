@@ -1,15 +1,16 @@
 """Epoch counters on forecaster TrainingResult and metadata.json."""
 
-from datetime import date, timedelta
+from datetime import date
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.lstm.config import LSTMConfig
 from brain_api.core.lstm.training import train_model_pytorch as train_lstm
-from brain_api.core.patchtst.config import PatchTSTConfig
-from brain_api.core.patchtst.training import train_model_pytorch as train_patchtst
+from brain_api.core.patchtst.config import INDIA_WEEKLY_CONFIG
+from brain_api.core.patchtst.weekly_training import fit_weekly_patchtst
 from brain_api.storage.metadata import create_training_metadata
+from tests.test_weekly_patchtst_progress import synthetic_weekly_data
 
 
 def test_create_training_metadata_includes_epoch_counters() -> None:
@@ -68,51 +69,13 @@ def test_lstm_tiny_train_records_epoch_counters() -> None:
 
 
 def test_patchtst_tiny_train_records_epoch_counters() -> None:
-    rng = np.random.default_rng(0)
-    config = PatchTSTConfig(
-        context_length=32,
-        patch_length=8,
-        stride=8,
-        d_model=16,
-        num_attention_heads=2,
-        num_hidden_layers=1,
-        ffn_dim=32,
-        epochs=2,
-        early_stopping_patience=10,
-        batch_size=4,
-    )
-    n_channels = config.num_input_channels
-    symbols_list = ("AAA", "BBB", "CCC", "DDD")
-    train_weeks = 4
-    n_samples = train_weeks * len(symbols_list) + len(symbols_list)
-    X = rng.normal(size=(n_samples, config.context_length, n_channels)).astype(
-        np.float32
-    )
-    y = rng.normal(size=(n_samples, config.prediction_length, n_channels)).astype(
-        np.float32
-    )
-    dates: list[date] = []
-    labels: list[str] = []
-    for week in range(train_weeks):
-        week_date = date(2024, 1, 5) + timedelta(days=7 * week)
-        for symbol in symbols_list:
-            dates.append(week_date)
-            labels.append(symbol)
-    val_date = date(2024, 3, 1)
-    for symbol in symbols_list:
-        dates.append(val_date)
-        labels.append(symbol)
-    result = train_patchtst(
-        X,
-        y,
-        StandardScaler(),
-        config,
-        anchor_dates=np.array(dates, dtype=object),
-        sample_symbols=np.array(labels, dtype=object),
+    from dataclasses import replace
+
+    result = fit_weekly_patchtst(
+        synthetic_weekly_data(), replace(INDIA_WEEKLY_CONFIG, epochs=2, batch_size=128)
     )
     assert result.stopped_epoch == 2
     assert 1 <= result.best_epoch <= result.stopped_epoch
-    assert result.stopped_epoch <= config.epochs
     assert np.isfinite(result.val_rank_ic)
 
 

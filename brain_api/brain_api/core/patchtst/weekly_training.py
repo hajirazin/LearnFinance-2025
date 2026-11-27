@@ -1,19 +1,28 @@
 """Fit the direct five-session PatchTST regressor."""
 
+import logging
 import math
 import threading
+import time
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 
 from brain_api.core.patchtst.config import PatchTSTConfig, create_patchtst_model
+from brain_api.core.patchtst.progress import (
+    ProgressCallback,
+    check_cancelled,
+    report_progress,
+)
 from brain_api.core.patchtst.weekly_data import (
     InsufficientWeeklyHistory,
     WeeklyPatchTSTData,
 )
 from brain_api.core.patchtst.weekly_rank_ic import mean_weekly_rank_ic
-from brain_api.core.training_utils import TrainingCancelledError, get_device
+from brain_api.core.training_utils import get_device
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -90,7 +99,10 @@ def fit_weekly_patchtst(
     config: PatchTSTConfig,
     *,
     shutdown_event: threading.Event | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> WeeklyPatchTSTResult:
+    check_cancelled(shutdown_event)
+    started = time.monotonic()
     train, validation = weekly_fold_indices(data, config.validation_split)
     targets = data.y
     scale = PatchTSTTargetScale(float(np.std(targets[train], dtype=np.float64)))
@@ -114,13 +126,29 @@ def fit_weekly_patchtst(
     best = float("inf")
     state = None
     best_epoch = 0
+    logger.info(
+        "PatchTST weekly fit start market=%s device=%s fit_examples=%s validation_examples=%s epochs=%s patience=%s",
+        config.market,
+        device,
+        len(train),
+        len(validation),
+        config.epochs,
+        config.early_stopping_patience,
+    )
     for epoch in range(1, config.epochs + 1):
+        check_cancelled(shutdown_event)
+        report_progress(
+            on_progress,
+            phase="training_weekly_regression",
+            epoch=epoch,
+            total_epochs=config.epochs,
+            batches_done=0,
+        )
         model.train()
         order = rng.permutation(train)
         running_loss = 0.0
         for start in range(0, len(order), config.batch_size):
-            if shutdown_event is not None and shutdown_event.is_set():
-                raise TrainingCancelledError("Weekly PatchTST training cancelled")
+            check_cancelled(shutdown_event)
             rows = order[start : start + config.batch_size]
             inputs = torch.from_numpy(data.X[rows]).to(device)
             labels = torch.from_numpy(targets[rows] / scale.target_std).to(device)
@@ -133,6 +161,17 @@ def fit_weekly_patchtst(
             torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
             optimizer.step()
             running_loss += float(loss.detach()) * len(rows) * scale.target_std**2
+            batch = start // config.batch_size + 1
+            if batch % 10 == 0 or start + config.batch_size >= len(order):
+                report_progress(
+                    on_progress,
+                    phase="training_weekly_regression",
+                    epoch=epoch,
+                    total_epochs=config.epochs,
+                    batches_done=batch,
+                    batches_total=math.ceil(len(order) / config.batch_size),
+                    elapsed_seconds=time.monotonic() - started,
+                )
 
         estimates = np.concatenate(
             [
@@ -143,6 +182,7 @@ def fit_weekly_patchtst(
             ]
         )
         mse = float(np.average((estimates - targets[validation]) ** 2, weights=weights))
+        check_cancelled(shutdown_event)
         scheduler.step(mse)
         if mse < best:
             best, best_epoch = mse, epoch
@@ -152,12 +192,50 @@ def fit_weekly_patchtst(
                 key: tensor.detach().cpu().clone()
                 for key, tensor in model.state_dict().items()
             }
+        metrics = {
+            "phase": "training_weekly_regression",
+            "epoch": epoch,
+            "total_epochs": config.epochs,
+            "train_loss": running_loss / len(train),
+            "val_loss": mse,
+            "weekly_rmse_pp": 100 * math.sqrt(mse),
+            "best_epoch": best_epoch,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+            "patience_used": epoch - best_epoch,
+            "patience_limit": config.early_stopping_patience,
+            "elapsed_seconds": time.monotonic() - started,
+        }
+        logger.info(
+            "PatchTST weekly epoch=%s/%s train_loss=%.6f val_loss=%.6f weekly_rmse_pp=%.4f lr=%.6g best_epoch=%s patience=%s/%s elapsed_s=%.1f",
+            epoch,
+            config.epochs,
+            metrics["train_loss"],
+            mse,
+            metrics["weekly_rmse_pp"],
+            metrics["learning_rate"],
+            best_epoch,
+            epoch - best_epoch,
+            config.early_stopping_patience,
+            metrics["elapsed_seconds"],
+        )
+        report_progress(on_progress, **metrics)
         if epoch - best_epoch >= config.early_stopping_patience:
+            logger.info(
+                "PatchTST weekly early stopping epoch=%s best_epoch=%s",
+                epoch,
+                best_epoch,
+            )
             break
     if state is None:
         raise ValueError("Weekly PatchTST selected no checkpoint")
     model.load_state_dict(state)
     model.eval()
+    logger.info(
+        "PatchTST weekly fit completed best_epoch=%s stopped_epoch=%s elapsed_s=%.1f",
+        best_epoch,
+        epoch,
+        time.monotonic() - started,
+    )
     try:
         rank_ic = mean_weekly_rank_ic(
             validation_dates,
