@@ -1,0 +1,12 @@
+{
+  "job_id": "13613a8ea1ddc80bf68f38439961fa1e0e9a3654571f2fcb8a7fff9ea2152ff6",
+  "status": "complete",
+  "first_session": "2026-11-02",
+  "last_session": "2026-11-20",
+  "windows_done": 6255,
+  "windows_total": 6255,
+  "missing_recent_news_inputs": 0,
+  "latest_session_usable_stocks": 417,
+  "stocks_passing_latest_annual_news_context_check": 417,
+  "error": null
+}

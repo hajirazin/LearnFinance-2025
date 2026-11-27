@@ -1,0 +1,69 @@
+{
+  "commit": "74f0e6ef88df671df715bcb09d10f57ffba3f257",
+  "scope": "current brain_api working tree, existing uncommitted news fixes included",
+  "runtime": "repository .venv Python 3.11, cwd brain_api",
+  "result": {
+    "passed": 1418,
+    "failed": 1,
+    "skipped": 4
+  },
+  "blocked_external_attempts": 27,
+  "affected_tests": 9,
+  "operations": {
+    "requests.Session.send": 1,
+    "curl_cffi.Session.request": 26
+  },
+  "tests": [
+    {
+      "nodeid": "tests/core/ppo_discovery/test_price_readiness.py::test_price_readiness_false_when_index_or_history_missing",
+      "operation": "requests.Session.send",
+      "attempts": 1
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_generate_buy_orders_from_cash",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 4
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_orders_are_market_type",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 4
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_buy_qty_sized_for_market_price",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 2
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_full_rebalance_sell_qty_matches_position",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 4
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_buy_cap_scales_buys_proportionally",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 4
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_buy_cap_not_applied_when_buys_fit_cash",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 4
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_buy_cap_uses_cash_plus_expected_sell_proceeds",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 2
+    },
+    {
+      "nodeid": "tests/test_orders.py::TestOrderGeneration::test_to_dict_omits_limit_price_for_market",
+      "operation": "curl_cffi.Session.request",
+      "attempts": 2
+    }
+  ],
+  "production_pretrained_model_loads_observed": false,
+  "attribution": {
+    "Cboe_readiness_call": "e7ac530, 2026-09-01",
+    "ATR_network_path": "7613c0c and 22f332b, 2026-08-14; price-loader refactor 06c5754, 2026-08-24"
+  },
+  "safety": "External I/O and production torch/joblib loads were blocked by a temporary pytest plugin. No repository Python files changed during this audit."
+}
