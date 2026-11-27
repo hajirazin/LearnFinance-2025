@@ -3,6 +3,8 @@
 from datetime import date
 
 import numpy as np
+import pytest
+import torch
 from sklearn.preprocessing import StandardScaler
 
 from brain_api.core.lstm.config import LSTMConfig
@@ -68,9 +70,16 @@ def test_lstm_tiny_train_records_epoch_counters() -> None:
     assert result.stopped_epoch <= config.epochs
 
 
-def test_patchtst_tiny_train_records_epoch_counters() -> None:
+def test_patchtst_tiny_train_records_epoch_counters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from dataclasses import replace
 
+    # Epoch metadata is a CPU contract; accelerator smoke tests run separately.
+    monkeypatch.setattr(
+        "brain_api.core.patchtst.weekly_training.get_device",
+        lambda: torch.device("cpu"),
+    )
     result = fit_weekly_patchtst(
         synthetic_weekly_data(), replace(INDIA_WEEKLY_CONFIG, epochs=2, batch_size=128)
     )
