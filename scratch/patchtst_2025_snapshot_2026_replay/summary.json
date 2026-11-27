@@ -1,0 +1,62 @@
+{
+  "snapshot": "snapshot-2025-12-31-12d23440a2a3",
+  "snapshot_trained_at": "2026-11-27T17:45:47.736366+00:00",
+  "snapshot_latest_label": "2025-12-29",
+  "run_at": "2026-11-27 17:57:23.445286+00:00",
+  "git_head": "91e8a28017c8d2ae975b46274d8c1e944c45274e",
+  "weeks": 47,
+  "completed_weeks": 46,
+  "final_week_complete": false,
+  "price_evidence_as_of": "2026-11-27T17:52:00.086227+00:00",
+  "roster_size": 417,
+  "initial_capital": 10000.0,
+  "first_execution": "2026-01-05 00:00:00",
+  "last_valuation": "2026-11-25 00:00:00",
+  "top_n": 15,
+  "hold_rank": 20,
+  "transaction_cost": 0,
+  "weekend": "Hold positions; self-financing rebalance at next session open",
+  "metrics": {
+    "PatchTST": {
+      "ending_value": 14543.94688903105,
+      "total_return": 0.4543946889031052,
+      "max_weekly_drawdown": -0.10218945652280342
+    },
+    "SPY": {
+      "ending_value": 10520.84331719278,
+      "total_return": 0.052084331719278065,
+      "max_weekly_drawdown": -0.11400389037676195
+    },
+    "QQQ": {
+      "ending_value": 10270.764911402577,
+      "total_return": 0.027076491140257675,
+      "max_weekly_drawdown": -0.19010476075343763
+    },
+    "S&P 500": {
+      "ending_value": 10421.621931810414,
+      "total_return": 0.04216219318104142,
+      "max_weekly_drawdown": -0.11536136252742057
+    }
+  },
+  "min_weekly_eligible": 393,
+  "max_weekly_eligible": 408,
+  "mean_retained": 9.782608695652174,
+  "limitations": [
+    "Retrospective frozen current roster; survivorship bias, not point-in-time membership.",
+    "Snapshot fitted in November 2026 using labels ending December 2025; retrospective out-of-time experiment, not an artifact actually available in January 2026.",
+    "Adjusted Yahoo prices model corporate actions/dividend reinvestment; quantities are adjusted units, not historical broker share counts.",
+    "SPY and QQQ use adjusted-price returns; S&P 500 (^GSPC) is a price index without dividends.",
+    "Model predicts five exchange sessions. Holiday-shortened weeks can target the following week rather than that Friday; no model alteration.",
+    "Archived sentiment rejects unavailable future article revisions and uses production missingness rules; residual archive coverage is reported.",
+    "Zero fees, spread, slippage, taxes, and market impact; fractional units; weekly-close drawdown only."
+  ],
+  "code_sha256": {
+    "test_replay.py": "00d40d0987b30be421ca0bccefa8c26c18f48b3cdd3c53cdd7f0e4325f51d55c",
+    "conftest.py": "ab16e3e599a0e42078e61cfd07bff195f4a9d71cc4c08623af5fd568c9b7a1b9",
+    "plot.py": "0b9a38ae3d2bd2c8ace2f2826ffb1c8f8a839714df29922eca8002fb522937bc",
+    "accounting.py": "c65128817ac6ba7dbab618399091a1bd5b070bf871ba1b446718f4afd8ab4d64",
+    "validate.py": "9cc2a1917bd7eae27942e6df7ea42fae85e31a5467d85923b0f7851f07cb909d",
+    "replay.py": "0c776989bde912b4a565e4374a9718bae6b17bc3f9b2337148cc8dccb49ccdaa",
+    "prepare.py": "1b01ca65713696051e5c446aa9cf46d74f13134c43e47240099edc8a8ed05730"
+  }
+}

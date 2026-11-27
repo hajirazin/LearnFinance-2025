@@ -1,0 +1,22 @@
+{
+  "weekly_books_reconciled": 47,
+  "holdings_rows": 705,
+  "forecast_rows": 19066,
+  "future_input_perturbation_checks": 3,
+  "maximum_self_financing_residual_usd": 1.5916157281026244e-12,
+  "benchmarks_reconciled": 3,
+  "unfinished_daily_bar_excluded": true,
+  "frozen_prices_verified": true,
+  "output_sha256": {
+    "summary.json": "b4a0e72ad1a741fcab43fbef40b2f6af78124a02f73148869dc6c8d7e05ad49c",
+    "forecasts.csv": "a121c632d77e427c55f463bdc47d496500caecb1596bda90e41338a988939e67",
+    "weekly_nav.csv": "93f0765b85b823ffb96fb007ec971060b7065c355a7f29c9490141f0be805aab",
+    "weekly_portfolio.csv": "c08ab10380ad2d85fdf4a08acbbb913705eaef73bdf8826b61f03568a40dba0f",
+    "weekly_ledger.json": "5c02d144b9cc18d2ec7904038e0ee379d77423e765f898cc1b567d44990d79a8",
+    "ending_holdings.csv": "503ec55c094084c2d252b8be435d1e0c7482e901d6210bc629a84d6cd646b923",
+    "price_manifest.json": "251fdc914281e2b4483d13603d603f3a1e69587f7f3e442a77286e0b80ee1fa2",
+    "trades.csv": "ef6963d2a8e2c1dbaa4792cae9c52734c989bb8afbaeb7b53e662a513d436911",
+    "weekly_holdings.csv": "7dbab2599b792ff01ea00d6b3406db987a179fb9cccdda11e023070bfbf08ce2",
+    "exclusions.csv": "24b293b698504928209461f6ccc3a69706d977637aec7aa20956195b78da7768"
+  }
+}
