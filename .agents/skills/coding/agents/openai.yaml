@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding"
+  short_description: "Implement code and approved plans with verified behavior"
+  default_prompt: "Use $coding to implement this task or approved plan while preserving existing behavior and verifying the production path."

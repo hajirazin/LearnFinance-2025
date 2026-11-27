@@ -221,7 +221,10 @@ scripts/output
 .opencode
 .github
 .agent
-.agents
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/coding/
 .cline
 .zencoder
 .claude

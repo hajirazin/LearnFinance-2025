@@ -1,6 +1,6 @@
 ---
 name: plan-generator
-description: Produces a complete, unambiguous, execution-ready implementation plan that a weak/local coding agent (e.g. Ollama Nemotron 32B, North Code) can follow line-by-line without judgement. Use this skill WHENEVER the user asks to plan, spec, design, scope, break down, or prepare any coding task, feature, bug fix, or refactor — even if they only say "plan this", "how would you do X", or "write me a plan". Always trigger before any code is written. This skill runs on a costly planning model (Claude/Gemini) with READ-ONLY tools; it never writes production code.
+description: Produce a researched, execution-ready implementation plan when the user asks to plan, spec, design, scope, or break down a coding task, feature, bug fix, or refactor. This skill plans with read-only tools; it does not implement. For authorized implementation, including execution of an existing plan, use the coding skill instead of restarting a planning-only workflow.
 ---
 
 # Plan Generator
@@ -31,6 +31,24 @@ Every instruction must be deterministic: exact file path, exact class/method nam
 
 Before investigating, establish the **ubiquitous language**. Read the codebase and any domain docs to learn the exact terms the domain already uses (entities, value objects, aggregates, bounded contexts, domain events, repositories, domain services). The plan must use these exact terms — do not invent synonyms. If the feature introduces a new domain concept, name it in the domain's existing vocabulary and record it in a short glossary at the top of the plan.
 
+Establish the change contract before designing the implementation:
+
+- Separate requested behavior changes from behavior to preserve. Record relevant
+  configuration values before and after; preserve unrelated defaults and model
+  hyperparameters. Identify effects on version hashes, artifact readers, and
+  downstream consumers when a configuration change is requested.
+- Trace the default production entry point through dependency injection,
+  application services, core functions, and storage. Identify actual callers of
+  any implementation being replaced, including retry and snapshot paths.
+- For a replacement, inventory operational behavior as well as outputs: logs,
+  metrics, progress/status, cancellation, error propagation, idempotency, and
+  persistence/publication ordering. Give each affected behavior a verification
+  step; do not assume that matching model outputs proves replacement parity.
+- Distinguish required edits from deployment or operational work. An
+  implementation plan does not authorize production training, publication,
+  database backups, or unrelated runbook edits. Account for active jobs before
+  edits that could reload or stop their process.
+
 ### Phase 1 — Investigate relentlessly (this is where "no guessing" is earned)
 
 Gather facts from three sources, in this order:
@@ -52,6 +70,10 @@ After investigating, list everything still unknown or genuinely ambiguous: busin
 - **Reuse before creating.** Default to extending or calling existing code. Only introduce a new class/module when you have confirmed (via Phase 1) that nothing suitable exists, and say so explicitly in the plan ("No existing X found; grep for `...` returned nothing").
 - **DDD naming.** Class and method names must reflect the domain, not the mechanics. Prefer `Order.markAsShipped()` over `Order.updateStatus(2)`; prefer `PricingPolicy` over `PriceHelper`. Entities/aggregates are nouns from the ubiquitous language; domain methods are behaviours expressed in that language; repositories are `<Aggregate>Repository`; application services are use-case-named.
 - **Respect the layering.** Keep domain logic out of infrastructure and interface layers. State which layer each new/changed artifact belongs to.
+- **Simple design and small reviews.** Plan cohesive behavior slices that can
+  be verified and reviewed as they are completed. Separate mechanical refactors
+  from changed behavior where practical. Prefer explicit composition and
+  existing domain abstractions over speculative frameworks or duplicate helpers.
 - **Produced-code file-size limit (coding best practice): no source file the Coder creates or edits may exceed 600 lines.** This is a rule on the *code files*, not on plans or docs. Before writing the plan, project the post-change line count of every file the Coder will touch. If any change would push a file to more than 600 lines, the plan must split that file — do not let the Coder decide when or how to split.
   - Split along a **cohesive responsibility / DDD boundary** (e.g. move a value object, policy, or repository into its own module), never with an arbitrary cut at line 600.
   - The plan must state exactly: the new file path, which classes/functions move into it, what stays, the new import lines, and how every existing import that referenced the moved symbols is updated.
@@ -68,9 +90,42 @@ Write for a model that cannot infer. That means:
 - Order steps so the project stays runnable; note any step that temporarily breaks the build.
 - Every step names the exact test(s) to write and the exact command to verify (e.g. `pytest tests/domain/test_pricing_policy.py -q`).
 
+When handing off an authorized implementation, name `$coding` as the execution
+skill when it is available. Include the requested changes, preserved contracts,
+and verification evidence it must produce. A request to plan remains a planning
+request; naming the execution skill does not authorize starting implementation.
+
+### Verification must reach the production path
+
+- Exercise the actual default endpoint and configuration with synthetic inputs
+  and temporary artifacts. Legacy configuration overrides or mocks of a retired
+  trainer are not coverage for its replacement. Stub external I/O and expensive
+  fitting deliberately, retaining focused tests of the real core behavior.
+- For provider/model integrations, specify offline enforcement at the actual
+  transports and artifact boundaries, including native/curl-backed clients when
+  used. Record attempted I/O so caught exceptions cannot make a leaking test
+  pass. Keep intentionally small synthetic model tests possible.
+- Give tests their own temporary storage before imports or constructors can
+  select production paths. Guard reads, writes, deletion, promotion, and remote
+  publication. Tests must never rearrange or clean the real model/data folders,
+  even with a plan to restore them. Use deterministic synthetic evidence and
+  scoped fixtures; keep authorized provider smoke tests outside the default suite.
+- For asynchronous jobs, specify accepted/running/terminal/retry transitions
+  together with worker ownership. Cover duplicate requests, cancellation at each
+  fitting entry point, partial publication, and reuse of saved work on retry.
+  Check framework shutdown ordering rather than assuming a lifecycle hook runs
+  before background tasks are drained.
+- For shared data, inspect the configured backend and available local/remote
+  evidence before declaring data missing or planning a download. Verify a blank
+  machine can restore published evidence and a publishing machine can reuse it;
+  include concurrent-write protection when changing synchronization bookkeeping.
+- When retiring a path, migrate its relevant behavioral tests and remove obsolete
+  callers, dependencies, branches, and exports. Keep checkpoint decoding or
+  inference compatibility that installed artifacts still require.
+
 ---
 
-## TDD is mandatory (Thoughtworks sensible default)
+## Test-driven development
 
 Every behavioural change follows red → green → refactor, and the plan must be ordered that way:
 
@@ -82,9 +137,11 @@ Every behavioural change follows red → green → refactor, and the plan must b
 
 ---
 
-## Thoughtworks sensible defaults the plan must honour
+## Engineering defaults the plan must honour
 
-These are Thoughtworks' codified defaults (rooted in Extreme Programming). Apply them unless the user's context gives a specific, stated reason not to — and if you deviate, say why in the plan.
+Apply these engineering defaults in the context of the repository and the
+user's requirements. Explain material deviations rather than treating practices
+as substitutes for understanding the problem.
 
 - **Test-driven development** — tests lead the code (see above).
 - **Continuous integration** — changes integrate into mainline frequently; the plan sequences work into small, independently-integrable steps rather than one big-bang change.
@@ -95,7 +152,9 @@ These are Thoughtworks' codified defaults (rooted in Extreme Programming). Apply
 - **Infrastructure as code** — any environment/config change is expressed as code/config in the repo, never as a manual step.
 - **Small, reversible steps** — decompose so each step is reviewable and safe to revert.
 
-(Reference: Thoughtworks "Sensible defaults" — practices and principles for high-quality delivery, distinct from rigid "best practices". Confirm the current list at thoughtworks.com/insights/topic/sensible-defaults when in doubt.)
+Keep plans and examples suitable for a public repository. Use neutral engineering
+language; omit organization branding, private links, and machine-specific paths
+unless they are explicitly required by the user.
 
 ---
 
@@ -135,6 +194,9 @@ One paragraph: what we are building and why (the domain outcome, not the mechani
 - Decision: <X>. Rationale: <why>. Layer: <domain/application/infrastructure/interface>.
 - New artifacts (only where nothing reusable exists): <path> — <class/method names, DDD-justified>
 - File-size check: <every touched/new file projected under 600 lines; splits noted here>
+- Change contract: <requested changes, preserved defaults/operations, artifact compatibility>
+- Production-path evidence: <default entry point, real implementation, isolated external boundaries>
+- Execution handoff: <use $coding for implementation when authorized and available>
 
 ## 5. Open questions
 NONE — all resolved in clarification. (If any remain, the plan is not ready; go back to Phase 2.)
@@ -165,5 +227,8 @@ NONE — all resolved in clarification. (If any remain, the plan is not ready; g
 - [ ] All names follow DDD / ubiquitous language.
 - [ ] No source file the Coder touches exceeds 600 lines; any file that would has an explicit split step (new path, moved symbols, updated imports).
 - [ ] Every change has a test written first (TDD); every bug fix has a regression test.
-- [ ] Thoughtworks sensible defaults are honoured or the deviation is justified.
+- [ ] Tests reach the current default production path; offline claims have enforcement evidence.
+- [ ] Replacement operational behavior and required artifact compatibility have explicit checks.
+- [ ] Unrequested configuration changes and operational actions have been excluded.
+- [ ] Engineering defaults are applied in context; material deviations are explained.
 - [ ] The two mandatory final TODOs are present, verbatim, and last.
