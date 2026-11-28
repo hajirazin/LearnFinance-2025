@@ -1,6 +1,7 @@
 # PatchTST research roadmap: diagnostics before tuning
 
-Created: 2026-11-28. Status: planning only; no experiments started.
+Created: 2026-11-28. Updated: 2026-11-28. Status: E2 screening run completed;
+the remaining experiment queue has not started.
 
 ## Purpose and working cadence
 
@@ -17,7 +18,15 @@ when authorized, records its outcome, and identifies the next useful question.
 An experiment may take several sessions. Dates are recorded when work occurs;
 there are no promised runtimes or automatic daily jobs.
 
-**Next experiment to plan: A0, evidence inventory and protocol.**
+**Latest result: E2, matched MSE versus Huber, inconclusive.** Both arms selected
+epoch 1 and stopped at epoch 16. Huber's reused-2025 mean weekly Rank IC was
+0.02402 versus 0.01692 for MSE; the paired difference was +0.00710 with a
+four-week-block 95% interval of −0.01147 to +0.02670. RMSE was essentially
+unchanged. See the [report](experiments/E2/REPORT.md) and
+[protocol](experiments/E2/PROTOCOL.md). The user authorized starting E2 directly;
+its bounded prerequisite checks do not complete the broader A0–A4 program.
+Next: review diagnostics or preregister seed/era replication before choosing a
+production loss. No additional experiment is running.
 
 ## Scope and isolation
 
@@ -75,8 +84,9 @@ obtain point-in-time membership before claiming an unbiased strategy backtest.
 
 ## Experiment queue
 
-All entries are pending. Later experiments are conditional on earlier evidence,
-not a commitment to execute the entire queue.
+E2's first screening run is complete. Other entries remain pending;
+later experiments are conditional on evidence, not a commitment to execute the
+entire queue.
 
 | ID | Question | Type | Dependency / stopping point |
 | --- | --- | --- | --- |
@@ -303,9 +313,10 @@ ledger before switching experiments. Do not check boxes for planned work.
 
 | ID | Status | Protocol / report | Conclusion and next action |
 | --- | --- | --- | --- |
-| A0 | Not started | — | Inventory existing evidence and plan the first audit. |
-| A1–A4 | Pending A0 | — | No runs authorized by this document alone. |
-| E1–E8 | Conditional | — | Select the next study from diagnostic evidence. |
+| A0 | E2-scoped inventory completed; broader inventory pending | [E2 protocol](experiments/E2/PROTOCOL.md) | Frozen local prices and roster; strict read-only news extraction; manifests saved in E2 scratch data. |
+| A1–A4 | E2-scoped checks completed; broader studies pending | [E2 checks](experiments/E2/test_training.py) | Known ticker collisions excluded in both arms; chronology, Huber gradients and exact synthetic production-MSE parity verified. |
+| E2 | Screening completed 2026-11-28; inconclusive | [Protocol](experiments/E2/PROTOCOL.md), [report](experiments/E2/REPORT.md) | Both best/stopped 1/16. Huber − MSE IC +0.00710, 95% interval [−0.01147, +0.02670]; unchanged RMSE. No production change; replication remains a separate experiment. |
+| E1, E3–E8 | Conditional | — | No other experiment has started. |
 | C1 | Pending frozen finalists | — | Historical confirmation, then future observation. |
 
 ## Sources and repository entry points
