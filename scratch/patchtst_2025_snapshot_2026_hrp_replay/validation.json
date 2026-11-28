@@ -1,0 +1,23 @@
+{
+  "run_id": "scratch:patchtst-2025-snapshot-2026-hrp-replay",
+  "attempt": 1,
+  "as_of": "2026-11-27T17:52:00.086227+00:00",
+  "weekly_books_reconciled": 47,
+  "holdings_rows": 705,
+  "unchanged_original_curves": [
+    "PatchTST",
+    "SPY",
+    "QQQ",
+    "S&P 500"
+  ],
+  "selected_stock_sets_identical": true,
+  "original_experiment_all_file_hashes_unchanged": true,
+  "exact_prior_session_daily_returns": 252,
+  "production_hrp_facade_comparisons": 705,
+  "max_production_rounding_difference_fraction": 4.998331604999517e-07,
+  "future_price_perturbation_checks": 3,
+  "maximum_self_financing_residual_usd": 2.9558577807620168e-12,
+  "price_fetches": 0,
+  "model_inference_runs": 0,
+  "training_runs": 0
+}
