@@ -1,0 +1,6 @@
+evidence/*.parquet
+evidence/*.pkl
+evidence/yfinance_cache/
+results_*/*/seed_*/model.pt
+results_*/*/seed_*/scaler.pkl
+results_*/*/seed_*/regime_hmm.pkl

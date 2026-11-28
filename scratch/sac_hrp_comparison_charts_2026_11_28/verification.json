@@ -1,0 +1,14 @@
+{
+  "original_chart_and_csv_files_unchanged": 9,
+  "new_graphs": 2,
+  "scenario_lines_per_graph": 7,
+  "original_six_curves_identical": true,
+  "weekly_hrp_transitions_per_universe": 104,
+  "prior_daily_returns_per_hrp_fit": 252,
+  "no_future_closes_used": true,
+  "all_frozen_roster_stocks_used": {
+    "halal": 13,
+    "halal_filtered": 15
+  },
+  "cash_target": 0.02
+}

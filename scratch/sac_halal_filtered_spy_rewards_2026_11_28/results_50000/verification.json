@@ -1,0 +1,15 @@
+{
+  "matched_training_runs": 12,
+  "steps_per_run": 50000,
+  "seeds": [
+    42,
+    123,
+    2026
+  ],
+  "test_periods_per_run": 104,
+  "execution_sensitivity_evaluations": 48,
+  "input_hashes_unchanged": true,
+  "aligned_traces_and_recomputed_metrics": true,
+  "finite_weights_and_cash_floor": true,
+  "artifact_files_present": true
+}

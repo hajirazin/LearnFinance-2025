@@ -1,0 +1,129 @@
+{
+  "stocks": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc",
+      "max_weight": 13.128549,
+      "sources": [
+        "SPUS",
+        "HLAL",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA Corp",
+      "max_weight": 12.92674,
+      "sources": [
+        "SPUS",
+        "HLAL",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "TSM",
+      "name": "Taiwan Semiconductor Manufacturing Co Ltd ADR",
+      "max_weight": 11.5117505,
+      "sources": [
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "MSFT",
+      "name": "Microsoft Corp",
+      "max_weight": 10.118879999999999,
+      "sources": [
+        "SPUS",
+        "HLAL",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "GOOGL",
+      "name": "Alphabet Inc Class A",
+      "max_weight": 4.2862,
+      "sources": [
+        "SPUS",
+        "HLAL"
+      ]
+    },
+    {
+      "symbol": "AVGO",
+      "name": "Broadcom Inc",
+      "max_weight": 4.0695901999999995,
+      "sources": [
+        "SPUS",
+        "HLAL",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "META",
+      "name": "Meta Platforms Inc Class A",
+      "max_weight": 3.52759,
+      "sources": [
+        "HLAL"
+      ]
+    },
+    {
+      "symbol": "TSLA",
+      "name": "Tesla Inc",
+      "max_weight": 3.04791,
+      "sources": [
+        "SPUS",
+        "HLAL"
+      ]
+    },
+    {
+      "symbol": "LLY",
+      "name": "Eli Lilly and Co",
+      "max_weight": 2.95742,
+      "sources": [
+        "SPUS",
+        "HLAL"
+      ]
+    },
+    {
+      "symbol": "MU",
+      "name": "Micron Technology Inc",
+      "max_weight": 2.62134,
+      "sources": [
+        "SPUS",
+        "HLAL",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "SAP",
+      "name": "SAP SE ADR",
+      "max_weight": 2.34042,
+      "sources": [
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "AMD",
+      "name": "Advanced Micro Devices Inc",
+      "max_weight": 2.16169,
+      "sources": [
+        "SPUS",
+        "SPTE"
+      ]
+    },
+    {
+      "symbol": "XOM",
+      "name": "ExxonMobil Holdings Corp",
+      "max_weight": 2.01059,
+      "sources": [
+        "SPUS"
+      ]
+    }
+  ],
+  "etfs_used": [
+    "SPUS",
+    "HLAL",
+    "SPTE"
+  ],
+  "total_stocks": 13,
+  "fetched_at": "2026-11-27T18:07:28.632721+00:00"
+}

@@ -1,0 +1,471 @@
+{
+  "action_bounds_15_stocks": {
+    "1": {
+      "min_single_stock_weight": 0.008941677254187127,
+      "max_cash_weight": 0.33002981752694643,
+      "min_total_bad_stock_weight": 0.008941677254187127
+    },
+    "5": {
+      "min_single_stock_weight": 0.008941677254187127,
+      "max_cash_weight": 0.33002981752694643,
+      "min_total_bad_stock_weight": 0.05795111486049548
+    },
+    "6": {
+      "min_single_stock_weight": 0.008941677254187127,
+      "max_cash_weight": 0.33002981752694643,
+      "min_total_bad_stock_weight": 0.0751027396190535
+    }
+  },
+  "reward_gap_example": {
+    "EW_minus_4pct": 0.01980262729617971,
+    "SPY_plus_1pct": 0.019802627296179712
+  },
+  "classifiers": [
+    {
+      "universe": "halal",
+      "label": "negative_next_week",
+      "train_samples": 4680,
+      "test_samples": 1352,
+      "test_auc": 0.5081907103885126,
+      "mean_within_week_auc": 0.5009152236652237,
+      "patchtst_rank_within_week_auc": 0.4999523809523809,
+      "weeks_with_both_classes": 100,
+      "brier": 0.25039182678308186,
+      "constant_train_rate_brier": 0.24976125904010524
+    },
+    {
+      "universe": "halal",
+      "label": "underperform_SPY_next_week",
+      "train_samples": 4680,
+      "test_samples": 1352,
+      "test_auc": 0.48454299308640675,
+      "mean_within_week_auc": 0.4884247696747697,
+      "patchtst_rank_within_week_auc": 0.5201562326562327,
+      "weeks_with_both_classes": 104,
+      "brier": 0.2526736682976792,
+      "constant_train_rate_brier": 0.24973542765949072
+    },
+    {
+      "universe": "halal_filtered",
+      "label": "negative_next_week",
+      "train_samples": 5138,
+      "test_samples": 1560,
+      "test_auc": 0.4953641295413447,
+      "mean_within_week_auc": 0.5060149001325472,
+      "patchtst_rank_within_week_auc": 0.5174458257791591,
+      "weeks_with_both_classes": 102,
+      "brier": 0.25360808283814285,
+      "constant_train_rate_brier": 0.2517272944837292
+    },
+    {
+      "universe": "halal_filtered",
+      "label": "underperform_SPY_next_week",
+      "train_samples": 5138,
+      "test_samples": 1560,
+      "test_auc": 0.4916624957192909,
+      "mean_within_week_auc": 0.48977543467928086,
+      "patchtst_rank_within_week_auc": 0.5111763041089965,
+      "weeks_with_both_classes": 104,
+      "brier": 0.25276275464878806,
+      "constant_train_rate_brier": 0.25018438488209593
+    }
+  ],
+  "paired_comparisons": [
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "net_return",
+      "weeks": 104,
+      "mean": -0.006833077476100535,
+      "lower_95": -0.16011461900574725,
+      "upper_95": 0.1349735346855443,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "negative_weight_gap",
+      "weeks": 104,
+      "mean": -0.023809165343961672,
+      "lower_95": -1.2522173172067173,
+      "upper_95": 1.225624510372431,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "relative_weight_gap",
+      "weeks": 104,
+      "mean": -0.3813957584850882,
+      "lower_95": -1.6147579106346932,
+      "upper_95": 0.9184732375033382,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "net_return",
+      "weeks": 24,
+      "mean": -0.13072352277775676,
+      "lower_95": -0.4532507833226789,
+      "upper_95": 0.138479029990395,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "negative_weight_gap",
+      "weeks": 24,
+      "mean": -0.37302477263834294,
+      "lower_95": -3.042517540119477,
+      "upper_95": 2.741697529821358,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "relative_weight_gap",
+      "weeks": 24,
+      "mean": -0.2761917072439122,
+      "lower_95": -3.129564275454419,
+      "upper_95": 3.2081054742883577,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "net_return",
+      "weeks": 43,
+      "mean": 0.07295965126582055,
+      "lower_95": -0.1313353901255411,
+      "upper_95": 0.271214224305634,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "negative_weight_gap",
+      "weeks": 43,
+      "mean": 0.5425597400790803,
+      "lower_95": -0.7658195769461907,
+      "upper_95": 1.9327751107169648,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "relative_weight_gap",
+      "weeks": 43,
+      "mean": -0.25529572706155906,
+      "lower_95": -1.9527254834559973,
+      "upper_95": 1.546845332293792,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "net_return",
+      "weeks": 43,
+      "mean": 0.0003025789883848585,
+      "lower_95": -0.26824012447937196,
+      "upper_95": 0.2277865699694184,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "negative_weight_gap",
+      "weeks": 43,
+      "mean": -0.3796834932482726,
+      "lower_95": -2.6080497771377082,
+      "upper_95": 2.0568048147798152,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "relative_weight_gap",
+      "weeks": 43,
+      "mean": -0.527582157812818,
+      "lower_95": -2.4692140354370764,
+      "upper_95": 1.7804923970702686,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "net_return",
+      "weeks": 42,
+      "mean": 0.005112216358153422,
+      "lower_95": -0.20345815964642014,
+      "upper_95": 0.21761858273087636,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "negative_weight_gap",
+      "weeks": 42,
+      "mean": 0.25586741048086664,
+      "lower_95": -1.5252224855985823,
+      "upper_95": 2.1767544085886206,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "relative_weight_gap",
+      "weeks": 42,
+      "mean": -0.03009072218232031,
+      "lower_95": -1.8152415207930142,
+      "upper_95": 1.7739083022470459,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "net_return",
+      "weeks": 44,
+      "mean": 0.14094522273698107,
+      "lower_95": -0.04623063975934672,
+      "upper_95": 0.3272259307182025,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "negative_weight_gap",
+      "weeks": 44,
+      "mean": -0.914104247330106,
+      "lower_95": -2.3845298970649496,
+      "upper_95": 0.28391691501246724,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal",
+      "comparison": "QQQ_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "relative_weight_gap",
+      "weeks": 44,
+      "mean": -1.2299480700122585,
+      "lower_95": -3.018375302943603,
+      "upper_95": 0.33017111927232745,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "net_return",
+      "weeks": 104,
+      "mean": -0.006035353925245055,
+      "lower_95": -0.10523246149185264,
+      "upper_95": 0.08323615940232336,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "negative_weight_gap",
+      "weeks": 104,
+      "mean": -0.7255692908068017,
+      "lower_95": -1.720026935106989,
+      "upper_95": 0.24014088015907756,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "all_weeks",
+      "metric": "relative_weight_gap",
+      "weeks": 104,
+      "mean": -0.7375795740916942,
+      "lower_95": -1.758551234938778,
+      "upper_95": 0.3664372123138541,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "net_return",
+      "weeks": 17,
+      "mean": -0.30002696625867803,
+      "lower_95": -0.5864157260850561,
+      "upper_95": -0.013999466439801917,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "negative_weight_gap",
+      "weeks": 17,
+      "mean": -0.1300141899382061,
+      "lower_95": -2.571194205412961,
+      "upper_95": 2.4003827924243266,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_negative_stocks",
+      "metric": "relative_weight_gap",
+      "weeks": 17,
+      "mean": 0.20452267551446526,
+      "lower_95": -2.0598221851546143,
+      "upper_95": 2.3889947027575147,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "net_return",
+      "weeks": 51,
+      "mean": 0.04751886867152542,
+      "lower_95": -0.0810985134856441,
+      "upper_95": 0.17683624935045916,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "negative_weight_gap",
+      "weeks": 51,
+      "mean": -0.8987696997347241,
+      "lower_95": -2.740593960216716,
+      "upper_95": 0.6704509676971753,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_negative_stocks",
+      "metric": "relative_weight_gap",
+      "weeks": 51,
+      "mean": -0.4728442356428009,
+      "lower_95": -2.3598580982658204,
+      "upper_95": 1.453985465212014,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "net_return",
+      "weeks": 24,
+      "mean": -0.13961686566408202,
+      "lower_95": -0.4035614742838233,
+      "upper_95": 0.14881271176395258,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "negative_weight_gap",
+      "weeks": 24,
+      "mean": -0.253874062174165,
+      "lower_95": -2.945979704329807,
+      "upper_95": 2.2843384749560847,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "5_or_6_underperform_SPY",
+      "metric": "relative_weight_gap",
+      "weeks": 24,
+      "mean": -0.9204575345653465,
+      "lower_95": -3.9300438482716467,
+      "upper_95": 1.972760002953163,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "net_return",
+      "weeks": 56,
+      "mean": 0.13534651677603676,
+      "lower_95": 0.0006919361719146058,
+      "upper_95": 0.25906926493464616,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "negative_weight_gap",
+      "weeks": 56,
+      "mean": -1.474157319875662,
+      "lower_95": -3.268084606007478,
+      "upper_95": 0.2991353029820434,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "majority_underperform_SPY",
+      "metric": "relative_weight_gap",
+      "weeks": 56,
+      "mean": -1.1881055543126953,
+      "lower_95": -2.8153071966748118,
+      "upper_95": 0.7674660023442723,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "net_return",
+      "weeks": 44,
+      "mean": -0.04147887199899197,
+      "lower_95": -0.22993777111769145,
+      "upper_95": 0.1532968882272401,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "negative_weight_gap",
+      "weeks": 44,
+      "mean": -0.34072155716619007,
+      "lower_95": -1.7205490304748818,
+      "upper_95": 0.962281546455397,
+      "valid_draws": 2000
+    },
+    {
+      "universe": "halal_filtered",
+      "comparison": "SPY_reward_minus_EW_reward",
+      "regime": "SPY_down",
+      "metric": "relative_weight_gap",
+      "weeks": 44,
+      "mean": -0.23126808427304368,
+      "lower_95": -2.3645781776249866,
+      "upper_95": 1.4532937075032673,
+      "valid_draws": 2000
+    }
+  ]
+}

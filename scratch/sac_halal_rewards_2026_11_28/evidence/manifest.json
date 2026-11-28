@@ -1,0 +1,49 @@
+{
+  "run_id": "scratch:sac-halal-rewards:2026-11-28",
+  "attempt": 1,
+  "as_of": "2026-11-28",
+  "code_revision": "102580004fff38b98284a57f10b3e3b2966f4902",
+  "symbols": [
+    "AAPL",
+    "AMD",
+    "AVGO",
+    "GOOGL",
+    "LLY",
+    "META",
+    "MSFT",
+    "MU",
+    "NVDA",
+    "SAP",
+    "TSLA",
+    "TSM",
+    "XOM"
+  ],
+  "n_weeks": 464,
+  "train_weeks": 360,
+  "test_weeks": 104,
+  "test_start": "2024-11-25",
+  "test_end": "2026-11-23",
+  "min_eligible_assets": 13,
+  "price_sha256": "3ebdb385ef2184df8dc7cdd1503c23ba33d2f8f21b13c4d8168cfac9711cf446",
+  "panel_sha256": "fbce12ac47bbe235c39f2aa47f642964390a23f378a2e6add89976ad02209047",
+  "price_returns": "Yahoo auto_adjust=True OHLCV; dividend/split-adjusted open-to-next-open",
+  "universe_bias": "November 2026 halal roster applied to history; survivorship/selection bias",
+  "forecast_evidence": {
+    "patchtst_news_revision_policy": "allow_later_revisions",
+    "patchtst_news_later_revision_cells": 1018,
+    "patchtst_news_lookahead_bias": true,
+    "patchtst_snapshots": {
+      "2017-12-31": "fc02b579d858",
+      "2018-12-31": "f8b0421e338c",
+      "2019-12-31": "d5a041a4fab2",
+      "2020-12-31": "fb84fa887603",
+      "2021-12-31": "e3c47d8ab67d",
+      "2022-12-31": "08bf8019d8cf",
+      "2023-12-31": "155e624ab946",
+      "2024-12-31": "ae60d03dd62d",
+      "2025-12-31": "12d23440a2a3"
+    }
+  },
+  "training_hyperparameters": "Production SAC v3 defaults; 50000 steps; seeds 42,123,2026",
+  "test_policy": "Same trailing 104 weeks for every run; no test-based hyperparameter selection"
+}

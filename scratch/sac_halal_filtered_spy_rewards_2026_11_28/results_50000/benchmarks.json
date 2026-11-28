@@ -1,0 +1,18 @@
+{
+  "SPY_buy_hold": {
+    "cagr": 0.11176487817803693,
+    "sharpe": 0.7078057804301676,
+    "max_drawdown": 0.1967954918028728,
+    "total_return": 0.23602114435022536,
+    "weeks": 104,
+    "entry_cost_usd": 0.35423513134788104
+  },
+  "halal_filtered_equal_weight_buy_hold": {
+    "cagr": -0.02804083345227537,
+    "sharpe": -0.026001112241486938,
+    "max_drawdown": 0.24440800464531054,
+    "total_return": -0.05529537856385258,
+    "weeks": 104,
+    "entry_cost_usd": 5.311214373406072
+  }
+}

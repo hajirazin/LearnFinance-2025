@@ -1,0 +1,18 @@
+{
+  "QQQ_buy_hold": {
+    "cagr": 0.13993935784941813,
+    "sharpe": 0.6955318272719713,
+    "max_drawdown": 0.24171443725480835,
+    "total_return": 0.2994617395741439,
+    "weeks": 104,
+    "entry_cost_usd": 0.35487477089886016
+  },
+  "halal_equal_weight_buy_hold": {
+    "cagr": 0.41318980954033724,
+    "sharpe": 1.243994235606464,
+    "max_drawdown": 0.2773494192690994,
+    "total_return": 0.9971054377886548,
+    "weeks": 104,
+    "entry_cost_usd": 4.565431993192295
+  }
+}

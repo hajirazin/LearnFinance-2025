@@ -1,0 +1,123 @@
+{
+  "stocks": [
+    {
+      "symbol": "MSTR",
+      "predicted_weekly_return_pct": 0.7069074548780918,
+      "rank": 1,
+      "selection_reason": "sticky"
+    },
+    {
+      "symbol": "ILMN",
+      "predicted_weekly_return_pct": 0.6127437576651573,
+      "rank": 2,
+      "selection_reason": "sticky"
+    },
+    {
+      "symbol": "SAR",
+      "predicted_weekly_return_pct": 0.7320179138332605,
+      "rank": 3,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "FFIV",
+      "predicted_weekly_return_pct": 0.7031197659671307,
+      "rank": 4,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "BDRFY",
+      "predicted_weekly_return_pct": 0.676884176209569,
+      "rank": 5,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "LEN",
+      "predicted_weekly_return_pct": 0.6626524031162262,
+      "rank": 6,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "NVO",
+      "predicted_weekly_return_pct": 0.6605327129364014,
+      "rank": 7,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "NWSA",
+      "predicted_weekly_return_pct": 0.6509939674288034,
+      "rank": 8,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "DLR",
+      "predicted_weekly_return_pct": 0.6484704557806253,
+      "rank": 9,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "FICO",
+      "predicted_weekly_return_pct": 0.6388584617525339,
+      "rank": 10,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "ASX",
+      "predicted_weekly_return_pct": 0.6378913763910532,
+      "rank": 11,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "BURL",
+      "predicted_weekly_return_pct": 0.6377800833433867,
+      "rank": 12,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "NWS",
+      "predicted_weekly_return_pct": 0.6315711420029402,
+      "rank": 13,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "LII",
+      "predicted_weekly_return_pct": 0.6304968614131212,
+      "rank": 14,
+      "selection_reason": "top_rank"
+    },
+    {
+      "symbol": "ATLKY",
+      "predicted_weekly_return_pct": 0.6290548946708441,
+      "rank": 15,
+      "selection_reason": "top_rank"
+    }
+  ],
+  "total_candidates": 350,
+  "total_universe": 417,
+  "filtered_insufficient_history": 65,
+  "top_n": 15,
+  "selection_method": "patchtst_forecast_rank_band",
+  "model_version": "v2026-11-27-611c30dfacf0",
+  "fetched_at": "2026-11-27T18:18:00.944790+00:00",
+  "partition": "halal_filtered_alpha",
+  "period_key": "202645",
+  "previous_period_key_used": "202641",
+  "kept_count": 2,
+  "fillers_count": 13,
+  "evicted_from_previous": {
+    "PSX": "rank_out_of_hold",
+    "GFI": "rank_out_of_hold",
+    "FNV": "rank_out_of_hold",
+    "AEM": "rank_out_of_hold",
+    "MCK": "rank_out_of_hold",
+    "SMCI": "rank_out_of_hold",
+    "RVTY": "rank_out_of_hold",
+    "COP": "rank_out_of_hold",
+    "WPM": "rank_out_of_hold",
+    "ATEYY": "rank_out_of_hold",
+    "CSLLY": "rank_out_of_hold",
+    "MPC": "rank_out_of_hold",
+    "VLO": "rank_out_of_hold"
+  },
+  "k_in": 15,
+  "k_hold": 20
+}
