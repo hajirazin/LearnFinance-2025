@@ -100,7 +100,17 @@ def assess_sac_training_readiness(
             missing=[],
             errors=[SACReadinessIssue("news_sync", str(exc), retryable=True)],
         )
-    symbols = bucket.symbols_resolver()
+    try:
+        symbols = bucket.symbols_resolver()
+    except (ValueError, StoragePolicyError) as exc:
+        return SACTrainingReadiness.from_issues(
+            universe=universe,
+            symbols=[],
+            missing=[],
+            # A failed screen has no training slate or Monday backfill bounds.
+            # Repair its reported dependency before the SAC readiness retry loop.
+            errors=[SACReadinessIssue("universe", str(exc), retryable=False)],
+        )
     try:
         start_date, end_date = resolve_sac_training_window()
     except (ValueError, StoragePolicyError) as exc:

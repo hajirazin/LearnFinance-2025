@@ -11,6 +11,7 @@ from brain_api.news.models import (
     NEWS_SCHEMA_VERSION,
     NEWS_SENTIMENT_MODEL,
     NEWS_SENTIMENT_REVISION,
+    NewsRevisionPolicy,
     NewsWindow,
 )
 from brain_api.news.store import NewsStore
@@ -24,9 +25,19 @@ def session_news_window(close: datetime) -> NewsWindow:
 
 
 def load_session_sentiment(
-    store: NewsStore, symbols: Sequence[str], closes: pd.Series
+    store: NewsStore,
+    symbols: Sequence[str],
+    closes: pd.Series,
+    *,
+    revision_policy: NewsRevisionPolicy = "point_in_time",
 ) -> pd.DataFrame:
-    """Build sentiments only where compatible evidence fully covers a cutoff."""
+    """Require coverage; optionally permit later edits of pre-cutoff articles.
+
+    Historical use of later revisions is explicitly biased. Live callers retain
+    point-in-time behavior. Publication membership and coverage are unchanged.
+    """
+    if revision_policy not in ("point_in_time", "allow_later_revisions"):
+        raise ValueError(f"Unknown news revision policy: {revision_policy}")
     if closes.empty or not symbols:
         return pd.DataFrame(index=closes.index, columns=list(symbols), dtype=float)
     windows = [session_news_window(close) for close in closes]
@@ -87,11 +98,14 @@ def load_session_sentiment(
             ), sentiments AS (
                 SELECT session, symbol, count(*) AS n,
                        bool_and(updated_at <= end_at) AS usable,
+                       count_if(updated_at > end_at) AS later_revisions,
                        sum(weight * sentiment_score) / nullif(sum(weight), 0) AS score
                 FROM revisions GROUP BY session, symbol
             )
             SELECT c.session, c.symbol,
-                   CASE WHEN s.n IS NULL THEN 0.0 WHEN s.usable THEN s.score END AS score
+                   CASE WHEN s.n IS NULL THEN 0.0
+                        WHEN s.usable OR $allow_later_revisions THEN s.score END AS score,
+                   coalesce(s.later_revisions, 0) AS later_revisions
             FROM covered c LEFT JOIN sentiments s USING (session, symbol)
             """,
             {
@@ -100,8 +114,16 @@ def load_session_sentiment(
                 "model": NEWS_SENTIMENT_MODEL,
                 "revision": NEWS_SENTIMENT_REVISION,
                 "tau_seconds": CONFIDENCE_RECENCY_TAU_HOURS * 3600,
+                "allow_later_revisions": revision_policy == "allow_later_revisions",
             },
         ).df()
-    return rows.pivot(index="session", columns="symbol", values="score").reindex(
+    result = rows.pivot(index="session", columns="symbol", values="score").reindex(
         index=closes.index, columns=list(symbols)
     )
+    result.attrs.update(
+        revision_policy=revision_policy,
+        later_revision_cells=int(
+            (rows["score"].notna() & rows["later_revisions"].gt(0)).sum()
+        ),
+    )
+    return result

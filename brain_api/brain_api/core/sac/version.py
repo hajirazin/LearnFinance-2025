@@ -8,6 +8,8 @@ import json
 from datetime import date
 from typing import TYPE_CHECKING
 
+from brain_api.news.models import HISTORICAL_PATCHTST_NEWS_REVISION_POLICY
+
 if TYPE_CHECKING:
     from brain_api.core.sac.config import SACConfig
 
@@ -53,6 +55,13 @@ def compute_version(
             "symbols": sorted(symbols),
             "config": config.to_dict(),
             **({"patchtst_recipe": patchtst_recipe} if patchtst_recipe else {}),
+            **(
+                {
+                    "patchtst_news_revision_policy": HISTORICAL_PATCHTST_NEWS_REVISION_POLICY
+                }
+                if patchtst_recipe
+                else {}
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),

@@ -1,0 +1,64 @@
+{
+  "model": "v2026-11-27-611c30dfacf0",
+  "cutoff": "2026-11-27",
+  "context_sessions": 251,
+  "cached_selection_forecast_pct": 0.7069074548780918,
+  "reconstructed_forecast_pct": 0.7068951725959778,
+  "reconstruction_difference_pp": -1.228228211402893e-05,
+  "all_channels_at_window_mean_forecast_pct": 0.3616675138473511,
+  "features": [
+    {
+      "feature": "momentum_20d",
+      "latest_raw_value": -0.42366892099380493,
+      "latest_normalized_value": -1.7137435674667358,
+      "shapley_percentage_points": 0.22443827227467583,
+      "prediction_without_feature_pct": 0.48245689272880554
+    },
+    {
+      "feature": "momentum_12_1",
+      "latest_raw_value": -0.15697774291038513,
+      "latest_normalized_value": 3.020040512084961,
+      "shapley_percentage_points": -0.026719308538096287,
+      "prediction_without_feature_pct": 0.7336145043373108
+    },
+    {
+      "feature": "volatility_20d",
+      "latest_raw_value": 0.8533443808555603,
+      "latest_normalized_value": 0.3447650074958801,
+      "shapley_percentage_points": -0.05840819492226555,
+      "prediction_without_feature_pct": 0.765303373336792
+    },
+    {
+      "feature": "relative_volume_20d",
+      "latest_raw_value": 0.8036351203918457,
+      "latest_normalized_value": -0.640048623085022,
+      "shapley_percentage_points": 0.040548980094137654,
+      "prediction_without_feature_pct": 0.6663462519645691
+    },
+    {
+      "feature": "news_sentiment",
+      "latest_raw_value": 0.0,
+      "latest_normalized_value": 0.11531360447406769,
+      "shapley_percentage_points": 0.007465603805723645,
+      "prediction_without_feature_pct": 0.6994295716285706
+    },
+    {
+      "feature": "close",
+      "latest_raw_value": 81.62000274658203,
+      "latest_normalized_value": -1.9579952955245972,
+      "shapley_percentage_points": 0.10336830999170028,
+      "prediction_without_feature_pct": 0.6035269498825073
+    },
+    {
+      "feature": "volume",
+      "latest_raw_value": 16508755.0,
+      "latest_normalized_value": -0.5228002071380615,
+      "shapley_percentage_points": 0.054533996042751116,
+      "prediction_without_feature_pct": 0.6523612141609192
+    }
+  ],
+  "method": "Exact group Shapley over 128 channel coalitions, relative to zero normalized histories; pre-cutoff news revision policy.",
+  "limitations": "Synthetic masked inputs can be out of distribution; correlated price-derived channels share information. This explains model sensitivity for one reconstructed forecast, not causation or general importance.",
+  "prices_sha256": "34c0eee364b21b0a62284090d7cf6d04d9644a997ab2d7b70a0726babec5f0a0",
+  "weights_sha256": "149e4f7b4751d9fe3b06ac0d3840aa39f9d65be325c98042597145f4460a4d9f"
+}

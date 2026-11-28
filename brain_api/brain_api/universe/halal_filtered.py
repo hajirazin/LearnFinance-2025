@@ -45,7 +45,8 @@ delete-then-insert is keyed on ``(partition, period_key)``, not on
 Error surfaces (no silent fallbacks per AGENTS.md)
 -------------------------------------------------
 - Empty ``current_scores`` (PatchTST returned nothing valid):
-  ``select_with_rank_band`` raises ``ValueError`` -- propagated.
+  raises ``ValueError`` with model, cutoff and candidate count before
+  reading or writing screening history.
 - Non-finite scores: ``rank_by_score`` (in the orchestrator) raises
   ``ValueError`` -- propagated.
 - SQLite contention: handled by the SQLite driver's default
@@ -179,6 +180,12 @@ def get_halal_filtered_universe(
     current_scores: dict[str, float] = {
         p.symbol: p.predicted_weekly_return_pct for p in valid
     }
+    if not current_scores:
+        raise ValueError(
+            f"Halal_Filtered: PatchTST {batch_result.model_version} returned "
+            f"0 valid predictions ({len(qualifying_symbols)} requested) at "
+            f"{cutoff_date}; check price and feature/news coverage before retrying."
+        )
 
     period_key = iso_year_week_of_month_anchor(cutoff_date)
     run_id = f"universe:halal_filtered:{cutoff_date.isoformat()}"

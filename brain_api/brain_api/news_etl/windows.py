@@ -7,7 +7,7 @@ from typing import Literal
 import pandas as pd
 
 from brain_api.core.weekly_decision import canonical_monday_windows_contained_in
-from brain_api.news.models import NewsWindow
+from brain_api.news.models import HISTORICAL_PATCHTST_NEWS_REVISION_POLICY, NewsWindow
 from brain_api.news.patchtst import load_session_sentiment, session_news_window
 from brain_api.news.store import NewsStore
 
@@ -40,11 +40,16 @@ def missing_session_windows(
 ) -> list[tuple[str, NewsWindow]]:
     if not windows or not symbols:
         return []
-    # Use the same reconstruction and point-in-time rules as the forecaster.
+    # Historical backfills validate the approved SAC forecast-input policy.
     closes = pd.Series(
         [window.end_inclusive for window in windows], index=pd.RangeIndex(len(windows))
     )
-    sentiments = load_session_sentiment(store, symbols, closes)
+    sentiments = load_session_sentiment(
+        store,
+        symbols,
+        closes,
+        revision_policy=HISTORICAL_PATCHTST_NEWS_REVISION_POLICY,
+    )
     return [
         (symbol, windows[index])
         for index in range(len(windows))

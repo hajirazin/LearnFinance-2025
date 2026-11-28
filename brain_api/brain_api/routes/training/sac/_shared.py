@@ -13,7 +13,11 @@ import logging
 from pydantic import BaseModel, Field
 
 from brain_api.core.model_buckets import ModelType, list_universes_for
-from brain_api.news.models import NEWS_SCHEMA_VERSION, NEWS_SENTIMENT_REVISION
+from brain_api.news.models import (
+    HISTORICAL_PATCHTST_NEWS_REVISION_POLICY,
+    NEWS_SCHEMA_VERSION,
+    NEWS_SENTIMENT_REVISION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +81,11 @@ def sac_current_is_reusable(
         and set(metadata.get("symbols", [])) == set(symbols)
         and (
             forecast_recipe is None
-            or metadata.get("patchtst_recipe") == forecast_recipe
+            or (
+                metadata.get("patchtst_recipe") == forecast_recipe
+                and metadata.get("patchtst_news_revision_policy")
+                == HISTORICAL_PATCHTST_NEWS_REVISION_POLICY
+            )
         )
         and (
             start_date is None

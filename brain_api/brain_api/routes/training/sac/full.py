@@ -95,7 +95,7 @@ def train_sac_endpoint(
     try:
         news_commit = sync_news()
         symbols = sorted(bucket.symbols_resolver())
-    except NewsSyncError as exc:
+    except (NewsSyncError, ValueError, StoragePolicyError) as exc:
         raise HTTPException(503, str(exc)) from exc
     if bucket.symbol_validator is not None:
         try:

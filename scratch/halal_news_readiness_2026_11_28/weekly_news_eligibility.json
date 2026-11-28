@@ -1,0 +1,3279 @@
+{
+  "rows": [
+    {
+      "decision": "2018-01-02",
+      "anchor": "2017-12-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-01-08",
+      "anchor": "2018-01-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-01-16",
+      "anchor": "2018-01-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-01-22",
+      "anchor": "2018-01-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-01-29",
+      "anchor": "2018-01-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-02-05",
+      "anchor": "2018-02-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-02-12",
+      "anchor": "2018-02-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-02-20",
+      "anchor": "2018-02-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-02-26",
+      "anchor": "2018-02-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-03-05",
+      "anchor": "2018-03-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-03-12",
+      "anchor": "2018-03-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-03-19",
+      "anchor": "2018-03-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-03-26",
+      "anchor": "2018-03-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-04-02",
+      "anchor": "2018-03-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-04-09",
+      "anchor": "2018-04-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-04-16",
+      "anchor": "2018-04-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-04-23",
+      "anchor": "2018-04-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-04-30",
+      "anchor": "2018-04-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-05-07",
+      "anchor": "2018-05-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-05-14",
+      "anchor": "2018-05-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-05-21",
+      "anchor": "2018-05-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-05-29",
+      "anchor": "2018-05-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-06-04",
+      "anchor": "2018-06-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-06-11",
+      "anchor": "2018-06-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-06-18",
+      "anchor": "2018-06-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-06-25",
+      "anchor": "2018-06-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-07-02",
+      "anchor": "2018-06-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-07-09",
+      "anchor": "2018-07-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-07-16",
+      "anchor": "2018-07-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-07-23",
+      "anchor": "2018-07-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-07-30",
+      "anchor": "2018-07-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-08-06",
+      "anchor": "2018-08-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-08-13",
+      "anchor": "2018-08-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-08-20",
+      "anchor": "2018-08-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-08-27",
+      "anchor": "2018-08-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-09-04",
+      "anchor": "2018-08-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-09-10",
+      "anchor": "2018-09-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-09-17",
+      "anchor": "2018-09-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-09-24",
+      "anchor": "2018-09-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-10-01",
+      "anchor": "2018-09-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-10-08",
+      "anchor": "2018-10-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-10-15",
+      "anchor": "2018-10-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-10-22",
+      "anchor": "2018-10-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-10-29",
+      "anchor": "2018-10-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-11-05",
+      "anchor": "2018-11-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-11-12",
+      "anchor": "2018-11-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-11-19",
+      "anchor": "2018-11-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-11-26",
+      "anchor": "2018-11-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-12-03",
+      "anchor": "2018-11-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-12-10",
+      "anchor": "2018-12-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-12-17",
+      "anchor": "2018-12-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-12-24",
+      "anchor": "2018-12-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2018-12-31",
+      "anchor": "2018-12-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-01-07",
+      "anchor": "2019-01-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-01-14",
+      "anchor": "2019-01-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-01-22",
+      "anchor": "2019-01-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-01-28",
+      "anchor": "2019-01-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-02-04",
+      "anchor": "2019-02-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-02-11",
+      "anchor": "2019-02-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-02-19",
+      "anchor": "2019-02-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-02-25",
+      "anchor": "2019-02-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-03-04",
+      "anchor": "2019-03-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-03-11",
+      "anchor": "2019-03-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-03-18",
+      "anchor": "2019-03-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-03-25",
+      "anchor": "2019-03-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-04-01",
+      "anchor": "2019-03-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-04-08",
+      "anchor": "2019-04-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-04-15",
+      "anchor": "2019-04-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-04-22",
+      "anchor": "2019-04-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-04-29",
+      "anchor": "2019-04-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-05-06",
+      "anchor": "2019-05-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-05-13",
+      "anchor": "2019-05-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-05-20",
+      "anchor": "2019-05-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-05-28",
+      "anchor": "2019-05-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-06-03",
+      "anchor": "2019-05-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-06-10",
+      "anchor": "2019-06-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-06-17",
+      "anchor": "2019-06-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-06-24",
+      "anchor": "2019-06-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-07-01",
+      "anchor": "2019-06-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-07-08",
+      "anchor": "2019-07-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-07-15",
+      "anchor": "2019-07-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-07-22",
+      "anchor": "2019-07-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-07-29",
+      "anchor": "2019-07-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-08-05",
+      "anchor": "2019-08-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-08-12",
+      "anchor": "2019-08-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-08-19",
+      "anchor": "2019-08-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-08-26",
+      "anchor": "2019-08-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-09-03",
+      "anchor": "2019-08-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-09-09",
+      "anchor": "2019-09-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-09-16",
+      "anchor": "2019-09-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-09-23",
+      "anchor": "2019-09-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-09-30",
+      "anchor": "2019-09-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-10-07",
+      "anchor": "2019-10-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-10-14",
+      "anchor": "2019-10-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-10-21",
+      "anchor": "2019-10-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-10-28",
+      "anchor": "2019-10-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-11-04",
+      "anchor": "2019-11-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-11-11",
+      "anchor": "2019-11-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-11-18",
+      "anchor": "2019-11-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-11-25",
+      "anchor": "2019-11-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-12-02",
+      "anchor": "2019-11-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-12-09",
+      "anchor": "2019-12-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-12-16",
+      "anchor": "2019-12-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-12-23",
+      "anchor": "2019-12-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2019-12-30",
+      "anchor": "2019-12-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-01-06",
+      "anchor": "2020-01-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-01-13",
+      "anchor": "2020-01-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-01-21",
+      "anchor": "2020-01-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-01-27",
+      "anchor": "2020-01-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-02-03",
+      "anchor": "2020-01-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-02-10",
+      "anchor": "2020-02-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-02-18",
+      "anchor": "2020-02-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-02-24",
+      "anchor": "2020-02-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-03-02",
+      "anchor": "2020-02-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-03-09",
+      "anchor": "2020-03-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-03-16",
+      "anchor": "2020-03-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-03-23",
+      "anchor": "2020-03-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-03-30",
+      "anchor": "2020-03-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-04-06",
+      "anchor": "2020-04-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-04-13",
+      "anchor": "2020-04-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-04-20",
+      "anchor": "2020-04-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-04-27",
+      "anchor": "2020-04-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-05-04",
+      "anchor": "2020-05-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-05-11",
+      "anchor": "2020-05-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-05-18",
+      "anchor": "2020-05-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-05-26",
+      "anchor": "2020-05-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-06-01",
+      "anchor": "2020-05-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-06-08",
+      "anchor": "2020-06-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-06-15",
+      "anchor": "2020-06-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-06-22",
+      "anchor": "2020-06-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-06-29",
+      "anchor": "2020-06-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-07-06",
+      "anchor": "2020-07-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-07-13",
+      "anchor": "2020-07-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-07-20",
+      "anchor": "2020-07-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-07-27",
+      "anchor": "2020-07-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-08-03",
+      "anchor": "2020-07-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-08-10",
+      "anchor": "2020-08-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-08-17",
+      "anchor": "2020-08-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-08-24",
+      "anchor": "2020-08-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-08-31",
+      "anchor": "2020-08-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-09-08",
+      "anchor": "2020-09-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-09-14",
+      "anchor": "2020-09-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-09-21",
+      "anchor": "2020-09-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-09-28",
+      "anchor": "2020-09-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-10-05",
+      "anchor": "2020-10-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-10-12",
+      "anchor": "2020-10-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-10-19",
+      "anchor": "2020-10-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-10-26",
+      "anchor": "2020-10-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-11-02",
+      "anchor": "2020-10-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-11-09",
+      "anchor": "2020-11-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-11-16",
+      "anchor": "2020-11-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-11-23",
+      "anchor": "2020-11-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-11-30",
+      "anchor": "2020-11-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-12-07",
+      "anchor": "2020-12-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-12-14",
+      "anchor": "2020-12-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-12-21",
+      "anchor": "2020-12-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2020-12-28",
+      "anchor": "2020-12-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-01-04",
+      "anchor": "2020-12-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-01-11",
+      "anchor": "2021-01-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-01-19",
+      "anchor": "2021-01-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-01-25",
+      "anchor": "2021-01-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-02-01",
+      "anchor": "2021-01-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-02-08",
+      "anchor": "2021-02-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-02-16",
+      "anchor": "2021-02-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-02-22",
+      "anchor": "2021-02-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-03-01",
+      "anchor": "2021-02-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-03-08",
+      "anchor": "2021-03-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-03-15",
+      "anchor": "2021-03-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-03-22",
+      "anchor": "2021-03-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-03-29",
+      "anchor": "2021-03-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-04-05",
+      "anchor": "2021-04-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-04-12",
+      "anchor": "2021-04-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-04-19",
+      "anchor": "2021-04-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-04-26",
+      "anchor": "2021-04-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-05-03",
+      "anchor": "2021-04-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-05-10",
+      "anchor": "2021-05-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-05-17",
+      "anchor": "2021-05-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-05-24",
+      "anchor": "2021-05-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-06-01",
+      "anchor": "2021-05-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-06-07",
+      "anchor": "2021-06-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-06-14",
+      "anchor": "2021-06-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-06-21",
+      "anchor": "2021-06-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-06-28",
+      "anchor": "2021-06-25",
+      "news_eligible": 12,
+      "ineligible": [
+        "LLY"
+      ]
+    },
+    {
+      "decision": "2021-07-06",
+      "anchor": "2021-07-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-07-12",
+      "anchor": "2021-07-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-07-19",
+      "anchor": "2021-07-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-07-26",
+      "anchor": "2021-07-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-08-02",
+      "anchor": "2021-07-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-08-09",
+      "anchor": "2021-08-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2021-08-16",
+      "anchor": "2021-08-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-08-23",
+      "anchor": "2021-08-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-08-30",
+      "anchor": "2021-08-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-09-07",
+      "anchor": "2021-09-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-09-13",
+      "anchor": "2021-09-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-09-20",
+      "anchor": "2021-09-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-09-27",
+      "anchor": "2021-09-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-10-04",
+      "anchor": "2021-10-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-10-11",
+      "anchor": "2021-10-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-10-18",
+      "anchor": "2021-10-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-10-25",
+      "anchor": "2021-10-22",
+      "news_eligible": 12,
+      "ineligible": [
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2021-11-01",
+      "anchor": "2021-10-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-11-08",
+      "anchor": "2021-11-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-11-15",
+      "anchor": "2021-11-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-11-22",
+      "anchor": "2021-11-19",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2021-11-29",
+      "anchor": "2021-11-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-12-06",
+      "anchor": "2021-12-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-12-13",
+      "anchor": "2021-12-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-12-20",
+      "anchor": "2021-12-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2021-12-27",
+      "anchor": "2021-12-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-01-03",
+      "anchor": "2021-12-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-01-10",
+      "anchor": "2022-01-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-01-18",
+      "anchor": "2022-01-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-01-24",
+      "anchor": "2022-01-21",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "MSFT"
+      ]
+    },
+    {
+      "decision": "2022-01-31",
+      "anchor": "2022-01-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-02-07",
+      "anchor": "2022-02-04",
+      "news_eligible": 12,
+      "ineligible": [
+        "MSFT"
+      ]
+    },
+    {
+      "decision": "2022-02-14",
+      "anchor": "2022-02-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-02-22",
+      "anchor": "2022-02-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-02-28",
+      "anchor": "2022-02-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-03-07",
+      "anchor": "2022-03-04",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-03-14",
+      "anchor": "2022-03-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-03-21",
+      "anchor": "2022-03-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-03-28",
+      "anchor": "2022-03-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-04-04",
+      "anchor": "2022-04-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-04-11",
+      "anchor": "2022-04-08",
+      "news_eligible": 12,
+      "ineligible": [
+        "AAPL"
+      ]
+    },
+    {
+      "decision": "2022-04-18",
+      "anchor": "2022-04-14",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-04-25",
+      "anchor": "2022-04-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-05-02",
+      "anchor": "2022-04-29",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-05-09",
+      "anchor": "2022-05-06",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "TSLA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2022-05-16",
+      "anchor": "2022-05-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-05-23",
+      "anchor": "2022-05-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-05-31",
+      "anchor": "2022-05-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2022-06-06",
+      "anchor": "2022-06-03",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "MSFT",
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2022-06-13",
+      "anchor": "2022-06-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-06-21",
+      "anchor": "2022-06-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-06-27",
+      "anchor": "2022-06-24",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-07-05",
+      "anchor": "2022-07-01",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-07-11",
+      "anchor": "2022-07-08",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-07-18",
+      "anchor": "2022-07-15",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-07-25",
+      "anchor": "2022-07-22",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-08-01",
+      "anchor": "2022-07-29",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-08-08",
+      "anchor": "2022-08-05",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-08-15",
+      "anchor": "2022-08-12",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-08-22",
+      "anchor": "2022-08-19",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-08-29",
+      "anchor": "2022-08-26",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-09-06",
+      "anchor": "2022-09-02",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-09-12",
+      "anchor": "2022-09-09",
+      "news_eligible": 11,
+      "ineligible": [
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-09-19",
+      "anchor": "2022-09-16",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-09-26",
+      "anchor": "2022-09-23",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-10-03",
+      "anchor": "2022-09-30",
+      "news_eligible": 11,
+      "ineligible": [
+        "MSFT",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-10-10",
+      "anchor": "2022-10-07",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-10-17",
+      "anchor": "2022-10-14",
+      "news_eligible": 11,
+      "ineligible": [
+        "TSM",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-10-24",
+      "anchor": "2022-10-21",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-10-31",
+      "anchor": "2022-10-28",
+      "news_eligible": 9,
+      "ineligible": [
+        "AAPL",
+        "MSFT",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-11-07",
+      "anchor": "2022-11-04",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-11-14",
+      "anchor": "2022-11-11",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-11-21",
+      "anchor": "2022-11-18",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "TSM",
+        "TSLA",
+        "MU"
+      ]
+    },
+    {
+      "decision": "2022-11-28",
+      "anchor": "2022-11-25",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-12-05",
+      "anchor": "2022-12-02",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-12-12",
+      "anchor": "2022-12-09",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-12-19",
+      "anchor": "2022-12-16",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-12-27",
+      "anchor": "2022-12-23",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-01-03",
+      "anchor": "2022-12-30",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-01-09",
+      "anchor": "2023-01-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-01-17",
+      "anchor": "2023-01-13",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-01-23",
+      "anchor": "2023-01-20",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-01-30",
+      "anchor": "2023-01-27",
+      "news_eligible": 11,
+      "ineligible": [
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-02-06",
+      "anchor": "2023-02-03",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-02-13",
+      "anchor": "2023-02-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-02-21",
+      "anchor": "2023-02-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-02-27",
+      "anchor": "2023-02-24",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-03-06",
+      "anchor": "2023-03-03",
+      "news_eligible": 10,
+      "ineligible": [
+        "NVDA",
+        "MSFT",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-03-13",
+      "anchor": "2023-03-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-03-20",
+      "anchor": "2023-03-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-03-27",
+      "anchor": "2023-03-24",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-04-03",
+      "anchor": "2023-03-31",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-04-10",
+      "anchor": "2023-04-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-04-17",
+      "anchor": "2023-04-14",
+      "news_eligible": 11,
+      "ineligible": [
+        "GOOGL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-04-24",
+      "anchor": "2023-04-21",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-05-01",
+      "anchor": "2023-04-28",
+      "news_eligible": 11,
+      "ineligible": [
+        "TSLA",
+        "XOM"
+      ]
+    },
+    {
+      "decision": "2023-05-08",
+      "anchor": "2023-05-05",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-05-15",
+      "anchor": "2023-05-12",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-05-22",
+      "anchor": "2023-05-19",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-05-30",
+      "anchor": "2023-05-26",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-06-05",
+      "anchor": "2023-06-02",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-06-12",
+      "anchor": "2023-06-09",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-06-20",
+      "anchor": "2023-06-16",
+      "news_eligible": 10,
+      "ineligible": [
+        "META",
+        "TSLA",
+        "MU"
+      ]
+    },
+    {
+      "decision": "2023-06-26",
+      "anchor": "2023-06-23",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-07-03",
+      "anchor": "2023-06-30",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-07-10",
+      "anchor": "2023-07-07",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-07-17",
+      "anchor": "2023-07-14",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-07-24",
+      "anchor": "2023-07-21",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-07-31",
+      "anchor": "2023-07-28",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-08-07",
+      "anchor": "2023-08-04",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-08-14",
+      "anchor": "2023-08-11",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-08-21",
+      "anchor": "2023-08-18",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-08-28",
+      "anchor": "2023-08-25",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-09-05",
+      "anchor": "2023-09-01",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-09-11",
+      "anchor": "2023-09-08",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-09-18",
+      "anchor": "2023-09-15",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-09-25",
+      "anchor": "2023-09-22",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-10-02",
+      "anchor": "2023-09-29",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-10-09",
+      "anchor": "2023-10-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-10-16",
+      "anchor": "2023-10-13",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-10-23",
+      "anchor": "2023-10-20",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-10-30",
+      "anchor": "2023-10-27",
+      "news_eligible": 9,
+      "ineligible": [
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-11-06",
+      "anchor": "2023-11-03",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-11-13",
+      "anchor": "2023-11-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-11-20",
+      "anchor": "2023-11-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-11-27",
+      "anchor": "2023-11-24",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2023-12-04",
+      "anchor": "2023-12-01",
+      "news_eligible": 12,
+      "ineligible": [
+        "NVDA"
+      ]
+    },
+    {
+      "decision": "2023-12-11",
+      "anchor": "2023-12-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2023-12-18",
+      "anchor": "2023-12-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2023-12-26",
+      "anchor": "2023-12-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-01-02",
+      "anchor": "2023-12-29",
+      "news_eligible": 6,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2024-01-08",
+      "anchor": "2024-01-05",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-01-16",
+      "anchor": "2024-01-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-01-22",
+      "anchor": "2024-01-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-01-29",
+      "anchor": "2024-01-26",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "TSM",
+        "TSLA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2024-02-05",
+      "anchor": "2024-02-02",
+      "news_eligible": 11,
+      "ineligible": [
+        "GOOGL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-02-12",
+      "anchor": "2024-02-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-02-20",
+      "anchor": "2024-02-16",
+      "news_eligible": 12,
+      "ineligible": [
+        "MSFT"
+      ]
+    },
+    {
+      "decision": "2024-02-26",
+      "anchor": "2024-02-23",
+      "news_eligible": 12,
+      "ineligible": [
+        "AAPL"
+      ]
+    },
+    {
+      "decision": "2024-03-04",
+      "anchor": "2024-03-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-03-11",
+      "anchor": "2024-03-08",
+      "news_eligible": 12,
+      "ineligible": [
+        "AAPL"
+      ]
+    },
+    {
+      "decision": "2024-03-18",
+      "anchor": "2024-03-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-03-25",
+      "anchor": "2024-03-22",
+      "news_eligible": 12,
+      "ineligible": [
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2024-04-01",
+      "anchor": "2024-03-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-04-08",
+      "anchor": "2024-04-05",
+      "news_eligible": 12,
+      "ineligible": [
+        "AAPL"
+      ]
+    },
+    {
+      "decision": "2024-04-15",
+      "anchor": "2024-04-12",
+      "news_eligible": 11,
+      "ineligible": [
+        "MSFT",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2024-04-22",
+      "anchor": "2024-04-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-04-29",
+      "anchor": "2024-04-26",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-05-06",
+      "anchor": "2024-05-03",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-05-13",
+      "anchor": "2024-05-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-05-20",
+      "anchor": "2024-05-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-05-28",
+      "anchor": "2024-05-24",
+      "news_eligible": 11,
+      "ineligible": [
+        "GOOGL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-06-03",
+      "anchor": "2024-05-31",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-06-10",
+      "anchor": "2024-06-07",
+      "news_eligible": 11,
+      "ineligible": [
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-06-17",
+      "anchor": "2024-06-14",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-06-24",
+      "anchor": "2024-06-21",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-07-01",
+      "anchor": "2024-06-28",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-07-08",
+      "anchor": "2024-07-05",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-07-15",
+      "anchor": "2024-07-12",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-07-22",
+      "anchor": "2024-07-19",
+      "news_eligible": 10,
+      "ineligible": [
+        "MSFT",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-07-29",
+      "anchor": "2024-07-26",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-08-05",
+      "anchor": "2024-08-02",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-08-12",
+      "anchor": "2024-08-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2024-08-19",
+      "anchor": "2024-08-16",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-08-26",
+      "anchor": "2024-08-23",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-09-03",
+      "anchor": "2024-08-30",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-09-09",
+      "anchor": "2024-09-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-09-16",
+      "anchor": "2024-09-13",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-09-23",
+      "anchor": "2024-09-20",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-09-30",
+      "anchor": "2024-09-27",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-10-07",
+      "anchor": "2024-10-04",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-10-14",
+      "anchor": "2024-10-11",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-10-21",
+      "anchor": "2024-10-18",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-10-28",
+      "anchor": "2024-10-25",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-11-04",
+      "anchor": "2024-11-01",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-11-11",
+      "anchor": "2024-11-08",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-11-18",
+      "anchor": "2024-11-15",
+      "news_eligible": 11,
+      "ineligible": [
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-11-25",
+      "anchor": "2024-11-22",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-12-02",
+      "anchor": "2024-11-29",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-12-09",
+      "anchor": "2024-12-06",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-12-16",
+      "anchor": "2024-12-13",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-12-23",
+      "anchor": "2024-12-20",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-12-30",
+      "anchor": "2024-12-27",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2025-01-06",
+      "anchor": "2025-01-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-01-13",
+      "anchor": "2025-01-10",
+      "news_eligible": 12,
+      "ineligible": [
+        "META"
+      ]
+    },
+    {
+      "decision": "2025-01-21",
+      "anchor": "2025-01-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-01-27",
+      "anchor": "2025-01-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-02-03",
+      "anchor": "2025-01-31",
+      "news_eligible": 12,
+      "ineligible": [
+        "NVDA"
+      ]
+    },
+    {
+      "decision": "2025-02-10",
+      "anchor": "2025-02-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-02-18",
+      "anchor": "2025-02-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-02-24",
+      "anchor": "2025-02-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-03-03",
+      "anchor": "2025-02-28",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2025-03-10",
+      "anchor": "2025-03-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-03-17",
+      "anchor": "2025-03-14",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "TSM",
+        "META"
+      ]
+    },
+    {
+      "decision": "2025-03-24",
+      "anchor": "2025-03-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-03-31",
+      "anchor": "2025-03-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-04-07",
+      "anchor": "2025-04-04",
+      "news_eligible": 12,
+      "ineligible": [
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2025-04-14",
+      "anchor": "2025-04-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-04-21",
+      "anchor": "2025-04-17",
+      "news_eligible": 12,
+      "ineligible": [
+        "NVDA"
+      ]
+    },
+    {
+      "decision": "2025-04-28",
+      "anchor": "2025-04-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-05-05",
+      "anchor": "2025-05-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-05-12",
+      "anchor": "2025-05-09",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-05-19",
+      "anchor": "2025-05-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-05-27",
+      "anchor": "2025-05-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-06-02",
+      "anchor": "2025-05-30",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "META"
+      ]
+    },
+    {
+      "decision": "2025-06-09",
+      "anchor": "2025-06-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-06-16",
+      "anchor": "2025-06-13",
+      "news_eligible": 12,
+      "ineligible": [
+        "XOM"
+      ]
+    },
+    {
+      "decision": "2025-06-23",
+      "anchor": "2025-06-20",
+      "news_eligible": 7,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2025-06-30",
+      "anchor": "2025-06-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-07-07",
+      "anchor": "2025-07-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-07-14",
+      "anchor": "2025-07-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-07-21",
+      "anchor": "2025-07-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-07-28",
+      "anchor": "2025-07-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-08-04",
+      "anchor": "2025-08-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-08-11",
+      "anchor": "2025-08-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-08-18",
+      "anchor": "2025-08-15",
+      "news_eligible": 11,
+      "ineligible": [
+        "NVDA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2025-08-25",
+      "anchor": "2025-08-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-09-02",
+      "anchor": "2025-08-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-09-08",
+      "anchor": "2025-09-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-09-15",
+      "anchor": "2025-09-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-09-22",
+      "anchor": "2025-09-19",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META"
+      ]
+    },
+    {
+      "decision": "2025-09-29",
+      "anchor": "2025-09-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-10-06",
+      "anchor": "2025-10-03",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-10-13",
+      "anchor": "2025-10-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-10-20",
+      "anchor": "2025-10-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-10-27",
+      "anchor": "2025-10-24",
+      "news_eligible": 12,
+      "ineligible": [
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2025-11-03",
+      "anchor": "2025-10-31",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-11-10",
+      "anchor": "2025-11-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-11-17",
+      "anchor": "2025-11-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-11-24",
+      "anchor": "2025-11-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-12-01",
+      "anchor": "2025-11-28",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-12-08",
+      "anchor": "2025-12-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-12-15",
+      "anchor": "2025-12-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-12-22",
+      "anchor": "2025-12-19",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2025-12-29",
+      "anchor": "2025-12-26",
+      "news_eligible": 11,
+      "ineligible": [
+        "GOOGL",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2026-01-05",
+      "anchor": "2026-01-02",
+      "news_eligible": 11,
+      "ineligible": [
+        "AAPL",
+        "TSM"
+      ]
+    },
+    {
+      "decision": "2026-01-12",
+      "anchor": "2026-01-09",
+      "news_eligible": 12,
+      "ineligible": [
+        "AAPL"
+      ]
+    },
+    {
+      "decision": "2026-01-20",
+      "anchor": "2026-01-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-01-26",
+      "anchor": "2026-01-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-02-02",
+      "anchor": "2026-01-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-02-09",
+      "anchor": "2026-02-06",
+      "news_eligible": 7,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "META",
+        "TSLA",
+        "LLY"
+      ]
+    },
+    {
+      "decision": "2026-02-17",
+      "anchor": "2026-02-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-02-23",
+      "anchor": "2026-02-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-03-02",
+      "anchor": "2026-02-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-03-09",
+      "anchor": "2026-03-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-03-16",
+      "anchor": "2026-03-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-03-23",
+      "anchor": "2026-03-20",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-03-30",
+      "anchor": "2026-03-27",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-04-06",
+      "anchor": "2026-04-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-04-13",
+      "anchor": "2026-04-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-04-20",
+      "anchor": "2026-04-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-04-27",
+      "anchor": "2026-04-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-05-04",
+      "anchor": "2026-05-01",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-05-11",
+      "anchor": "2026-05-08",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-05-18",
+      "anchor": "2026-05-15",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-05-26",
+      "anchor": "2026-05-22",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-06-01",
+      "anchor": "2026-05-29",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-06-08",
+      "anchor": "2026-06-05",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-06-15",
+      "anchor": "2026-06-12",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-06-22",
+      "anchor": "2026-06-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-06-29",
+      "anchor": "2026-06-26",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-07-06",
+      "anchor": "2026-07-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-07-13",
+      "anchor": "2026-07-10",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-07-20",
+      "anchor": "2026-07-17",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-07-27",
+      "anchor": "2026-07-24",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-08-03",
+      "anchor": "2026-07-31",
+      "news_eligible": 12,
+      "ineligible": [
+        "META"
+      ]
+    },
+    {
+      "decision": "2026-08-10",
+      "anchor": "2026-08-07",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-08-17",
+      "anchor": "2026-08-14",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-08-24",
+      "anchor": "2026-08-21",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-08-31",
+      "anchor": "2026-08-28",
+      "news_eligible": 10,
+      "ineligible": [
+        "AAPL",
+        "GOOGL",
+        "META"
+      ]
+    },
+    {
+      "decision": "2026-09-08",
+      "anchor": "2026-09-04",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-09-14",
+      "anchor": "2026-09-11",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-09-21",
+      "anchor": "2026-09-18",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-09-28",
+      "anchor": "2026-09-25",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-10-05",
+      "anchor": "2026-10-02",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-10-12",
+      "anchor": "2026-10-09",
+      "news_eligible": 11,
+      "ineligible": [
+        "MSFT",
+        "GOOGL"
+      ]
+    },
+    {
+      "decision": "2026-10-19",
+      "anchor": "2026-10-16",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-10-26",
+      "anchor": "2026-10-23",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-11-02",
+      "anchor": "2026-10-30",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-11-09",
+      "anchor": "2026-11-06",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-11-16",
+      "anchor": "2026-11-13",
+      "news_eligible": 13,
+      "ineligible": []
+    },
+    {
+      "decision": "2026-11-23",
+      "anchor": "2026-11-20",
+      "news_eligible": 13,
+      "ineligible": []
+    }
+  ],
+  "blocked": [
+    {
+      "decision": "2022-10-31",
+      "anchor": "2022-10-28",
+      "news_eligible": 9,
+      "ineligible": [
+        "AAPL",
+        "MSFT",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2022-11-21",
+      "anchor": "2022-11-18",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "TSM",
+        "TSLA",
+        "MU"
+      ]
+    },
+    {
+      "decision": "2023-10-30",
+      "anchor": "2023-10-27",
+      "news_eligible": 9,
+      "ineligible": [
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2024-01-02",
+      "anchor": "2023-12-29",
+      "news_eligible": 6,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2024-01-29",
+      "anchor": "2024-01-26",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "TSM",
+        "TSLA",
+        "AMD"
+      ]
+    },
+    {
+      "decision": "2025-06-23",
+      "anchor": "2025-06-20",
+      "news_eligible": 7,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "TSLA"
+      ]
+    },
+    {
+      "decision": "2025-09-22",
+      "anchor": "2025-09-19",
+      "news_eligible": 9,
+      "ineligible": [
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "META"
+      ]
+    },
+    {
+      "decision": "2026-02-09",
+      "anchor": "2026-02-06",
+      "news_eligible": 7,
+      "ineligible": [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "META",
+        "TSLA",
+        "LLY"
+      ]
+    }
+  ]
+}

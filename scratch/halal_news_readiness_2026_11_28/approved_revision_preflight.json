@@ -1,0 +1,23 @@
+{
+  "universe": "halal",
+  "symbols": [
+    "AAPL",
+    "NVDA",
+    "TSM",
+    "MSFT",
+    "GOOGL",
+    "AVGO",
+    "META",
+    "TSLA",
+    "LLY",
+    "MU",
+    "SAP",
+    "AMD",
+    "XOM"
+  ],
+  "ready": true,
+  "missing": [],
+  "errors": [],
+  "news_backfill_start": "2017-12-25T09:00:00-05:00",
+  "news_backfill_end": "2026-11-16T09:00:00-05:00"
+}

@@ -1,5 +1,6 @@
 """Score the current weekly regressor with complete exchange-session evidence."""
 
+import logging
 from datetime import date
 
 import numpy as np
@@ -13,6 +14,8 @@ from brain_api.core.patchtst.weekly_data import WeeklyPatchTSTInputs
 from brain_api.core.patchtst.weekly_training import predict_weekly_returns
 from brain_api.core.prices import load_prices_yfinance
 from brain_api.news.store import NewsStore
+
+logger = logging.getLogger(__name__)
 
 
 def run_weekly_batch(
@@ -51,6 +54,35 @@ def run_weekly_batch(
             omitted.append((symbol, count))
         else:
             windows[symbol] = (window, count)
+    logger.info(
+        "PatchTST weekly inputs model=%s anchor=%s usable=%s requested=%s",
+        artifacts.version,
+        anchor,
+        len(windows),
+        len(set(symbols)),
+    )
+    if symbols and not windows:
+        available = [inputs.features[s] for s in set(symbols) if s in inputs.features]
+        if available and "news_sentiment" in config.feature_names:
+            channel = config.feature_names.index("news_sentiment")
+            missing_news = sum(
+                not np.isfinite(values[-1, channel]) for values in available
+            )
+            if missing_news == len(available):
+                raise ValueError(
+                    f"Missing compatible news sentiment at US session close {anchor} "
+                    f"for {missing_news}/{len(set(symbols))} requested symbols "
+                    f"(PatchTST {artifacts.version}); no usable forecasts. "
+                    "Refresh closed-session news with POST /etl/news/patchtst "
+                    f'body {{"session_date": "{anchor}"}}, poll its job until completed, '
+                    "then retry. Monday news coverage alone does not establish "
+                    "session-close coverage. No ranking fallback was used."
+                )
+        raise ValueError(
+            f"PatchTST {artifacts.version} has no usable input windows at {anchor} "
+            f"({len(set(symbols))} requested). Check price history and compatible "
+            "feature/news coverage over the model's context window."
+        )
     scores = (
         predict_weekly_returns(
             artifacts.model,

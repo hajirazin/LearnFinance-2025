@@ -22,6 +22,10 @@ NEWS_ARCHIVE_START_ISO = "2015-01-05T09:00:00-05:00"
 
 CoverageStatus = Literal["complete", "verified_empty"]
 JobStatus = Literal["pending", "running", "complete", "failed"]
+NewsRevisionPolicy = Literal["point_in_time", "allow_later_revisions"]
+# User-approved historical PatchTST input policy, November 28, 2026.
+# Prefer an available pre-cutoff revision; otherwise allow a stored later edit.
+HISTORICAL_PATCHTST_NEWS_REVISION_POLICY: NewsRevisionPolicy = "allow_later_revisions"
 
 
 @dataclass(frozen=True)

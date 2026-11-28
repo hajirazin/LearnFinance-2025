@@ -27,6 +27,7 @@ from brain_api.core.patchtst.progress import (
     check_cancelled,
     report_progress,
 )
+from brain_api.news.models import NewsRevisionPolicy
 from brain_api.news.patchtst import load_session_sentiment
 from brain_api.news.store import NewsStore
 
@@ -56,6 +57,7 @@ class WeeklyPatchTSTInputs:
         prices: dict[str, pd.DataFrame],
         store: NewsStore | None = None,
         *,
+        news_revision_policy: NewsRevisionPolicy = "point_in_time",
         on_progress: ProgressCallback | None = None,
         shutdown_event: threading.Event | None = None,
     ):
@@ -77,9 +79,15 @@ class WeeklyPatchTSTInputs:
             )
             if store is None:
                 store = NewsStore()
-            sentiment = load_session_sentiment(store, list(prices), calendar.closes)
+            sentiment = load_session_sentiment(
+                store,
+                list(prices),
+                calendar.closes,
+                revision_policy=news_revision_policy,
+            )
         else:
             sentiment = None
+        self.news_evidence = dict(sentiment.attrs) if sentiment is not None else {}
         self.symbols = sorted(prices)
         self.features = {}
         self.close = {}

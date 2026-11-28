@@ -230,6 +230,10 @@ def test_compatible_sac_reuse_requires_forecast_recipe_and_window():
         )
 
     assert not reusable(incumbent)
-    migrated = dict(incumbent, patchtst_recipe=SAC_PATCHTST_RECIPE)
+    migrated = dict(
+        incumbent,
+        patchtst_recipe=SAC_PATCHTST_RECIPE,
+        patchtst_news_revision_policy="allow_later_revisions",
+    )
     assert reusable(migrated)
     assert not reusable(dict(migrated, data_window={"start": "2019-01-01"}))
