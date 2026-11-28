@@ -1,0 +1,115 @@
+{
+  "decision_date": "2026-11-23",
+  "checks": {
+    "us_full": {
+      "status": "passed",
+      "endpoint": "/inference/patchtst",
+      "model_version": "v2026-11-27-611c30dfacf0",
+      "symbols_returned": 417,
+      "finite_predictions": 408,
+      "excluded_symbols": [
+        "KXIAY",
+        "EXPN",
+        "SNDK",
+        "VYLR",
+        "Q",
+        "MDLN",
+        "FDXF",
+        "MBGL",
+        "JPY"
+      ],
+      "forecast_anchor_date": "2026-11-20",
+      "forecast_end_date": "2026-11-30",
+      "signals_used": [
+        "momentum_20d",
+        "momentum_12_1",
+        "volatility_20d",
+        "relative_volume_20d",
+        "news_sentiment",
+        "close",
+        "volume"
+      ]
+    },
+    "india_full": {
+      "status": "passed",
+      "endpoint": "/inference/patchtst/india",
+      "model_version": "v2026-10-02-7e38003c317e",
+      "symbols_returned": 203,
+      "finite_predictions": 203,
+      "excluded_symbols": [],
+      "forecast_anchor_date": null,
+      "forecast_end_date": null,
+      "signals_used": [
+        "ohlcv"
+      ]
+    },
+    "us_batch": {
+      "status": "passed",
+      "endpoint": "/inference/patchtst/score-batch",
+      "market": "us",
+      "model_version": "v2026-11-27-611c30dfacf0",
+      "requested_count": 418,
+      "finite_predictions": 408,
+      "excluded_symbols": [
+        "KXIAY",
+        "SNDK",
+        "EXPN",
+        "VYLR",
+        "Q",
+        "FDXF",
+        "MDLN",
+        "MBGL",
+        "JPY",
+        "HKD"
+      ],
+      "forecast_anchor_date": "2026-11-20",
+      "forecast_end_date": "2026-11-30",
+      "full_route_comparison": {
+        "common_symbols": 408,
+        "max_abs_score_difference_pct": 1.4202669262886047e-06
+      },
+      "score_parity_passed": true
+    },
+    "india_batch": {
+      "status": "passed",
+      "endpoint": "/inference/patchtst/score-batch",
+      "market": "india",
+      "model_version": "v2026-10-02-7e38003c317e",
+      "requested_count": 203,
+      "finite_predictions": 188,
+      "excluded_symbols": [
+        "NAVINFLUOR.NS",
+        "FORCEMOT.NS",
+        "PERSISTENT.NS",
+        "NEULANDLAB.NS",
+        "HEROMOTOCO.NS",
+        "PAGEIND.NS",
+        "ALKEM.NS",
+        "POLYCAB.NS",
+        "MRF.NS",
+        "LINDEINDIA.NS",
+        "ULTRACEMCO.NS",
+        "GILLETTE.NS",
+        "ATUL.NS",
+        "DIXON.NS",
+        "AMBER.NS"
+      ],
+      "forecast_anchor_date": null,
+      "forecast_end_date": null,
+      "full_route_comparison": {
+        "common_symbols": 182,
+        "max_abs_score_difference_pct": 0.0
+      },
+      "exclusion_reason": "15 stocks above the production INR 5000 price cap; verified in Pi API logs",
+      "score_parity_passed": true
+    }
+  },
+  "health_after": {
+    "status": "healthy"
+  },
+  "request_scope": {
+    "full_routes": "all symbols from current model metadata",
+    "batch_routes": "all symbols from existing November production universe caches",
+    "min_predictions": 15
+  }
+}

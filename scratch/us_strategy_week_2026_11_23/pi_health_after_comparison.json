@@ -1,0 +1,10 @@
+{
+  "method": "GET",
+  "path": "/health",
+  "started_at": "2026-11-28T17:02:45.309883+00:00",
+  "finished_at": "2026-11-28T17:02:50.364002+00:00",
+  "status": 200,
+  "response": {
+    "status": "healthy"
+  }
+}

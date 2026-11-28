@@ -1,0 +1,875 @@
+{
+  "decision_date": "2026-11-23",
+  "observed_end": "2026-11-27",
+  "forecast_anchor": "2026-11-20",
+  "forecast_end": "2026-11-30",
+  "model_versions": {
+    "alpha_hrp": "v2026-11-27-611c30dfacf0",
+    "sac_halal": "v2026-11-27_93fcc760",
+    "sac_halal_filtered": "v2026-11-27_879504e8"
+  },
+  "method": {
+    "replay": "Current models, hypothetical USD 10000 all-cash pre-decision portfolio; not models available on Monday.",
+    "sticky": "Production prior week 202647 realized Stage-2 carry-set; pure K_in=15/K_hold=20 selector; no history writes.",
+    "hrp": "Production core HRP, 252 returns, prices through November 20 only.",
+    "weekly_return": "Adjusted November 27 close / adjusted November 20 close - 1.",
+    "monday_entry": "Adjusted November 27 close / adjusted November 23 open - 1.",
+    "portfolio_return": "Sum of target weight times each stock return; cash flat; fees, slippage and cash interest excluded.",
+    "account_pnl": "Not calculated: target basket returns do not establish executed account performance.",
+    "source": "Yahoo Finance through repository loader, auto_adjust=True; source price rows retained."
+  },
+  "sticky": {
+    "selected": [
+      "AI",
+      "FFIV",
+      "COO",
+      "SAR",
+      "BDRFY",
+      "NVO",
+      "CTVA",
+      "BURL",
+      "HLN",
+      "ATLKY",
+      "DLR",
+      "FICO",
+      "CBRE",
+      "XYL",
+      "ENR"
+    ],
+    "reasons": {
+      "AI": "sticky",
+      "FFIV": "top_rank",
+      "COO": "top_rank",
+      "SAR": "top_rank",
+      "BDRFY": "top_rank",
+      "NVO": "top_rank",
+      "CTVA": "top_rank",
+      "BURL": "top_rank",
+      "HLN": "top_rank",
+      "ATLKY": "top_rank",
+      "DLR": "top_rank",
+      "FICO": "top_rank",
+      "CBRE": "top_rank",
+      "XYL": "top_rank",
+      "ENR": "top_rank"
+    },
+    "kept_count": 1,
+    "fillers_count": 14,
+    "evicted_from_previous": {
+      "TWLO": "rank_out_of_hold",
+      "TYL": "rank_out_of_hold",
+      "OKTA": "rank_out_of_hold",
+      "ACN": "rank_out_of_hold",
+      "FROG": "rank_out_of_hold",
+      "TS": "rank_out_of_hold",
+      "BIIB": "rank_out_of_hold",
+      "GILD": "rank_out_of_hold",
+      "RVTY": "rank_out_of_hold",
+      "WST": "rank_out_of_hold",
+      "FJTSY": "rank_out_of_hold",
+      "MCK": "rank_out_of_hold",
+      "RBLX": "rank_out_of_hold",
+      "CAH": "rank_out_of_hold"
+    }
+  },
+  "replay": {
+    "alpha_hrp": {
+      "rows": [
+        {
+          "symbol": "CTVA",
+          "weight_pct": 8.3758,
+          "stock_weekly_return_pct": 4.689485027343188,
+          "stock_monday_open_to_friday_close_pct": 3.379229856046506,
+          "weekly_contribution_pp": 0.3927818869202107,
+          "monday_open_contribution_pp": 0.28303753428274325,
+          "patchtst_prediction_pct": 0.719612231478095
+        },
+        {
+          "symbol": "AI",
+          "weight_pct": 2.9264,
+          "stock_weekly_return_pct": 11.938665267526538,
+          "stock_monday_open_to_friday_close_pct": 4.6059343723729995,
+          "weekly_contribution_pp": 0.34937310038889663,
+          "monday_open_contribution_pp": 0.13478806347312347,
+          "patchtst_prediction_pct": 0.6172259338200092
+        },
+        {
+          "symbol": "FFIV",
+          "weight_pct": 6.1059,
+          "stock_weekly_return_pct": 6.207439627416278,
+          "stock_monday_open_to_friday_close_pct": 1.7362467755080546,
+          "weekly_contribution_pp": 0.3790200562104105,
+          "monday_open_contribution_pp": 0.10601349186574631,
+          "patchtst_prediction_pct": 0.7860491052269936
+        },
+        {
+          "symbol": "SAR",
+          "weight_pct": 13.1182,
+          "stock_weekly_return_pct": 4.376166452933505,
+          "stock_monday_open_to_friday_close_pct": 3.4132830290666494,
+          "weekly_contribution_pp": 0.574074267628723,
+          "monday_open_contribution_pp": 0.4477612943190212,
+          "patchtst_prediction_pct": 0.7564863190054893
+        },
+        {
+          "symbol": "FICO",
+          "weight_pct": 3.0145,
+          "stock_weekly_return_pct": 2.0538390367080384,
+          "stock_monday_open_to_friday_close_pct": 0.4138004406052165,
+          "weekly_contribution_pp": 0.06191297776156381,
+          "monday_open_contribution_pp": 0.01247401428204425,
+          "patchtst_prediction_pct": 0.6832197774201632
+        },
+        {
+          "symbol": "ATLKY",
+          "weight_pct": 7.3182,
+          "stock_weekly_return_pct": 5.293441431060253,
+          "stock_monday_open_to_friday_close_pct": -1.8240352130950543,
+          "weekly_contribution_pp": 0.3873846308078514,
+          "monday_open_contribution_pp": -0.13348654496472226,
+          "patchtst_prediction_pct": 0.697682099416852
+        },
+        {
+          "symbol": "DLR",
+          "weight_pct": 10.8277,
+          "stock_weekly_return_pct": 2.893017822238586,
+          "stock_monday_open_to_friday_close_pct": -2.0680758854102366,
+          "weekly_contribution_pp": 0.31324729073852736,
+          "monday_open_contribution_pp": -0.2239250526445642,
+          "patchtst_prediction_pct": 0.6961358711123466
+        },
+        {
+          "symbol": "NVO",
+          "weight_pct": 4.1225,
+          "stock_weekly_return_pct": 8.5933369281459,
+          "stock_monday_open_to_friday_close_pct": 6.316330725455077,
+          "weekly_contribution_pp": 0.35426031486281473,
+          "monday_open_contribution_pp": 0.2603907341568855,
+          "patchtst_prediction_pct": 0.7240164093673229
+        },
+        {
+          "symbol": "BURL",
+          "weight_pct": 4.9076,
+          "stock_weekly_return_pct": 3.1629615559860325,
+          "stock_monday_open_to_friday_close_pct": 1.6139410000436838,
+          "weekly_contribution_pp": 0.15522550132157054,
+          "monday_open_contribution_pp": 0.07920576851814383,
+          "patchtst_prediction_pct": 0.7176462560892105
+        },
+        {
+          "symbol": "ENR",
+          "weight_pct": 3.7002,
+          "stock_weekly_return_pct": 2.2847022374913095,
+          "stock_monday_open_to_friday_close_pct": 1.6087318663495775,
+          "weekly_contribution_pp": 0.08453855219165343,
+          "monday_open_contribution_pp": 0.05952629651866707,
+          "patchtst_prediction_pct": 0.6494981702417135
+        },
+        {
+          "symbol": "BDRFY",
+          "weight_pct": 7.903299999999999,
+          "stock_weekly_return_pct": 5.223445400123672,
+          "stock_monday_open_to_friday_close_pct": 5.837711903047449,
+          "weekly_contribution_pp": 0.4128245603079741,
+          "monday_open_contribution_pp": 0.46137188483354896,
+          "patchtst_prediction_pct": 0.7531056180596352
+        },
+        {
+          "symbol": "HLN",
+          "weight_pct": 9.7152,
+          "stock_weekly_return_pct": 4.299893676350464,
+          "stock_monday_open_to_friday_close_pct": 5.698326701123269,
+          "weekly_contribution_pp": 0.4177432704448002,
+          "monday_open_contribution_pp": 0.5536038356675277,
+          "patchtst_prediction_pct": 0.711532449349761
+        },
+        {
+          "symbol": "XYL",
+          "weight_pct": 7.795299999999999,
+          "stock_weekly_return_pct": 1.7197758476208191,
+          "stock_monday_open_to_friday_close_pct": 0.5723307866918548,
+          "weekly_contribution_pp": 0.1340616866495857,
+          "monday_open_contribution_pp": 0.04461490181499015,
+          "patchtst_prediction_pct": 0.6550869904458523
+        },
+        {
+          "symbol": "COO",
+          "weight_pct": 5.4233,
+          "stock_weekly_return_pct": 5.774452529727969,
+          "stock_monday_open_to_friday_close_pct": 4.883795316633677,
+          "weekly_contribution_pp": 0.313165884044737,
+          "monday_open_contribution_pp": 0.2648628714069942,
+          "patchtst_prediction_pct": 0.7587559521198273
+        },
+        {
+          "symbol": "CBRE",
+          "weight_pct": 4.746,
+          "stock_weekly_return_pct": 10.321971042498479,
+          "stock_monday_open_to_friday_close_pct": 7.439293189223073,
+          "weekly_contribution_pp": 0.4898807456769778,
+          "monday_open_contribution_pp": 0.3530688547605271,
+          "patchtst_prediction_pct": 0.6617370527237654
+        }
+      ],
+      "weekly_return_pct": 4.819494725956297,
+      "monday_open_to_friday_close_pct": 2.7033079482906763,
+      "stock_winners": 13,
+      "stock_losers": 2
+    },
+    "sac_halal": {
+      "rows": [
+        {
+          "symbol": "AAPL",
+          "weight_pct": 1.6237888549222712,
+          "stock_weekly_return_pct": 4.664879466434146,
+          "stock_monday_open_to_friday_close_pct": 3.067241664271725,
+          "weekly_contribution_pp": 0.07574779287151517,
+          "monday_open_contribution_pp": 0.04980552829797665
+        },
+        {
+          "symbol": "AMD",
+          "weight_pct": 1.7812090034889705,
+          "stock_weekly_return_pct": 0.035343408493870854,
+          "stock_monday_open_to_friday_close_pct": -10.98297479829905,
+          "weekly_contribution_pp": 0.0006295399742327132,
+          "monday_open_contribution_pp": -0.19562973595822727
+        },
+        {
+          "symbol": "AVGO",
+          "weight_pct": 6.244465881358381,
+          "stock_weekly_return_pct": 2.605036818889639,
+          "stock_monday_open_to_friday_close_pct": -2.655360407230778,
+          "weekly_contribution_pp": 0.1626706353523872,
+          "monday_open_contribution_pp": -0.16581307465662487
+        },
+        {
+          "symbol": "GOOGL",
+          "weight_pct": 11.614446740102458,
+          "stock_weekly_return_pct": 3.6450611024496204,
+          "stock_monday_open_to_friday_close_pct": -3.278460448937326,
+          "weekly_contribution_pp": 0.4233536803882027,
+          "monday_open_contribution_pp": -0.3807750427371497
+        },
+        {
+          "symbol": "LLY",
+          "weight_pct": 2.1336203144988226,
+          "stock_weekly_return_pct": 3.360528837549648,
+          "stock_monday_open_to_friday_close_pct": 3.5142122239836926,
+          "weekly_contribution_pp": 0.07170092595255041,
+          "monday_open_contribution_pp": 0.07497994590551692
+        },
+        {
+          "symbol": "META",
+          "weight_pct": 11.336078225848594,
+          "stock_weekly_return_pct": 12.146065162132658,
+          "stock_monday_open_to_friday_close_pct": 6.293526180176046,
+          "weekly_contribution_pp": 1.3768874481419018,
+          "monday_open_contribution_pp": 0.7134390509490174
+        },
+        {
+          "symbol": "MSFT",
+          "weight_pct": 8.704506294067617,
+          "stock_weekly_return_pct": 1.719230842632724,
+          "stock_monday_open_to_friday_close_pct": -2.6103607316934063,
+          "weekly_contribution_pp": 0.14965055690651718,
+          "monday_open_contribution_pp": -0.22721901418812204
+        },
+        {
+          "symbol": "MU",
+          "weight_pct": 3.2824714592201882,
+          "stock_weekly_return_pct": 8.820709757616996,
+          "stock_monday_open_to_friday_close_pct": -6.3368601390716535,
+          "weekly_contribution_pp": 0.28953728029442816,
+          "monday_open_contribution_pp": -0.20800562547572776
+        },
+        {
+          "symbol": "NVDA",
+          "weight_pct": 11.67515259033064,
+          "stock_weekly_return_pct": 19.8836986828552,
+          "stock_monday_open_to_friday_close_pct": -9.907799603786671,
+          "weekly_contribution_pp": 2.3214521618249084,
+          "monday_open_contribution_pp": -1.1567507220862683
+        },
+        {
+          "symbol": "SAP",
+          "weight_pct": 8.405590644235891,
+          "stock_weekly_return_pct": 7.399588680774749,
+          "stock_monday_open_to_friday_close_pct": 6.219545860990872,
+          "weekly_contribution_pp": 0.6219791338631403,
+          "monday_open_contribution_pp": 0.5227895650054093
+        },
+        {
+          "symbol": "TSLA",
+          "weight_pct": 11.399324273381875,
+          "stock_weekly_return_pct": 15.667107607509113,
+          "stock_monday_open_to_friday_close_pct": 6.7406763152837,
+          "weekly_contribution_pp": 1.7859444004396448,
+          "monday_open_contribution_pp": 0.7683915513982378
+        },
+        {
+          "symbol": "TSM",
+          "weight_pct": 10.042568775343504,
+          "stock_weekly_return_pct": 10.865679084834579,
+          "stock_monday_open_to_friday_close_pct": -8.3400333889182,
+          "weekly_contribution_pp": 1.0911932950026273,
+          "monday_open_contribution_pp": -0.837553588968722
+        },
+        {
+          "symbol": "XOM",
+          "weight_pct": 9.756776943200784,
+          "stock_weekly_return_pct": 0.1187494068967343,
+          "stock_monday_open_to_friday_close_pct": 1.418253893725252,
+          "weekly_contribution_pp": 0.011586114752288252,
+          "monday_open_contribution_pp": 0.13837586889903272
+        },
+        {
+          "symbol": "CASH",
+          "weight_pct": 2.0,
+          "stock_weekly_return_pct": 0.0,
+          "stock_monday_open_to_friday_close_pct": 0.0,
+          "weekly_contribution_pp": 0.0,
+          "monday_open_contribution_pp": 0.0
+        }
+      ],
+      "weekly_return_pct": 8.382332965764345,
+      "monday_open_to_friday_close_pct": -0.9039652936156511,
+      "stock_winners": 6,
+      "stock_losers": 7
+    },
+    "sac_halal_filtered": {
+      "rows": [
+        {
+          "symbol": "ASX",
+          "weight_pct": 1.587944272492376,
+          "stock_weekly_return_pct": 19.29957977342123,
+          "stock_monday_open_to_friday_close_pct": -5.3458182577329705,
+          "weekly_contribution_pp": 0.3064665716271395,
+          "monday_open_contribution_pp": -0.08488861484152244
+        },
+        {
+          "symbol": "ATLKY",
+          "weight_pct": 7.966050092323439,
+          "stock_weekly_return_pct": 5.293441431060253,
+          "stock_monday_open_to_friday_close_pct": -1.8240352130950543,
+          "weekly_contribution_pp": 0.42167819600606243,
+          "monday_open_contribution_pp": -0.14530355877677062
+        },
+        {
+          "symbol": "BDRFY",
+          "weight_pct": 8.481671842889668,
+          "stock_weekly_return_pct": 5.223445400123672,
+          "stock_monday_open_to_friday_close_pct": 5.837711903047449,
+          "weekly_contribution_pp": 0.44303549773100503,
+          "monday_open_contribution_pp": 0.4951355667497941
+        },
+        {
+          "symbol": "BURL",
+          "weight_pct": 10.375878683973298,
+          "stock_weekly_return_pct": 3.1629615559860325,
+          "stock_monday_open_to_friday_close_pct": 1.6139410000436838,
+          "weekly_contribution_pp": 0.3281850538698249,
+          "monday_open_contribution_pp": 0.16746056019543804
+        },
+        {
+          "symbol": "DLR",
+          "weight_pct": 3.4868561000021043,
+          "stock_weekly_return_pct": 2.893017822238586,
+          "stock_monday_open_to_friday_close_pct": -2.0680758854102366,
+          "weekly_contribution_pp": 0.10087536840887418,
+          "monday_open_contribution_pp": -0.07211083016309937
+        },
+        {
+          "symbol": "FFIV",
+          "weight_pct": 10.087491409585187,
+          "stock_weekly_return_pct": 6.207439627416278,
+          "stock_monday_open_to_friday_close_pct": 1.7362467755080546,
+          "weekly_contribution_pp": 0.6261749391708038,
+          "monday_open_contribution_pp": 0.17514374432857482
+        },
+        {
+          "symbol": "FICO",
+          "weight_pct": 6.682384442016184,
+          "stock_weekly_return_pct": 2.0538390367080384,
+          "stock_monday_open_to_friday_close_pct": 0.4138004406052165,
+          "weekly_contribution_pp": 0.13724542025303302,
+          "monday_open_contribution_pp": 0.027651736263997407
+        },
+        {
+          "symbol": "ILMN",
+          "weight_pct": 1.4507606891756544,
+          "stock_weekly_return_pct": 6.700548531367323,
+          "stock_monday_open_to_friday_close_pct": -0.24727006392045725,
+          "weekly_contribution_pp": 0.09720892405221376,
+          "monday_open_contribution_pp": -0.0035872968834575066
+        },
+        {
+          "symbol": "LEN",
+          "weight_pct": 9.160292943409251,
+          "stock_weekly_return_pct": 6.626205865335799,
+          "stock_monday_open_to_friday_close_pct": 5.852691995167758,
+          "weekly_contribution_pp": 0.6069798682981251,
+          "monday_open_contribution_pp": 0.5361237318328302
+        },
+        {
+          "symbol": "LII",
+          "weight_pct": 1.5136125946165242,
+          "stock_weekly_return_pct": 4.648874036455042,
+          "stock_monday_open_to_friday_close_pct": 1.1383999918878507,
+          "weekly_contribution_pp": 0.0703659429236411,
+          "monday_open_contribution_pp": 0.017230965654328
+        },
+        {
+          "symbol": "MSTR",
+          "weight_pct": 2.311729540982525,
+          "stock_weekly_return_pct": 4.910025122085027,
+          "stock_monday_open_to_friday_close_pct": -10.415978268242176,
+          "weekly_contribution_pp": 0.11350650121690287,
+          "monday_open_contribution_pp": -0.24078924660927445
+        },
+        {
+          "symbol": "NVO",
+          "weight_pct": 10.001034684027731,
+          "stock_weekly_return_pct": 8.5933369281459,
+          "stock_monday_open_to_friday_close_pct": 6.316330725455077,
+          "weekly_contribution_pp": 0.8594226066992346,
+          "monday_open_contribution_pp": 0.6316984266106627
+        },
+        {
+          "symbol": "NWS",
+          "weight_pct": 9.333406282183624,
+          "stock_weekly_return_pct": 4.951557657737626,
+          "stock_monday_open_to_friday_close_pct": 3.1746017863143905,
+          "weekly_contribution_pp": 0.46214899349322797,
+          "monday_open_contribution_pp": 0.2962984825581809
+        },
+        {
+          "symbol": "NWSA",
+          "weight_pct": 6.671834213995593,
+          "stock_weekly_return_pct": 4.990020112059201,
+          "stock_monday_open_to_friday_close_pct": 3.747529945937389,
+          "weekly_contribution_pp": 0.3329258691216271,
+          "monday_open_contribution_pp": 0.25002898511278127
+        },
+        {
+          "symbol": "SAR",
+          "weight_pct": 8.889052208326843,
+          "stock_weekly_return_pct": 4.376166452933505,
+          "stock_monday_open_to_friday_close_pct": 3.4132830290666494,
+          "weekly_contribution_pp": 0.38899972072454425,
+          "monday_open_contribution_pp": 0.30340851047169437
+        },
+        {
+          "symbol": "CASH",
+          "weight_pct": 2.0,
+          "stock_weekly_return_pct": 0.0,
+          "stock_monday_open_to_friday_close_pct": 0.0,
+          "weekly_contribution_pp": 0.0,
+          "monday_open_contribution_pp": 0.0
+        }
+      ],
+      "weekly_return_pct": 5.295219473596259,
+      "monday_open_to_friday_close_pct": 2.3535011625041573,
+      "stock_winners": 10,
+      "stock_losers": 5
+    }
+  },
+  "recorded_monday_target_baskets": {
+    "alpha_hrp": {
+      "rows": [
+        {
+          "symbol": "SU",
+          "weight_pct": 3.8801999999999994,
+          "stock_weekly_return_pct": 1.5355740545593743,
+          "stock_monday_open_to_friday_close_pct": 1.8387583907001792,
+          "weekly_contribution_pp": 0.05958334446501284,
+          "monday_open_contribution_pp": 0.07134750307594835
+        },
+        {
+          "symbol": "DVN",
+          "weight_pct": 2.456,
+          "stock_weekly_return_pct": 3.1295118161025703,
+          "stock_monday_open_to_friday_close_pct": 3.4033305262514357,
+          "weekly_contribution_pp": 0.07686081020347912,
+          "monday_open_contribution_pp": 0.08358579772473526
+        },
+        {
+          "symbol": "OKTA",
+          "weight_pct": 3.2337,
+          "stock_weekly_return_pct": 8.356836644172727,
+          "stock_monday_open_to_friday_close_pct": 0.5476687213611164,
+          "weekly_contribution_pp": 0.27023502656261345,
+          "monday_open_contribution_pp": 0.017709963442654422
+        },
+        {
+          "symbol": "MPC",
+          "weight_pct": 6.0051,
+          "stock_weekly_return_pct": -2.0125860179476818,
+          "stock_monday_open_to_friday_close_pct": -2.435059118187799,
+          "weekly_contribution_pp": -0.12085780296377623,
+          "monday_open_contribution_pp": -0.1462277351062955
+        },
+        {
+          "symbol": "XOM",
+          "weight_pct": 4.5525,
+          "stock_weekly_return_pct": 0.1187494068967343,
+          "stock_monday_open_to_friday_close_pct": 1.418253893725252,
+          "weekly_contribution_pp": 0.005406066748973829,
+          "monday_open_contribution_pp": 0.0645660085118421
+        },
+        {
+          "symbol": "P",
+          "weight_pct": 3.6309,
+          "stock_weekly_return_pct": 10.222700402762385,
+          "stock_monday_open_to_friday_close_pct": -8.627523191703313,
+          "weekly_contribution_pp": 0.37117602892389945,
+          "monday_open_contribution_pp": -0.3132567395675556
+        },
+        {
+          "symbol": "RBLX",
+          "weight_pct": 3.1931000000000003,
+          "stock_weekly_return_pct": 22.816779899158735,
+          "stock_monday_open_to_friday_close_pct": 7.2523384450752015,
+          "weekly_contribution_pp": 0.7285625989600376,
+          "monday_open_contribution_pp": 0.23157441888969627
+        },
+        {
+          "symbol": "ACN",
+          "weight_pct": 7.9848,
+          "stock_weekly_return_pct": 9.34575138584397,
+          "stock_monday_open_to_friday_close_pct": 8.599395431558765,
+          "weekly_contribution_pp": 0.7462395566568694,
+          "monday_open_contribution_pp": 0.6866445264191043
+        },
+        {
+          "symbol": "SSDOY",
+          "weight_pct": 5.2979,
+          "stock_weekly_return_pct": 4.026070706028362,
+          "stock_monday_open_to_friday_close_pct": 2.223052844335349,
+          "weekly_contribution_pp": 0.2132971999346766,
+          "monday_open_contribution_pp": 0.11777511664004248
+        },
+        {
+          "symbol": "OXY",
+          "weight_pct": 2.5339,
+          "stock_weekly_return_pct": 0.5009214015268215,
+          "stock_monday_open_to_friday_close_pct": 1.366017142581799,
+          "weekly_contribution_pp": 0.012692847393288131,
+          "monday_open_contribution_pp": 0.03461350837588021
+        },
+        {
+          "symbol": "COP",
+          "weight_pct": 11.1839,
+          "stock_weekly_return_pct": 0.49956505947923446,
+          "stock_monday_open_to_friday_close_pct": 1.6269240260577078,
+          "weekly_contribution_pp": 0.0558708566870981,
+          "monday_open_contribution_pp": 0.18195355615026798
+        },
+        {
+          "symbol": "EOG",
+          "weight_pct": 11.9968,
+          "stock_weekly_return_pct": 0.06728858722717668,
+          "stock_monday_open_to_friday_close_pct": -0.020169959092741774,
+          "weekly_contribution_pp": 0.008072477232469932,
+          "monday_open_contribution_pp": -0.002419749652438045
+        },
+        {
+          "symbol": "CAH",
+          "weight_pct": 14.478399999999999,
+          "stock_weekly_return_pct": 3.6838781140380306,
+          "stock_monday_open_to_friday_close_pct": 4.130455786363485,
+          "weekly_contribution_pp": 0.5333666088628822,
+          "monday_open_contribution_pp": 0.5980239105728508
+        },
+        {
+          "symbol": "TS",
+          "weight_pct": 9.8481,
+          "stock_weekly_return_pct": 5.01389755901287,
+          "stock_monday_open_to_friday_close_pct": 3.661058712322496,
+          "weekly_contribution_pp": 0.49377364550914643,
+          "monday_open_contribution_pp": 0.3605447230482317
+        },
+        {
+          "symbol": "MCK",
+          "weight_pct": 9.7246,
+          "stock_weekly_return_pct": 0.582551467216752,
+          "stock_monday_open_to_friday_close_pct": 0.7747889166804578,
+          "weekly_contribution_pp": 0.056650799980960266,
+          "monday_open_contribution_pp": 0.07534512299150779
+        }
+      ],
+      "weekly_return_pct": 3.510930065157631,
+      "monday_open_to_friday_close_pct": 2.0617799315164724,
+      "stock_winners": 12,
+      "stock_losers": 3
+    },
+    "sac_halal_filtered": {
+      "rows": [
+        {
+          "symbol": "AEM",
+          "weight_pct": 11.347914138371868,
+          "stock_weekly_return_pct": 14.540647426473674,
+          "stock_monday_open_to_friday_close_pct": 7.226833490559992,
+          "weekly_contribution_pp": 1.6500601851196113,
+          "monday_open_contribution_pp": 0.8200948594318506
+        },
+        {
+          "symbol": "ATEYY",
+          "weight_pct": 11.477526436713314,
+          "stock_weekly_return_pct": 18.690387549349417,
+          "stock_monday_open_to_friday_close_pct": 3.2569625429324622,
+          "weekly_contribution_pp": 2.145194172100753,
+          "monday_open_contribution_pp": 0.37381873689892353
+        },
+        {
+          "symbol": "COP",
+          "weight_pct": 4.065979080899623,
+          "stock_weekly_return_pct": 0.49956505947923446,
+          "stock_monday_open_to_friday_close_pct": 1.6269240260577078,
+          "weekly_contribution_pp": 0.02031221081390943,
+          "monday_open_contribution_pp": 0.06615039056163632
+        },
+        {
+          "symbol": "CSLLY",
+          "weight_pct": 1.629064837043266,
+          "stock_weekly_return_pct": 6.79222230440224,
+          "stock_monday_open_to_friday_close_pct": 1.6157438962043802,
+          "weekly_contribution_pp": 0.11064970521482673,
+          "monday_open_contribution_pp": 0.026321515669738407
+        },
+        {
+          "symbol": "FNV",
+          "weight_pct": 11.30656964226819,
+          "stock_weekly_return_pct": 16.2806236217204,
+          "stock_monday_open_to_friday_close_pct": 10.970964329506083,
+          "weekly_contribution_pp": 1.8407800479853829,
+          "monday_open_contribution_pp": 1.2404397223440067
+        },
+        {
+          "symbol": "GFI",
+          "weight_pct": 10.675402140279148,
+          "stock_weekly_return_pct": 15.29934075940631,
+          "stock_monday_open_to_friday_close_pct": 5.080837665246651,
+          "weekly_contribution_pp": 1.6332661508782613,
+          "monday_open_contribution_pp": 0.5423998528598502
+        },
+        {
+          "symbol": "ILMN",
+          "weight_pct": 8.975165383057092,
+          "stock_weekly_return_pct": 6.700548531367323,
+          "stock_monday_open_to_friday_close_pct": -0.24727006392045725,
+          "weekly_contribution_pp": 0.6013853122622204,
+          "monday_open_contribution_pp": -0.022192897179652022
+        },
+        {
+          "symbol": "MCK",
+          "weight_pct": 4.38083700920485,
+          "stock_weekly_return_pct": 0.582551467216752,
+          "stock_monday_open_to_friday_close_pct": 0.7747889166804578,
+          "weekly_contribution_pp": 0.02552063027349733,
+          "monday_open_contribution_pp": 0.03394223960515482
+        },
+        {
+          "symbol": "MPC",
+          "weight_pct": 1.6186152094490898,
+          "stock_weekly_return_pct": -2.0125860179476818,
+          "stock_monday_open_to_friday_close_pct": -2.435059118187799,
+          "weekly_contribution_pp": -0.03257602338974696,
+          "monday_open_contribution_pp": -0.0394142372460646
+        },
+        {
+          "symbol": "MSTR",
+          "weight_pct": 8.092109166601357,
+          "stock_weekly_return_pct": 4.910025122085027,
+          "stock_monday_open_to_friday_close_pct": -10.415978268242176,
+          "weekly_contribution_pp": 0.39732459298667194,
+          "monday_open_contribution_pp": -0.8428723322356305
+        },
+        {
+          "symbol": "PSX",
+          "weight_pct": 4.784019469647224,
+          "stock_weekly_return_pct": 1.165751583498631,
+          "stock_monday_open_to_friday_close_pct": 0.12819881796601873,
+          "weekly_contribution_pp": 0.055769782722295325,
+          "monday_open_contribution_pp": 0.00613305641135194
+        },
+        {
+          "symbol": "RVTY",
+          "weight_pct": 4.383675116464834,
+          "stock_weekly_return_pct": 4.166094891132177,
+          "stock_monday_open_to_friday_close_pct": -0.8260634084571672,
+          "weekly_contribution_pp": 0.18262806507087398,
+          "monday_open_contribution_pp": -0.036211936082758106
+        },
+        {
+          "symbol": "SMCI",
+          "weight_pct": 1.8140299295293774,
+          "stock_weekly_return_pct": 9.74596142045938,
+          "stock_monday_open_to_friday_close_pct": -9.554625752357172,
+          "weekly_contribution_pp": 0.17679465708751962,
+          "monday_open_contribution_pp": -0.17332377080228056
+        },
+        {
+          "symbol": "VLO",
+          "weight_pct": 1.7195912493748577,
+          "stock_weekly_return_pct": -1.0729646383425662,
+          "stock_monday_open_to_friday_close_pct": -2.1157230873571464,
+          "weekly_contribution_pp": -0.01845060602982536,
+          "monday_open_contribution_pp": -0.03638178907119707
+        },
+        {
+          "symbol": "WPM",
+          "weight_pct": 11.729501191095897,
+          "stock_weekly_return_pct": 19.206623516498954,
+          "stock_monday_open_to_friday_close_pct": 9.777968954788285,
+          "weekly_contribution_pp": 2.2528411341370496,
+          "monday_open_contribution_pp": 1.1469069850168792
+        },
+        {
+          "symbol": "CASH",
+          "weight_pct": 2.0,
+          "stock_weekly_return_pct": 0.0,
+          "stock_monday_open_to_friday_close_pct": 0.0,
+          "weekly_contribution_pp": 0.0,
+          "monday_open_contribution_pp": 0.0
+        }
+      ],
+      "weekly_return_pct": 11.0415000172333,
+      "monday_open_to_friday_close_pct": 3.1058103961818087,
+      "stock_winners": 9,
+      "stock_losers": 6,
+      "model_version": "v2026-10-02_4e5831c9",
+      "has_execution_report": true,
+      "has_labeled_realized_return": false
+    },
+    "sac_halal": {
+      "rows": [
+        {
+          "symbol": "AAPL",
+          "weight_pct": 9.85707396634618,
+          "stock_weekly_return_pct": 4.664879466434146,
+          "stock_monday_open_to_friday_close_pct": 3.067241664271725,
+          "weekly_contribution_pp": 0.45982061944730884,
+          "monday_open_contribution_pp": 0.3023402795738515
+        },
+        {
+          "symbol": "AMD",
+          "weight_pct": 2.0530457556435597,
+          "stock_weekly_return_pct": 0.035343408493870854,
+          "stock_monday_open_to_friday_close_pct": -10.98297479829905,
+          "weekly_contribution_pp": 0.0007256163479831809,
+          "monday_open_contribution_pp": -0.22548549793988046
+        },
+        {
+          "symbol": "AVGO",
+          "weight_pct": 3.953790435409077,
+          "stock_weekly_return_pct": 2.605036818889639,
+          "stock_monday_open_to_friday_close_pct": -2.655360407230778,
+          "weekly_contribution_pp": 0.10299769658414341,
+          "monday_open_contribution_pp": -0.10498738580673002
+        },
+        {
+          "symbol": "GOOGL",
+          "weight_pct": 2.7488145517640814,
+          "stock_weekly_return_pct": 3.6450611024496204,
+          "stock_monday_open_to_friday_close_pct": -3.278460448937326,
+          "weekly_contribution_pp": 0.10019597000482743,
+          "monday_open_contribution_pp": -0.09011879789421924
+        },
+        {
+          "symbol": "LLY",
+          "weight_pct": 6.457692046834578,
+          "stock_weekly_return_pct": 3.360528837549648,
+          "stock_monday_open_to_friday_close_pct": 3.5142122239836926,
+          "weekly_contribution_pp": 0.2170126034740261,
+          "monday_open_contribution_pp": 0.22693700329708344
+        },
+        {
+          "symbol": "META",
+          "weight_pct": 7.276753682201723,
+          "stock_weekly_return_pct": 12.146065162132658,
+          "stock_monday_open_to_friday_close_pct": 6.293526180176046,
+          "weekly_contribution_pp": 0.8838392439281088,
+          "monday_open_contribution_pp": 0.4579643980562898
+        },
+        {
+          "symbol": "MSFT",
+          "weight_pct": 13.278442290412695,
+          "stock_weekly_return_pct": 1.719230842632724,
+          "stock_monday_open_to_friday_close_pct": -2.6103607316934063,
+          "weekly_contribution_pp": 0.22828707527796216,
+          "monday_open_contribution_pp": -0.34661524332950355
+        },
+        {
+          "symbol": "MU",
+          "weight_pct": 11.069970626670935,
+          "stock_weekly_return_pct": 8.820709757616996,
+          "stock_monday_open_to_friday_close_pct": -6.3368601390716535,
+          "weekly_contribution_pp": 0.9764499792320984,
+          "monday_open_contribution_pp": -0.701488556048451
+        },
+        {
+          "symbol": "NVDA",
+          "weight_pct": 2.086129158563276,
+          "stock_weekly_return_pct": 19.8836986828552,
+          "stock_monday_open_to_friday_close_pct": -9.907799603786671,
+          "weekly_contribution_pp": 0.41479963602390435,
+          "monday_open_contribution_pp": -0.20668949650661045
+        },
+        {
+          "symbol": "SAP",
+          "weight_pct": 14.51691557212526,
+          "stock_weekly_return_pct": 7.399588680774749,
+          "stock_monday_open_to_friday_close_pct": 6.219545860990872,
+          "weekly_contribution_pp": 1.0741920414726076,
+          "monday_open_contribution_pp": 0.9028862216096559
+        },
+        {
+          "symbol": "TSLA",
+          "weight_pct": 2.520177400049696,
+          "stock_weekly_return_pct": 15.667107607509113,
+          "stock_monday_open_to_friday_close_pct": 6.7406763152837,
+          "weekly_contribution_pp": 0.3948389051659113,
+          "monday_open_contribution_pp": 0.1698770011082824
+        },
+        {
+          "symbol": "TSM",
+          "weight_pct": 7.026475725108313,
+          "stock_weekly_return_pct": 10.865679084834579,
+          "stock_monday_open_to_friday_close_pct": -8.3400333889182,
+          "weekly_contribution_pp": 0.7634743032640728,
+          "monday_open_contribution_pp": -0.5860104215382657
+        },
+        {
+          "symbol": "XOM",
+          "weight_pct": 15.083994397575651,
+          "stock_weekly_return_pct": 0.1187494068967343,
+          "stock_monday_open_to_friday_close_pct": 1.418253893725252,
+          "weekly_contribution_pp": 0.017912153883457717,
+          "monday_open_contribution_pp": 0.21392933787291554
+        },
+        {
+          "symbol": "CASH",
+          "weight_pct": 2.070724391294972,
+          "stock_weekly_return_pct": 0.0,
+          "stock_monday_open_to_friday_close_pct": 0.0,
+          "weekly_contribution_pp": 0.0,
+          "monday_open_contribution_pp": 0.0
+        }
+      ],
+      "weekly_return_pct": 5.6345458441064125,
+      "monday_open_to_friday_close_pct": 0.012538842454418303,
+      "stock_winners": 6,
+      "stock_losers": 7,
+      "model_version": "v2026-10-02_38dff4e0",
+      "has_execution_report": false,
+      "has_labeled_realized_return": false
+    }
+  },
+  "benchmark_spy": {
+    "adjusted_close_nov20": 689.8099975585938,
+    "adjusted_open_nov23": 724.3300170898438,
+    "adjusted_close_nov27": 728.3200073242188,
+    "weekly_return_pct": 5.582698120050633,
+    "monday_open_to_friday_close_pct": 0.5508525313372648
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "decision_date": "2026-11-30",
+  "checks": {
+    "model_halal_filtered": {
+      "version": "v2026-11-27_879504e8",
+      "symbols": 15,
+      "schema": 3
+    },
+    "model_halal": {
+      "version": "v2026-11-27_93fcc760",
+      "symbols": 13,
+      "schema": 3
+    },
+    "patchtst_us": {
+      "status": "passed",
+      "requested": 418,
+      "predicted": 408,
+      "model_version": "v2026-11-27-611c30dfacf0",
+      "anchor": "2026-11-27",
+      "forecast_end": "2026-12-04",
+      "excluded": [
+        "KXIAY",
+        "SNDK",
+        "EXPN",
+        "VYLR",
+        "Q",
+        "FDXF",
+        "MDLN",
+        "MBGL",
+        "JPY",
+        "HKD"
+      ],
+      "sac_usable_forecasts": {
+        "halal_filtered": 15,
+        "halal": 13
+      }
+    },
+    "patchtst_india": {
+      "status": "passed",
+      "requested": 203,
+      "predicted": 187,
+      "model_version": "v2026-10-02-7e38003c317e",
+      "anchor": null,
+      "forecast_end": null,
+      "excluded": [
+        "NAVINFLUOR.NS",
+        "FORCEMOT.NS",
+        "PERSISTENT.NS",
+        "NEULANDLAB.NS",
+        "HEROMOTOCO.NS",
+        "PAGEIND.NS",
+        "ALKEM.NS",
+        "POLYCAB.NS",
+        "BRITANNIA.NS",
+        "MRF.NS",
+        "LINDEINDIA.NS",
+        "ULTRACEMCO.NS",
+        "GILLETTE.NS",
+        "ATUL.NS",
+        "DIXON.NS",
+        "AMBER.NS"
+      ]
+    },
+    "sac_price_history": {
+      "halal_filtered": {
+        "usable_253_bars": 15,
+        "required_assets": 15
+      },
+      "halal": {
+        "usable_253_bars": 13,
+        "required_assets": 13
+      }
+    },
+    "market_2024-11-15": {
+      "status": "passed",
+      "rows": 508,
+      "last_session": "2026-11-27"
+    },
+    "health": {
+      "status": "healthy"
+    }
+  },
+  "fresh_monday_news": "Must be materialized after November 30 09:00 America/New_York; not fabricated or fetched early."
+}

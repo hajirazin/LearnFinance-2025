@@ -1,0 +1,12 @@
+{
+  "method": "POST",
+  "path": "/calendar/monday-decision-window",
+  "started_at": "2026-11-28T16:16:23.630161+00:00",
+  "finished_at": "2026-11-28T16:16:28.770860+00:00",
+  "status": 200,
+  "response": {
+    "cutoff": "2026-11-23T09:00:00-05:00",
+    "start_exclusive": "2026-11-16T09:00:00-05:00",
+    "end_inclusive": "2026-11-23T09:00:00-05:00"
+  }
+}

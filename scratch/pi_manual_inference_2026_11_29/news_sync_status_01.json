@@ -1,0 +1,13 @@
+{
+  "method": "GET",
+  "path": "/etl/news/sync/news_sync:restore",
+  "started_at": "2026-11-28T16:15:13.702684+00:00",
+  "finished_at": "2026-11-28T16:15:18.734182+00:00",
+  "status": 200,
+  "response": {
+    "job_id": "news_sync:restore",
+    "status": "failed",
+    "result": null,
+    "error": "Hugging Face news sync failed with status 401"
+  }
+}

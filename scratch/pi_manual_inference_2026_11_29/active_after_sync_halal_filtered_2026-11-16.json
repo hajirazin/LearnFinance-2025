@@ -1,0 +1,30 @@
+{
+  "method": "GET",
+  "path": "/models/active-symbols?universe=halal_filtered",
+  "started_at": "2026-11-28T16:42:23.786097+00:00",
+  "finished_at": "2026-11-28T16:42:29.140384+00:00",
+  "status": 200,
+  "response": {
+    "symbols": [
+      "ASX",
+      "ATLKY",
+      "BDRFY",
+      "BURL",
+      "DLR",
+      "FFIV",
+      "FICO",
+      "ILMN",
+      "LEN",
+      "LII",
+      "MSTR",
+      "NVO",
+      "NWS",
+      "NWSA",
+      "SAR"
+    ],
+    "source_model": "sac_halal_filtered",
+    "model_version": "v2026-11-27_879504e8",
+    "training_cutoff_date": "2024-11-15",
+    "sac_schema_version": 3
+  }
+}

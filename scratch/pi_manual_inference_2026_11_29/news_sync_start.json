@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "path": "/etl/news/sync",
+  "started_at": "2026-11-28T16:15:01.707923+00:00",
+  "finished_at": "2026-11-28T16:15:06.760949+00:00",
+  "status": 202,
+  "response": {
+    "job_id": "news_sync:restore",
+    "status": "pending"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "percentage_weights": {
+    "CTVA": 8.3758,
+    "AI": 2.9264,
+    "FFIV": 6.1059,
+    "SAR": 13.1182,
+    "FICO": 3.0145,
+    "ATLKY": 7.3182,
+    "DLR": 10.8277,
+    "NVO": 4.1225,
+    "BURL": 4.9076,
+    "ENR": 3.7002,
+    "BDRFY": 7.9033,
+    "HLN": 9.7152,
+    "XYL": 7.7953,
+    "COO": 5.4233,
+    "CBRE": 4.746
+  },
+  "symbols_used": [
+    "AI",
+    "FFIV",
+    "COO",
+    "SAR",
+    "BDRFY",
+    "NVO",
+    "CTVA",
+    "BURL",
+    "HLN",
+    "ATLKY",
+    "DLR",
+    "FICO",
+    "CBRE",
+    "XYL",
+    "ENR"
+  ],
+  "symbols_excluded": [],
+  "lookback_days": 252,
+  "as_of_date": "2026-11-23"
+}

@@ -1,0 +1,3472 @@
+{
+  "method": "POST",
+  "path": "/inference/patchtst/india",
+  "started_at": "2026-11-28T16:46:49.849981+00:00",
+  "finished_at": "2026-11-28T16:47:31.151001+00:00",
+  "status": 200,
+  "response": {
+    "predictions": [
+      {
+        "symbol": "BBOX.NS",
+        "predicted_weekly_return_pct": 4.0681,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0005377018824219704,
+          0.01135250460356474,
+          0.010494793765246868,
+          0.004290864337235689,
+          0.01319919154047966
+        ]
+      },
+      {
+        "symbol": "WELSPUNLIV.NS",
+        "predicted_weekly_return_pct": 3.7595,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.005626749712973833,
+          0.007607949897646904,
+          0.008663509041070938,
+          0.005916852504014969,
+          0.009090252220630646
+        ]
+      },
+      {
+        "symbol": "LAURUSLABS.NS",
+        "predicted_weekly_return_pct": 2.8576,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002812790684401989,
+          0.007391123101115227,
+          0.006278836168348789,
+          0.004651385359466076,
+          0.007041293196380138
+        ]
+      },
+      {
+        "symbol": "SHYAMMETL.NS",
+        "predicted_weekly_return_pct": 2.5217,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.00455110240727663,
+          0.004686938598752022,
+          0.005206602159887552,
+          0.004864540416747332,
+          0.005594777874648571
+        ]
+      },
+      {
+        "symbol": "EMCURE.NS",
+        "predicted_weekly_return_pct": 2.3877,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0023166979663074017,
+          0.005248605273663998,
+          0.005404293537139893,
+          0.004474252928048372,
+          0.006152797490358353
+        ]
+      },
+      {
+        "symbol": "SAILIFE.NS",
+        "predicted_weekly_return_pct": 2.179,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002900446765124798,
+          0.005459767300635576,
+          0.0045158653520047665,
+          0.0053073083981871605,
+          0.003372307401150465
+        ]
+      },
+      {
+        "symbol": "JYOTICNC.NS",
+        "predicted_weekly_return_pct": 2.0158,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00373120978474617,
+          0.007281291764229536,
+          0.0058354949578642845,
+          0.004021073691546917,
+          0.006551207508891821
+        ]
+      },
+      {
+        "symbol": "NAVINFLUOR.NS",
+        "predicted_weekly_return_pct": 1.8659,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.003630571998655796,
+          0.003724053967744112,
+          0.003798732766881585,
+          0.005251231603324413,
+          0.0020826985128223896
+        ]
+      },
+      {
+        "symbol": "CYIENT.NS",
+        "predicted_weekly_return_pct": 1.8235,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.009922120720148087,
+          -0.0005351542495191097,
+          0.002895146608352661,
+          0.002518164925277233,
+          0.0032703483011573553
+        ]
+      },
+      {
+        "symbol": "CPPLUS.NS",
+        "predicted_weekly_return_pct": 1.8196,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0011944673024117947,
+          0.005825645290315151,
+          0.00428042933344841,
+          0.002874532015994191,
+          0.006246642675250769
+        ]
+      },
+      {
+        "symbol": "SANSERA.NS",
+        "predicted_weekly_return_pct": 1.8039,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          6.460235454142094e-05,
+          0.004771684296429157,
+          0.004299538675695658,
+          0.003936550114303827,
+          0.004805734381079674
+        ]
+      },
+      {
+        "symbol": "LENSKART.NS",
+        "predicted_weekly_return_pct": 1.5769,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0017267861403524876,
+          0.002961615100502968,
+          0.004247043281793594,
+          0.003205681685358286,
+          0.003504968248307705
+        ]
+      },
+      {
+        "symbol": "GLENMARK.NS",
+        "predicted_weekly_return_pct": 1.5061,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0023527585435658693,
+          0.002313274424523115,
+          0.0039700111374258995,
+          0.002262510359287262,
+          0.004050471354275942
+        ]
+      },
+      {
+        "symbol": "MANKIND.NS",
+        "predicted_weekly_return_pct": 1.3648,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002122707897797227,
+          0.0020041170064359903,
+          0.0036636488512158394,
+          0.0021682584192603827,
+          0.003597180126234889
+        ]
+      },
+      {
+        "symbol": "DRREDDY.NS",
+        "predicted_weekly_return_pct": 1.2967,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.000953128095716238,
+          0.004244919400662184,
+          0.003272813744843006,
+          0.0031916305888444185,
+          0.003127563977614045
+        ]
+      },
+      {
+        "symbol": "REDINGTON.NS",
+        "predicted_weekly_return_pct": 1.2962,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0071203988045454025,
+          0.006603766232728958,
+          0.005297429393976927,
+          0.0013120054500177503,
+          0.006785934790968895
+        ]
+      },
+      {
+        "symbol": "BLUESTARCO.NS",
+        "predicted_weekly_return_pct": 1.2938,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0020274741109460592,
+          0.0031317947432398796,
+          0.002430520486086607,
+          0.0032556147780269384,
+          0.0020092702470719814
+        ]
+      },
+      {
+        "symbol": "NUVOCO.NS",
+        "predicted_weekly_return_pct": 1.2248,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.00508927833288908,
+          0.0013256703969091177,
+          0.0018582327757030725,
+          0.0012907936470583081,
+          0.0026100040413439274
+        ]
+      },
+      {
+        "symbol": "INOXINDIA.NS",
+        "predicted_weekly_return_pct": 1.163,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0028358923736959696,
+          0.003994890488684177,
+          0.003289335872977972,
+          0.0030000125989317894,
+          0.004114980809390545
+        ]
+      },
+      {
+        "symbol": "COFORGE.NS",
+        "predicted_weekly_return_pct": 1.1344,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.00438076863065362,
+          0.0010787384817376733,
+          0.002522207796573639,
+          0.0010692288633435965,
+          0.002228865632787347
+        ]
+      },
+      {
+        "symbol": "COHANCE.NS",
+        "predicted_weekly_return_pct": 1.0899,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0015238441992551088,
+          0.004281752277165651,
+          0.003316472517326474,
+          0.00193518225569278,
+          0.0028306753374636173
+        ]
+      },
+      {
+        "symbol": "EMAMILTD.NS",
+        "predicted_weekly_return_pct": 1.0657,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0002021235995925963,
+          0.0027824505232274532,
+          0.0031290785409510136,
+          0.0012497869320213795,
+          0.003641375107690692
+        ]
+      },
+      {
+        "symbol": "ACUTAAS.NS",
+        "predicted_weekly_return_pct": 1.0276,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0031279546674340963,
+          0.00486171618103981,
+          0.0018710310105234385,
+          0.00306135811842978,
+          0.003557187970727682
+        ]
+      },
+      {
+        "symbol": "PATANJALI.NS",
+        "predicted_weekly_return_pct": 1.0118,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0003845959436148405,
+          0.0037496588192880154,
+          0.001658473745919764,
+          0.0010480373166501522,
+          0.003995885141193867
+        ]
+      },
+      {
+        "symbol": "SAGILITY.NS",
+        "predicted_weekly_return_pct": 1.0079,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00049684097757563,
+          0.00251437583938241,
+          0.0032089725136756897,
+          0.0013384874910116196,
+          0.0034638792276382446
+        ]
+      },
+      {
+        "symbol": "MSUMI.NS",
+        "predicted_weekly_return_pct": 0.9708,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.003427189541980624,
+          0.0006796149536967278,
+          0.002141768578439951,
+          0.0009438922861590981,
+          0.0024683394003659487
+        ]
+      },
+      {
+        "symbol": "MAXHEALTH.NS",
+        "predicted_weekly_return_pct": 0.9466,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.006519949063658714,
+          -0.002196899615228176,
+          0.002757730893790722,
+          0.0017862339736893773,
+          0.0005543199949897826
+        ]
+      },
+      {
+        "symbol": "GAIL.NS",
+        "predicted_weekly_return_pct": 0.8977,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.000645025516860187,
+          0.0027108166832476854,
+          0.0024546710774302483,
+          0.001664767856709659,
+          0.0027520558796823025
+        ]
+      },
+      {
+        "symbol": "ACE.NS",
+        "predicted_weekly_return_pct": 0.8852,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002365110907703638,
+          0.0031195960473269224,
+          0.0031591011211276054,
+          0.0021030402276664972,
+          0.002796822227537632
+        ]
+      },
+      {
+        "symbol": "AUROPHARMA.NS",
+        "predicted_weekly_return_pct": 0.8848,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0004990169545635581,
+          0.0019413334084674716,
+          0.0020734143909066916,
+          0.0015546302311122417,
+          0.0027403859421610832
+        ]
+      },
+      {
+        "symbol": "FORCEMOT.NS",
+        "predicted_weekly_return_pct": 0.8253,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0005495435325428843,
+          0.002206010278314352,
+          0.0015139561146497726,
+          0.0028892620466649532,
+          0.0010599346132948995
+        ]
+      },
+      {
+        "symbol": "WOCKPHARMA.NS",
+        "predicted_weekly_return_pct": 0.8228,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0039632623083889484,
+          0.0036463062278926373,
+          0.002608730224892497,
+          0.0018288168357685208,
+          0.004073705058544874
+        ]
+      },
+      {
+        "symbol": "CEMPRO.NS",
+        "predicted_weekly_return_pct": 0.784,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.006867536809295416,
+          -0.0012045420007780194,
+          0.0005299653857946396,
+          1.1009396985173225e-06,
+          0.0016157631762325764
+        ]
+      },
+      {
+        "symbol": "LTTS.NS",
+        "predicted_weekly_return_pct": 0.7809,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0006350025068968534,
+          0.00157322664745152,
+          0.0014177209232002497,
+          0.0005368764977902174,
+          0.003615774679929018
+        ]
+      },
+      {
+        "symbol": "SONACOMS.NS",
+        "predicted_weekly_return_pct": 0.7322,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0019869529642164707,
+          0.002795637585222721,
+          0.001664352836087346,
+          0.0022282821591943502,
+          0.0025942905340343714
+        ]
+      },
+      {
+        "symbol": "PETRONET.NS",
+        "predicted_weekly_return_pct": 0.7292,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002396565629169345,
+          0.0031050893012434244,
+          0.0021134470589458942,
+          0.0021296523045748472,
+          0.002314334735274315
+        ]
+      },
+      {
+        "symbol": "IOC.NS",
+        "predicted_weekly_return_pct": 0.719,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0017655022675171494,
+          0.0009659688803367317,
+          0.0015476499684154987,
+          0.0011920680990442634,
+          0.0016928724944591522
+        ]
+      },
+      {
+        "symbol": "MEDANTA.NS",
+        "predicted_weekly_return_pct": 0.6915,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0008689326932653785,
+          0.0016645821742713451,
+          0.002373754046857357,
+          0.0009252166491933167,
+          0.0027967197820544243
+        ]
+      },
+      {
+        "symbol": "BHEL.NS",
+        "predicted_weekly_return_pct": 0.6396,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004359915852546692,
+          0.003118308261036873,
+          0.002844227710738778,
+          0.0010127158602699637,
+          0.003760485677048564
+        ]
+      },
+      {
+        "symbol": "COROMANDEL.NS",
+        "predicted_weekly_return_pct": 0.6179,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00118069420568645,
+          0.0015204630326479673,
+          0.0020784216467291117,
+          0.0013768905773758888,
+          0.002365334192290902
+        ]
+      },
+      {
+        "symbol": "SYNGENE.NS",
+        "predicted_weekly_return_pct": 0.6142,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002411138266324997,
+          0.00046617083717137575,
+          0.0012476607225835323,
+          0.0017462563700973988,
+          0.00025206408463418484
+        ]
+      },
+      {
+        "symbol": "ULTRACEMCO.NS",
+        "predicted_weekly_return_pct": 0.6094,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0046636927872896194,
+          -0.0007180694956332445,
+          0.0007213233038783073,
+          0.000627539586275816,
+          0.0007804683409631252
+        ]
+      },
+      {
+        "symbol": "RHIM.NS",
+        "predicted_weekly_return_pct": 0.6039,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0002599625731818378,
+          0.0024853821378201246,
+          0.0018180501647293568,
+          0.0002722772187553346,
+          0.0017050178721547127
+        ]
+      },
+      {
+        "symbol": "MINDACORP.NS",
+        "predicted_weekly_return_pct": 0.5707,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0005822807434014976,
+          0.0012718967627733946,
+          0.001401450834237039,
+          0.0009836931712925434,
+          0.001451573334634304
+        ]
+      },
+      {
+        "symbol": "TATACONSUM.NS",
+        "predicted_weekly_return_pct": 0.5529,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002822425216436386,
+          -5.215441342443228e-05,
+          0.0007782996981404722,
+          0.001007730606943369,
+          0.0009578702738508582
+        ]
+      },
+      {
+        "symbol": "SYRMA.NS",
+        "predicted_weekly_return_pct": 0.5511,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0018978536827489734,
+          0.00035010362626053393,
+          0.0004468147817533463,
+          -0.0004987324355170131,
+          0.003300152253359556
+        ]
+      },
+      {
+        "symbol": "GABRIEL.NS",
+        "predicted_weekly_return_pct": 0.5361,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004348567686975002,
+          0.0037816371768712997,
+          0.0018148821545764804,
+          0.002320267725735903,
+          0.0017784461379051208
+        ]
+      },
+      {
+        "symbol": "BSOFT.NS",
+        "predicted_weekly_return_pct": 0.5311,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0007045156089589,
+          0.0010266981553286314,
+          0.00114821782335639,
+          -0.001898768823593855,
+          0.004316724371165037
+        ]
+      },
+      {
+        "symbol": "TRENT.NS",
+        "predicted_weekly_return_pct": 0.4824,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0020955202635377645,
+          0.0002512509236112237,
+          0.001026236917823553,
+          0.0020675663836300373,
+          -0.000628181267529726
+        ]
+      },
+      {
+        "symbol": "FLUOROCHEM.NS",
+        "predicted_weekly_return_pct": 0.4645,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00145252444781363,
+          0.0019098010379821062,
+          0.001280672731809318,
+          0.0020676078274846077,
+          0.0008285165531560779
+        ]
+      },
+      {
+        "symbol": "INDUSTOWER.NS",
+        "predicted_weekly_return_pct": 0.4561,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0009176036110147834,
+          0.0016736220568418503,
+          0.0011905907886102796,
+          0.00010771714732982218,
+          0.0024966569617390633
+        ]
+      },
+      {
+        "symbol": "CEATLTD.NS",
+        "predicted_weekly_return_pct": 0.4349,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.000879086961504072,
+          0.0010520117357373238,
+          0.0016744344029575586,
+          0.0004949560388922691,
+          0.0019974245224148035
+        ]
+      },
+      {
+        "symbol": "ZYDUSLIFE.NS",
+        "predicted_weekly_return_pct": 0.4208,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002206409815698862,
+          0.0018645573873072863,
+          0.0013226590817794204,
+          0.0022468268871307373,
+          0.000971580040641129
+        ]
+      },
+      {
+        "symbol": "PERSISTENT.NS",
+        "predicted_weekly_return_pct": 0.3889,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.004896859172731638,
+          -0.0012158771278336644,
+          3.1359726563096046e-05,
+          -0.0003160022897645831,
+          0.0004855496226809919
+        ]
+      },
+      {
+        "symbol": "FINCABLES.NS",
+        "predicted_weekly_return_pct": 0.3587,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007821854203939438,
+          0.00439901789650321,
+          0.0024450155906379223,
+          0.000723331468179822,
+          0.0038347020745277405
+        ]
+      },
+      {
+        "symbol": "WHIRLPOOL.NS",
+        "predicted_weekly_return_pct": 0.2798,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004869814030826092,
+          0.0030351756140589714,
+          0.0007252650102600455,
+          0.0014240557793527842,
+          0.0024796845391392708
+        ]
+      },
+      {
+        "symbol": "MARICO.NS",
+        "predicted_weekly_return_pct": 0.274,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001359197311103344,
+          0.0015191808342933655,
+          0.00022337958216667175,
+          0.0010008877143263817,
+          0.001352153718471527
+        ]
+      },
+      {
+        "symbol": "SCHNEIDER.NS",
+        "predicted_weekly_return_pct": 0.2641,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0033273822627961636,
+          0.002642993349581957,
+          0.0013784548500552773,
+          -0.0013652178458869457,
+          0.003309131134301424
+        ]
+      },
+      {
+        "symbol": "IGL.NS",
+        "predicted_weekly_return_pct": 0.1803,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002759333234280348,
+          -0.0009478720603510737,
+          -0.00014803488738834858,
+          5.783222150057554e-05,
+          8.025666465982795e-05
+        ]
+      },
+      {
+        "symbol": "APARINDS.NS",
+        "predicted_weekly_return_pct": 0.1658,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00642557255923748,
+          0.0034499280154705048,
+          0.0019116410985589027,
+          -0.0006152143469080329,
+          0.0033360011875629425
+        ]
+      },
+      {
+        "symbol": "JINDALSTEL.NS",
+        "predicted_weekly_return_pct": 0.1636,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0004191883490420878,
+          0.0002505371521692723,
+          0.0007316539995372295,
+          -0.00030580293969251215,
+          0.0013778008287772536
+        ]
+      },
+      {
+        "symbol": "CASTROLIND.NS",
+        "predicted_weekly_return_pct": 0.1522,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001459744875319302,
+          0.0012979047605767846,
+          0.00047134640044532716,
+          0.0004789114464074373,
+          0.0007322882302105427
+        ]
+      },
+      {
+        "symbol": "ETERNAL.NS",
+        "predicted_weekly_return_pct": 0.1057,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00013127189595252275,
+          0.00020750146359205246,
+          0.00015980866737663746,
+          0.0022511915303766727,
+          -0.0014312845887616277
+        ]
+      },
+      {
+        "symbol": "APLAPOLLO.NS",
+        "predicted_weekly_return_pct": 0.0837,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002592835109680891,
+          0.001730681280605495,
+          0.00026614248054102063,
+          -0.0002517749380785972,
+          0.0016842558979988098
+        ]
+      },
+      {
+        "symbol": "UNOMINDA.NS",
+        "predicted_weekly_return_pct": 0.0834,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002359227277338505,
+          0.0008468219893984497,
+          0.0001174313947558403,
+          0.0003447417402639985,
+          0.0018839479889720678
+        ]
+      },
+      {
+        "symbol": "ASTERDM.NS",
+        "predicted_weekly_return_pct": 0.0774,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.005112287122756243,
+          -0.0029601678252220154,
+          -3.3032847568392754e-05,
+          -0.0005133665399625897,
+          -0.0008322120411321521
+        ]
+      },
+      {
+        "symbol": "SCI.NS",
+        "predicted_weekly_return_pct": 0.0724,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0011905028950423002,
+          6.8904017098248e-05,
+          0.0009637880139052868,
+          -0.0011915958020836115,
+          0.002072799252346158
+        ]
+      },
+      {
+        "symbol": "UPL.NS",
+        "predicted_weekly_return_pct": 0.0414,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00028369890060275793,
+          4.625657311407849e-05,
+          0.00023296500148717314,
+          0.0004285011673346162,
+          -1.0300003850716166e-05
+        ]
+      },
+      {
+        "symbol": "HYUNDAI.NS",
+        "predicted_weekly_return_pct": -0.0083,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0014347524847835302,
+          -0.0001384772767778486,
+          0.0006371626514010131,
+          0.0008054478676058352,
+          4.780809467774816e-05
+        ]
+      },
+      {
+        "symbol": "TIMKEN.NS",
+        "predicted_weekly_return_pct": -0.0305,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0006386716850101948,
+          0.00048576670815236866,
+          -0.00022787004127167165,
+          -0.00022466364316642284,
+          0.0002999342395924032
+        ]
+      },
+      {
+        "symbol": "MGL.NS",
+        "predicted_weekly_return_pct": -0.0313,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0007868203101679683,
+          -0.0003515266580507159,
+          -0.0006711337482556701,
+          -0.000603392836637795,
+          0.0005263481289148331
+        ]
+      },
+      {
+        "symbol": "CIPLA.NS",
+        "predicted_weekly_return_pct": -0.0386,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00029176866519264877,
+          -0.00023936430807225406,
+          0.00023477792274206877,
+          0.0005445386632345617,
+          -0.0006337591912597418
+        ]
+      },
+      {
+        "symbol": "KAJARIACER.NS",
+        "predicted_weekly_return_pct": -0.0529,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -4.0840779547579587e-05,
+          0.0002689958200789988,
+          -0.00038755586137995124,
+          -0.0004571884637698531,
+          8.709089161129668e-05
+        ]
+      },
+      {
+        "symbol": "AFCONS.NS",
+        "predicted_weekly_return_pct": -0.0667,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0012674098834395409,
+          -0.0006981105543673038,
+          0.0015671560540795326,
+          -0.0013382933102548122,
+          0.001069424208253622
+        ]
+      },
+      {
+        "symbol": "MOTHERSON.NS",
+        "predicted_weekly_return_pct": -0.0839,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0037261690013110638,
+          0.0014262825716286898,
+          0.0003162205684930086,
+          -0.00019410299137234688,
+          0.0013389282394200563
+        ]
+      },
+      {
+        "symbol": "BHARTIHEXA.NS",
+        "predicted_weekly_return_pct": -0.0856,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          9.55026043811813e-05,
+          -0.0005915033398196101,
+          -0.00040787822217680514,
+          -0.0005143359303474426,
+          0.0005618721479550004
+        ]
+      },
+      {
+        "symbol": "INFY.NS",
+        "predicted_weekly_return_pct": -0.0883,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0006556497537530959,
+          -0.0008431434398517013,
+          -0.0003702268295455724,
+          -0.001603542361408472,
+          0.001278242445550859
+        ]
+      },
+      {
+        "symbol": "HINDUNILVR.NS",
+        "predicted_weekly_return_pct": -0.0953,
+        "direction": "FLAT",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001572783337906003,
+          0.000859843916259706,
+          -0.0004313637618906796,
+          0.000441205978859216,
+          -0.0002505744923837483
+        ]
+      },
+      {
+        "symbol": "TCS.NS",
+        "predicted_weekly_return_pct": -0.1038,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0006766981678083539,
+          -0.0013500391505658627,
+          -0.00025092827854678035,
+          -0.001714605139568448,
+          0.0016006177756935358
+        ]
+      },
+      {
+        "symbol": "JSL.NS",
+        "predicted_weekly_return_pct": -0.1399,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0002599348081275821,
+          -0.00028305320302024484,
+          -0.0005092694773338735,
+          0.0005834563635289669,
+          -0.0014509186148643494
+        ]
+      },
+      {
+        "symbol": "FRACTAL.NS",
+        "predicted_weekly_return_pct": -0.1601,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001117985462769866,
+          0.0002222876064479351,
+          0.0002660348254721612,
+          -0.00045464790309779346,
+          -0.0005183065659366548
+        ]
+      },
+      {
+        "symbol": "IPCALAB.NS",
+        "predicted_weekly_return_pct": -0.1679,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0027450022753328085,
+          0.0011526793241500854,
+          7.418915629386902e-05,
+          0.0006828497280366719,
+          -0.0008452006732113659
+        ]
+      },
+      {
+        "symbol": "GVT&D.NS",
+        "predicted_weekly_return_pct": -0.1727,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006380508188158274,
+          0.002248999662697315,
+          0.0003635999164544046,
+          -0.000534231192432344,
+          0.0025738829281181097
+        ]
+      },
+      {
+        "symbol": "GRANULES.NS",
+        "predicted_weekly_return_pct": -0.1853,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002839734312146902,
+          0.0006481694290414453,
+          0.0003293687477707863,
+          0.00014731212286278605,
+          -0.00013980374205857515
+        ]
+      },
+      {
+        "symbol": "NAVA.NS",
+        "predicted_weekly_return_pct": -0.1873,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0036990041844546795,
+          -0.002358539728447795,
+          -0.0010811006650328636,
+          -0.0021837318781763315,
+          4.91492246510461e-05
+        ]
+      },
+      {
+        "symbol": "ACC.NS",
+        "predicted_weekly_return_pct": -0.1909,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001128551084548235,
+          -0.00041440813220106065,
+          -7.558685319963843e-05,
+          -0.0005231117247603834,
+          0.00023125525331124663
+        ]
+      },
+      {
+        "symbol": "PGEL.NS",
+        "predicted_weekly_return_pct": -0.1999,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0012829289771616459,
+          -0.00012990215327590704,
+          -1.2305346899665892e-05,
+          4.354577686171979e-05,
+          -0.0006196352187544107
+        ]
+      },
+      {
+        "symbol": "NSLNISP.NS",
+        "predicted_weekly_return_pct": -0.2095,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0031979591585695744,
+          0.00044379231985658407,
+          0.00027568230871111155,
+          -0.0007755373371765018,
+          0.0011564893648028374
+        ]
+      },
+      {
+        "symbol": "AMBUJACEM.NS",
+        "predicted_weekly_return_pct": -0.2165,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0013235530350357294,
+          -0.0002967616019304842,
+          -0.00010730689973570406,
+          -0.000657837837934494,
+          0.00021825951989740133
+        ]
+      },
+      {
+        "symbol": "TATACHEM.NS",
+        "predicted_weekly_return_pct": -0.2436,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002250273944810033,
+          -0.0010095894103869796,
+          0.001013865345157683,
+          -1.4269258826971054e-05,
+          -0.0001781875325832516
+        ]
+      },
+      {
+        "symbol": "BPCL.NS",
+        "predicted_weekly_return_pct": -0.2437,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0005665599019266665,
+          -0.0013412929838523269,
+          -0.0007668043836019933,
+          -0.0008846870623528957,
+          -1.4088924217503518e-05
+        ]
+      },
+      {
+        "symbol": "BATAINDIA.NS",
+        "predicted_weekly_return_pct": -0.2672,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0007271148497238755,
+          -0.0003943763440474868,
+          -0.0001941306982189417,
+          -0.0008493724744766951,
+          -0.0005108116311021149
+        ]
+      },
+      {
+        "symbol": "CARBORUNIV.NS",
+        "predicted_weekly_return_pct": -0.2762,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00837249681353569,
+          0.0032753380946815014,
+          0.0009653078159317374,
+          -0.001100305002182722,
+          0.0024662730284035206
+        ]
+      },
+      {
+        "symbol": "GODREJCP.NS",
+        "predicted_weekly_return_pct": -0.2837,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0015701696975156665,
+          -5.059679824626073e-05,
+          -0.0006226814002729952,
+          -0.000180743052624166,
+          -0.00041651929495856166
+        ]
+      },
+      {
+        "symbol": "SRF.NS",
+        "predicted_weekly_return_pct": -0.2839,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0016215670621022582,
+          -0.0004941449733451009,
+          -0.0003246053238399327,
+          -0.00022539441124536097,
+          -0.00017778176697902381
+        ]
+      },
+      {
+        "symbol": "GILLETTE.NS",
+        "predicted_weekly_return_pct": -0.288,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0003528781817294657,
+          -0.00016871606931090355,
+          -0.0010077774059027433,
+          -0.0008783810189925134,
+          -0.0004767369828186929
+        ]
+      },
+      {
+        "symbol": "FORTIS.NS",
+        "predicted_weekly_return_pct": -0.2898,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0006580158369615674,
+          -0.002337878802791238,
+          0.0003324107965454459,
+          -0.0018914183601737022,
+          0.00033633888233453035
+        ]
+      },
+      {
+        "symbol": "TARIL.NS",
+        "predicted_weekly_return_pct": -0.2998,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004220783244818449,
+          0.0002386273699812591,
+          0.00027508294442668557,
+          -0.0018422119319438934,
+          0.0025469257961958647
+        ]
+      },
+      {
+        "symbol": "INOXWIND.NS",
+        "predicted_weekly_return_pct": -0.3169,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.011225221678614616,
+          0.0038491031154990196,
+          0.0022393660619854927,
+          -0.003381244372576475,
+          0.005343509837985039
+        ]
+      },
+      {
+        "symbol": "COLPAL.NS",
+        "predicted_weekly_return_pct": -0.3274,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005457424558699131,
+          0.001511887414380908,
+          0.00014804996317252517,
+          0.0001795765128917992,
+          0.0003386937896721065
+        ]
+      },
+      {
+        "symbol": "ONGC.NS",
+        "predicted_weekly_return_pct": -0.3412,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002969858469441533,
+          0.0003296144132036716,
+          -0.00048807100392878056,
+          0.00020798083278350532,
+          -0.0004977371427230537
+        ]
+      },
+      {
+        "symbol": "MPHASIS.NS",
+        "predicted_weekly_return_pct": -0.3466,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0030989875085651875,
+          -0.0028736297972500324,
+          -0.0012036008993163705,
+          -0.0022414680570364,
+          -0.0002525443269405514
+        ]
+      },
+      {
+        "symbol": "TEGA.NS",
+        "predicted_weekly_return_pct": -0.3507,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.009849930182099342,
+          0.004414868075400591,
+          0.0003828960470855236,
+          -0.0018489970825612545,
+          0.003388442564755678
+        ]
+      },
+      {
+        "symbol": "KPIL.NS",
+        "predicted_weekly_return_pct": -0.3553,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.001955147599801421,
+          0.00031056214356794953,
+          -0.0008943607681430876,
+          -0.0007322842720896006,
+          -0.00028812448726966977
+        ]
+      },
+      {
+        "symbol": "ALKEM.NS",
+        "predicted_weekly_return_pct": -0.3797,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0019383225589990616,
+          -0.0005050391773693264,
+          -0.0004634408396668732,
+          -0.00019442243501544,
+          -0.0007033215370029211
+        ]
+      },
+      {
+        "symbol": "CHAMBLFERT.NS",
+        "predicted_weekly_return_pct": -0.3932,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0042883483693003654,
+          0.001011683139950037,
+          -5.645980127155781e-05,
+          -0.0015829000622034073,
+          0.0009760630782693624
+        ]
+      },
+      {
+        "symbol": "SUNPHARMA.NS",
+        "predicted_weekly_return_pct": -0.4221,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0014365070965141058,
+          -0.0008544684387743473,
+          -0.00059314607642591,
+          -0.0004168223822489381,
+          -0.0009285315172746778
+        ]
+      },
+      {
+        "symbol": "HCLTECH.NS",
+        "predicted_weekly_return_pct": -0.4254,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0007008189568296075,
+          -0.0015894518001005054,
+          -0.0011424403637647629,
+          -0.0012771445326507092,
+          0.00044633453944697976
+        ]
+      },
+      {
+        "symbol": "TBOTEK.NS",
+        "predicted_weekly_return_pct": -0.4574,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0032703070901334286,
+          -0.00020362238865345716,
+          -0.00028563651721924543,
+          -0.001354508101940155,
+          0.0005299046169966459
+        ]
+      },
+      {
+        "symbol": "CHENNPETRO.NS",
+        "predicted_weekly_return_pct": -0.469,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0032425399404019117,
+          0.0008224076009355485,
+          -0.0010683819418773055,
+          0.0007863871287554502,
+          -0.0019988310523331165
+        ]
+      },
+      {
+        "symbol": "LUPIN.NS",
+        "predicted_weekly_return_pct": -0.4932,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0022648551966995,
+          -0.0006668883142992854,
+          -0.00020007777493447065,
+          -0.0007961960509419441,
+          -0.0010165540734305978
+        ]
+      },
+      {
+        "symbol": "SAIL.NS",
+        "predicted_weekly_return_pct": -0.4996,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004568512551486492,
+          0.0008740790653973818,
+          -0.0006774538778699934,
+          -0.0010662986896932125,
+          0.0004293924430385232
+        ]
+      },
+      {
+        "symbol": "TATATECH.NS",
+        "predicted_weekly_return_pct": -0.509,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -1.0824180208146572e-05,
+          -0.002334886696189642,
+          -0.0005758346524089575,
+          -0.0018841464770957828,
+          -0.0002973087830469012
+        ]
+      },
+      {
+        "symbol": "NCC.NS",
+        "predicted_weekly_return_pct": -0.5219,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010206373408436775,
+          0.0021159048192203045,
+          0.0010339010041207075,
+          -0.0005910440813750029,
+          0.002415317576378584
+        ]
+      },
+      {
+        "symbol": "USHAMART.NS",
+        "predicted_weekly_return_pct": -0.5377,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.009332051500678062,
+          0.0031813858076930046,
+          0.000163428601808846,
+          -0.00018983223708346486,
+          0.000785424024797976
+        ]
+      },
+      {
+        "symbol": "TDPOWERSYS.NS",
+        "predicted_weekly_return_pct": -0.5454,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.014056520536541939,
+          0.005286333616822958,
+          0.001306561753153801,
+          -0.0024975852575153112,
+          0.0044927517883479595
+        ]
+      },
+      {
+        "symbol": "CIEINDIA.NS",
+        "predicted_weekly_return_pct": -0.5559,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0042463564313948154,
+          0.0004361647879704833,
+          -0.0006071268580853939,
+          -0.0008063768036663532,
+          -0.00035034690517932177
+        ]
+      },
+      {
+        "symbol": "AMBER.NS",
+        "predicted_weekly_return_pct": -0.558,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0014556926907971501,
+          -0.0007669854094274342,
+          -0.0011245458154007792,
+          -0.001748315873555839,
+          -0.0005002369871363044
+        ]
+      },
+      {
+        "symbol": "NESTLEIND.NS",
+        "predicted_weekly_return_pct": -0.5669,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0023502162657678127,
+          -0.0010834578424692154,
+          -0.0004719184944406152,
+          -0.0012851664796471596,
+          -0.0004939485806971788
+        ]
+      },
+      {
+        "symbol": "TMPV.NS",
+        "predicted_weekly_return_pct": -0.5736,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002738421317189932,
+          -0.000311731593683362,
+          -0.000613868236541748,
+          -0.0018737372010946274,
+          -0.00021447171457111835
+        ]
+      },
+      {
+        "symbol": "LODHA.NS",
+        "predicted_weekly_return_pct": -0.5832,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.002282937988638878,
+          -0.002523433417081833,
+          -0.002430980559438467,
+          -0.0020934008061885834,
+          -0.001084670308046043
+        ]
+      },
+      {
+        "symbol": "DOMS.NS",
+        "predicted_weekly_return_pct": -0.5895,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0014704512432217598,
+          -0.0032200831919908524,
+          -0.0014603170566260815,
+          -0.0013003124622628093,
+          -0.0014022928662598133
+        ]
+      },
+      {
+        "symbol": "TMCV.NS",
+        "predicted_weekly_return_pct": -0.6334,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0006461671437136829,
+          -0.0017438388895243406,
+          -0.0016336418921127915,
+          -0.0015195064479485154,
+          -0.000811093021184206
+        ]
+      },
+      {
+        "symbol": "LTFOODS.NS",
+        "predicted_weekly_return_pct": -0.6364,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.003635005559772253,
+          -0.00021525600459426641,
+          -0.000815035542473197,
+          -0.0010307490592822433,
+          -0.0006878356798551977
+        ]
+      },
+      {
+        "symbol": "DIXON.NS",
+        "predicted_weekly_return_pct": -0.6616,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00428100535646081,
+          -0.00032122223637998104,
+          -0.00041728047654032707,
+          -0.0022303774021565914,
+          0.0006121871992945671
+        ]
+      },
+      {
+        "symbol": "BALKRISIND.NS",
+        "predicted_weekly_return_pct": -0.6633,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0013192881597205997,
+          -0.0028971522115170956,
+          -0.002301485277712345,
+          -0.0017116264207288623,
+          -0.0010645706206560135
+        ]
+      },
+      {
+        "symbol": "THERMAX.NS",
+        "predicted_weekly_return_pct": -0.6658,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004850972443819046,
+          0.0008845659904181957,
+          0.00042372196912765503,
+          -0.003939426504075527,
+          0.0008021402172744274
+        ]
+      },
+      {
+        "symbol": "APOLLOTYRE.NS",
+        "predicted_weekly_return_pct": -0.667,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0012026263866573572,
+          -0.0015027308836579323,
+          -0.0014066152507439256,
+          -0.0014388775452971458,
+          -0.001140985288657248
+        ]
+      },
+      {
+        "symbol": "CGPOWER.NS",
+        "predicted_weekly_return_pct": -0.6739,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010776999406516552,
+          0.002885649912059307,
+          0.0005524278385564685,
+          -0.0010055310558527708,
+          0.0015823798021301627
+        ]
+      },
+      {
+        "symbol": "MRF.NS",
+        "predicted_weekly_return_pct": -0.6747,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0009529990493319929,
+          -0.002529320539906621,
+          -0.001951269805431366,
+          -0.0019547787960618734,
+          -0.0012873332016170025
+        ]
+      },
+      {
+        "symbol": "VOLTAS.NS",
+        "predicted_weekly_return_pct": -0.675,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00045134942047297955,
+          -0.001837231800891459,
+          -0.0016574303153902292,
+          -0.0006225805846042931,
+          -0.002203804673627019
+        ]
+      },
+      {
+        "symbol": "KPITTECH.NS",
+        "predicted_weekly_return_pct": -0.6808,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0037936693988740444,
+          -0.000573638710193336,
+          -0.0005608170758932829,
+          -0.003082260023802519,
+          0.0011792097939178348
+        ]
+      },
+      {
+        "symbol": "HEROMOTOCO.NS",
+        "predicted_weekly_return_pct": -0.6988,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.003019396448507905,
+          4.477065522223711e-05,
+          -0.0017372237052768469,
+          -0.00012070182128809392,
+          -0.0021799735259264708
+        ]
+      },
+      {
+        "symbol": "NBCC.NS",
+        "predicted_weekly_return_pct": -0.6994,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005738124717026949,
+          0.0004590322496369481,
+          -0.000543230096809566,
+          -0.0018446394242346287,
+          0.0006480031879618764
+        ]
+      },
+      {
+        "symbol": "RUBICON.NS",
+        "predicted_weekly_return_pct": -0.7035,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006638332270085812,
+          0.0002353005693294108,
+          -0.00011098009417764843,
+          -0.0011455768253654242,
+          0.0005995522369630635
+        ]
+      },
+      {
+        "symbol": "TRIDENT.NS",
+        "predicted_weekly_return_pct": -0.709,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0026479531079530716,
+          -0.0007148308795876801,
+          -0.0016405466012656689,
+          -0.0017323533538728952,
+          -0.000379222328774631
+        ]
+      },
+      {
+        "symbol": "RAILTEL.NS",
+        "predicted_weekly_return_pct": -0.724,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004651060327887535,
+          -0.000206284923478961,
+          -0.0009803721914067864,
+          -0.001762826694175601,
+          0.0003340484108775854
+        ]
+      },
+      {
+        "symbol": "SUPREMEIND.NS",
+        "predicted_weekly_return_pct": -0.7659,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005104545038193464,
+          0.0001380763715133071,
+          -0.0013001085026189685,
+          -0.0007056751055642962,
+          -0.0007158122025430202
+        ]
+      },
+      {
+        "symbol": "BRITANNIA.NS",
+        "predicted_weekly_return_pct": -0.7666,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0019499252084642649,
+          -0.0012819909024983644,
+          -0.001618498470634222,
+          -0.0017023528926074505,
+          -0.0011428091675043106
+        ]
+      },
+      {
+        "symbol": "ITI.NS",
+        "predicted_weekly_return_pct": -0.7992,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007216134108603001,
+          0.0011463009286671877,
+          -0.0008480566320940852,
+          -0.0029342230409383774,
+          0.0018279391806572676
+        ]
+      },
+      {
+        "symbol": "PIDILITIND.NS",
+        "predicted_weekly_return_pct": -0.8039,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0008725187508389354,
+          -0.0016826264327391982,
+          -0.002176280366256833,
+          -0.0014283666387200356,
+          -0.0019118372583761811
+        ]
+      },
+      {
+        "symbol": "DMART.NS",
+        "predicted_weekly_return_pct": -0.8084,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0013960461365059018,
+          -0.0018599476898089051,
+          -0.0014649468939751387,
+          -0.001726232236251235,
+          -0.0016694760415703058
+        ]
+      },
+      {
+        "symbol": "ELGIEQUIP.NS",
+        "predicted_weekly_return_pct": -0.818,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00548403849825263,
+          0.000389851164072752,
+          -0.0012488220818340778,
+          -0.001560174161568284,
+          -0.0003107821103185415
+        ]
+      },
+      {
+        "symbol": "ASIANPAINT.NS",
+        "predicted_weekly_return_pct": -0.8424,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0010415883734822273,
+          -0.0037428096402436495,
+          -0.0018050734652206302,
+          -0.0005306913517415524,
+          -0.003422843525186181
+        ]
+      },
+      {
+        "symbol": "AJANTPHARM.NS",
+        "predicted_weekly_return_pct": -0.8672,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0008785799145698547,
+          -0.0019709402695298195,
+          -0.0021252185106277466,
+          -0.0015836638631299138,
+          -0.002151135355234146
+        ]
+      },
+      {
+        "symbol": "HEGAM.NS",
+        "predicted_weekly_return_pct": -0.8827,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.019826002418994904,
+          0.008229153230786324,
+          0.011628745123744011,
+          0.0031855758279561996,
+          -0.012084132060408592
+        ]
+      },
+      {
+        "symbol": "HAVELLS.NS",
+        "predicted_weekly_return_pct": -0.8893,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006082822103053331,
+          -0.0007440116605721414,
+          -0.0008683216874487698,
+          -0.0005165173788554966,
+          -0.0007210246985778213
+        ]
+      },
+      {
+        "symbol": "ASTRAL.NS",
+        "predicted_weekly_return_pct": -0.8917,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004647368565201759,
+          -0.0003489989321678877,
+          -0.0011329404078423977,
+          -0.0017729339888319373,
+          -0.001054977998137474
+        ]
+      },
+      {
+        "symbol": "RAMCOCEM.NS",
+        "predicted_weekly_return_pct": -0.893,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002972756512463093,
+          -0.0014383458765223622,
+          -0.0015732331667095423,
+          -0.0018669122364372015,
+          -0.0011184357572346926
+        ]
+      },
+      {
+        "symbol": "ATUL.NS",
+        "predicted_weekly_return_pct": -0.8969,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0048465486615896225,
+          -0.000395042123273015,
+          -0.0009234852623194456,
+          -0.001766879577189684,
+          -0.0010772785171866417
+        ]
+      },
+      {
+        "symbol": "BHARATCOAL.NS",
+        "predicted_weekly_return_pct": -0.9117,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005043328274041414,
+          -0.0007397118024528027,
+          -0.0011619979050010443,
+          -0.0021460452117025852,
+          -6.797770038247108e-05
+        ]
+      },
+      {
+        "symbol": "ENRIN.NS",
+        "predicted_weekly_return_pct": -0.9196,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00937270000576973,
+          0.0010823355987668037,
+          -0.00025495910085737705,
+          -0.0022479803301393986,
+          0.0015544937923550606
+        ]
+      },
+      {
+        "symbol": "BERGEPAINT.NS",
+        "predicted_weekly_return_pct": -0.9312,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0022992482408881187,
+          -0.0013219863176345825,
+          -0.0021706726402044296,
+          -0.002693384187296033,
+          -0.000870180141646415
+        ]
+      },
+      {
+        "symbol": "INDIACEM.NS",
+        "predicted_weekly_return_pct": -0.9433,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0011838518548756838,
+          -0.00228710169903934,
+          -0.0020812072325497866,
+          -0.0028938106261193752,
+          -0.001031779684126377
+        ]
+      },
+      {
+        "symbol": "RVNL.NS",
+        "predicted_weekly_return_pct": -0.9729,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010284652933478355,
+          0.0017934180796146393,
+          -0.0004279364366084337,
+          -0.0014421675587072968,
+          0.0005843392573297024
+        ]
+      },
+      {
+        "symbol": "DEEPAKNTR.NS",
+        "predicted_weekly_return_pct": -0.976,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0021769185550510883,
+          -0.0015951324021443725,
+          -0.0018952068639919162,
+          -0.00220276415348053,
+          -0.0019384035840630531
+        ]
+      },
+      {
+        "symbol": "GPIL.NS",
+        "predicted_weekly_return_pct": -0.9799,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0030722012743353844,
+          -0.0015700699295848608,
+          -0.0017171328654512763,
+          -0.001651136321015656,
+          -0.001837023999541998
+        ]
+      },
+      {
+        "symbol": "LINDEINDIA.NS",
+        "predicted_weekly_return_pct": -0.9849,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005164206959307194,
+          -0.00025365190231241286,
+          -0.0018233521841466427,
+          -0.00030367315048351884,
+          -0.0023533643689006567
+        ]
+      },
+      {
+        "symbol": "POLYCAB.NS",
+        "predicted_weekly_return_pct": -1.0079,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006781524047255516,
+          -0.0006842317525297403,
+          -0.0006901898887008429,
+          -0.0014307091478258371,
+          -0.0005435412749648094
+        ]
+      },
+      {
+        "symbol": "LTM.NS",
+        "predicted_weekly_return_pct": -1.0377,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.0008399859070777893,
+          -0.0033917126711457968,
+          -0.002711211098358035,
+          -0.0032082591205835342,
+          -0.0019596575293689966
+        ]
+      },
+      {
+        "symbol": "WELCORP.NS",
+        "predicted_weekly_return_pct": -1.0688,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.011584234423935413,
+          0.0033499912824481726,
+          -0.0015844563022255898,
+          0.00047676009126007557,
+          -0.0014033932238817215
+        ]
+      },
+      {
+        "symbol": "VTL.NS",
+        "predicted_weekly_return_pct": -1.0725,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005451386794447899,
+          7.364992052316666e-05,
+          -0.0022158098872750998,
+          -0.0021974286064505577,
+          -0.0009917269926518202
+        ]
+      },
+      {
+        "symbol": "SIEMENS.NS",
+        "predicted_weekly_return_pct": -1.1376,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008076418191194534,
+          0.00037087290547788143,
+          -0.0012263775570318103,
+          -0.0011804805835708976,
+          -0.0013283360749483109
+        ]
+      },
+      {
+        "symbol": "EXIDEIND.NS",
+        "predicted_weekly_return_pct": -1.1436,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002207173965871334,
+          -0.003392432816326618,
+          -0.0014021258102729917,
+          -0.0013603561092168093,
+          -0.0031401573214679956
+        ]
+      },
+      {
+        "symbol": "TENNIND.NS",
+        "predicted_weekly_return_pct": -1.1453,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.00022606062702834606,
+          -0.004128328990191221,
+          -0.002165430225431919,
+          -0.0035851681604981422,
+          -0.001866220380179584
+        ]
+      },
+      {
+        "symbol": "VEDL.NS",
+        "predicted_weekly_return_pct": -1.1465,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006016761064529419,
+          -0.0007580647943541408,
+          -0.0017740682233124971,
+          -0.0023003583773970604,
+          -0.0006825019372627139
+        ]
+      },
+      {
+        "symbol": "CRISIL.NS",
+        "predicted_weekly_return_pct": -1.1642,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006126792635768652,
+          -0.00019997113849967718,
+          -0.002245773561298847,
+          -0.0022509407717734575,
+          -0.0008865903364494443
+        ]
+      },
+      {
+        "symbol": "TITAGARH.NS",
+        "predicted_weekly_return_pct": -1.1681,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0065395585261285305,
+          -0.0008821573574095964,
+          -0.0012146364897489548,
+          -0.0009431227808818221,
+          -0.002169929211959243
+        ]
+      },
+      {
+        "symbol": "GALLANTT.NS",
+        "predicted_weekly_return_pct": -1.1744,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004120207391679287,
+          -0.001165896886959672,
+          -0.003248653607442975,
+          -0.0005290344124659896,
+          -0.0027497620321810246
+        ]
+      },
+      {
+        "symbol": "SCHAEFFLER.NS",
+        "predicted_weekly_return_pct": -1.2454,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0035324946511536837,
+          -0.0024668793193995953,
+          -0.0024049177300184965,
+          -0.0015055565163493156,
+          -0.002622457453981042
+        ]
+      },
+      {
+        "symbol": "KIRLOSBROS.NS",
+        "predicted_weekly_return_pct": -1.2503,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0022527091205120087,
+          -0.002966197207570076,
+          -0.0022816206328570843,
+          -0.003865498583763838,
+          -0.0012156942393630743
+        ]
+      },
+      {
+        "symbol": "JINDALSAW.NS",
+        "predicted_weekly_return_pct": -1.2621,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.009528320282697678,
+          0.00028337654657661915,
+          -0.0013684994773939252,
+          -0.0017899700906127691,
+          -0.00029755267314612865
+        ]
+      },
+      {
+        "symbol": "CROMPTON.NS",
+        "predicted_weekly_return_pct": -1.2667,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004129917360842228,
+          -0.002140976255759597,
+          -0.002161495853215456,
+          -0.0017714017303660512,
+          -0.0025445600040256977
+        ]
+      },
+      {
+        "symbol": "PAGEIND.NS",
+        "predicted_weekly_return_pct": -1.2809,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006264227442443371,
+          -0.0012734263436868787,
+          -0.002128273481503129,
+          -0.0020345202647149563,
+          -0.0011913361959159374
+        ]
+      },
+      {
+        "symbol": "NEULANDLAB.NS",
+        "predicted_weekly_return_pct": -1.3086,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006498376838862896,
+          -0.000858636514749378,
+          -0.002167952712625265,
+          -0.0008877778891474009,
+          -0.002759228926151991
+        ]
+      },
+      {
+        "symbol": "ENDURANCE.NS",
+        "predicted_weekly_return_pct": -1.3524,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004847569391131401,
+          -0.0016979505307972431,
+          -0.0024031673092395067,
+          -0.00301133980974555,
+          -0.0016563604585826397
+        ]
+      },
+      {
+        "symbol": "ANANTRAJ.NS",
+        "predicted_weekly_return_pct": -1.3961,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008246778510510921,
+          -0.001042308285832405,
+          -0.0013401834294199944,
+          -0.003091841470450163,
+          -0.00033820606768131256
+        ]
+      },
+      {
+        "symbol": "HINDZINC.NS",
+        "predicted_weekly_return_pct": -1.4203,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007542054634541273,
+          -0.0006028846837580204,
+          -0.002259321277961135,
+          -0.0027029886841773987,
+          -0.0011971675558015704
+        ]
+      },
+      {
+        "symbol": "FIRSTCRY.NS",
+        "predicted_weekly_return_pct": -1.4379,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007376490160822868,
+          -0.0008085776353254914,
+          -0.0022307964973151684,
+          -0.0023082513362169266,
+          -0.0017595430836081505
+        ]
+      },
+      {
+        "symbol": "BIOCON.NS",
+        "predicted_weekly_return_pct": -1.4793,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004433430265635252,
+          -0.0024936236441135406,
+          -0.0027704164385795593,
+          -0.0026756003499031067,
+          -0.002530557569116354
+        ]
+      },
+      {
+        "symbol": "HINDALCO.NS",
+        "predicted_weekly_return_pct": -1.4836,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.002201282186433673,
+          -0.0034729312174022198,
+          -0.0031129957642406225,
+          -0.0027407605666667223,
+          -0.003419307991862297
+        ]
+      },
+      {
+        "symbol": "CUMMINSIND.NS",
+        "predicted_weekly_return_pct": -1.5243,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010489953681826591,
+          0.0012288996949791908,
+          -0.0012237930204719305,
+          -0.0005858391523361206,
+          -0.004290030803531408
+        ]
+      },
+      {
+        "symbol": "JUBLINGREA.NS",
+        "predicted_weekly_return_pct": -1.541,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008895276114344597,
+          -4.62937168776989e-05,
+          -0.0025403015315532684,
+          -0.0025369497016072273,
+          -0.0015115344431251287
+        ]
+      },
+      {
+        "symbol": "HEXT.NS",
+        "predicted_weekly_return_pct": -1.6091,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.0035470332950353622,
+          -0.0033198115415871143,
+          -0.003401070134714246,
+          -0.004831255413591862,
+          -0.0011225709458813071
+        ]
+      },
+      {
+        "symbol": "DALBHARAT.NS",
+        "predicted_weekly_return_pct": -1.655,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.005051526706665754,
+          -0.00301682623103261,
+          -0.002697428222745657,
+          -0.0030275247991085052,
+          -0.002894846023991704
+        ]
+      },
+      {
+        "symbol": "NETWEB.NS",
+        "predicted_weekly_return_pct": -1.663,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008479481562972069,
+          -0.0008077486418187618,
+          -0.002403243677690625,
+          -0.00407100934535265,
+          -0.0010084069799631834
+        ]
+      },
+      {
+        "symbol": "GRAVITA.NS",
+        "predicted_weekly_return_pct": -1.7214,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          0.00027710432186722755,
+          -0.005723019130527973,
+          -0.003990921191871166,
+          -0.004727229475975037,
+          -0.0031993091106414795
+        ]
+      },
+      {
+        "symbol": "HFCL.NS",
+        "predicted_weekly_return_pct": -1.7615,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007432357408106327,
+          -0.001488193403929472,
+          -0.0031257648952305317,
+          -0.005200367420911789,
+          -0.0005255900323390961
+        ]
+      },
+      {
+        "symbol": "SUZLON.NS",
+        "predicted_weekly_return_pct": -1.8136,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006871047429740429,
+          -0.0028760419227182865,
+          -0.0026732897385954857,
+          -0.0044638728722929955,
+          -0.0014181090518832207
+        ]
+      },
+      {
+        "symbol": "KSB.NS",
+        "predicted_weekly_return_pct": -1.8326,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006164482794702053,
+          -0.0026334805879741907,
+          -0.003889836836606264,
+          -0.0030185652431100607,
+          -0.002789880381897092
+        ]
+      },
+      {
+        "symbol": "ARE&M.NS",
+        "predicted_weekly_return_pct": -1.8505,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008462633937597275,
+          -0.0018348199082538486,
+          -0.002831000369042158,
+          -0.003909191116690636,
+          -0.0016409081872552633
+        ]
+      },
+      {
+        "symbol": "JWL.NS",
+        "predicted_weekly_return_pct": -1.8525,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.009207228198647499,
+          -0.0007680691778659821,
+          -0.0031092267017811537,
+          -0.0041170427575707436,
+          -0.0014974307268857956
+        ]
+      },
+      {
+        "symbol": "SWIGGY.NS",
+        "predicted_weekly_return_pct": -1.8972,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.014142804779112339,
+          0.0007090526632964611,
+          -0.0008670147508382797,
+          -0.0031808768399059772,
+          -0.0016722558066248894
+        ]
+      },
+      {
+        "symbol": "ECLERX.NS",
+        "predicted_weekly_return_pct": -1.8979,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.006892820820212364,
+          -0.0012362338602542877,
+          -0.0037051131948828697,
+          -0.002635264303535223,
+          -0.004692160524427891
+        ]
+      },
+      {
+        "symbol": "TIINDIA.NS",
+        "predicted_weekly_return_pct": -1.9123,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.007940489798784256,
+          -0.002225252566859126,
+          -0.0028898920863866806,
+          -0.004185810219496489,
+          -0.0020667242351919413
+        ]
+      },
+      {
+        "symbol": "VMM.NS",
+        "predicted_weekly_return_pct": -1.9527,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.004197523929178715,
+          -0.004479364491999149,
+          -0.0038338846061378717,
+          -0.004121832549571991,
+          -0.00308809382840991
+        ]
+      },
+      {
+        "symbol": "TECHM.NS",
+        "predicted_weekly_return_pct": -2.0336,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.029157623648643494,
+          0.009206664748489857,
+          -0.0035986145958304405,
+          -0.009646262973546982,
+          0.012650270946323872
+        ]
+      },
+      {
+        "symbol": "HINDCOPPER.NS",
+        "predicted_weekly_return_pct": -2.2631,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.011523584835231304,
+          -0.001447899965569377,
+          -0.003323532175272703,
+          -0.004718611482530832,
+          -0.0018774769268929958
+        ]
+      },
+      {
+        "symbol": "CONCORDBIO.NS",
+        "predicted_weekly_return_pct": -2.3526,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.008110713213682175,
+          -0.0018770534079521894,
+          -0.005339968018233776,
+          -0.005626643542200327,
+          -0.0028526815585792065
+        ]
+      },
+      {
+        "symbol": "OLECTRA.NS",
+        "predicted_weekly_return_pct": -2.3639,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010132674127817154,
+          -0.002415579743683338,
+          -0.0037939820904284716,
+          -0.004612593445926905,
+          -0.002968196291476488
+        ]
+      },
+      {
+        "symbol": "KEI.NS",
+        "predicted_weekly_return_pct": -2.3837,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.00849837251007557,
+          -0.004167432431131601,
+          -0.003536676289513707,
+          -0.003726343158632517,
+          -0.004197334870696068
+        ]
+      },
+      {
+        "symbol": "KEC.NS",
+        "predicted_weekly_return_pct": -2.4915,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.012038348242640495,
+          -0.0016963984817266464,
+          -0.0038552212063223124,
+          -0.005277939606457949,
+          -0.0023625176399946213
+        ]
+      },
+      {
+        "symbol": "RRKABEL.NS",
+        "predicted_weekly_return_pct": -3.4183,
+        "direction": "DOWN",
+        "has_enough_history": true,
+        "history_days_used": 100,
+        "data_end_date": "2026-11-20",
+        "target_week_start": "2026-11-23",
+        "target_week_end": "2026-11-27",
+        "daily_returns": [
+          -0.010067783296108246,
+          -0.005920818541198969,
+          -0.006814976688474417,
+          -0.006342253182083368,
+          -0.0056349411606788635
+        ]
+      }
+    ],
+    "model_version": "v2026-10-02-7e38003c317e",
+    "forecast_anchor_date": null,
+    "forecast_end_date": null,
+    "forecast_recipe": null,
+    "as_of_date": "2026-11-20",
+    "target_week_start": "2026-11-23",
+    "target_week_end": "2026-11-27",
+    "signals_used": [
+      "ohlcv"
+    ]
+  }
+}

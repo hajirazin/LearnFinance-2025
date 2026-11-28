@@ -1,0 +1,20 @@
+{
+  "hf_token_present": true,
+  "news_repo": "hajirazin/learnfinance-news-sentiments",
+  "hf_cache_dir": "/root/.cache/huggingface/hub",
+  "free_disk_bytes": 45335523328,
+  "news_partitions": {
+    "published": 542,
+    "imported": 542,
+    "missing_or_changed": []
+  },
+  "latest_coverage_end": "2026-11-27 18:00:00+00:00",
+  "finbert_files": {
+    "config.json": false,
+    "pytorch_model.bin": false,
+    "model.safetensors": false,
+    "tokenizer_config.json": false,
+    "vocab.txt": false,
+    "tokenizer.json": false
+  }
+}

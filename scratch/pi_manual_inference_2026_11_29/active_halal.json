@@ -1,0 +1,28 @@
+{
+  "method": "GET",
+  "path": "/models/active-symbols?universe=halal",
+  "started_at": "2026-11-28T16:15:44.722580+00:00",
+  "finished_at": "2026-11-28T16:15:53.118400+00:00",
+  "status": 200,
+  "response": {
+    "symbols": [
+      "AAPL",
+      "AMD",
+      "AVGO",
+      "GOOGL",
+      "LLY",
+      "META",
+      "MSFT",
+      "MU",
+      "NVDA",
+      "SAP",
+      "TSLA",
+      "TSM",
+      "XOM"
+    ],
+    "source_model": "sac_halal",
+    "model_version": "v2026-11-27_93fcc760",
+    "training_cutoff_date": "2024-11-15",
+    "sac_schema_version": 3
+  }
+}

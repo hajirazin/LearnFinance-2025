@@ -1,0 +1,247 @@
+{
+  "decision_date": "2026-11-23",
+  "model_version": "v2026-11-27-611c30dfacf0",
+  "previous_year_week": "202647",
+  "previous_selected": [
+    "ACN",
+    "AI",
+    "BIIB",
+    "CAH",
+    "FJTSY",
+    "FROG",
+    "GILD",
+    "MCK",
+    "OKTA",
+    "RBLX",
+    "RVTY",
+    "TS",
+    "TWLO",
+    "TYL",
+    "WST"
+  ],
+  "selection": {
+    "selected": [
+      "AI",
+      "FFIV",
+      "COO",
+      "SAR",
+      "BDRFY",
+      "NVO",
+      "CTVA",
+      "BURL",
+      "HLN",
+      "ATLKY",
+      "DLR",
+      "FICO",
+      "CBRE",
+      "XYL",
+      "ENR"
+    ],
+    "reasons": {
+      "AI": "sticky",
+      "FFIV": "top_rank",
+      "COO": "top_rank",
+      "SAR": "top_rank",
+      "BDRFY": "top_rank",
+      "NVO": "top_rank",
+      "CTVA": "top_rank",
+      "BURL": "top_rank",
+      "HLN": "top_rank",
+      "ATLKY": "top_rank",
+      "DLR": "top_rank",
+      "FICO": "top_rank",
+      "CBRE": "top_rank",
+      "XYL": "top_rank",
+      "ENR": "top_rank"
+    },
+    "kept_count": 1,
+    "fillers_count": 14,
+    "evicted_from_previous": {
+      "TWLO": "rank_out_of_hold",
+      "TYL": "rank_out_of_hold",
+      "OKTA": "rank_out_of_hold",
+      "ACN": "rank_out_of_hold",
+      "FROG": "rank_out_of_hold",
+      "TS": "rank_out_of_hold",
+      "BIIB": "rank_out_of_hold",
+      "GILD": "rank_out_of_hold",
+      "RVTY": "rank_out_of_hold",
+      "WST": "rank_out_of_hold",
+      "FJTSY": "rank_out_of_hold",
+      "MCK": "rank_out_of_hold",
+      "RBLX": "rank_out_of_hold",
+      "CAH": "rank_out_of_hold"
+    }
+  },
+  "rows": [
+    {
+      "symbol": "AI",
+      "rank": 18,
+      "forecast_pct": 0.6172259338200092,
+      "reason": "sticky"
+    },
+    {
+      "symbol": "FFIV",
+      "rank": 1,
+      "forecast_pct": 0.7860491052269936,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "COO",
+      "rank": 2,
+      "forecast_pct": 0.7587559521198273,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "SAR",
+      "rank": 3,
+      "forecast_pct": 0.7564863190054893,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "BDRFY",
+      "rank": 4,
+      "forecast_pct": 0.7531056180596352,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "NVO",
+      "rank": 5,
+      "forecast_pct": 0.7240164093673229,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "CTVA",
+      "rank": 6,
+      "forecast_pct": 0.719612231478095,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "BURL",
+      "rank": 7,
+      "forecast_pct": 0.7176462560892105,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "HLN",
+      "rank": 8,
+      "forecast_pct": 0.711532449349761,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "ATLKY",
+      "rank": 9,
+      "forecast_pct": 0.697682099416852,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "DLR",
+      "rank": 10,
+      "forecast_pct": 0.6961358711123466,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "FICO",
+      "rank": 11,
+      "forecast_pct": 0.6832197774201632,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "CBRE",
+      "rank": 12,
+      "forecast_pct": 0.6617370527237654,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "XYL",
+      "rank": 13,
+      "forecast_pct": 0.6550869904458523,
+      "reason": "top_rank"
+    },
+    {
+      "symbol": "ENR",
+      "rank": 14,
+      "forecast_pct": 0.6494981702417135,
+      "reason": "top_rank"
+    }
+  ],
+  "raw_top15": [
+    {
+      "symbol": "FFIV",
+      "rank": 1,
+      "forecast_pct": 0.7860491052269936
+    },
+    {
+      "symbol": "COO",
+      "rank": 2,
+      "forecast_pct": 0.7587559521198273
+    },
+    {
+      "symbol": "SAR",
+      "rank": 3,
+      "forecast_pct": 0.7564863190054893
+    },
+    {
+      "symbol": "BDRFY",
+      "rank": 4,
+      "forecast_pct": 0.7531056180596352
+    },
+    {
+      "symbol": "NVO",
+      "rank": 5,
+      "forecast_pct": 0.7240164093673229
+    },
+    {
+      "symbol": "CTVA",
+      "rank": 6,
+      "forecast_pct": 0.719612231478095
+    },
+    {
+      "symbol": "BURL",
+      "rank": 7,
+      "forecast_pct": 0.7176462560892105
+    },
+    {
+      "symbol": "HLN",
+      "rank": 8,
+      "forecast_pct": 0.711532449349761
+    },
+    {
+      "symbol": "ATLKY",
+      "rank": 9,
+      "forecast_pct": 0.697682099416852
+    },
+    {
+      "symbol": "DLR",
+      "rank": 10,
+      "forecast_pct": 0.6961358711123466
+    },
+    {
+      "symbol": "FICO",
+      "rank": 11,
+      "forecast_pct": 0.6832197774201632
+    },
+    {
+      "symbol": "CBRE",
+      "rank": 12,
+      "forecast_pct": 0.6617370527237654
+    },
+    {
+      "symbol": "XYL",
+      "rank": 13,
+      "forecast_pct": 0.6550869904458523
+    },
+    {
+      "symbol": "ENR",
+      "rank": 14,
+      "forecast_pct": 0.6494981702417135
+    },
+    {
+      "symbol": "MTZ",
+      "rank": 15,
+      "forecast_pct": 0.6232207641005516
+    }
+  ],
+  "forecast_anchor_date": "2026-11-20",
+  "forecast_end_date": "2026-11-30"
+}

@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "path": "/news/windows/query",
+  "started_at": "2026-11-28T16:16:28.772547+00:00",
+  "finished_at": "2026-11-28T16:16:34.796983+00:00",
+  "status": 422,
+  "response": {
+    "detail": "missing news coverage for ['ASX', 'ATLKY', 'BDRFY', 'BURL', 'DLR', 'FFIV', 'FICO', 'LEN', 'LII', 'NVO', 'NWS', 'NWSA', 'SAR'] window 2026-11-16T09:00:00-05:00->2026-11-23T09:00:00-05:00"
+  }
+}

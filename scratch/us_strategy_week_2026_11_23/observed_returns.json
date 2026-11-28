@@ -1,0 +1,476 @@
+{
+  "source": "Yahoo Finance via repository yfinance loader; auto_adjust=True",
+  "start_close": "2026-11-20",
+  "end_close": "2026-11-27",
+  "symbols": {
+    "AAPL": {
+      "adjusted_close_nov20": 342.55999755859375,
+      "adjusted_open_nov23": 347.8699951171875,
+      "adjusted_close_nov27": 358.5400085449219,
+      "weekly_return_pct": 4.664879466434146,
+      "monday_open_to_friday_close_pct": 3.067241664271725
+    },
+    "ACN": {
+      "adjusted_close_nov20": 221.1699981689453,
+      "adjusted_open_nov23": 222.69000244140625,
+      "adjusted_close_nov27": 241.83999633789062,
+      "weekly_return_pct": 9.34575138584397,
+      "monday_open_to_friday_close_pct": 8.599395431558765
+    },
+    "AEM": {
+      "adjusted_close_nov20": 151.3000030517578,
+      "adjusted_open_nov23": 161.6199951171875,
+      "adjusted_close_nov27": 173.3000030517578,
+      "weekly_return_pct": 14.540647426473674,
+      "monday_open_to_friday_close_pct": 7.226833490559992
+    },
+    "AI": {
+      "adjusted_close_nov20": 9.130000114440918,
+      "adjusted_open_nov23": 9.770000457763672,
+      "adjusted_close_nov27": 10.220000267028809,
+      "weekly_return_pct": 11.938665267526538,
+      "monday_open_to_friday_close_pct": 4.6059343723729995
+    },
+    "AMD": {
+      "adjusted_close_nov20": 424.3900146484375,
+      "adjusted_open_nov23": 476.9200134277344,
+      "adjusted_close_nov27": 424.5400085449219,
+      "weekly_return_pct": 0.035343408493870854,
+      "monday_open_to_friday_close_pct": -10.98297479829905
+    },
+    "ASX": {
+      "adjusted_close_nov20": 26.270000457763672,
+      "adjusted_open_nov23": 33.11000061035156,
+      "adjusted_close_nov27": 31.34000015258789,
+      "weekly_return_pct": 19.29957977342123,
+      "monday_open_to_friday_close_pct": -5.3458182577329705
+    },
+    "ATEYY": {
+      "adjusted_close_nov20": 140.5,
+      "adjusted_open_nov23": 161.5,
+      "adjusted_close_nov27": 166.75999450683594,
+      "weekly_return_pct": 18.690387549349417,
+      "monday_open_to_friday_close_pct": 3.2569625429324622
+    },
+    "ATLKY": {
+      "adjusted_close_nov20": 17.3799991607666,
+      "adjusted_open_nov23": 18.639999389648438,
+      "adjusted_close_nov27": 18.299999237060547,
+      "weekly_return_pct": 5.293441431060253,
+      "monday_open_to_friday_close_pct": -1.8240352130950543
+    },
+    "AVGO": {
+      "adjusted_close_nov20": 304.4100036621094,
+      "adjusted_open_nov23": 320.8599853515625,
+      "adjusted_close_nov27": 312.3399963378906,
+      "weekly_return_pct": 2.605036818889639,
+      "monday_open_to_friday_close_pct": -2.655360407230778
+    },
+    "BDRFY": {
+      "adjusted_close_nov20": 17.229999542236328,
+      "adjusted_open_nov23": 17.1299991607666,
+      "adjusted_close_nov27": 18.1299991607666,
+      "weekly_return_pct": 5.223445400123672,
+      "monday_open_to_friday_close_pct": 5.837711903047449
+    },
+    "BIIB": {
+      "adjusted_close_nov20": 249.58999633789062,
+      "adjusted_open_nov23": 250.19000244140625,
+      "adjusted_close_nov27": 264.20001220703125,
+      "weekly_return_pct": 5.853606347812845,
+      "monday_open_to_friday_close_pct": 5.599748043052233
+    },
+    "BURL": {
+      "adjusted_close_nov20": 245.33999633789062,
+      "adjusted_open_nov23": 249.0800018310547,
+      "adjusted_close_nov27": 253.10000610351562,
+      "weekly_return_pct": 3.1629615559860325,
+      "monday_open_to_friday_close_pct": 1.6139410000436838
+    },
+    "CAH": {
+      "adjusted_close_nov20": 272.80999755859375,
+      "adjusted_open_nov23": 271.6400146484375,
+      "adjusted_close_nov27": 282.8599853515625,
+      "weekly_return_pct": 3.6838781140380306,
+      "monday_open_to_friday_close_pct": 4.130455786363485
+    },
+    "CBRE": {
+      "adjusted_close_nov20": 126.72000122070312,
+      "adjusted_open_nov23": 130.1199951171875,
+      "adjusted_close_nov27": 139.8000030517578,
+      "weekly_return_pct": 10.321971042498479,
+      "monday_open_to_friday_close_pct": 7.439293189223073
+    },
+    "COO": {
+      "adjusted_close_nov20": 58.880001068115234,
+      "adjusted_open_nov23": 59.380001068115234,
+      "adjusted_close_nov27": 62.279998779296875,
+      "weekly_return_pct": 5.774452529727969,
+      "monday_open_to_friday_close_pct": 4.883795316633677
+    },
+    "COP": {
+      "adjusted_close_nov20": 136.1199951171875,
+      "adjusted_open_nov23": 134.61000061035156,
+      "adjusted_close_nov27": 136.8000030517578,
+      "weekly_return_pct": 0.49956505947923446,
+      "monday_open_to_friday_close_pct": 1.6269240260577078
+    },
+    "CSLLY": {
+      "adjusted_close_nov20": 32.38999938964844,
+      "adjusted_open_nov23": 34.040000915527344,
+      "adjusted_close_nov27": 34.59000015258789,
+      "weekly_return_pct": 6.79222230440224,
+      "monday_open_to_friday_close_pct": 1.6157438962043802
+    },
+    "CTVA": {
+      "adjusted_close_nov20": 7.889999866485596,
+      "adjusted_open_nov23": 7.989999771118164,
+      "adjusted_close_nov27": 8.260000228881836,
+      "weekly_return_pct": 4.689485027343188,
+      "monday_open_to_friday_close_pct": 3.379229856046506
+    },
+    "DLR": {
+      "adjusted_close_nov20": 162.4600067138672,
+      "adjusted_open_nov23": 170.69000244140625,
+      "adjusted_close_nov27": 167.16000366210938,
+      "weekly_return_pct": 2.893017822238586,
+      "monday_open_to_friday_close_pct": -2.0680758854102366
+    },
+    "DVN": {
+      "adjusted_close_nov20": 41.540000915527344,
+      "adjusted_open_nov23": 41.43000030517578,
+      "adjusted_close_nov27": 42.84000015258789,
+      "weekly_return_pct": 3.1295118161025703,
+      "monday_open_to_friday_close_pct": 3.4033305262514357
+    },
+    "ENR": {
+      "adjusted_close_nov20": 28.264245986938477,
+      "adjusted_open_nov23": 28.452278968936156,
+      "adjusted_close_nov27": 28.90999984741211,
+      "weekly_return_pct": 2.2847022374913095,
+      "monday_open_to_friday_close_pct": 1.6087318663495775
+    },
+    "EOG": {
+      "adjusted_close_nov20": 148.60000610351562,
+      "adjusted_open_nov23": 148.72999572753906,
+      "adjusted_close_nov27": 148.6999969482422,
+      "weekly_return_pct": 0.06728858722717668,
+      "monday_open_to_friday_close_pct": -0.020169959092741774
+    },
+    "FFIV": {
+      "adjusted_close_nov20": 303.989990234375,
+      "adjusted_open_nov23": 317.3500061035156,
+      "adjusted_close_nov27": 322.8599853515625,
+      "weekly_return_pct": 6.207439627416278,
+      "monday_open_to_friday_close_pct": 1.7362467755080546
+    },
+    "FICO": {
+      "adjusted_close_nov20": 694.3099975585938,
+      "adjusted_open_nov23": 705.6500244140625,
+      "adjusted_close_nov27": 708.5700073242188,
+      "weekly_return_pct": 2.0538390367080384,
+      "monday_open_to_friday_close_pct": 0.4138004406052165
+    },
+    "FJTSY": {
+      "adjusted_close_nov20": 21.0,
+      "adjusted_open_nov23": 21.020000457763672,
+      "adjusted_close_nov27": 22.479999542236328,
+      "weekly_return_pct": 7.047616867792028,
+      "monday_open_to_friday_close_pct": 6.9457614304352155
+    },
+    "FNV": {
+      "adjusted_close_nov20": 223.2100067138672,
+      "adjusted_open_nov23": 233.88999938964844,
+      "adjusted_close_nov27": 259.54998779296875,
+      "weekly_return_pct": 16.2806236217204,
+      "monday_open_to_friday_close_pct": 10.970964329506083
+    },
+    "FROG": {
+      "adjusted_close_nov20": 100.96499633789062,
+      "adjusted_open_nov23": 109.31999969482422,
+      "adjusted_close_nov27": 111.5199966430664,
+      "weekly_return_pct": 10.454118445022576,
+      "monday_open_to_friday_close_pct": 2.012437755565011
+    },
+    "GFI": {
+      "adjusted_close_nov20": 31.56999969482422,
+      "adjusted_open_nov23": 34.63999938964844,
+      "adjusted_close_nov27": 36.400001525878906,
+      "weekly_return_pct": 15.29934075940631,
+      "monday_open_to_friday_close_pct": 5.080837665246651
+    },
+    "GILD": {
+      "adjusted_close_nov20": 166.42999267578125,
+      "adjusted_open_nov23": 167.2100067138672,
+      "adjusted_close_nov27": 177.0,
+      "weekly_return_pct": 6.351023126468536,
+      "monday_open_to_friday_close_pct": 5.85490873335448
+    },
+    "GOOGL": {
+      "adjusted_close_nov20": 265.2900085449219,
+      "adjusted_open_nov23": 284.2799987792969,
+      "adjusted_close_nov27": 274.9599914550781,
+      "weekly_return_pct": 3.6450611024496204,
+      "monday_open_to_friday_close_pct": -3.278460448937326
+    },
+    "HLN": {
+      "adjusted_close_nov20": 9.069999694824219,
+      "adjusted_open_nov23": 8.949999809265137,
+      "adjusted_close_nov27": 9.460000038146973,
+      "weekly_return_pct": 4.299893676350464,
+      "monday_open_to_friday_close_pct": 5.698326701123269
+    },
+    "ILMN": {
+      "adjusted_close_nov20": 192.82000732421875,
+      "adjusted_open_nov23": 206.25,
+      "adjusted_close_nov27": 205.74000549316406,
+      "weekly_return_pct": 6.700548531367323,
+      "monday_open_to_friday_close_pct": -0.24727006392045725
+    },
+    "LEN": {
+      "adjusted_close_nov20": 80.73999786376953,
+      "adjusted_open_nov23": 81.33000183105469,
+      "adjusted_close_nov27": 86.08999633789062,
+      "weekly_return_pct": 6.626205865335799,
+      "monday_open_to_friday_close_pct": 5.852691995167758
+    },
+    "LII": {
+      "adjusted_close_nov20": 334.489990234375,
+      "adjusted_open_nov23": 346.1000061035156,
+      "adjusted_close_nov27": 350.0400085449219,
+      "weekly_return_pct": 4.648874036455042,
+      "monday_open_to_friday_close_pct": 1.1383999918878507
+    },
+    "LLY": {
+      "adjusted_close_nov20": 1347.1099853515625,
+      "adjusted_open_nov23": 1345.1099853515625,
+      "adjusted_close_nov27": 1392.3800048828125,
+      "weekly_return_pct": 3.360528837549648,
+      "monday_open_to_friday_close_pct": 3.5142122239836926
+    },
+    "MCK": {
+      "adjusted_close_nov20": 1069.4300537109375,
+      "adjusted_open_nov23": 1067.3900146484375,
+      "adjusted_close_nov27": 1075.6600341796875,
+      "weekly_return_pct": 0.582551467216752,
+      "monday_open_to_friday_close_pct": 0.7747889166804578
+    },
+    "META": {
+      "adjusted_close_nov20": 560.8400268554688,
+      "adjusted_open_nov23": 591.719970703125,
+      "adjusted_close_nov27": 628.9600219726562,
+      "weekly_return_pct": 12.146065162132658,
+      "monday_open_to_friday_close_pct": 6.293526180176046
+    },
+    "MPC": {
+      "adjusted_close_nov20": 367.19000244140625,
+      "adjusted_open_nov23": 368.7799987792969,
+      "adjusted_close_nov27": 359.79998779296875,
+      "weekly_return_pct": -2.0125860179476818,
+      "monday_open_to_friday_close_pct": -2.435059118187799
+    },
+    "MSFT": {
+      "adjusted_close_nov20": 484.5199890136719,
+      "adjusted_open_nov23": 506.05999755859375,
+      "adjusted_close_nov27": 492.8500061035156,
+      "weekly_return_pct": 1.719230842632724,
+      "monday_open_to_friday_close_pct": -2.6103607316934063
+    },
+    "MSTR": {
+      "adjusted_close_nov20": 77.80000305175781,
+      "adjusted_open_nov23": 91.11000061035156,
+      "adjusted_close_nov27": 81.62000274658203,
+      "weekly_return_pct": 4.910025122085027,
+      "monday_open_to_friday_close_pct": -10.415978268242176
+    },
+    "MU": {
+      "adjusted_close_nov20": 594.510009765625,
+      "adjusted_open_nov23": 690.719970703125,
+      "adjusted_close_nov27": 646.9500122070312,
+      "weekly_return_pct": 8.820709757616996,
+      "monday_open_to_friday_close_pct": -6.3368601390716535
+    },
+    "NVDA": {
+      "adjusted_close_nov20": 125.52999877929688,
+      "adjusted_open_nov23": 167.0399932861328,
+      "adjusted_close_nov27": 150.49000549316406,
+      "weekly_return_pct": 19.8836986828552,
+      "monday_open_to_friday_close_pct": -9.907799603786671
+    },
+    "NVO": {
+      "adjusted_close_nov20": 37.81999969482422,
+      "adjusted_open_nov23": 38.630001068115234,
+      "adjusted_close_nov27": 41.06999969482422,
+      "weekly_return_pct": 8.5933369281459,
+      "monday_open_to_friday_close_pct": 6.316330725455077
+    },
+    "NWS": {
+      "adjusted_close_nov20": 27.8700008392334,
+      "adjusted_open_nov23": 28.350000381469727,
+      "adjusted_close_nov27": 29.25,
+      "weekly_return_pct": 4.951557657737626,
+      "monday_open_to_friday_close_pct": 3.1746017863143905
+    },
+    "NWSA": {
+      "adjusted_close_nov20": 25.049999237060547,
+      "adjusted_open_nov23": 25.350000381469727,
+      "adjusted_close_nov27": 26.299999237060547,
+      "weekly_return_pct": 4.990020112059201,
+      "monday_open_to_friday_close_pct": 3.747529945937389
+    },
+    "OKTA": {
+      "adjusted_close_nov20": 191.4600067138672,
+      "adjusted_open_nov23": 206.3300018310547,
+      "adjusted_close_nov27": 207.4600067138672,
+      "weekly_return_pct": 8.356836644172727,
+      "monday_open_to_friday_close_pct": 0.5476687213611164
+    },
+    "OXY": {
+      "adjusted_close_nov20": 53.900001525878906,
+      "adjusted_open_nov23": 53.439998626708984,
+      "adjusted_close_nov27": 54.16999816894531,
+      "weekly_return_pct": 0.5009214015268215,
+      "monday_open_to_friday_close_pct": 1.366017142581799
+    },
+    "P": {
+      "adjusted_close_nov20": 92.05000305175781,
+      "adjusted_open_nov23": 111.04000091552734,
+      "adjusted_close_nov27": 101.45999908447266,
+      "weekly_return_pct": 10.222700402762385,
+      "monday_open_to_friday_close_pct": -8.627523191703313
+    },
+    "PSX": {
+      "adjusted_close_nov20": 239.3300018310547,
+      "adjusted_open_nov23": 241.80999755859375,
+      "adjusted_close_nov27": 242.1199951171875,
+      "weekly_return_pct": 1.165751583498631,
+      "monday_open_to_friday_close_pct": 0.12819881796601873
+    },
+    "RBLX": {
+      "adjusted_close_nov20": 46.720001220703125,
+      "adjusted_open_nov23": 53.5,
+      "adjusted_close_nov27": 57.380001068115234,
+      "weekly_return_pct": 22.816779899158735,
+      "monday_open_to_friday_close_pct": 7.2523384450752015
+    },
+    "RVTY": {
+      "adjusted_close_nov20": 145.22000122070312,
+      "adjusted_open_nov23": 152.52999877929688,
+      "adjusted_close_nov27": 151.27000427246094,
+      "weekly_return_pct": 4.166094891132177,
+      "monday_open_to_friday_close_pct": -0.8260634084571672
+    },
+    "SAP": {
+      "adjusted_close_nov20": 198.92999267578125,
+      "adjusted_open_nov23": 201.13999938964844,
+      "adjusted_close_nov27": 213.64999389648438,
+      "weekly_return_pct": 7.399588680774749,
+      "monday_open_to_friday_close_pct": 6.219545860990872
+    },
+    "SAR": {
+      "adjusted_close_nov20": 10.739999771118164,
+      "adjusted_open_nov23": 10.84000015258789,
+      "adjusted_close_nov27": 11.210000038146973,
+      "weekly_return_pct": 4.376166452933505,
+      "monday_open_to_friday_close_pct": 3.4132830290666494
+    },
+    "SMCI": {
+      "adjusted_close_nov20": 21.649999618530273,
+      "adjusted_open_nov23": 26.270000457763672,
+      "adjusted_close_nov27": 23.760000228881836,
+      "weekly_return_pct": 9.74596142045938,
+      "monday_open_to_friday_close_pct": -9.554625752357172
+    },
+    "SPY": {
+      "adjusted_close_nov20": 689.8099975585938,
+      "adjusted_open_nov23": 724.3300170898438,
+      "adjusted_close_nov27": 728.3200073242188,
+      "weekly_return_pct": 5.582698120050633,
+      "monday_open_to_friday_close_pct": 0.5508525313372648
+    },
+    "SSDOY": {
+      "adjusted_close_nov20": 26.079999923706055,
+      "adjusted_open_nov23": 26.540000915527344,
+      "adjusted_close_nov27": 27.1299991607666,
+      "weekly_return_pct": 4.026070706028362,
+      "monday_open_to_friday_close_pct": 2.223052844335349
+    },
+    "SU": {
+      "adjusted_close_nov20": 63.81999969482422,
+      "adjusted_open_nov23": 63.630001068115234,
+      "adjusted_close_nov27": 64.80000305175781,
+      "weekly_return_pct": 1.5355740545593743,
+      "monday_open_to_friday_close_pct": 1.8387583907001792
+    },
+    "TS": {
+      "adjusted_close_nov20": 53.98332977294922,
+      "adjusted_open_nov23": 54.68784452996338,
+      "adjusted_close_nov27": 56.689998626708984,
+      "weekly_return_pct": 5.01389755901287,
+      "monday_open_to_friday_close_pct": 3.661058712322496
+    },
+    "TSLA": {
+      "adjusted_close_nov20": 345.82000732421875,
+      "adjusted_open_nov23": 374.739990234375,
+      "adjusted_close_nov27": 400.0,
+      "weekly_return_pct": 15.667107607509113,
+      "monday_open_to_friday_close_pct": 6.7406763152837
+    },
+    "TSM": {
+      "adjusted_close_nov20": 318.7099914550781,
+      "adjusted_open_nov23": 385.489990234375,
+      "adjusted_close_nov27": 353.3399963378906,
+      "weekly_return_pct": 10.865679084834579,
+      "monday_open_to_friday_close_pct": -8.3400333889182
+    },
+    "TWLO": {
+      "adjusted_close_nov20": 172.10000610351562,
+      "adjusted_open_nov23": 178.9600067138672,
+      "adjusted_close_nov27": 185.61000061035156,
+      "weekly_return_pct": 7.8500836883816705,
+      "monday_open_to_friday_close_pct": 3.715910620810825
+    },
+    "TYL": {
+      "adjusted_close_nov20": 404.44000244140625,
+      "adjusted_open_nov23": 400.54998779296875,
+      "adjusted_close_nov27": 422.4700012207031,
+      "weekly_return_pct": 4.458015693417705,
+      "monday_open_to_friday_close_pct": 5.47247886550033
+    },
+    "VLO": {
+      "adjusted_close_nov20": 332.96258544921875,
+      "adjusted_open_nov23": 336.5096265076389,
+      "adjusted_close_nov27": 329.3900146484375,
+      "weekly_return_pct": -1.0729646383425662,
+      "monday_open_to_friday_close_pct": -2.1157230873571464
+    },
+    "WPM": {
+      "adjusted_close_nov20": 109.91000366210938,
+      "adjusted_open_nov23": 119.3499984741211,
+      "adjusted_close_nov27": 131.02000427246094,
+      "weekly_return_pct": 19.206623516498954,
+      "monday_open_to_friday_close_pct": 9.777968954788285
+    },
+    "WST": {
+      "adjusted_close_nov20": 390.29998779296875,
+      "adjusted_open_nov23": 400.5,
+      "adjusted_close_nov27": 366.1700134277344,
+      "weekly_return_pct": -6.18241740197899,
+      "monday_open_to_friday_close_pct": -8.571781915671817
+    },
+    "XOM": {
+      "adjusted_close_nov20": 159.99000549316406,
+      "adjusted_open_nov23": 157.94000244140625,
+      "adjusted_close_nov27": 160.17999267578125,
+      "weekly_return_pct": 0.1187494068967343,
+      "monday_open_to_friday_close_pct": 1.418253893725252
+    },
+    "XYL": {
+      "adjusted_close_nov20": 94.23929595947266,
+      "adjusted_open_nov23": 95.31448646016281,
+      "adjusted_close_nov27": 95.86000061035156,
+      "weekly_return_pct": 1.7197758476208191,
+      "monday_open_to_friday_close_pct": 0.5723307866918548
+    }
+  }
+}

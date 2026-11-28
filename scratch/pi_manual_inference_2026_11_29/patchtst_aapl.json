@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "path": "/inference/patchtst?universe=halal_new",
+  "started_at": "2026-11-28T16:15:53.119604+00:00",
+  "finished_at": "2026-11-28T16:16:03.665583+00:00",
+  "status": 503,
+  "response": {
+    "detail": "PatchTST v2026-11-27-611c30dfacf0 has no usable input windows at 2026-11-20 (1 requested). Check price history and compatible feature/news coverage over the model's context window."
+  }
+}

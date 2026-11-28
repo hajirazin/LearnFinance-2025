@@ -1,0 +1,66 @@
+{
+  "main": [
+    {
+      "id": "5b4db7b092d908fd562d99dacdfee64f3d7e6d37",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-10-02-7e38003c317e to current",
+      "message": "",
+      "date": "2026-10-04T06:31:55.000Z"
+    },
+    {
+      "id": "c153e2f36272f44e4f52a3e565ef18b0431713cd",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-21-30ef75f05908 to current",
+      "message": "",
+      "date": "2026-08-23T10:21:17.000Z"
+    },
+    {
+      "id": "9e5e589f01a0dceae43b057fd531de742fb53d81",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-21-5f2b1062dc89 to current",
+      "message": "",
+      "date": "2026-08-23T06:53:09.000Z"
+    },
+    {
+      "id": "4e8885ed7426155c182375ee2a7c4978a230cdf7",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-14-e89b75d03a12 to current",
+      "message": "",
+      "date": "2026-08-15T10:16:39.000Z"
+    },
+    {
+      "id": "d4a405c9fa0cdca1620067fec7aafcd76a048a18",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-07-9c6bde69f0ba to current",
+      "message": "",
+      "date": "2026-08-09T09:45:58.000Z"
+    }
+  ],
+  "v2026-11-20-38ec212466c7": [
+    {
+      "id": "5bea3b22e050afe54c0d81e2c53cd063d2608dfa",
+      "title": "Publish India weekly PatchTST v2026-11-20-38ec212466c7",
+      "message": "",
+      "date": "2026-11-25T12:30:12.000Z"
+    },
+    {
+      "id": "5b4db7b092d908fd562d99dacdfee64f3d7e6d37",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-10-02-7e38003c317e to current",
+      "message": "",
+      "date": "2026-10-04T06:31:55.000Z"
+    },
+    {
+      "id": "c153e2f36272f44e4f52a3e565ef18b0431713cd",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-21-30ef75f05908 to current",
+      "message": "",
+      "date": "2026-08-23T10:21:17.000Z"
+    },
+    {
+      "id": "9e5e589f01a0dceae43b057fd531de742fb53d81",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-21-5f2b1062dc89 to current",
+      "message": "",
+      "date": "2026-08-23T06:53:09.000Z"
+    },
+    {
+      "id": "4e8885ed7426155c182375ee2a7c4978a230cdf7",
+      "title": "Promote PATCHTST_NIFTY_SHARIAH_500 version v2026-08-14-e89b75d03a12 to current",
+      "message": "",
+      "date": "2026-08-15T10:16:39.000Z"
+    }
+  ]
+}

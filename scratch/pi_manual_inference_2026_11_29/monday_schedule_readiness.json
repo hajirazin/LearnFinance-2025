@@ -1,0 +1,62 @@
+[
+  {
+    "id": "us-weekly-allocate",
+    "state": {
+      "notes": "No Reason"
+    },
+    "next_runs": [
+      "2026-11-30T14:00:00Z",
+      "2026-12-07T14:00:00Z"
+    ],
+    "task_queue": {
+      "name": "learnfinance-inference",
+      "kind": "TASK_QUEUE_KIND_NORMAL"
+    }
+  },
+  {
+    "id": "us-sac-halal-allocate",
+    "state": {
+      "notes": "evy"
+    },
+    "next_runs": [
+      "2026-11-30T14:05:00Z",
+      "2026-12-07T14:05:00Z"
+    ],
+    "task_queue": {
+      "name": "learnfinance-inference",
+      "kind": "TASK_QUEUE_KIND_NORMAL"
+    }
+  },
+  {
+    "id": "us-alpha-hrp",
+    "state": {
+      "notes": "Unpaused via Python SDK"
+    },
+    "next_runs": [
+      "2026-11-30T12:30:00Z",
+      "2026-12-07T12:30:00Z"
+    ],
+    "task_queue": {
+      "name": "learnfinance-inference",
+      "kind": "TASK_QUEUE_KIND_NORMAL"
+    }
+  },
+  {
+    "id": "india-weekly-allocate",
+    "state": {
+      "notes": "Unpaused via Python SDK"
+    },
+    "next_runs": [
+      "2026-11-30T03:30:00Z",
+      "2026-12-07T03:30:00Z"
+    ],
+    "task_queue": {
+      "name": "learnfinance-inference",
+      "kind": "TASK_QUEUE_KIND_NORMAL"
+    }
+  },
+  {
+    "id": "us-patchtst-news",
+    "error": "HTTP Error 404: Not Found"
+  }
+]

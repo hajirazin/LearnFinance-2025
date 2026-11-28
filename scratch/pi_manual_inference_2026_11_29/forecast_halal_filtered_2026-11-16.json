@@ -1,0 +1,192 @@
+{
+  "method": "POST",
+  "path": "/inference/patchtst?universe=halal_new",
+  "started_at": "2026-11-28T16:42:35.850255+00:00",
+  "finished_at": "2026-11-28T16:42:45.941735+00:00",
+  "status": 200,
+  "response": {
+    "predictions": [
+      {
+        "symbol": "BURL",
+        "predicted_weekly_return_pct": 0.8018013089895248,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "NVO",
+        "predicted_weekly_return_pct": 0.7903921417891979,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "FFIV",
+        "predicted_weekly_return_pct": 0.7599822711199522,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "BDRFY",
+        "predicted_weekly_return_pct": 0.7303903345018625,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "SAR",
+        "predicted_weekly_return_pct": 0.700990529730916,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "DLR",
+        "predicted_weekly_return_pct": 0.672420859336853,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "ATLKY",
+        "predicted_weekly_return_pct": 0.6620255298912525,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "FICO",
+        "predicted_weekly_return_pct": 0.6418767385184765,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "LII",
+        "predicted_weekly_return_pct": 0.608580932021141,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "MSTR",
+        "predicted_weekly_return_pct": 0.5646388977766037,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "ASX",
+        "predicted_weekly_return_pct": 0.5413596983999014,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "ILMN",
+        "predicted_weekly_return_pct": 0.5157425999641418,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "NWS",
+        "predicted_weekly_return_pct": 0.48338547348976135,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "NWSA",
+        "predicted_weekly_return_pct": 0.46171778813004494,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      },
+      {
+        "symbol": "LEN",
+        "predicted_weekly_return_pct": 0.45995735563337803,
+        "direction": "UP",
+        "has_enough_history": true,
+        "history_days_used": 251,
+        "data_end_date": "2026-11-13",
+        "target_week_start": "2026-11-16",
+        "target_week_end": "2026-11-20",
+        "daily_returns": null
+      }
+    ],
+    "model_version": "v2026-11-27-611c30dfacf0",
+    "forecast_anchor_date": "2026-11-13",
+    "forecast_end_date": "2026-11-20",
+    "forecast_recipe": "ed95fd01246795234d061d7e71cd00eb3d895c47b660098a1ca276c99cc1be85",
+    "as_of_date": "2026-11-13",
+    "target_week_start": "2026-11-16",
+    "target_week_end": "2026-11-20",
+    "signals_used": [
+      "momentum_20d",
+      "momentum_12_1",
+      "volatility_20d",
+      "relative_volume_20d",
+      "news_sentiment",
+      "close",
+      "volume"
+    ]
+  }
+}

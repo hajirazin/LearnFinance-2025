@@ -1,0 +1,13 @@
+{
+  "method": "GET",
+  "path": "/etl/news/sync/news_sync:restore",
+  "started_at": "2026-11-28T16:23:43.372296+00:00",
+  "finished_at": "2026-11-28T16:23:48.418677+00:00",
+  "status": 200,
+  "response": {
+    "job_id": "news_sync:restore",
+    "status": "running",
+    "result": null,
+    "error": null
+  }
+}
