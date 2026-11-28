@@ -1,5 +1,18 @@
 # Seven-line SAC comparison copies with one-year HRP
 
+The graphs below load directly from committed PNG files, with SVG and CSV
+exports beside them.
+
+![SAC halal: six original curves plus 252-session HRP](01_sac_halal_with_hrp.png)
+
+[Vector SVG](01_sac_halal_with_hrp.svg) · [Plotted values](01_sac_halal_with_hrp.csv)
+
+![SAC halal_filtered: six original curves plus 252-session HRP](02_sac_halal_filtered_with_hrp.png)
+
+[Vector SVG](02_sac_halal_filtered_with_hrp.svg) · [Plotted values](02_sac_halal_filtered_with_hrp.csv)
+
+[Original six-line graphs and combined twelve-line graph](../sac_reward_comparison_charts_2026_11_28/README.md)
+
 These two new graph copies retain the six original scenario curves and add
 weekly one-stage Hierarchical Risk Parity on each experiment's full frozen
 stock roster. The original six-line graphs and combined twelve-line graph

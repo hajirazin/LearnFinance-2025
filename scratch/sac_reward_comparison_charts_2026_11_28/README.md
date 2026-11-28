@@ -1,5 +1,22 @@
 # SAC reward comparison charts
 
+The graphs below load directly from committed PNG files. Each also has a
+vector SVG and CSV export beside it.
+
+![SAC halal: four reward variants and two passive benchmarks](01_sac_halal.png)
+
+[Vector SVG](01_sac_halal.svg) · [Plotted values](01_sac_halal.csv)
+
+![SAC halal_filtered: four reward variants and two passive benchmarks](02_sac_halal_filtered.png)
+
+[Vector SVG](02_sac_halal_filtered.svg) · [Plotted values](02_sac_halal_filtered.csv)
+
+![All twelve comparison curves](03_all_12_scenarios.png)
+
+[Vector SVG](03_all_12_scenarios.svg) · [Plotted values](03_all_12_scenarios.csv)
+
+[Seven-line copies with HRP](../sac_hrp_comparison_charts_2026_11_28/README.md)
+
 Three graphs show simulated growth of USD 10,000 over the common held-out
 window, November 25, 2024 to November 23, 2026:
 

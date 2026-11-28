@@ -85,3 +85,20 @@ An action-independent benchmark subtraction preserves the ideal unnormalized obj
 Integrity checks are recorded in verification.json: all input hashes unchanged, all traces aligned to the same 104 weeks, finite constrained weights, metrics independently recomputed, and 48 execution sensitivity evaluations present.
 
 Total training time: 59.0 minutes. All results, models, and evidence remain in this scratch directory. No production model was promoted.
+
+## Portfolio growth graphs
+
+The four SAC curves use the actual median-CAGR seed for each reward. The tables
+above summarize all three seeds; a plotted seed's Sharpe can differ from the
+median Sharpe. All curves start at USD 10,000 over the same two-year window.
+
+![SAC halal: four reward variants and two passive benchmarks](../../sac_reward_comparison_charts_2026_11_28/01_sac_halal.png)
+
+[Vector SVG](../../sac_reward_comparison_charts_2026_11_28/01_sac_halal.svg) · [Plotted values](../../sac_reward_comparison_charts_2026_11_28/01_sac_halal.csv)
+
+![SAC halal: original six curves plus 252-session HRP](../../sac_hrp_comparison_charts_2026_11_28/01_sac_halal_with_hrp.png)
+
+[Vector SVG](../../sac_hrp_comparison_charts_2026_11_28/01_sac_halal_with_hrp.svg) · [Plotted values](../../sac_hrp_comparison_charts_2026_11_28/01_sac_halal_with_hrp.csv)
+
+[Combined twelve-line graph](../../sac_reward_comparison_charts_2026_11_28/03_all_12_scenarios.png) ·
+[HRP methodology](../../sac_hrp_comparison_charts_2026_11_28/README.md)

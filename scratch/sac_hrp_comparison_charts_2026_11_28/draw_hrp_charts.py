@@ -3,7 +3,6 @@
 import json
 import math
 import sys
-import zipfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -73,12 +72,6 @@ def main():
             item["final_value_usd"] = curve.wealth[-1]
             records.append(item)
     (ROOT / "series_manifest.json").write_text(json.dumps(records, indent=2))
-    with zipfile.ZipFile(
-        ROOT / "seven_line_graphs_with_hrp.zip", "w", zipfile.ZIP_DEFLATED
-    ) as archive:
-        for pattern in ("*.png", "*.svg", "*.csv", "*.json", "README.md"):
-            for path in sorted(ROOT.glob(pattern)):
-                archive.write(path, path.name)
     print(
         "Created two new seven-line graphs and exports; original graphs were not written."
     )
